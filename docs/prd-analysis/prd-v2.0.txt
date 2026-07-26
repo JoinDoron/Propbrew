@@ -1,0 +1,1290 @@
+
+===== PAGE 1 =====
+Unrealabs (Choplife Technologies Ltd)  ·  hello@choplife.io  ·  Confidential
+PRD v2.0 · Page 1
+P R O D U C T   R E Q U I R E M E N T S   ·   v 2 . 0
+Facility & Estate
+Management Platform
+A 2-in-1, AI-powered platform for managing facilities, estates and communities — predicting problems
+before they happen and automating the busywork. Version 2.0 — developer-ready draft.
+Version
+2.0 — Developer-ready draft
+Prepared by
+Unrealabs (Choplife Technologies Ltd)
+Prepared for
+7 Fifteen Capital
+Audience
+Product, engineering & QA teams; 7 Fifteen Capital stakeholders
+Date
+July 2026
+Status
+Living document — refined during discovery; material changes via Change Request
+Related agreement
+Design & Development Services Agreement (commercial terms map to Schedule A)
+Classification
+Confidential
+1.  Executive summary
+7 Fifteen Capital requires a modern platform to run facilities, estates and residential communities end-to-end. Unrealabs
+proposes a 2-in-1, AI-powered platform that unifies facility operations and estate/community management on a single
+shared core — predicting problems before they happen, automating the busywork, and giving managers, residents,
+owners and investors one modern experience across mobile, web and admin.
+The product ships as a multi-tenant platform with two functional modules — Facility Management and Estate
+Management — on a shared, AI-enabled core covering payments, multi-platform apps, document intelligence and an
+investor off-plan dashboard. Delivery is a one-time build priced at USD 300,000 over an indicative ≈24–26 weeks (July
+– December 2026).
+What changed in v2.0: this revision makes the PRD buildable. Every requirement now carries a priority (MoSCoW), a
+user story and testable acceptance criteria; the domain model, tenancy model, permissions matrix and key workflow
+states are defined; NFRs are quantified; AI features specify inputs/outputs, human-in-the-loop behaviour, fallbacks and
+proposed benchmarks; and an open-questions register assigns the decisions still needed before or during discovery.
+Items marked (proposed) or (TBC) are baselines for estimation and build — they are confirmed with 7 Fifteen Capital at
+discovery and do not silently become contract terms.
+2.  Product vision
+“One intelligent platform that runs facilities and estates end-to-end — predicting problems before
+they happen, automating the busywork, and giving managers, residents and owners a single,
+modern experience.”
+ Two worlds, one product — unifies facility operations and estate/community management across mobile, web and
+admin.
+ AI from day one — built in, not bolted on, to cut reactive maintenance and lift collections and satisfaction.
+ Real-time visibility — clear, live insight for owners and investors across the whole portfolio.
+
+===== PAGE 2 =====
+Unrealabs (Choplife Technologies Ltd)  ·  hello@choplife.io  ·  Confidential
+PRD v2.0 · Page 2
+3.  Problem & opportunity
+Management today is fragmented and largely manual — spreadsheets, WhatsApp groups, paper logs and disconnected
+tools. The predictable results:
+ Reactive, not preventive — assets fail before anyone acts, driving up downtime and cost.
+ Slow request handling — issues get lost; the right technician or vendor is hard to assign.
+ Leaky billing — service charges go unpaid and reconciliation is painful.
+ Poor experience — little transparency, slow communication, no self-service.
+ No single truth — data is scattered, so reporting and decisions are guesswork.
+The opportunity: one intelligent platform running both facility operations and estate/community life on a shared core —
+problems predicted rather than reacted to, routine work automated, and every stakeholder working from the same live
+data.
+4.  Glossary
+Term
+Definition
+Tenant / Organisation
+A client organisation onboarded onto the platform (e.g. an estate operator or facility owner managed by 7
+Fifteen Capital). All data is scoped to a tenant.
+Estate
+A residential/mixed community managed under a tenant: units, residents, amenities, security.
+Facility
+A managed building or site with assets, maintenance and compliance obligations.
+Unit / Space
+An addressable space (apartment, office, zone) within an estate or facility.
+Work order (WO)
+A tracked maintenance job — reactive (from a request) or planned (from a PPM schedule).
+PPM
+Planned preventive maintenance — recurring, scheduled maintenance plans.
+Service charge
+A recurring or one-off charge billed to a unit/resident.
+Arrears
+Unpaid charges past their due date.
+Off-plan
+Property sold before/during construction; tracked on the investor dashboard.
+RAG
+Retrieval-augmented generation — AI answers grounded in the tenant’s own documents.
+HITL
+Human-in-the-loop — an AI suggestion a person reviews, approves or overrides.
+NDPA
+Nigeria Data Protection Act — governing privacy, consent and biometric/CCTV features.
+5.  Target users
+User
+Module
+What they need
+Facility Manager
+Facility
+Oversee assets, maintenance, vendors and compliance from one dashboard.
+Maintenance Technician
+Facility
+Receive, prioritise and resolve work orders; log inspections on mobile.
+Property Owner / Executive
+Facility
+Portfolio-level visibility, reports and ROI.
+Estate Manager
+Estate
+Run estate operations: billing, communication, bookings, security.
+Resident
+Estate
+Pay charges, raise requests, book facilities, get updates, use the marketplace.
+Worker / Security
+Estate
+Access control, SOS response, patrols and directory.
+Vendor / Contractor
+Both
+Receive jobs, submit updates/invoices, list services on the marketplace.
+Investor
+Shared
+Track off-plan sales, occupancy and returns via a dedicated dashboard.
+
+===== PAGE 3 =====
+Unrealabs (Choplife Technologies Ltd)  ·  hello@choplife.io  ·  Confidential
+PRD v2.0 · Page 3
+6.  Product scope & prioritisation
+6.1  In scope — one product, two modules, a shared core
+Component
+Coverage
+Module 01 — Facility Management
+Assets, maintenance, inspections, vendors, space and reporting.
+Module 02 — Estate Management
+Billing, residents, requests, bookings, security, marketplace.
+Shared AI-enabled core
+Multi-tenant deployment · payments · mobile + web + admin · AI copilot · document
+intelligence · investor dashboard.
+6.2  Priority scheme (MoSCoW)
+All Must/Should/Could items below are inside the contracted scope and price (§18); priorities set the build order and
+MVP cut, not what is bought. Must = MVP; the platform does not go live without it. Should = committed, follows MVP
+within the timeline. Could = built last; first to reflow if the timeline is squeezed (any descope via Change Request).
+Won’t (this phase) = §6.3.
+6.3  Out of scope (Won’t — this phase)
+ Features outside the agreed scope (added via Change Request, Clause 10).
+ Bespoke AI model training beyond the foundation-model + RAG approach.
+ Maintenance and support beyond the 30-day warranty (available under a separate retainer).
+ Content creation and third-party API-driven changes.
+ Hardware procurement (CCTV, IoT devices) — software integration only.
+7.  Roles & permissions matrix
+Server-side, deny-by-default enforcement on every API (SC-01). Legend: F full control · M manage (create/edit within
+own tenant/estate) · V view · O own records only · — no access. Column key: Plat = Platform Admin (7 Fifteen Capital
+HQ), Exec = Owner/Executive, EstM = Estate Manager, FacM = Facility Manager, Tech = Technician, Res = Resident,
+Sec = Security, Ven = Vendor, Inv = Investor.
+Capability
+Plat
+Exec
+EstM
+FacM
+Tech
+Res
+Sec
+Ven
+Inv
+Tenant onboarding & config
+F
+—
+V
+—
+—
+—
+—
+—
+—
+Users & roles
+F
+V
+M
+M
+—
+O
+—
+O
+O
+Assets & PPM plans
+V
+V
+V
+M
+V
+—
+—
+—
+—
+Work orders
+V
+V
+M
+M
+O
+O
+—
+O
+—
+Inspections & compliance
+V
+V
+V
+M
+O
+—
+—
+—
+—
+Charges & invoicing
+V
+V
+M
+—
+—
+O
+—
+—
+—
+Payments (pay in-app)
+—
+—
+—
+—
+—
+O
+—
+—
+—
+Announcements
+V
+V
+M
+M
+—
+V
+V
+—
+—
+Bookings & amenities
+V
+V
+M
+—
+—
+O
+V
+—
+—
+Security & SOS
+V
+V
+M
+—
+—
+O
+M
+—
+—
+Marketplace
+V
+V
+M
+—
+—
+O
+—
+O
+—
+Investor projects
+F
+V
+—
+—
+—
+—
+—
+—
+O
+Reports & analytics
+F
+V
+M
+M
+—
+—
+—
+—
+V
+Fine-grained permissions per endpoint are finalised at design; this matrix is the authoritative baseline.
+8.  Domain model & multi-tenancy
+
+===== PAGE 4 =====
+Unrealabs (Choplife Technologies Ltd)  ·  hello@choplife.io  ·  Confidential
+PRD v2.0 · Page 4
+8.1  Core entities
+Entity
+Purpose
+Key relationships
+Tenant
+Client organisation; the isolation boundary for
+all data.
+Has estates/facilities, users, configuration, payment account.
+Estate / Facility
+A managed community or building.
+Belongs to tenant; has buildings, units, amenities, staff.
+Unit / Space
+Addressable space in the hierarchy estate →
+building → floor → unit/zone.
+Links residents, assets, charges, bookings.
+User + Role(s)
+Any actor; roles per §7, scoped to tenant (and
+estate where relevant).
+Resident links user → unit(s); vendor links user → vendor org.
+Asset
+Equipment/infrastructure under management.
+Belongs to unit/space; has PPM plans, work orders, documents.
+PPM plan
+Recurring maintenance definition (frequency,
+checklist, lead time).
+Generates work orders for an asset/category.
+Work order
+A maintenance job with lifecycle per §10.
+Links asset/unit, requester, assignee (tech or vendor), costs,
+evidence.
+Inspection
+Checklist run with pass/fail items and evidence.
+Failed items raise work orders; feeds compliance register.
+Vendor
+External contractor organisation.
+Receives work orders; has documents, invoices, ratings, listings.
+Charge / Invoice
+Billable item per unit/resident with due date.
+Has payments (possibly partial); drives arrears aging.
+Payment
+Gateway transaction reconciled to
+invoices/orders.
+Webhook-confirmed; idempotent; per-tenant settlement account.
+Announcement
+Broadcast or targeted message.
+Delivered via notifications engine; tracks delivery/read.
+Booking
+Reservation of an amenity.
+Links resident, amenity, optional payment; approval per amenity
+rules.
+Visitor pass
+Time-bound access code/QR for a guest.
+Issued by resident; verified by security; logged.
+SOS event
+Panic alert with acknowledge/resolve trail.
+Links resident/unit, responders, timestamps.
+Document
+Stored file with permissions.
+Indexed by document intelligence (AI-S-03).
+Listing / Order
+Marketplace product/service and purchase.
+Vendor listing → resident order → payment → fulfilment.
+Investor project /
+Lead
+Off-plan project with sales pipeline.
+Drives investor dashboard and AI projections.
+AI interaction log
+Every AI request/response, confidence,
+override.
+Per tenant; powers audit, tuning and cost metering.
+8.2  Tenancy model & isolation requirements
+ Hierarchy: Platform → Tenant (organisation) → Estates/Facilities → Buildings → Units → Residents/Assets. Every
+domain record carries its tenant scope.
+ Hard isolation: no query, file, search index, AI retrieval or report may cross tenants below Platform Admin. Verified
+by automated cross-tenant access tests in CI (release-blocking).
+ Isolation strategy: shared database with tenant-scoped rows enforced at application and database layer (e.g.
+row-level security), tenant-scoped object storage and per-tenant vector-store namespaces (proposed — confirm as
+Architecture Decision ADR-01, open question Q2).
+ Tenant onboarding: Platform Admin creates the organisation, then configures estates/units (bulk import), branding,
+payment settlement account, languages and enabled features.
+ Per-tenant configuration: branding, notification templates, amenity rules, charge structures, AI feature flags and
+usage caps.
+ Cost metering: AI, SMS and email usage metered per tenant (assumption §15: usage costs are billed to the Client).
+
+===== PAGE 5 =====
+Unrealabs (Choplife Technologies Ltd)  ·  hello@choplife.io  ·  Confidential
+PRD v2.0 · Page 5
+9.  Functional requirements
+Each requirement carries an ID, a MoSCoW priority, a primary user story and key acceptance criteria (AC). ACs are the
+definition of done for build and QA; they are proposed baselines, confirmed per feature during discovery/design.
+Requirements marked (new in v2.0) were implicit in v1.0 and are now explicit — they add no scope beyond what the
+v1.0 features already required to function.
+9.1  Module 01 — Facility Management
+ID · Priority
+Requirement & user story
+Key acceptance criteria
+FM-01
+Must
+Asset management & register
+Story — As a Facility Manager, I maintain a
+register of every asset so identity, location and
+history are trackable.
+ Asset CRUD: name, category, serial/tag, location
+(estate→building→unit/zone), status, purchase & warranty dates, photos,
+documents.
+ Assets link to work orders and inspections; service history viewable per
+asset.
+ Archive (no hard delete); all changes audit-logged (SC-11).
+ Bulk import via CSV template.
+FM-02
+Must
+Preventive maintenance & scheduling
+Story — As a Facility Manager, I define
+recurring PPM plans so work is scheduled
+before failure.
+ PPM plans: frequency, checklist, assignee rules, lead time, per asset or
+category.
+ Scheduler auto-generates work orders ahead of due date; calendar view;
+overdue flagged.
+ Completion requires checklist + evidence photo (configurable).
+FM-03
+Must (new
+in v2.0)
+Work-order management
+Story — As a Technician, I receive, update
+and close work orders on mobile so nothing
+gets lost.
+ Lifecycle states and transitions exactly per §10 with per-priority SLA timers.
+ Assign to internal technician or vendor; reassignment and every state change
+tracked and notified.
+ Capture photos, notes, parts and costs; requester notified on state changes.
+ Offline updates supported per §12.1.
+FM-04
+Should
+Space management
+Story — As a Facility Manager, I manage the
+space hierarchy so occupancy and allocation
+are always current.
+ Estate→building→floor→unit/zone hierarchy maintained once, shared with the
+Estate module.
+ Occupancy/allocation status per space; spaces link to assets, bookings and
+residents.
+FM-05
+Must
+Vendor management
+Story — As a Facility Manager, I onboard
+vendors and route jobs to them so external
+work is controlled.
+ Vendor profiles: services, coverage, documents (insurance/certifications)
+with expiry alerts.
+ Vendors receive assignments and submit updates & invoices via the vendor
+portal.
+ Performance metrics: jobs completed, SLA hit rate, rating.
+FM-06
+Should
+Inspection & compliance tracking
+Story — As a Facility Manager, I schedule
+inspections so compliance is evidenced, not
+assumed.
+ Inspection templates with checklist items (pass/fail/severity); scheduled and
+ad-hoc runs on mobile with photo capture.
+ Failed items auto-raise work orders (FM-03).
+ Compliance register shows status and expiry per obligation.
+FM-07
+Must
+Reporting & analytics
+Story — As an Executive, I see portfolio
+performance so decisions stop being
+guesswork.
+ Dashboards: open/overdue WOs, PPM compliance %, downtime, cost by
+category/estate.
+ Filters by estate/date; export CSV/PDF; role-scoped visibility per §7.
+FM-08
+Must
+Full mobile access
+Story — As a Technician, I do my whole job
+from my phone, including in poor-connectivity
+areas.
+ All technician and FM day-to-day flows usable on Android/iOS.
+ Push notifications for assignments and escalations; camera-first capture.
+9.2  Module 02 — Estate Management
+
+===== PAGE 6 =====
+Unrealabs (Choplife Technologies Ltd)  ·  hello@choplife.io  ·  Confidential
+PRD v2.0 · Page 6
+ID · Priority
+Requirement & user story
+Key acceptance criteria
+EM-01
+Must
+Service charge & billing
+Story — As an Estate Manager, I issue
+charges and track collection so cash flow is
+predictable.
+ Charge setup per unit type/size: recurring cycles, one-off levies,
+penalties/discounts (configurable).
+ Invoices generated and delivered in-app + email/SMS; residents pay in-app
+via gateway (SC-02).
+ Payments auto-reconcile to invoices; partial payments, receipts and arrears
+aging supported.
+ Statements per unit/resident; accounting export.
+EM-02
+Must
+Residents & visitor management
+Story — As an Estate Manager, I onboard
+residents and control guest access so I know
+who is on the estate.
+ Resident onboarding (invite + profile) linked to unit(s); move-in/move-out;
+household members supported.
+ Visitor invites generate time-bound codes/QR verified by Security at the gate;
+visitor log retained per NDPA retention policy (§12).
+EM-03
+Must
+Maintenance request portal
+Story — As a Resident, I raise a request with
+photos and track it to resolution without
+chasing anyone.
+ Request: category, description, photos → ticket ID with visible status.
+ Requests feed the shared work-order pipeline (FM-03) with estate routing.
+ Resident notified on each state change and can rate the resolution.
+EM-04
+Must
+Announcements & communication
+Story — As an Estate Manager, I reach the
+right residents on the channels they actually
+read.
+ Broadcast and targeted (estate/building/audience) sends via in-app, push,
+SMS, email per user preference (SC-09).
+ Delivery/read statistics visible to managers.
+ AI drafting/translation (AI-E-04) always requires manager approval before
+send.
+EM-05
+Should
+Facility booking
+Story — As a Resident, I book shared
+amenities without a WhatsApp back-and-forth.
+ Amenity setup: capacity, hours, rules, optional fees.
+ Availability calendar; auto- or manager-approval per amenity; fees paid via
+gateway; cancellation per policy.
+EM-06
+Must
+Security & SOS alerts
+Story — As a Resident, I trigger an SOS and
+know security has seen it.
+ SOS alerts security desk and designated responders with unit/location;
+acknowledge → responding → resolved with timestamps (§10).
+ Patrol and incident logging for security staff; all security events audit-logged.
+ SOS submission works on poor connectivity with SMS fallback (proposed).
+EM-07
+Should
+Vendor / staff directory
+Story — As a Resident, I find approved
+vendors and estate staff without asking
+around.
+ Searchable directory with services and contact routes; visibility rules per role
+(§7).
+EM-08
+Should
+Document management
+Story — As an Estate Manager, I publish
+estate documents once and the right people
+can always find them.
+ Upload/organise with folder and permission control; residents see documents
+shared to their audience.
+ All stored documents indexed for AI document intelligence (AI-S-03).
+EM-09
+Should
+Marketplace
+Story — As a Resident, I buy services from
+approved vendors inside the app.
+ Vendors list products/services; residents browse, order and pay via gateway.
+ Order lifecycle (placed → accepted → fulfilled → closed) with notifications.
+ Commission/payout model per commercial decision — open question Q3
+blocks build of payouts.
+9.3  Shared core platform
+ID · Priority
+Requirement & user story
+Key acceptance criteria
+SC-01
+Must
+Multi-user profiles & RBAC
+Story — As any user, I see and do only what
+my role allows — enforced by the server, not
+the UI.
+ Roles and access per §7, tenant- and estate-scoped; deny-by-default on
+every API.
+ Session and password policy; MFA for admin roles (proposed).
+SC-02
+Must
+Payments integration
+Story — As a Resident, I pay any charge
+in-app and it reconciles itself.
+ Gateway abstraction (provider per §13) supporting cards, transfers and
+USSD where available.
+ Webhook-confirmed payments with idempotency and retries; refund/void;
+per-tenant reconciliation report.
+SC-03
+Must
+Core integrations
+Story — As the platform, I send SMS/email
+and render maps through swappable
+providers.
+ SMS/email behind an abstraction with template management and
+delivery-failure handling/logs; maps for locations.
+
+===== PAGE 7 =====
+Unrealabs (Choplife Technologies Ltd)  ·  hello@choplife.io  ·  Confidential
+PRD v2.0 · Page 7
+ID · Priority
+Requirement & user story
+Key acceptance criteria
+SC-04
+Should
+E-commerce / marketplace infrastructure
+Story — As the platform, I provide shared
+catalog/order/payment services that EM-09
+consumes.
+ Catalog, cart/order and payment services shared between marketplace and
+paid bookings.
+SC-05
+Must
+Mobile apps (Android, iOS)
+Story — As a user, I get the same product on
+Android and iOS.
+ Single cross-platform codebase (framework decision at kickoff); Android AAB
++ iOS builds.
+ Distribution: Play Store + TestFlight/IPA per v1.0 — production App Store
+release is open question Q11.
+ Push via FCM/APNs; crash and performance reporting wired in.
+SC-06
+Must
+Web app & admin dashboard
+Story — As an operator, I run everything from
+a browser.
+ Responsive web app for residents/managers; platform admin console for
+tenant management, configuration and audit views.
+SC-07
+Must
+Multi-tenant deployment
+Story — As Platform Admin, I onboard a new
+organisation without touching code, and
+tenants can never see each other.
+ All §8.2 isolation requirements met; cross-tenant access tests pass in CI
+(release-blocking).
+ Tenant onboarding, configuration and per-tenant usage metering
+implemented.
+SC-08
+Should
+Investor off-plan dashboard
+Story — As an Investor, I track my projects’
+sales, occupancy and returns.
+ Off-plan projects with sales pipeline, occupancy and returns; investors see
+only their projects.
+ AI projections (AI-S-04) always labelled as estimates with assumptions
+shown.
+SC-09
+Must (new
+in v2.0)
+Notifications engine
+Story — As a user, I get the right alerts on the
+right channel — and can control them.
+ Unified service for push/SMS/email/in-app used by all modules (single event
+bus).
+ Per-user channel preferences and quiet hours; per-tenant templates; delivery
+logging.
+SC-10
+Must (new
+in v2.0)
+Audit logging
+Story — As a compliance owner, I can
+reconstruct who did what, when.
+ Immutable log of auth events, permission changes, financial actions, security
+events and AI overrides — actor, tenant, timestamp.
+ 12-month retention (proposed); queryable from the admin console.
+SC-11
+Should
+Landing page
+Story — As a prospect or investor, I learn
+about the platform and register interest.
+ Public marketing page with lead capture into the investor pipeline (proposed).
+10.  Key workflows & states
+State machines below are the contract between backend, mobile and QA. Only the listed transitions are legal; every
+transition is timestamped, actor-attributed and notified via SC-09. SLA values are proposed defaults, configurable per
+tenant.
+Workflow
+States
+Rules & SLAs (proposed)
+Work order
+New → Triaged → Assigned → In Progress →
+On Hold → Resolved → Verified → Closed;
+branches: Rejected, Cancelled
+AI triage suggests category/priority/assignee; human confirms (AI-F/E
+triage). SLA timers per priority (e.g. Emergency: respond 2h / resolve
+24h; Routine: 72h). Resolved → Verified by requester or manager;
+auto-close after 5 days (proposed).
+Service charge
+Draft → Issued → Partially paid → Paid; Issued
+→ Overdue → In arrears → Escalated
+Reminder schedule (e.g. −3d, due, +7d, +21d) via SC-09; AI timing
+suggestions (AI-E-03) require manager approval. Escalation policy per
+tenant.
+Booking
+Requested → Approved / Auto-approved →
+Confirmed → Completed; branches: Declined,
+Cancelled
+Auto-approval per amenity rules; payment (if fees) required to confirm;
+cancellation window per policy.
+SOS event
+Raised → Acknowledged → Responding →
+Resolved → Reviewed
+Acknowledge target < 60s during manned hours (proposed);
+unacknowledged alerts escalate to backup responders; full timeline
+retained for review.
+Marketplace
+order
+Placed → Accepted → Fulfilled → Closed;
+branches: Declined, Refunded
+Vendor must accept within SLA or order auto-expires; refunds via
+gateway; payout model pending Q3.
+
+===== PAGE 8 =====
+Unrealabs (Choplife Technologies Ltd)  ·  hello@choplife.io  ·  Confidential
+PRD v2.0 · Page 8
+11.  AI requirements
+AI is the differentiator, delivered on a foundation-model + RAG architecture. Every AI feature must define the four
+columns below before build: what goes in, what comes out, where the human sits, and what happens when the AI is
+unavailable. Benchmarks are proposed acceptance baselines (per §15: acceptance is against agreed benchmarks, not
+100% accuracy) — final numbers are agreed at discovery and measured on an eval set built with 7 Fifteen Capital.
+11.1  Facility Management AI
+ID · Priority
+Capability: inputs → outputs
+Human-in-the-loop & fallback
+Proposed benchmark (TBC)
+AI-F-01
+Should
+Predictive maintenance — asset
+attributes, WO/failure history, sensor
+feeds where available → ranked
+failure-risk list + suggested PPM dates
+as draft schedule entries.
+FM approves before any schedule changes.
+Runs in shadow mode until data volume is
+sufficient. Fallback: standard PPM calendar
+unaffected.
+After 3–6 months of data: precision
+≥ 70% on 30-day failure window.
+AI-F-02
+Should
+Smart work-order triage — request
+text/photos/category → suggested
+category, priority and best-fit
+assignee/vendor with confidence.
+Dispatcher confirms or overrides; overrides
+logged for tuning. Fallback: manual triage queue.
+Top-1 category accuracy ≥ 85%;
+assignee suggestion acceptance ≥
+70%.
+AI-F-03
+Should
+Vision-based inspections — inspection
+photos → detected defects with severity
++ auto-drafted report.
+Inspector edits and approves every report.
+Fallback: manual checklist flow.
+Defect recall ≥ 80% on agreed
+defect classes (pilot set).
+AI-F-04
+Should
+Analytics & anomaly alerts —
+cost/energy/usage series →
+plain-language anomaly cards with
+drill-down.
+Confirm/dismiss feedback loop tunes sensitivity.
+Fallback: static threshold alerts.
+False-positive rate ≤ 30% after
+tuning period.
+AI-F-05
+Should
+Facility-manager copilot —
+natural-language queries over
+tenant-scoped data → answers with
+sources; drafted actions (e.g. raise WO).
+Every drafted action requires explicit user
+confirmation. Fallback: normal navigation and
+search.
+Grounded-answer accuracy ≥ 90%
+on eval set.
+11.2  Estate Management AI
+ID · Priority
+Capability: inputs → outputs
+Human-in-the-loop & fallback
+Proposed benchmark (TBC)
+AI-E-01
+Should
+Resident support chatbot — resident
+question + estate RAG corpus →
+grounded answer with source, or
+escalation.
+No source → must refuse and escalate to a ticket
+(EM-03). Corpus curated by the Estate Manager.
+Fallback: FAQ + ticket.
+Routine-query deflection ≥ 60%;
+grounded-answer accuracy ≥ 90%.
+AI-E-02
+Should
+Smart request triage — photo-based
+classification and auto-routing of
+resident requests (shared service with
+AI-F-02).
+Same HITL and fallback as AI-F-02.
+Shared benchmark with AI-F-02.
+AI-E-03
+Should
+Billing & arrears intelligence —
+billing/payment history → anomaly flags,
+defaulter-risk scores, reminder-timing
+suggestions.
+Managers approve reminder campaigns; no
+automated penalties ever. Fallback: fixed
+reminder schedule.
+Risk model AUC ≥ 0.75 after two
+billing cycles.
+AI-E-04
+Should
+Communication assistant — drafts
+announcements and translates into
+configured languages.
+Manager approval required before any send.
+Fallback: manual compose.
+Human review pass rate ≥ 90%.
+AI-E-05
+Could
+Marketplace intelligence — listing
+auto-generation, personalised
+recommendations, fraud flags.
+Fraud flags go to a human review queue —
+never auto-block. Fallback: manual listings, no
+recommendations.
+Fraud-flag precision ≥ 60% at
+review (pilot).
+AI-E-06
+Could
+(optional)
+AI security & access — CCTV anomaly
+detection and face/plate recognition.
+Prerequisites: NDPA compliance, explicit
+consent and DPIA sign-off (Q5). Builds only after
+sign-off; integrates with client hardware
+(hardware out of scope).
+Defined during DPIA; not in default
+acceptance.
+
+===== PAGE 9 =====
+Unrealabs (Choplife Technologies Ltd)  ·  hello@choplife.io  ·  Confidential
+PRD v2.0 · Page 9
+11.3  Shared platform AI
+ID · Priority
+Capability: inputs → outputs
+Human-in-the-loop & fallback
+Proposed benchmark (TBC)
+AI-S-01
+Should
+Platform-wide copilot — one
+conversational assistant across both
+modules and admin (extends AI-F-05).
+Action confirmation as AI-F-05. Fallback:
+standard UI.
+Shared benchmark with AI-F-05.
+AI-S-02
+Should
+NL search & reporting — questions
+across data → answers and reports in
+plain language with the underlying
+records viewable.
+Every figure traceable to source records.
+Fallback: standard reports (FM-07).
+Query success rate ≥ 80% on
+agreed test set.
+AI-S-03
+Should
+Document intelligence — OCR + field
+extraction + semantic search across
+document management.
+Extracted fields editable before save. Fallback:
+manual entry and keyword search.
+Field extraction ≥ 95% printed / ≥
+85% scanned documents.
+AI-S-04
+Should
+Investor-dashboard AI —
+sales/occupancy forecasting, lead
+scoring, ROI projections.
+All outputs labelled as estimates with
+assumptions shown; not presented as financial
+advice.
+Forecast error (MAPE) reviewed
+quarterly vs actuals.
+AI-S-05
+Could
+Recommendation & fraud engine —
+shared personalisation and anomaly
+service behind AI-E-05 and bookings.
+As AI-E-05.
+As AI-E-05.
+AI-S-06
+Must
+AI architecture & guardrails — LLM +
+RAG vector store, prompt/cost controls,
+logging; the platform every AI feature
+runs on.
+See §11.4 — release-blocking requirements.
+Zero cross-tenant retrieval in
+isolation tests (hard requirement).
+11.4  AI guardrails & design requirements (release-blocking)
+ Tenant isolation: retrieval, embeddings and context are hard-scoped to the tenant; automated cross-tenant leakage
+tests run in CI.
+ Provider abstraction: LLM/OCR/translation behind an abstraction with health checks; on provider failure, features
+degrade to their listed fallback — core flows never block on AI.
+ Cost controls: per-tenant and per-feature usage caps with alerts and kill-switch per feature (usage billed to Client
+per §15).
+ Prompt-injection defence: user- and document-supplied content is treated as data; the assistant cannot be
+instructed by it to exceed the user’s permissions (§7).
+ Logging & privacy: all AI interactions logged (AI interaction log, §8.1) with PII minimised/redacted in logs.
+ UX states: every AI surface shows loading, confidence, sources and error states; every suggestion is
+review/approve/override — AI is assistive, not autonomous.
+12.  Non-functional requirements (quantified)
+Targets marked (proposed) are engineering baselines to design and test against; confirm with 7 Fifteen Capital at
+discovery.
+Area
+Requirement
+Measurable target (proposed)
+Performance
+Fast load on mobile networks; smooth
+under concurrent load.
+API P95 < 500 ms; key screens interactive < 3 s on 4G and usable on 3G.
+Reliability
+High availability; AI fails safely.
+99.5% monthly availability for core flows; AI outage never blocks core;
+backups with RPO ≤ 24 h, RTO ≤ 4 h.
+Security
+RBAC, encryption, certified gateway, audit
+logs, tenant isolation.
+OWASP ASVS L2; TLS 1.2+ in transit, AES-256 at rest; MFA for admin
+roles; audit log per SC-10; cross-tenant tests release-blocking.
+Privacy &
+compliance
+NDPA compliance; consent for
+biometric/CCTV.
+Consent records + processing register; DPIA before any AI-E-06 work;
+per-entity retention schedule; data residency per Q7.
+
+===== PAGE 10 =====
+Unrealabs (Choplife Technologies Ltd)  ·  hello@choplife.io  ·  Confidential
+PRD v2.0 · Page 10
+Area
+Requirement
+Measurable target (proposed)
+Scalability
+Grows with tenants, units and users.
+Launch sizing to confirm (Q8) — design target: 20 tenants / 10,000 units /
+50,000 users / 1,000 concurrent; documented horizontal scale path.
+Accessibility
+Mobile-first, responsive,
+connectivity-tolerant.
+WCAG 2.1 AA for web; offline behaviour per §12.1.
+Localization
+Multilingual for a diverse user base.
+English at launch; additional languages per Q6; all UI strings externalised;
+AI translation for communications (AI-E-04).
+Maintainability
+Modular, shared design system,
+documented handover.
+Modular services; CI/CD; unit-test coverage ≥ 70% on core domains;
+runbooks + handover docs per §16.
+12.1  Offline & poor-connectivity behaviour
+ Read caching for dashboards, work-order lists and key resident screens.
+ Queued writes for work-order updates, inspection logs and SOS (SMS fallback for SOS, proposed), with visible sync
+status.
+ Conflict resolution is server-authoritative; overwritten offline edits are surfaced to the user and audit-logged.
+13.  Platform, integrations & environments
+13.1  Footprint
+ Mobile — Android (APK/AAB) and iOS (TestFlight/IPA); store release plan per Q11.
+ Web — product web app plus admin dashboard.
+ Environments — dev, staging and production with CI/CD promotion; staging seeded with realistic multi-tenant test
+data.
+13.2  Integration decisions (Client selects at kickoff; third-party fees per §15)
+Area
+Need
+Candidate providers (illustrative)
+Decide by
+Payments
+Cards, transfers, USSD; webhooks;
+per-tenant settlement.
+Paystack · Flutterwave
+Kickoff (blocks EM-01)
+SMS
+Transactional + OTP delivery in
+Nigeria.
+Termii · Twilio
+Kickoff
+Email
+Transactional email at volume.
+AWS SES · SendGrid · Mailgun
+Kickoff
+Maps
+Location display and geocoding.
+Google Maps Platform
+Design phase
+LLM / AI
+Copilots, chatbot, triage, translation via
+provider abstraction.
+Provider-agnostic (e.g. Anthropic, OpenAI) behind
+AI-S-06
+Design phase
+OCR / vision
+Document extraction; inspection photo
+analysis.
+Cloud vision API or equivalent
+Design phase
+Push
+Mobile push notifications.
+FCM · APNs
+Design phase
+Hosting
+Cloud hosting; residency per Q7.
+To be agreed with Client
+Kickoff
+14.  Success metrics (KPIs) with traceability
+Proposed measures, baselined and confirmed during discovery. Each KPI names the requirements that move it, so
+instrumentation is built in — every metric below must be reportable from the product itself (FM-07 / AI-S-02).
+Category
+Metrics
+Driven by
+Maintenance
+% preventive vs reactive work · mean time to resolve · asset downtime
+reduction.
+FM-02, FM-03, AI-F-01/02
+
+===== PAGE 11 =====
+Unrealabs (Choplife Technologies Ltd)  ·  hello@choplife.io  ·  Confidential
+PRD v2.0 · Page 11
+Category
+Metrics
+Driven by
+Estate finance
+Service-charge collection rate · on-time payment % · arrears reduction.
+EM-01, SC-02, AI-E-03
+Service quality
+Request resolution time · resident satisfaction score.
+EM-03, FM-03, AI-E-02
+Engagement
+Resident app adoption · chatbot deflection rate · marketplace
+transactions.
+EM-02/04/09, AI-E-01
+AI performance
+Triage accuracy · prediction precision · % queries resolved by AI.
+§11 benchmarks, AI-S-06 logs
+Commercial
+Investor-dashboard usage · off-plan sales and occupancy.
+SC-08, AI-S-04, SC-11
+15.  Assumptions & dependencies
+15.1  General
+ Development proceeds on approved designs and agreed requirements.
+ Third-party fees (SMS, email, hosting, maps, payment gateway) are paid by the Client.
+ App Store / Play Store publishing requires Client-owned developer accounts.
+15.2  AI-specific
+ Usage costs — LLM, vision, OCR and translation usage is billed to the Client (metered per tenant, §8.2).
+ Data dependency — AI quality improves as data accumulates; data-hungry features (AI-F-01, AI-E-03) launch in
+shadow/tuning mode.
+ Assistive by design — AI produces suggestions with human review; it is not a replacement for judgement.
+ Privacy & consent — biometric/CCTV features are optional and NDPA-contingent (Q5).
+ Scope boundary — foundation models + RAG; bespoke model training is separate.
+ Acceptance — AI features are accepted against the agreed benchmarks of §11, not 100% accuracy.
+16.  Delivery plan & phase mapping
+Indicative 6-month plan, July – December 2026; detailed roadmap confirmed at kickoff. Phases map requirements to
+the v1.0 milestones so the team always knows what “core development” means.
+Phase
+Weeks
+(indic.)
+Focus
+Requirement IDs
+1 — Foundations &
+MVP
+1–12
+Discovery, brand, UX/UI; shared core;
+Must-priority features; AI guardrails scaffolding.
+SC-01/02/03/05/06/07/09/10 ·
+FM-01/02/03/05/07/08 · EM-01/02/03/04/06 ·
+AI-S-06
+2 — Committed
+scope
+10–20
+Should-priority features behind flags; AI feature
+set on the guardrails platform.
+FM-04/06 · EM-05/07/08/09 · SC-04/08/11 ·
+AI-F-01…05 · AI-E-01…04 · AI-S-01…04
+3 — Complete &
+harden
+18–26
+Could items; performance/security hardening;
+UAT; deployment, go-live, integration &
+handover.
+AI-E-05/06 (if Q5 signed off) · AI-S-05 · NFR
+verification · docs & runbooks
+Process: Discovery → design (up to 3 revision rounds) → build → QA → client review (5 business days; deemed
+acceptance if no response) → deployment — with a 30-day post-deployment warranty on reproducible bugs.
+Milestones: (1) discovery, brand & UX/UI kickoff · (2) core development · (3) testing & QA · (4) deployment · (5) go-live ·
+(6) third-party integration & handover.
+17.  Open questions & decisions register
+These block or shape build work. Each needs an owner and an answer by the phase shown; unresolved items default to
+the (proposed) baseline in this document.
+
+===== PAGE 12 =====
+Unrealabs (Choplife Technologies Ltd)  ·  hello@choplife.io  ·  Confidential
+PRD v2.0 · Page 12
+#
+Question
+Why it matters
+Owner
+Needed by
+Q1
+Who exactly is a “tenant” — estates
+operated by 7 Fifteen Capital, or
+third-party operators too?
+Shapes onboarding, branding and
+commercial model.
+Client
+Kickoff
+Q2
+Confirm data-isolation strategy (ADR-01:
+shared DB + row-level security vs
+schema-per-tenant).
+Foundational architecture; expensive to
+change later.
+Unrealabs
+Kickoff
+Q3
+Marketplace commercial model:
+commission %, escrow, vendor payout
+rails and KYC.
+Payouts have regulatory and gateway
+implications; blocks EM-09 payout build.
+Client
+Phase 2 start
+Q4
+SOS operating model: who responds,
+escalation chain, liability and manned
+hours.
+Safety-critical flow; drives EM-06 SLAs
+and staffing.
+Client
+Phase 1
+Q5
+Proceed with AI security & access
+(AI-E-06)? Requires consent framework +
+DPIA.
+NDPA-contingent; long lead time.
+Client + Unrealabs
+Phase 2
+Q6
+Language list for localization at launch.
+Sizes translation and QA effort.
+Client
+Design phase
+Q7
+Hosting provider and data-residency
+requirement (Nigeria vs regional cloud).
+NDPA posture, latency and cost.
+Client
+Kickoff
+Q8
+Launch sizing: tenants, units, users,
+expected concurrency.
+Validates §12 scalability targets and load
+tests.
+Client
+Design phase
+Q9
+Any legacy data to migrate (spreadsheets,
+resident lists, asset registers)?
+Migration is unscoped; may need a
+Change Request.
+Client
+Kickoff
+Q10
+Payment reconciliation source of truth
+(gateway settlement vs bank statements).
+Defines EM-01 reconciliation rules.
+Client
+Phase 1
+Q11
+iOS distribution: v1.0 lists TestFlight/IPA
+— is a production App Store release in
+scope?
+Affects review lead times and release
+plan.
+Client + Unrealabs
+Phase 1
+Q12
+Per-tenant AI/SMS budget caps and alert
+thresholds.
+Client pays usage; caps prevent surprises.
+Client
+Phase 2
+18.  Commercials
+Unchanged from v1.0. One package, one-time build fee; all figures in USD · multi-tenant · covers design, development,
+QA and delivery. Commercial terms map to Schedule A of the Design & Development Services Agreement.
+What's included
+Complete + AI
+Brand identity (A1)
+ ✓
+Shared core — mobile, web, admin, payments
+ ✓
+Facility Management module
+ ✓
+Estate Management module
+ ✓
+AI capabilities
+ ✓
+QA, PM, deployment & 30-day warranty
+ ✓
+Indicative timeline
+ ≈24–26 weeks
+Total (one-time, USD)
+ USD 300,000
+Component
+Coverage
+Price (USD)
+Foundation
+Brand (A1) + shared core + base delivery
+ 70,000
+
+===== PAGE 13 =====
+Unrealabs (Choplife Technologies Ltd)  ·  hello@choplife.io  ·  Confidential
+PRD v2.0 · Page 13
+Component
+Coverage
+Price (USD)
+Facility module
+Asset, maintenance, inspection, vendor, reporting
+ 40,000
+Estate module
+Billing, residents, requests, bookings, security, marketplace
+ 40,000
+AI capabilities
+Predictive maintenance, copilots, chatbot, doc intelligence, fraud
+ 150,000
+Total — Complete + AI
+Everything, AI built in
+ 300,000
+ One-time fee in USD; excludes third-party running costs — hosting, SMS, email, maps, payment gateway and AI
+usage are billed separately to the Client.
+ Up to 3 design revision rounds per module; 30-day warranty.
+ Upgrades and scope changes via Change Request (Clause 10). Estimate valid for 30 days.
+19.  Approval & sign-off
+This PRD is a living document and may be refined during discovery. Material changes to scope, features or assumptions
+are handled via Change Request under the Design & Development Services Agreement.
+FOR 7 FIFTEEN CAPITAL (CLIENT)
+Name
+ 
+Title
+ 
+Signature
+ 
+Date
+ 
+FOR UNREALABS (CONTRACTOR)
+Name
+Samuel Omosehin
+Title
+Founder
+Signature
+ 
+Date
+ 
+Note: ongoing third-party running costs (hosting, SMS, email, maps, payment gateway and AI usage) are billed separately to the
+Client.
+20.  Change log
+Version
+Date
+Change
+1.0
+Jul 2026
+Initial PRD derived from the submission deck (prepared for Greenbox Ltd).
+1.1
+Jul 2026
+Client corrected to 7 Fifteen Capital; deployment model changed to multi-tenant.
+2.0
+Jul 2026
+Business-analysis revision for developer readiness: MoSCoW priorities, user stories and acceptance criteria on
+every requirement; glossary; roles & permissions matrix; domain model and tenancy/isolation requirements; new
+explicit requirements FM-03 work orders, SC-09 notifications, SC-10 audit logging; workflow state machines; AI
+specs with HITL, fallbacks and proposed benchmarks; quantified NFRs and offline behaviour; integration decision
+table; KPI traceability; phase-mapped delivery plan; open-questions register.

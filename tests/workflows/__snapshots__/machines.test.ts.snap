@@ -1,0 +1,7 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`derived_proposed edges are visible, not hidden > lists every edge that needs client sign-off before shipping 1`] = `
+[
+  "work-order:WO-20",
+]
+`;

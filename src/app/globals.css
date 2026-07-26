@@ -32,6 +32,15 @@
   /* Elevation */
   --shadow: 0 1px 2px rgb(16 18 32 / 0.04), 0 4px 16px rgb(16 18 32 / 0.05);
   --shadow-lg: 0 8px 40px rgb(16 18 32 / 0.14);
+
+  /* Semantic tones (light). Domain status → tone in src/lib/status-tones.ts. */
+  --tone-neutral: #64748b; /* draft, placed, requested */
+  --tone-info: #3b82f6; /* issued, assigned, acknowledged */
+  --tone-progress: #8b5cf6; /* in progress, triaged, responding */
+  --tone-warn: #f59e0b; /* overdue, on hold, partially paid */
+  --tone-danger: #ef4444; /* in arrears, escalated, raised (SOS) */
+  --tone-success: #10b981; /* paid, resolved, verified, delivered */
+  --tone-muted: #6b7280; /* closed, cancelled, rejected, expired */
 }
 
 [data-theme='dark'] {
@@ -55,6 +64,15 @@
 
   --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 6px 20px rgb(0 0 0 / 0.35);
   --shadow-lg: 0 12px 48px rgb(0 0 0 / 0.5);
+
+  /* Semantic tones (dark) — lifted for contrast against deep surfaces. */
+  --tone-neutral: #94a3b8;
+  --tone-info: #60a5fa;
+  --tone-progress: #a78bfa;
+  --tone-warn: #fbbf24;
+  --tone-danger: #f87171;
+  --tone-success: #34d399;
+  --tone-muted: #9ca3af;
 }
 
 /* Expose the tokens to Tailwind so `bg-surface`, `text-text-2`,
@@ -77,17 +95,20 @@
   --color-primary-weak-2: var(--primary-weak-2);
   --color-on-primary: var(--on-primary);
 
-  /* Status scale — Draft, Posted, Booked, In Transit, Delivered, Closed. */
-  --color-status-draft: #8b93a1;
-  --color-status-posted: #3b82f6;
-  --color-status-booked: #8b5cf6;
-  --color-status-transit: #f59e0b;
-  --color-status-delivered: #10b981;
-  --color-status-closed: #6b7280;
+  /* Semantic tone scale. Domain statuses map onto these tones (see
+     src/lib/status-tones.ts), so status colour resolves through the theme like
+     every other colour instead of being hard-coded per status. */
+  --color-tone-neutral: var(--tone-neutral);
+  --color-tone-info: var(--tone-info);
+  --color-tone-progress: var(--tone-progress);
+  --color-tone-warn: var(--tone-warn);
+  --color-tone-danger: var(--tone-danger);
+  --color-tone-success: var(--tone-success);
+  --color-tone-muted: var(--tone-muted);
 
-  --color-positive: #10b981;
-  --color-negative: #ef4444;
-  --color-warning: #f59e0b;
+  --color-positive: var(--tone-success);
+  --color-negative: var(--tone-danger);
+  --color-warning: var(--tone-warn);
 
   --shadow-card: var(--shadow);
   --shadow-float: var(--shadow-lg);
