@@ -8,9 +8,13 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { issueInvoice, payInvoice } from '@/server/actions/transitions';
+import { issueInvoice } from '@/server/actions/transitions';
+import { payChargeFromWallet } from '@/server/actions/resident-home';
 import { Button } from '@/components/ui';
 
+/** The resident's pay control. The wallet is the single funding source, so this
+ *  tops the unit wallet up to cover the charge and settles it from there — hence
+ *  "Top up to pay". */
 export function PayButton({ invoiceRef }: { invoiceRef: string }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -22,12 +26,12 @@ export function PayButton({ invoiceRef }: { invoiceRef: string }) {
         disabled={pending}
         className="!h-8 !px-3 !text-[12px]"
         onClick={() => start(async () => {
-          const r = await payInvoice(invoiceRef);
+          const r = await payChargeFromWallet(invoiceRef);
           if (!r.ok) setError(r.error);
           else router.refresh();
         })}
       >
-        {pending ? 'Paying…' : 'Pay now'}
+        {pending ? 'Paying…' : 'Top up to pay'}
       </Button>
       {error && <span className="text-[11px] text-negative">{error}</span>}
     </span>

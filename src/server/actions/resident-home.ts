@@ -13,7 +13,8 @@ import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { getActor } from '@/server/session';
 import { ForbiddenError, assertCan } from '@/lib/authz';
-import { db, settleUnitFromWallet } from '@/server/data/store';
+import { repos } from '@/server/data';
+import { db, recordHistory, settleUnitFromWallet } from '@/server/data/store';
 import { addMoney, money } from '@/domain/primitives';
 import { ACTIVE_UNIT_COOKIE } from '@/server/active-unit';
 
@@ -47,5 +48,57 @@ export async function topUpWallet(unitId: string, amountNaira: number): Promise<
   settleUnitFromWallet(unitId);
 
   ['/portal', '/portal/bills', '/billing', '/dashboard'].forEach((p) => revalidatePath(p));
+  return { ok: true };
+}
+
+/**
+ * Pay a specific charge — the ONLY payment path now that the wallet is the
+ * single source of funds. It tops the unit wallet up to cover the charge, then
+ * clears that exact invoice from the wallet, recording a PAYMENT_CONFIRMED
+ * (SC-02). Net wallet change is zero; the money flows resident → wallet → charge.
+ */
+export async function payChargeFromWallet(ref: string): Promise<TopUpResult> {
+  const actor = await getActor();
+  try {
+    assertCan(actor, 'payments_in_app', 'create'); // resident-only (§7)
+  } catch (e) {
+    if (e instanceof ForbiddenError) return { ok: false, error: 'Only residents can pay in-app.' };
+    throw e;
+  }
+  const inv = repos.invoices.getByRef(actor, ref); // scoped: only your own units
+  if (!inv) return { ok: false, error: 'Charge not found.' };
+  const live = db.invoices.find((i) => i.id === inv.id);
+  if (!live) return { ok: false, error: 'Charge not found.' };
+  if (live.status === 'paid' || live.status === 'draft') return { ok: false, error: 'Nothing to pay on this charge.' };
+
+  const owed = live.amount.minor - live.paid.minor;
+  if (owed <= 0) return { ok: false, error: 'Nothing to pay.' };
+
+  const wallet = db.wallets.find((w) => w.unitId === live.unitId && w.ownerUserId === actor.userId);
+  if (!wallet) return { ok: false, error: 'No wallet is linked to this unit.' };
+
+  // Top the wallet up to cover the charge (usually the whole amount — a unit
+  // with a pending charge has a drained wallet by the auto-deduct invariant),
+  // then clear this specific invoice from it.
+  const shortfall = Math.max(0, owed - wallet.available.minor);
+  wallet.available = addMoney(wallet.available, money(shortfall, wallet.available.currency));
+
+  const from = live.status;
+  live.paid = money(live.paid.minor + owed, live.amount.currency);
+  live.status = 'paid';
+  live.agingDays = Math.min(live.agingDays, 0);
+  wallet.available = money(wallet.available.minor - owed, wallet.available.currency);
+
+  recordHistory('service-charge', live.id, {
+    at: new Date().toISOString(),
+    event: 'PAYMENT_CONFIRMED',
+    from,
+    to: 'paid',
+    actorId: actor.userId,
+    actorName: 'Wallet payment (SC-02)',
+    actorRole: 'system_webhook',
+  });
+
+  ['/portal/bills', '/portal', '/billing', '/dashboard'].forEach((p) => revalidatePath(p));
   return { ok: true };
 }

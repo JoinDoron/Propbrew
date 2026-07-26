@@ -12,6 +12,10 @@ export default async function MyBillsPage() {
 
   return (
     <div className="max-w-[900px] mx-auto flex flex-col gap-3.5">
+      <div className="rounded-xl border border-border bg-surface-2 px-4 py-2.5 text-[12px] text-text-3">
+        Charges are settled from your unit wallet — paying tops the wallet up to cover the amount and clears the
+        charge from it. Funds you add always clear pending charges first.
+      </div>
       <Card padded={false}>
         <div className="p-4 sm:p-[18px] pb-0">
           <CardHeader title="My bills" subtitle="Your service charges and payments" />

@@ -25,7 +25,6 @@ import {
   type Machine,
 } from '@/domain/workflows';
 import type { Role } from '@/domain/enums';
-import { money } from '@/domain/primitives';
 
 export type TxResult = { ok: true; to: string } | { ok: false; error: string };
 
@@ -123,46 +122,9 @@ export async function issueInvoice(ref: string): Promise<TxResult> {
   return { ok: true, to: t };
 }
 
-/**
- * Resident pays an invoice. Authorises the initiation (payments_in_app), then
- * simulates the SC-02 gateway webhook confirming — the transition is fired as
- * system_webhook, not as the resident.
- */
-export async function payInvoice(ref: string): Promise<TxResult> {
-  const actor = await getActor();
-  try {
-    assertCan(actor, 'payments_in_app', 'create'); // resident-only (§7)
-  } catch (e) {
-    if (e instanceof ForbiddenError) return { ok: false, error: 'Only residents can pay in-app.' };
-    throw e;
-  }
-  const inv = repos.invoices.getByRef(actor, ref);
-  if (!inv) return { ok: false, error: 'Invoice not found.' };
-  const live = db.invoices.find((i) => i.id === inv.id)!;
-
-  // Simulate a full settlement of the remaining balance.
-  const target = 'paid';
-  const t = serviceChargeMachine.transitions.find(
-    (x) => x.from === live.status && x.event === 'PAYMENT_CONFIRMED' && x.to === target,
-  );
-  if (!t) return { ok: false, error: `No payment is due on this invoice (${live.status}).` };
-
-  const from = live.status;
-  live.paid = money(live.amount.minor, live.amount.currency);
-  live.status = target;
-  live.agingDays = live.agingDays > 0 ? 0 : live.agingDays;
-  recordHistory('service-charge', live.id, {
-    at: new Date().toISOString(),
-    event: 'PAYMENT_CONFIRMED',
-    from,
-    to: target,
-    actorId: 'gateway',
-    actorName: 'Payment gateway (SC-02)',
-    actorRole: 'system_webhook',
-  });
-  ['/portal/bills', '/portal', '/billing', '/dashboard'].forEach((p) => revalidatePath(p));
-  return { ok: true, to: target };
-}
+// Resident payment lives in resident-home.ts (`payChargeFromWallet`): the wallet
+// is the single funding source, so charges are paid by funding the unit wallet
+// and clearing them from it — there is no direct gateway-to-invoice path.
 
 /* --- creates -------------------------------------------------------------- */
 
