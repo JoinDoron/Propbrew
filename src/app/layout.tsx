@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import { Inter_Tight, JetBrains_Mono } from 'next/font/google';
-import { AppShell } from '@/components/app-shell';
 import { ThemeProvider, themeInitScript } from '@/components/theme-provider';
 import { brand } from '@/config/brand';
 import './globals.css';
@@ -21,7 +20,7 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: `${brand.name} — ${brand.tagline}`,
-  description: 'Logistics management platform.',
+  description: 'Facility & Estate Management Platform.',
 };
 
 export default function RootLayout({
@@ -38,9 +37,9 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body className="min-h-full flex flex-col">
-        <ThemeProvider>
-          <AppShell>{children}</AppShell>
-        </ThemeProvider>
+        {/* AppShell now lives in each authenticated route group's layout, so the
+            root layout carries only fonts, theme init and globals. */}
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );

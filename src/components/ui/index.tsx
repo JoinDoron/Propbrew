@@ -10,24 +10,7 @@
  */
 
 import type { ButtonHTMLAttributes, ReactNode, ThHTMLAttributes } from 'react';
-
-export type LoadStatus =
-  | 'Draft'
-  | 'Posted'
-  | 'Booked'
-  | 'In Transit'
-  | 'Delivered'
-  | 'Closed';
-
-/** The template's status colour scale. */
-export const STATUS_COLORS: Record<LoadStatus, string> = {
-  Draft: '#8b93a1',
-  Posted: '#3b82f6',
-  Booked: '#8b5cf6',
-  'In Transit': '#f59e0b',
-  Delivered: '#10b981',
-  Closed: '#6b7280',
-};
+import { toneVar, type Tone } from '@/lib/status-tones';
 
 /** Fade a hex colour to an rgba() string — used for soft status backgrounds. */
 export function hexA(hex: string, alpha: number): string {
@@ -161,17 +144,20 @@ export function KpiCard({
 /* Status pill                                                                 */
 /* -------------------------------------------------------------------------- */
 
-export function StatusPill({ status }: { status: LoadStatus | string }) {
-  const color = STATUS_COLORS[status as LoadStatus] ?? '#8b93a1';
+/**
+ * Status pill. The colour comes from a semantic `tone`, resolved through the
+ * theme tokens, so an unmapped domain status is a compile error at the call
+ * site (via the closed tone maps in status-tones.ts) rather than a silent grey
+ * pill. `status` is the display label; `tone` is required.
+ */
+export function StatusPill({ status, tone }: { status: string; tone: Tone }) {
+  const color = toneVar(tone);
   return (
     <span
       className="inline-flex items-center gap-1.5 h-[22px] px-2 rounded-md text-[11.5px] font-semibold whitespace-nowrap"
-      style={{ color, background: hexA(color, 0.13) }}
+      style={{ color, background: `color-mix(in srgb, ${color} 14%, transparent)` }}
     >
-      <span
-        className="w-1.5 h-1.5 rounded-full flex-none"
-        style={{ background: color }}
-      />
+      <span className="w-1.5 h-1.5 rounded-full flex-none" style={{ background: color }} />
       {status}
     </span>
   );

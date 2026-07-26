@@ -3,44 +3,50 @@
 /**
  * Application shell — collapsible sidebar, sticky header, mobile drawer.
  *
- * A 248px sidebar that collapses to a
- * 72px icon rail, a 64px header with theme/notification/profile controls, and
- * a fixed off-canvas drawer below 880px.
+ * A 248px sidebar that collapses to a 72px icon rail, a 64px header, and a fixed
+ * off-canvas drawer below 880px. Nav and identity are computed on the server
+ * (getActor → visibleNav) and passed in as serializable data; this component
+ * only renders and handles interactivity.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import {
-  Bell,
-  ChevronLeft,
-  LogOut,
-  type LucideIcon,
-  Menu,
-  MessageSquare,
-  Moon,
-  Search,
-  Sun,
-  Truck,
-} from 'lucide-react';
+import { Bell, ChevronLeft, Menu, MessageSquare, Moon, Search, Sun, Truck } from 'lucide-react';
 import { brand } from '@/config/brand';
-import { navGroups, pageMeta } from '@/config/nav';
+import { PAGE_META, type NavGroup } from '@/config/nav';
 import { useTheme } from '@/components/theme-provider';
+import { Icon } from '@/components/icon';
 import { Avatar, IconButton } from '@/components/ui';
 
 const SIDEBAR_WIDTH = 248;
 const SIDEBAR_COLLAPSED = 72;
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export type ShellIdentity = {
+  name: string;
+  roleSummary: string;
+  tenantLabel: string;
+};
+
+export function AppShell({
+  groups,
+  identity,
+  devSwitcher,
+  children,
+}: {
+  groups: NavGroup[];
+  identity: ShellIdentity;
+  devSwitcher?: ReactNode;
+  children: ReactNode;
+}) {
   const pathname = usePathname();
   const { theme, toggleTheme } = useTheme();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
 
-  const meta = pageMeta[pathname] ?? { title: '', subtitle: '' };
+  const meta = PAGE_META[pathname] ?? { title: brand.name, subtitle: '' };
   const showLabels = !collapsed;
 
-  // ⌘K / Ctrl+K focuses search, Escape closes the drawer.
   const handleKey = useCallback((e: KeyboardEvent) => {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
       e.preventDefault();
@@ -56,7 +62,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-app text-text">
-      {/* Drawer backdrop (mobile only) */}
       {mobileNav && (
         <div
           onClick={() => setMobileNav(false)}
@@ -66,7 +71,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <aside
         style={{ width: collapsed ? SIDEBAR_COLLAPSED : SIDEBAR_WIDTH }}
-        data-open={mobileNav}
         className={`flex-none flex flex-col bg-surface border-r border-border transition-[width] duration-200
           max-[879px]:fixed max-[879px]:top-0 max-[879px]:left-0 max-[879px]:h-full max-[879px]:z-[60]
           max-[879px]:!w-[264px] max-[879px]:shadow-float
@@ -76,19 +80,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {/* Brand */}
         <div className="flex items-center gap-2.5 px-4 h-16 flex-none">
           <span
-            className="w-[34px] h-[34px] rounded-[10px] flex items-center justify-center flex-none text-white"
-            style={{
-              background: 'linear-gradient(145deg, var(--primary), var(--primary))',
-              boxShadow: '0 4px 12px var(--primary-weak-2)',
-            }}
+            className="w-[34px] h-[34px] rounded-[10px] flex items-center justify-center flex-none text-white bg-primary"
+            style={{ boxShadow: '0 4px 12px var(--primary-weak-2)' }}
           >
             <Truck size={18} />
           </span>
           {showLabels && (
             <div className="flex flex-col leading-none min-w-0">
-              <span className="font-bold text-base tracking-[-0.02em] truncate">
-                {brand.name}
-              </span>
+              <span className="font-bold text-base tracking-[-0.02em] truncate">{brand.name}</span>
               <span className="text-[10px] text-text-3 font-medium tracking-[0.04em] mt-[3px]">
                 {brand.tagline}
               </span>
@@ -101,10 +100,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             className="ml-auto !w-[26px] !h-[26px] max-[879px]:hidden"
           >
-            <ChevronLeft
-              size={16}
-              className={`transition-transform duration-200 ${collapsed ? 'rotate-180' : ''}`}
-            />
+            <ChevronLeft size={16} className={`transition-transform duration-200 ${collapsed ? 'rotate-180' : ''}`} />
           </IconButton>
         </div>
 
@@ -118,9 +114,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {showLabels && (
               <>
                 <span className="flex-1 text-left truncate">Search…</span>
-                <span className="text-[11px] border border-border-2 rounded-[5px] px-1.5 py-px">
-                  ⌘K
-                </span>
+                <span className="text-[11px] border border-border-2 rounded-[5px] px-1.5 py-px">⌘K</span>
               </>
             )}
           </button>
@@ -128,50 +122,53 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto overflow-x-hidden px-3">
-          {navGroups.map((group) => (
+          {groups.map((group) => (
             <div key={group.label}>
               {showLabels && (
                 <div className="text-[10.5px] font-semibold tracking-[0.06em] text-text-3 uppercase px-2.5 pt-3.5 pb-1.5">
                   {group.label}
                 </div>
               )}
-              {group.items.map((item) => (
-                <NavLink
-                  key={item.id}
-                  href={item.href}
-                  label={item.label}
-                  icon={item.icon}
-                  badge={item.badge}
-                  active={pathname === item.href}
-                  showLabel={showLabels}
-                  onNavigate={() => setMobileNav(false)}
-                />
-              ))}
+              {group.items.map((item) => {
+                const active = pathname === item.href;
+                return (
+                  <Link
+                    key={item.id}
+                    href={item.href}
+                    title={item.label}
+                    aria-current={active ? 'page' : undefined}
+                    onClick={() => setMobileNav(false)}
+                    className={`w-full flex items-center gap-[11px] h-10 px-2.5 mb-0.5 rounded-[10px] text-[13.5px] font-medium transition-colors duration-150 ${
+                      active ? 'bg-primary-weak text-primary' : 'text-text-2 hover:bg-surface-2'
+                    }`}
+                  >
+                    <Icon name={item.icon} className={`flex-none ${active ? 'text-primary' : 'text-text-3'}`} />
+                    {showLabels && <span className="flex-1 truncate">{item.label}</span>}
+                    {showLabels && item.proposed && (
+                      <span
+                        title="Nav mapping proposed — not specified in the PRD §7 matrix"
+                        className="text-[9px] font-bold uppercase tracking-wide text-text-3 border border-border-2 rounded px-1 py-px"
+                      >
+                        ?
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
             </div>
           ))}
         </nav>
 
-        {/* Profile footer */}
+        {/* Identity footer */}
         <div className="p-3 border-t border-border mt-1">
-          <div className="flex items-center gap-2.5 p-1.5 rounded-[10px] cursor-pointer hover:bg-surface-2 transition-colors">
-            <Avatar name="Delowar Rahman" />
+          {devSwitcher}
+          <div className="flex items-center gap-2.5 p-1.5 rounded-[10px]">
+            <Avatar name={identity.name} />
             {showLabels && (
-              <>
-                <div className="flex-1 min-w-0 leading-tight">
-                  <div className="font-semibold text-[13px] truncate">
-                    Delowar Rahman
-                  </div>
-                  <div className="text-[11px] text-text-3">Admin · Full access</div>
-                </div>
-                <IconButton
-                  bordered={false}
-                  title="Sign out"
-                  aria-label="Sign out"
-                  className="!w-[30px] !h-[30px]"
-                >
-                  <LogOut size={16} />
-                </IconButton>
-              </>
+              <div className="flex-1 min-w-0 leading-tight">
+                <div className="font-semibold text-[13px] truncate">{identity.name}</div>
+                <div className="text-[11px] text-text-3 truncate">{identity.roleSummary}</div>
+              </div>
             )}
           </div>
         </div>
@@ -193,12 +190,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <h1 className="text-[16px] sm:text-[18px] font-semibold tracking-[-0.02em] leading-tight truncate">
               {meta.title}
             </h1>
-            <p className="text-[12.5px] text-text-3 mt-0.5 truncate max-[879px]:hidden">
-              {meta.subtitle}
-            </p>
+            <p className="text-[12.5px] text-text-3 mt-0.5 truncate max-[879px]:hidden">{meta.subtitle}</p>
           </div>
 
-          {/* Header-mounted search target for ⌘K */}
           <label htmlFor="global-search" className="sr-only">
             Search
           </label>
@@ -208,11 +202,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             className="hidden lg:block w-56 h-[38px] px-3 rounded-[10px] border border-border bg-surface-2 text-[13px] outline-none focus:border-primary transition-colors"
           />
 
-          <IconButton
-            onClick={toggleTheme}
-            title="Toggle theme"
-            aria-label="Toggle theme"
-          >
+          <IconButton onClick={toggleTheme} title="Toggle theme" aria-label="Toggle theme">
             {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
           </IconButton>
           <IconButton title="Chat" aria-label="Chat" className="max-[560px]:hidden">
@@ -224,63 +214,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               3
             </span>
           </IconButton>
-          <button className="flex items-center gap-2.5 h-[38px] pl-[3px] pr-3 border border-border rounded-[20px] bg-surface cursor-pointer max-[560px]:hidden hover:bg-surface-2 transition-colors">
-            <Avatar name="Delowar Rahman" size={30} />
-            <span className="font-semibold text-[13px]">Delowar</span>
-          </button>
+          <div className="flex items-center gap-2.5 h-[38px] pl-[3px] pr-3 border border-border rounded-[20px] bg-surface max-[560px]:hidden">
+            <Avatar name={identity.name} size={30} />
+            <span className="font-semibold text-[13px]">{identity.name.split(' ')[0]}</span>
+          </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto overflow-x-hidden px-4 sm:px-6 pt-[22px] pb-10">
-          {children}
-        </main>
+        <main className="flex-1 overflow-y-auto overflow-x-hidden px-4 sm:px-6 pt-[22px] pb-10">{children}</main>
       </div>
     </div>
-  );
-}
-
-function NavLink({
-  href,
-  label,
-  icon: Icon,
-  badge,
-  active,
-  showLabel,
-  onNavigate,
-}: {
-  href: string;
-  label: string;
-  icon: LucideIcon;
-  badge?: string;
-  active: boolean;
-  showLabel: boolean;
-  onNavigate: () => void;
-}) {
-  return (
-    <Link
-      href={href}
-      title={label}
-      onClick={onNavigate}
-      aria-current={active ? 'page' : undefined}
-      className={`w-full flex items-center gap-[11px] h-10 px-2.5 mb-0.5 rounded-[10px] text-[13.5px] font-medium transition-colors duration-150 ${
-        active
-          ? 'bg-primary-weak text-primary'
-          : 'text-text-2 hover:bg-surface-2'
-      }`}
-    >
-      <Icon
-        size={18}
-        className={`flex-none ${active ? 'text-primary' : 'text-text-3'}`}
-      />
-      {showLabel && <span className="flex-1 truncate">{label}</span>}
-      {showLabel && badge && (
-        <span
-          className={`min-w-[19px] h-[19px] px-1.5 rounded-[10px] text-[10.5px] font-bold flex items-center justify-center ${
-            active ? 'bg-primary text-white' : 'bg-surface-3 text-text-2'
-          }`}
-        >
-          {badge}
-        </span>
-      )}
-    </Link>
   );
 }
