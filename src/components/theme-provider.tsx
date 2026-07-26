@@ -1,48 +1,65 @@
 'use client';
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useState,
-  type ReactNode,
-} from 'react';
+import { useCallback, useSyncExternalStore, type ReactNode } from 'react';
 import type { Theme } from '@/config/brand';
 
 const STORAGE_KEY = 'cargoflow.theme';
 
-type ThemeContextValue = {
-  theme: Theme;
-  toggleTheme: () => void;
-  setTheme: (theme: Theme) => void;
-};
+/**
+ * The `data-theme` attribute on <html> is the single source of truth. A
+ * blocking script sets it before first paint, `useSyncExternalStore` reads it,
+ * and `setTheme` writes it. Keeping the DOM authoritative means there is no
+ * second copy of the theme to fall out of sync — and no hydration mismatch.
+ */
 
-const ThemeContext = createContext<ThemeContextValue | null>(null);
+const listeners = new Set<() => void>();
+
+function subscribe(onChange: () => void) {
+  listeners.add(onChange);
+  // Keep other tabs in step when the preference changes.
+  window.addEventListener('storage', onChange);
+  return () => {
+    listeners.delete(onChange);
+    window.removeEventListener('storage', onChange);
+  };
+}
+
+function getSnapshot(): Theme {
+  return document.documentElement.getAttribute('data-theme') === 'dark'
+    ? 'dark'
+    : 'light';
+}
+
+// The server has no DOM; the init script corrects the client before paint.
+function getServerSnapshot(): Theme {
+  return 'light';
+}
 
 /**
  * Blocking snippet that applies the persisted theme before first paint.
- * Without this the app renders light, then flips to dark on hydration.
+ * Without it the app renders light, then flips to dark on hydration.
  */
-export const themeInitScript = `(function(){try{var t=localStorage.getItem('${STORAGE_KEY}');if(!t){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();`;
+export const themeInitScript = `(function(){try{var t=localStorage.getItem('${STORAGE_KEY}');if(t!=='dark'&&t!=='light'){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();`;
 
+/**
+ * Kept as an explicit mount point so app-wide theme concerns have a home,
+ * even though the DOM (not React state) holds the value.
+ */
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>('light');
+  return <>{children}</>;
+}
 
-  // Adopt whatever the init script already put on <html>.
-  useEffect(() => {
-    const current = document.documentElement.getAttribute('data-theme');
-    if (current === 'dark' || current === 'light') setThemeState(current);
-  }, []);
+export function useTheme() {
+  const theme = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   const setTheme = useCallback((next: Theme) => {
-    setThemeState(next);
     document.documentElement.setAttribute('data-theme', next);
     try {
       localStorage.setItem(STORAGE_KEY, next);
     } catch {
-      // Private browsing or blocked storage — theme still applies for the session.
+      // Private browsing or blocked storage — theme still applies this session.
     }
+    listeners.forEach((l) => l());
   }, []);
 
   const toggleTheme = useCallback(
@@ -50,15 +67,5 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     [theme, setTheme],
   );
 
-  return (
-    <ThemeContext.Provider value={{ theme, toggleTheme, setTheme }}>
-      {children}
-    </ThemeContext.Provider>
-  );
-}
-
-export function useTheme() {
-  const ctx = useContext(ThemeContext);
-  if (!ctx) throw new Error('useTheme must be used inside <ThemeProvider>');
-  return ctx;
+  return { theme, setTheme, toggleTheme };
 }
