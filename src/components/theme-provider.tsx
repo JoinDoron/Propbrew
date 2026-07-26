@@ -3,7 +3,7 @@
 import { useCallback, useSyncExternalStore, type ReactNode } from 'react';
 import type { Theme } from '@/config/brand';
 
-const STORAGE_KEY = 'cargoflow.theme';
+const STORAGE_KEY = 'vesta.theme';
 
 /**
  * The `data-theme` attribute on <html> is the single source of truth. A

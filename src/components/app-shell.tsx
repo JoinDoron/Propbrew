@@ -3,7 +3,7 @@
 /**
  * Application shell — collapsible sidebar, sticky header, mobile drawer.
  *
- * Reproduces the Cargoflow TMS layout: a 248px sidebar that collapses to a
+ * A 248px sidebar that collapses to a
  * 72px icon rail, a 64px header with theme/notification/profile controls, and
  * a fixed off-canvas drawer below 880px.
  */

@@ -1,9 +1,9 @@
 'use client';
 
 /**
- * Cargoflow UI primitives.
+ * Vesta UI primitives.
  *
- * These are the repeating patterns extracted from the Cargoflow TMS template:
+ * The repeating patterns of the design system:
  * cards, KPI tiles, status pills, filter chips, buttons, tabs and tables.
  * Everything resolves through the design tokens in globals.css, so all of it
  * themes automatically.

@@ -1,7 +1,11 @@
-# Cargoflow design system
+# Vesta design system
 
-Extracted from the [Cargoflow TMS HTML template](https://pbdh7766-cpu.github.io/Logistics-Management-Dashboard-HTML-Template/)
-and rebuilt as real React components on Next.js 16 + Tailwind v4.
+The visual language of the Vesta platform, built as React components on
+Next.js 16 + Tailwind v4.
+
+Origin: the tokens, shape language and component vocabulary were extracted from a
+commercial dashboard template and rebuilt from scratch as real components. The
+template's own domain (logistics) was discarded — only the design system remains.
 
 ## Where things live
 
@@ -107,9 +111,21 @@ reads it via `useSyncExternalStore` and syncs across tabs.
 const { theme, toggleTheme, setTheme } = useTheme();
 ```
 
-## What was deliberately not carried over
+## Multi-tenant branding
 
-The original is a mock-data prototype in a proprietary `.dc` compiler format.
-Its screens (loads, fleet map, fuel, RBAC matrix, chat) were **not** ported —
-the PRD defines what actually gets built. What carried over is the visual
-language: tokens, type, shape, motion, layout and component vocabulary.
+Vesta is multi-tenant (PRD §8.2), so per-tenant branding overrides the platform
+defaults at runtime. Because every colour resolves through `--primary` and the
+surface tokens, a tenant re-skin is a variable swap on `.tms-root` — no component
+changes. `PRIMARY_PRESETS` in `brand.ts` holds the palette offered to tenants.
+
+## Accessibility
+
+PRD §12 requires **WCAG 2.1 AA** for web. What the system already does:
+
+- Every interactive control has an accessible name (`aria-label` on icon buttons).
+- Tabs use `role="tablist"` / `role="tab"` / `aria-selected`; nav uses `aria-current`.
+- Motion collapses under `prefers-reduced-motion`.
+- Colour is never the sole signal — status pills pair a colour with a text label.
+
+Still to verify: contrast ratios on the status scale against both themes, full
+keyboard traversal of the shell, and focus-visible rings on every control.
