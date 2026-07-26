@@ -90,6 +90,18 @@ export const repos = {
   bookings: {
     list: (a: Actor, o?: ListOpts) => scopedList(a, 'bookings_amenities', seed.bookings, o),
   },
+  inspections: {
+    list: (a: Actor, o?: ListOpts) => scopedList(a, 'inspections_compliance', seed.inspections, o),
+  },
+  investorProjects: {
+    list: (a: Actor, o?: ListOpts) => scopedList(a, 'investor_projects', seed.investorProjects, o),
+  },
+  listings: {
+    list: (a: Actor, o?: ListOpts) => scopedList(a, 'marketplace', seed.listings, o),
+  },
+  marketplaceOrders: {
+    list: (a: Actor, o?: ListOpts) => scopedList(a, 'marketplace', seed.marketplaceOrders, o),
+  },
   sites: {
     // Sites carry no per-row ownership; scoped by tenant + estate via siteId.
     all: (a: Actor) => scopedList(a, 'assets_ppm', seed.sites, { limit: 100 }).items,

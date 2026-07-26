@@ -28,6 +28,7 @@ import type {
   AnnouncementScope,
   BookingStatus,
   InvoiceStatus,
+  OrderStatus,
   Role,
   SiteKind,
   SosStatus,
@@ -209,6 +210,70 @@ export type SosEvent = TenantScoped & {
   ackSeconds: number | null;
   responder: string | null;
   channel: 'in_app' | 'queued_offline' | 'sms_fallback';
+};
+
+/* --- inspections (FM-06, Should) ------------------------------------------ */
+
+export type Inspection = TenantScoped & {
+  id: string;
+  ref: string;
+  template: string;
+  siteId: SiteId;
+  estateId: SiteId;
+  assetName: string;
+  status: 'scheduled' | 'passed' | 'failed' | 'overdue';
+  scheduledDate: ISODate;
+  passItems: number;
+  failItems: number;
+  inspector: string;
+  /** FM-06: failed items auto-raise work orders. */
+  raisedWorkOrders: number;
+};
+
+/* --- investor off-plan projects (SC-08, Should) --------------------------- */
+
+export type InvestorProject = TenantScoped & {
+  id: string;
+  /** Scope column: equals `id`; an investor sees a project iff it is in their
+   *  investorProjectIds (§7 O). */
+  projectId: string;
+  name: string;
+  location: string;
+  status: 'planning' | 'selling' | 'construction' | 'completed';
+  unitsTotal: number;
+  unitsSold: number;
+  salesTarget: Money;
+  salesToDate: Money;
+  occupancyPct: number;
+  /** AI-S-04 projection — always shown as an estimate with assumptions. */
+  projectedRoiPct: number;
+  handoverDate: ISODate;
+};
+
+/* --- marketplace (EM-09, Should) ------------------------------------------ */
+
+export type Listing = TenantScoped & {
+  id: string;
+  vendorOrgId: VendorOrgId;
+  vendorName: string;
+  title: string;
+  category: string;
+  price: Money;
+  status: 'active' | 'paused';
+  estateId: SiteId;
+};
+
+export type MarketplaceOrder = TenantScoped & {
+  id: string;
+  ref: string;
+  ownerUserId: UserId;
+  vendorOrgId: VendorOrgId;
+  estateId: SiteId;
+  residentName: string;
+  listingTitle: string;
+  status: OrderStatus;
+  amount: Money;
+  placedAt: ISODateTime;
 };
 
 /* --- a booking row for the resident portal (EM-05) ------------------------ */

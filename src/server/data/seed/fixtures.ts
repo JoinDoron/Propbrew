@@ -15,7 +15,11 @@ import type {
   Asset,
   Booking,
   Building,
+  Inspection,
+  InvestorProject,
   Invoice,
+  Listing,
+  MarketplaceOrder,
   PpmPlan,
   Resident,
   Site,
@@ -190,6 +194,32 @@ export const sosEvents: SosEvent[] = [
   { tenantId: A, id: 'sos-2', ref: 'SOS-0041', estateId: SEED.estateGardens, unitId: 'u-c09a', residentName: 'Tobi Ade', ownerUserId: 'user-tobi', status: 'reviewed', raisedAt: '2026-07-25T22:10:00Z', acknowledgedAt: '2026-07-25T22:10:52Z', ackSeconds: 52, responder: 'Musa Ibrahim', channel: 'in_app' },
   { tenantId: A, id: 'sos-3', ref: 'SOS-0043', estateId: SEED.estateGardens, unitId: 'u-d04c', residentName: 'Amina Sule', ownerUserId: 'user-amina', status: 'raised', raisedAt: '2026-07-26T08:58:00Z', acknowledgedAt: null, ackSeconds: null, responder: null, channel: 'sms_fallback' },
 ] as unknown as SosEvent[];
+
+export const inspections = ([
+  { tenantId: A, id: 'insp-1', ref: 'INS-1201', template: 'Fire safety — quarterly', siteId: SEED.estateGardens, estateId: SEED.estateGardens, assetName: 'Block C — common areas', status: 'passed', scheduledDate: '2026-07-10', passItems: 18, failItems: 0, inspector: 'Bola Adeyemi', raisedWorkOrders: 0 },
+  { tenantId: A, id: 'insp-2', ref: 'INS-1202', template: 'Lift statutory inspection', siteId: SEED.estateGardens, estateId: SEED.estateGardens, assetName: 'Passenger Lift — Block C #1', status: 'failed', scheduledDate: '2026-07-18', passItems: 14, failItems: 3, inspector: 'CoolAir Nigeria', raisedWorkOrders: 3 },
+  { tenantId: A, id: 'insp-3', ref: 'INS-1203', template: 'Generator load test', siteId: SEED.estateVictoria, estateId: SEED.estateVictoria, assetName: 'Chiller — Victoria Tower 1', status: 'scheduled', scheduledDate: '2026-07-30', passItems: 0, failItems: 0, inspector: 'Brightworks Facilities', raisedWorkOrders: 0 },
+  { tenantId: A, id: 'insp-4', ref: 'INS-1198', template: 'Water tank hygiene', siteId: SEED.estateGardens, estateId: SEED.estateGardens, assetName: 'Water Pump — Block D', status: 'overdue', scheduledDate: '2026-07-05', passItems: 0, failItems: 0, inspector: 'Emeka Nwosu', raisedWorkOrders: 0 },
+  { tenantId: B, id: 'insp-b1', ref: 'INS-9001', template: 'Fire safety — quarterly', siteId: SEED.estateIkoyi, estateId: SEED.estateIkoyi, assetName: 'Tower A — common areas', status: 'passed', scheduledDate: '2026-07-12', passItems: 20, failItems: 0, inspector: 'Zainab Yusuf', raisedWorkOrders: 0 },
+] as unknown) as Inspection[];
+
+export const investorProjects = ([
+  { tenantId: A, id: SEED.investorProject, projectId: SEED.investorProject, name: 'Marina Heights (off-plan)', location: 'Lekki Phase 2, Lagos', status: 'selling', unitsTotal: 120, unitsSold: 78, salesTarget: ngn(4_800_000_000), salesToDate: ngn(3_120_000_000), occupancyPct: 0, projectedRoiPct: 18.5, handoverDate: '2027-06-30' },
+  { tenantId: A, id: 'p-cedar', projectId: 'p-cedar', name: 'Cedar Court', location: 'Ikate, Lagos', status: 'construction', unitsTotal: 64, unitsSold: 64, salesTarget: ngn(2_240_000_000), salesToDate: ngn(2_240_000_000), occupancyPct: 12, projectedRoiPct: 15.2, handoverDate: '2026-12-15' },
+  { tenantId: B, id: 'p-ikoyi-towers', projectId: 'p-ikoyi-towers', name: 'Ikoyi Towers', location: 'Ikoyi, Lagos', status: 'selling', unitsTotal: 90, unitsSold: 40, salesTarget: ngn(6_300_000_000), salesToDate: ngn(2_800_000_000), occupancyPct: 0, projectedRoiPct: 21.0, handoverDate: '2028-03-31' },
+] as unknown) as InvestorProject[];
+
+export const listings = ([
+  { tenantId: A, id: 'lst-1', vendorOrgId: SEED.vendorOrg, vendorName: 'Brightworks Facilities', title: 'AC deep-clean & servicing', category: 'HVAC', price: ngn(25000), status: 'active', estateId: SEED.estateGardens },
+  { tenantId: A, id: 'lst-2', vendorOrgId: SEED.vendorOrg, vendorName: 'Brightworks Facilities', title: 'Emergency plumbing call-out', category: 'Plumbing', price: ngn(15000), status: 'active', estateId: SEED.estateGardens },
+  { tenantId: A, id: 'lst-3', vendorOrgId: 'v-coolair', vendorName: 'CoolAir Nigeria', title: 'Fridge & freezer repair', category: 'Refrigeration', price: ngn(18000), status: 'paused', estateId: SEED.estateGardens },
+] as unknown) as Listing[];
+
+export const marketplaceOrders = ([
+  { tenantId: A, id: 'ord-1', ref: 'ORD-5001', ownerUserId: 'user-resident', vendorOrgId: SEED.vendorOrg, estateId: SEED.estateGardens, residentName: 'Folake Bello', listingTitle: 'AC deep-clean & servicing', status: 'fulfilled', amount: ngn(25000), placedAt: '2026-07-20T10:00:00Z' },
+  { tenantId: A, id: 'ord-2', ref: 'ORD-5002', ownerUserId: 'user-tobi', vendorOrgId: SEED.vendorOrg, estateId: SEED.estateGardens, residentName: 'Tobi Ade', listingTitle: 'Emergency plumbing call-out', status: 'accepted', amount: ngn(15000), placedAt: '2026-07-25T14:30:00Z' },
+  { tenantId: A, id: 'ord-3', ref: 'ORD-5003', ownerUserId: 'user-resident', vendorOrgId: 'v-coolair', estateId: SEED.estateGardens, residentName: 'Folake Bello', listingTitle: 'Fridge & freezer repair', status: 'placed', amount: ngn(18000), placedAt: '2026-07-26T08:00:00Z' },
+] as unknown) as MarketplaceOrder[];
 
 export const bookings: Booking[] = [
   { tenantId: A, id: 'bk-1', amenity: 'Clubhouse', estateId: SEED.estateGardens, ownerUserId: 'user-resident', residentName: 'Folake Bello', status: 'confirmed', slot: '2026-07-28T16:00:00Z', fee: ngn(15000) },
