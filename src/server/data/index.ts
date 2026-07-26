@@ -49,49 +49,42 @@ function scopedGet<T extends ScopableRow & { id: string }>(
 
 /* --- repositories --------------------------------------------------------- */
 
+type ListOpts = { cursor?: string | null; limit?: number };
+
 export const repos = {
   workOrders: {
-    list: (a: Actor, o?: { cursor?: string | null; limit?: number }) =>
-      scopedList(a, 'work_orders', seed.workOrders as unknown as (ScopableRow & typeof seed.workOrders[number])[], o),
-    get: (a: Actor, id: string) => scopedGet(a, 'work_orders', seed.workOrders as never, id),
+    list: (a: Actor, o?: ListOpts) => scopedList(a, 'work_orders', seed.workOrders, o),
+    get: (a: Actor, id: string) => scopedGet(a, 'work_orders', seed.workOrders, id),
   },
   assets: {
-    list: (a: Actor, o?: { cursor?: string | null; limit?: number }) =>
-      scopedList(a, 'assets_ppm', seed.assets as never, o),
-    get: (a: Actor, id: string) => scopedGet(a, 'assets_ppm', seed.assets as never, id),
+    list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', seed.assets, o),
+    get: (a: Actor, id: string) => scopedGet(a, 'assets_ppm', seed.assets, id),
   },
   ppmPlans: {
-    list: (a: Actor, o?: { cursor?: string | null; limit?: number }) =>
-      scopedList(a, 'assets_ppm', seed.ppmPlans as never, o),
+    list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', seed.ppmPlans, o),
   },
   invoices: {
-    list: (a: Actor, o?: { cursor?: string | null; limit?: number }) =>
-      scopedList(a, 'charges_invoicing', seed.invoices as never, o),
+    list: (a: Actor, o?: ListOpts) => scopedList(a, 'charges_invoicing', seed.invoices, o),
   },
   residents: {
-    list: (a: Actor, o?: { cursor?: string | null; limit?: number }) =>
-      scopedList(a, 'users_roles', seed.residents as never, o),
+    list: (a: Actor, o?: ListOpts) => scopedList(a, 'users_roles', seed.residents, o),
   },
   vendors: {
     // Vendors are read via the work_orders capability (the proposed nav mapping).
-    list: (a: Actor, o?: { cursor?: string | null; limit?: number }) =>
-      scopedList(a, 'work_orders', seed.vendors as never, o),
+    list: (a: Actor, o?: ListOpts) => scopedList(a, 'work_orders', seed.vendors, o),
   },
   announcements: {
-    list: (a: Actor, o?: { cursor?: string | null; limit?: number }) =>
-      scopedList(a, 'announcements', seed.announcements as never, o),
+    list: (a: Actor, o?: ListOpts) => scopedList(a, 'announcements', seed.announcements, o),
   },
   sosEvents: {
-    list: (a: Actor, o?: { cursor?: string | null; limit?: number }) =>
-      scopedList(a, 'security_sos', seed.sosEvents as never, o),
+    list: (a: Actor, o?: ListOpts) => scopedList(a, 'security_sos', seed.sosEvents, o),
   },
   bookings: {
-    list: (a: Actor, o?: { cursor?: string | null; limit?: number }) =>
-      scopedList(a, 'bookings_amenities', seed.bookings as never, o),
+    list: (a: Actor, o?: ListOpts) => scopedList(a, 'bookings_amenities', seed.bookings, o),
   },
   sites: {
     // Sites carry no per-row ownership; scoped by tenant + estate via siteId.
-    all: (a: Actor) => scopedList(a, 'assets_ppm', seed.sites as never, { limit: 100 }).items,
+    all: (a: Actor) => scopedList(a, 'assets_ppm', seed.sites, { limit: 100 }).items,
   },
 };
 

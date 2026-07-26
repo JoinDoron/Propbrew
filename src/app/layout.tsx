@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Script from 'next/script';
 import { Inter_Tight, JetBrains_Mono } from 'next/font/google';
 import { ThemeProvider, themeInitScript } from '@/components/theme-provider';
 import { brand } from '@/config/brand';
@@ -32,11 +33,13 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${interTight.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
-      <head>
-        {/* Runs before paint so the persisted theme never flashes. */}
-        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
-      </head>
       <body className="min-h-full flex flex-col">
+        {/* Runs before paint so the persisted theme never flashes. `next/script`
+            with beforeInteractive is injected by Next into the document head and
+            avoids React's "script tag in component" warning. */}
+        <Script id="theme-init" strategy="beforeInteractive">
+          {themeInitScript}
+        </Script>
         {/* AppShell now lives in each authenticated route group's layout, so the
             root layout carries only fonts, theme init and globals. */}
         <ThemeProvider>{children}</ThemeProvider>
