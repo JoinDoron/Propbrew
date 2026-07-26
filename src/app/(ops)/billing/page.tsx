@@ -4,6 +4,7 @@ import { repos } from '@/server/data';
 import { addMoney, money, type Money as MoneyValue } from '@/domain/primitives';
 import { Button, Card, CardHeader, KpiCard, Mono, Table, Td, Th, TableRow } from '@/components/ui';
 import { DomainStatus, Money, ReadOnlyChip, ScopeBanner } from '@/components/domain';
+import { IssueButton } from '@/components/billing-actions';
 import { Banknote, Plus, TriangleAlert } from 'lucide-react';
 
 /** EM-01 — service charge & billing. Arrears aging is derived from the invoice
@@ -46,6 +47,7 @@ export default async function BillingPage() {
               <Th className="text-right">Amount</Th>
               <Th className="text-right max-[560px]:hidden">Paid</Th>
               <Th className="text-right">Aging</Th>
+              <Th className="text-right">Action</Th>
             </tr>
           </thead>
           <tbody>
@@ -62,6 +64,9 @@ export default async function BillingPage() {
                   ) : (
                     <span className="font-mono text-[12.5px] text-text-3">—</span>
                   )}
+                </Td>
+                <Td className="text-right">
+                  {canMutate && i.status === 'draft' ? <IssueButton invoiceRef={i.ref} /> : <span className="text-text-3 text-[12px]">—</span>}
                 </Td>
               </TableRow>
             ))}

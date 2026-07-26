@@ -1,8 +1,11 @@
 import { requireCapability } from '@/server/guard';
 import { effectiveLevel } from '@/lib/authz';
 import { repos } from '@/server/data';
+import { bookingMachine } from '@/domain/workflows';
+import { legalEvents } from '@/lib/legal-events';
 import { Button, Card, CardHeader, Mono, Table, Td, Th, TableRow } from '@/components/ui';
 import { DomainStatus, Money, ReadOnlyChip, ScopeBanner } from '@/components/domain';
+import { InlineActions } from '@/components/inline-actions';
 import { Plus } from 'lucide-react';
 
 /** EM-05 — amenity bookings (Should). Managers approve/decline; the state track is
@@ -32,6 +35,7 @@ export default async function BookingsPage() {
               <Th>Status</Th>
               <Th className="max-[560px]:hidden">Slot</Th>
               <Th className="text-right">Fee</Th>
+              <Th className="text-right">Actions</Th>
             </tr>
           </thead>
           <tbody>
@@ -42,6 +46,9 @@ export default async function BookingsPage() {
                 <Td><DomainStatus type="booking" status={b.status} /></Td>
                 <Td className="max-[560px]:hidden"><Mono className="text-[12.5px]">{fmt(b.slot)}</Mono></Td>
                 <Td className="text-right"><Money value={b.fee} /></Td>
+                <Td className="text-right">
+                  {canMutate ? <InlineActions machineKey="booking" id={b.id} events={legalEvents(bookingMachine, b.status, actor)} /> : <span className="text-text-3 text-[12px]">—</span>}
+                </Td>
               </TableRow>
             ))}
           </tbody>

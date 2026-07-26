@@ -15,6 +15,7 @@ import type {
   Asset,
   Booking,
   Building,
+  EstateDocument,
   Inspection,
   InvestorProject,
   Invoice,
@@ -194,6 +195,14 @@ export const sosEvents: SosEvent[] = [
   { tenantId: A, id: 'sos-2', ref: 'SOS-0041', estateId: SEED.estateGardens, unitId: 'u-c09a', residentName: 'Tobi Ade', ownerUserId: 'user-tobi', status: 'reviewed', raisedAt: '2026-07-25T22:10:00Z', acknowledgedAt: '2026-07-25T22:10:52Z', ackSeconds: 52, responder: 'Musa Ibrahim', channel: 'in_app' },
   { tenantId: A, id: 'sos-3', ref: 'SOS-0043', estateId: SEED.estateGardens, unitId: 'u-d04c', residentName: 'Amina Sule', ownerUserId: 'user-amina', status: 'raised', raisedAt: '2026-07-26T08:58:00Z', acknowledgedAt: null, ackSeconds: null, responder: null, channel: 'sms_fallback' },
 ] as unknown as SosEvent[];
+
+export const documents = ([
+  { tenantId: A, id: 'doc-1', name: 'Estate Handbook 2026.pdf', folder: 'Policies', estateId: SEED.estateGardens, audience: 'All residents', sizeKb: 2400, updatedAt: '2026-01-15', indexed: true },
+  { tenantId: A, id: 'doc-2', name: 'Service Charge Breakdown Q3.xlsx', folder: 'Finance', estateId: SEED.estateGardens, audience: 'All residents', sizeKb: 88, updatedAt: '2026-07-01', indexed: true },
+  { tenantId: A, id: 'doc-3', name: 'Fire Safety Certificate.pdf', folder: 'Compliance', estateId: SEED.estateGardens, audience: 'Managers', sizeKb: 512, updatedAt: '2026-07-10', indexed: true },
+  { tenantId: A, id: 'doc-4', name: 'Lift Maintenance Contract.pdf', folder: 'Contracts', estateId: SEED.estateVictoria, audience: 'Managers', sizeKb: 340, updatedAt: '2026-06-20', indexed: false },
+  { tenantId: B, id: 'doc-b1', name: 'Ikoyi House Rules.pdf', folder: 'Policies', estateId: SEED.estateIkoyi, audience: 'All residents', sizeKb: 900, updatedAt: '2026-05-01', indexed: true },
+] as unknown) as EstateDocument[];
 
 export const inspections = ([
   { tenantId: A, id: 'insp-1', ref: 'INS-1201', template: 'Fire safety — quarterly', siteId: SEED.estateGardens, estateId: SEED.estateGardens, assetName: 'Block C — common areas', status: 'passed', scheduledDate: '2026-07-10', passItems: 18, failItems: 0, inspector: 'Bola Adeyemi', raisedWorkOrders: 0 },

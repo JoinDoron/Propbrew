@@ -91,6 +91,20 @@ export const SEVERITY_TONES: Record<Severity, Tone> = {
   critical: 'danger',
 };
 
+/** Tone for a status given the machine it belongs to — used where the machine
+ *  is known only at runtime (e.g. the shared transition timeline). */
+const MACHINE_TONES: Record<string, Record<string, Tone>> = {
+  'work-order': WORK_ORDER_TONES,
+  'service-charge': INVOICE_TONES,
+  booking: BOOKING_TONES,
+  'sos-event': SOS_TONES,
+  'marketplace-order': ORDER_TONES,
+};
+
+export function statusTone(machineKey: string, status: string): Tone {
+  return MACHINE_TONES[machineKey]?.[status] ?? 'neutral';
+}
+
 /** Title-case display labels — the enums are snake_case for the wire. */
 export function humanizeStatus(status: string): string {
   return status

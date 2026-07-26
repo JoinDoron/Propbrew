@@ -2,6 +2,7 @@ import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
 import { Button, Card, CardHeader, Mono, Table, Td, Th, TableRow } from '@/components/ui';
 import { DomainStatus } from '@/components/domain';
+import { RaiseSosButton } from '@/components/sos-raise';
 import { LifeBuoy, QrCode } from 'lucide-react';
 
 /** EM-06 / EM-02 (resident view) — Safety & SOS + visitor passes, scoped to the
@@ -22,7 +23,7 @@ export default async function ResidentSecurityPage() {
             <h3 className="text-[15px] font-semibold">Emergency SOS</h3>
             <p className="text-[12.5px] text-text-2">Alerts the security desk and responders with your unit and location.</p>
           </div>
-          <Button variant="primary" className="!bg-[color:var(--tone-danger)] !h-11 !px-5">Raise SOS</Button>
+          <RaiseSosButton />
         </div>
       </Card>
 

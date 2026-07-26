@@ -18,7 +18,7 @@ import { revalidatePath } from 'next/cache';
 import { getActor } from '@/server/session';
 import { ForbiddenError, assertCan } from '@/lib/authz';
 import { repos } from '@/server/data';
-import { recordWoHistory } from '@/server/data/store';
+import { recordHistory } from '@/server/data/store';
 import { workOrderMachine } from '@/domain/workflows';
 import { ROLE_LABELS } from '@/lib/authz';
 import type { Role } from '@/domain/enums';
@@ -61,7 +61,7 @@ export async function fireWoTransition(
   }
 
   const firingRole = (actor.roles as Role[]).find((r) => (transition.actors as string[]).includes(r)) ?? actor.roles[0];
-  recordWoHistory(wo.id, {
+  recordHistory('work-order', wo.id, {
     at: new Date().toISOString(),
     event,
     from,

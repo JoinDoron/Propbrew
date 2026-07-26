@@ -4,11 +4,11 @@ import { ArrowLeft } from 'lucide-react';
 import { requireCapability } from '@/server/guard';
 import { can, type Role } from '@/lib/authz';
 import { repos, seed } from '@/server/data';
-import { getWoHistory } from '@/server/data/store';
+import { getHistory } from '@/server/data/store';
 import { workOrderMachine } from '@/domain/workflows';
 import { Card, CardHeader } from '@/components/ui';
 import { AiSuggestionCard, DomainStatus, Money, SlaBadge } from '@/components/domain';
-import { WoTimeline } from '@/components/work-orders/timeline';
+import { Timeline } from '@/components/work-orders/timeline';
 import { TransitionActions, type LegalEvent } from '@/components/work-orders/transition-actions';
 
 const NOW = '2026-07-26T09:00:00Z';
@@ -55,7 +55,7 @@ export default async function WorkOrderDetail({ params }: { params: Promise<{ re
     ...seed.vendors.filter((v) => v.tenantId === actor.tenantId).map((v) => v.name),
   ];
 
-  const history = getWoHistory(wo.id);
+  const history = getHistory('work-order', wo.id);
   const breached = !CLOSED.includes(wo.status) && (wo.respondDueAt ?? '') < NOW;
   const showAiTriage = ['new', 'triaged'].includes(wo.status) && canTransition;
 
@@ -119,7 +119,7 @@ export default async function WorkOrderDetail({ params }: { params: Promise<{ re
         <Card>
           <CardHeader title="History" subtitle="Every transition, attributed" />
           <div className="mt-3">
-            <WoTimeline entries={history} />
+            <Timeline machineKey="work-order" entries={history} />
           </div>
         </Card>
       </div>

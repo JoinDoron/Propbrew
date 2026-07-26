@@ -1,7 +1,10 @@
 import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
+import { marketplaceOrderMachine } from '@/domain/workflows';
+import { legalEvents } from '@/lib/legal-events';
 import { Card, CardHeader, Mono, Table, Td, Th, TableRow, StatusPill } from '@/components/ui';
 import { DomainStatus, Money, ScopeBanner } from '@/components/domain';
+import { InlineActions } from '@/components/inline-actions';
 
 /** EM-09 — marketplace oversight (Should). Managers see listings and the order
  *  pipeline; the order state track is Placed → Accepted → Fulfilled → Closed. */
@@ -55,6 +58,7 @@ export default async function MarketplacePage() {
               <Th>Item</Th>
               <Th>Status</Th>
               <Th className="text-right">Amount</Th>
+              <Th className="text-right">Actions</Th>
             </tr>
           </thead>
           <tbody>
@@ -65,6 +69,9 @@ export default async function MarketplacePage() {
                 <Td className="text-[13px]">{o.listingTitle}</Td>
                 <Td><DomainStatus type="order" status={o.status} /></Td>
                 <Td className="text-right"><Money value={o.amount} /></Td>
+                <Td className="text-right">
+                  <InlineActions machineKey="marketplace-order" id={o.id} events={legalEvents(marketplaceOrderMachine, o.status, actor)} />
+                </Td>
               </TableRow>
             ))}
           </tbody>

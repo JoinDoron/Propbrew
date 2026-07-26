@@ -212,6 +212,20 @@ export type SosEvent = TenantScoped & {
   channel: 'in_app' | 'queued_offline' | 'sms_fallback';
 };
 
+/* --- documents (EM-08, Should) -------------------------------------------- */
+
+export type EstateDocument = TenantScoped & {
+  id: string;
+  name: string;
+  folder: string;
+  estateId: SiteId;
+  audience: string;
+  sizeKb: number;
+  updatedAt: ISODate;
+  /** EM-08 / AI-S-03: indexed for document intelligence. */
+  indexed: boolean;
+};
+
 /* --- inspections (FM-06, Should) ------------------------------------------ */
 
 export type Inspection = TenantScoped & {

@@ -1,7 +1,8 @@
 import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
-import { Button, Card, CardHeader, Mono, Table, Td, Th, TableRow } from '@/components/ui';
+import { Card, CardHeader, Mono, Table, Td, Th, TableRow } from '@/components/ui';
 import { DomainStatus, Money } from '@/components/domain';
+import { PayButton } from '@/components/billing-actions';
 
 /** EM-01 (resident view) — My Bills. Payments are the ONE mutation a resident may
  *  make (§7 Payments = O for Res only); everything else is read. */
@@ -36,7 +37,7 @@ export default async function MyBillsPage() {
                   <Td className="text-right"><Money value={b.amount} /></Td>
                   <Td className="text-right">
                     {owing > 0 && b.status !== 'draft' ? (
-                      <Button variant="primary" className="!h-8 !px-3 !text-[12px]">Pay now</Button>
+                      <PayButton invoiceRef={b.ref} />
                     ) : (
                       <span className="text-[12px] text-text-3">—</span>
                     )}

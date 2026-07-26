@@ -1,7 +1,10 @@
 import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
+import { sosEventMachine } from '@/domain/workflows';
+import { legalEvents } from '@/lib/legal-events';
 import { Card, CardHeader, KpiCard, Mono, Table, Td, Th, TableRow } from '@/components/ui';
 import { DomainStatus, ScopeBanner } from '@/components/domain';
+import { InlineActions } from '@/components/inline-actions';
 import { ShieldAlert, ShieldCheck, Timer } from 'lucide-react';
 
 /** EM-06 — Security & SOS console. Acknowledge time is measured against the
@@ -38,7 +41,7 @@ export default async function SecurityPage() {
               <Th>Status</Th>
               <Th className="max-[560px]:hidden">Ack</Th>
               <Th className="max-[720px]:hidden">Responder</Th>
-              <Th className="max-[720px]:hidden">Channel</Th>
+              <Th className="text-right">Actions</Th>
             </tr>
           </thead>
           <tbody>
@@ -58,7 +61,9 @@ export default async function SecurityPage() {
                   )}
                 </Td>
                 <Td className="max-[720px]:hidden text-[13px] text-text-2">{s.responder ?? '—'}</Td>
-                <Td className="max-[720px]:hidden text-[12px] text-text-3">{s.channel.replace(/_/g, ' ')}</Td>
+                <Td className="text-right">
+                  <InlineActions machineKey="sos-event" id={s.id} events={legalEvents(sosEventMachine, s.status, actor)} />
+                </Td>
               </TableRow>
             ))}
           </tbody>

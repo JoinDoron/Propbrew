@@ -1,11 +1,14 @@
-import { DomainStatus } from '@/components/domain';
-import { humanizeStatus } from '@/lib/status-tones';
-import type { WoHistoryEntry } from '@/server/data/store';
+import { StatusPill } from '@/components/ui';
+import { humanizeStatus, statusTone } from '@/lib/status-tones';
+import type { MachineKey } from '@/domain/workflows';
+import type { HistoryEntry } from '@/server/data/store';
 
-/** The §10 audit trail for a work order — every transition, timestamped and
- *  actor-attributed. This is the SC-10 audit view in miniature. */
-export function WoTimeline({ entries }: { entries: WoHistoryEntry[] }) {
+/** The §10 audit trail for any transactional record — every transition,
+ *  timestamped and actor-attributed. The SC-10 audit view in miniature, shared
+ *  across all five machines. */
+export function Timeline({ machineKey, entries }: { machineKey: MachineKey; entries: HistoryEntry[] }) {
   const ordered = [...entries].reverse(); // newest first
+  if (ordered.length === 0) return <p className="text-[13px] text-text-3">No history yet.</p>;
   return (
     <ol className="flex flex-col">
       {ordered.map((e, i) => (
@@ -17,7 +20,7 @@ export function WoTimeline({ entries }: { entries: WoHistoryEntry[] }) {
           <div className="pb-4 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[13px] font-semibold">{eventLabel(e.event)}</span>
-              <DomainStatus type="work_order" status={e.to} />
+              <StatusPill status={humanizeStatus(e.to)} tone={statusTone(machineKey, e.to)} />
             </div>
             <div className="text-[12px] text-text-3 mt-0.5">
               {e.actorName} · {formatWhen(e.at)}
@@ -45,6 +48,26 @@ const EVENT_LABELS: Record<string, string> = {
   REJECT: 'Rejected',
   CANCEL: 'Cancelled',
   REOPEN: 'Reopened',
+  // billing
+  ISSUE: 'Issued',
+  PAYMENT_CONFIRMED: 'Payment received',
+  DUE_DATE_PASSED: 'Became overdue',
+  // booking
+  APPROVE: 'Approved',
+  AUTO_APPROVE: 'Auto-approved',
+  DECLINE: 'Declined',
+  CONFIRM: 'Confirmed',
+  COMPLETE: 'Completed',
+  // sos
+  RAISE: 'Raised',
+  ACKNOWLEDGE: 'Acknowledged',
+  RESPOND: 'Responding',
+  REVIEW: 'Reviewed',
+  // marketplace
+  PLACE: 'Placed',
+  ACCEPT: 'Accepted',
+  FULFIL: 'Fulfilled',
+  REFUND: 'Refunded',
 };
 
 function eventLabel(event: string): string {
@@ -52,6 +75,5 @@ function eventLabel(event: string): string {
 }
 
 function formatWhen(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleString('en-NG', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return new Date(iso).toLocaleString('en-NG', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }

@@ -1,7 +1,10 @@
 import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
+import { bookingMachine } from '@/domain/workflows';
+import { legalEvents } from '@/lib/legal-events';
 import { Button, Card, CardHeader, Table, Td, Th, TableRow, Mono } from '@/components/ui';
 import { DomainStatus, Money } from '@/components/domain';
+import { InlineActions } from '@/components/inline-actions';
 import { Plus } from 'lucide-react';
 
 /** EM-05 (resident view) — my amenity bookings (§7 O). */
@@ -16,7 +19,7 @@ export default async function MyBookingsPage() {
           <CardHeader title="My bookings" subtitle="Amenities you have reserved" />
         </div>
         <Table>
-          <thead><tr><Th>Amenity</Th><Th>Status</Th><Th className="max-[560px]:hidden">Slot</Th><Th className="text-right">Fee</Th></tr></thead>
+          <thead><tr><Th>Amenity</Th><Th>Status</Th><Th className="max-[560px]:hidden">Slot</Th><Th className="text-right">Fee</Th><Th className="text-right">Action</Th></tr></thead>
           <tbody>
             {rows.map((b) => (
               <TableRow key={b.id}>
@@ -24,6 +27,7 @@ export default async function MyBookingsPage() {
                 <Td><DomainStatus type="booking" status={b.status} /></Td>
                 <Td className="max-[560px]:hidden"><Mono className="text-[12.5px]">{new Date(b.slot).toLocaleString('en-NG',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</Mono></Td>
                 <Td className="text-right"><Money value={b.fee} /></Td>
+                <Td className="text-right"><InlineActions machineKey="booking" id={b.id} events={legalEvents(bookingMachine, b.status, actor)} /></Td>
               </TableRow>
             ))}
           </tbody>

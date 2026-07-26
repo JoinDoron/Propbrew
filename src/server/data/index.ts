@@ -72,7 +72,12 @@ export const repos = {
     list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', seed.ppmPlans, o),
   },
   invoices: {
-    list: (a: Actor, o?: ListOpts) => scopedList(a, 'charges_invoicing', seed.invoices, o),
+    list: (a: Actor, o?: ListOpts) => scopedList(a, 'charges_invoicing', db.invoices, o),
+    getByRef: (a: Actor, ref: string) => {
+      const scope = assertCan(a, 'charges_invoicing', 'read');
+      const [m] = applyScope(db.invoices.filter((i) => i.ref === ref), scope);
+      return m ?? null;
+    },
   },
   residents: {
     list: (a: Actor, o?: ListOpts) => scopedList(a, 'users_roles', seed.residents, o),
@@ -85,13 +90,16 @@ export const repos = {
     list: (a: Actor, o?: ListOpts) => scopedList(a, 'announcements', seed.announcements, o),
   },
   sosEvents: {
-    list: (a: Actor, o?: ListOpts) => scopedList(a, 'security_sos', seed.sosEvents, o),
+    list: (a: Actor, o?: ListOpts) => scopedList(a, 'security_sos', db.sosEvents, o),
   },
   bookings: {
-    list: (a: Actor, o?: ListOpts) => scopedList(a, 'bookings_amenities', seed.bookings, o),
+    list: (a: Actor, o?: ListOpts) => scopedList(a, 'bookings_amenities', db.bookings, o),
   },
   inspections: {
     list: (a: Actor, o?: ListOpts) => scopedList(a, 'inspections_compliance', seed.inspections, o),
+  },
+  documents: {
+    list: (a: Actor, o?: ListOpts) => scopedList(a, 'announcements', seed.documents, o),
   },
   investorProjects: {
     list: (a: Actor, o?: ListOpts) => scopedList(a, 'investor_projects', seed.investorProjects, o),
@@ -100,7 +108,7 @@ export const repos = {
     list: (a: Actor, o?: ListOpts) => scopedList(a, 'marketplace', seed.listings, o),
   },
   marketplaceOrders: {
-    list: (a: Actor, o?: ListOpts) => scopedList(a, 'marketplace', seed.marketplaceOrders, o),
+    list: (a: Actor, o?: ListOpts) => scopedList(a, 'marketplace', db.marketplaceOrders, o),
   },
   sites: {
     // Sites carry no per-row ownership; scoped by tenant + estate via siteId.
