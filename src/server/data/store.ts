@@ -15,6 +15,7 @@ import 'server-only';
 
 import * as seed from './seed/fixtures';
 import { findTransition, workOrderMachine, type MachineKey } from '@/domain/workflows';
+import { money } from '@/domain/primitives';
 import type { Role } from '@/domain/enums';
 import type { SystemActor } from '@/domain/workflows';
 
@@ -57,6 +58,57 @@ export function recordHistory(machine: MachineKey, id: string, entry: Omit<Histo
 export function getHistory(machine: MachineKey, id: string): HistoryEntry[] {
   return history.get(key(machine, id)) ?? [];
 }
+
+/* --- wallet auto-deduct (resident-home PRD, open question #1) -------------- */
+
+const UNPAID_INV = ['issued', 'partially_paid', 'overdue', 'in_arrears', 'escalated'];
+
+/**
+ * Draw a unit's wallet balance down against its pending charges — most-overdue
+ * first, then earliest due. Each cleared portion is a real §10 PAYMENT_CONFIRMED
+ * transition, attributed to the wallet auto-deduct rule (SC-02), so the billing
+ * ledger and the audit trail stay truthful. Called once at init and after every
+ * top-up, which keeps the invariant "available and pending are never both
+ * positive on the same unit" holding everywhere.
+ */
+export function settleUnitFromWallet(unitId: string, at = new Date().toISOString()): void {
+  const wallet = db.wallets.find((w) => w.unitId === unitId);
+  if (!wallet || wallet.available.minor <= 0) return;
+
+  const invoices = db.invoices
+    .filter((i) => i.unitId === unitId && UNPAID_INV.includes(i.status))
+    .sort((a, b) => b.agingDays - a.agingDays || (a.dueDate < b.dueDate ? -1 : 1));
+
+  let funds = wallet.available.minor;
+  for (const inv of invoices) {
+    if (funds <= 0) break;
+    const owed = inv.amount.minor - inv.paid.minor;
+    if (owed <= 0) continue;
+    const pay = Math.min(funds, owed);
+    const from = inv.status;
+    inv.paid = money(inv.paid.minor + pay, inv.amount.currency);
+    funds -= pay;
+    const full = inv.paid.minor >= inv.amount.minor;
+    inv.status = full ? 'paid' : 'partially_paid';
+    if (full) inv.agingDays = Math.min(inv.agingDays, 0);
+    recordHistory('service-charge', inv.id, {
+      at,
+      event: 'PAYMENT_CONFIRMED',
+      from,
+      to: inv.status,
+      actorId: 'wallet',
+      actorName: 'Wallet auto-deduct (SC-02)',
+      actorRole: 'system_webhook',
+    });
+  }
+  wallet.available = money(funds, wallet.available.currency);
+}
+
+function settleAllUnits() {
+  const unitIds = Array.from(new Set(db.wallets.map((w) => w.unitId)));
+  for (const u of unitIds) settleUnitFromWallet(u, '2026-07-25T20:00:00Z');
+}
+settleAllUnits();
 
 /** Flatten the entire audit trail across every machine — the SC-10 admin view.
  *  Platform-Admin-only in practice (the page gates it). */

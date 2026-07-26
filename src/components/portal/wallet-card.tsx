@@ -117,7 +117,10 @@ export function WalletCard({
 
       {showTopUp && (
         <div className="mt-3 rounded-xl bg-white/95 p-3 text-text">
-          <div className="text-[12px] text-text-3 mb-2">Add funds to {shortUnit(unitId)}</div>
+          <div className="text-[12px] text-text-3 mb-2">
+            Add funds to {shortUnit(unitId)}
+            {pending.minor > 0 && <span className="text-text-2"> · clears {formatMoney(pending)} pending first</span>}
+          </div>
           <div className="grid grid-cols-4 gap-2">
             {TOPUP_PRESETS.map((a) => (
               <button

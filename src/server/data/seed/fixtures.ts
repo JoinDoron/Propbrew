@@ -181,6 +181,7 @@ export const invoices: Invoice[] = [
   inv('in-5', 'INV-2990', 'u-c09a', 'Tobi Ade', 'user-tobi', 'in_arrears', 250000, 50000, '2026-06-15', 41),
   inv('in-6', 'INV-2981', 'u-d04c', 'Amina Sule', 'user-amina', 'escalated', 250000, 0, '2026-05-30', 57),
   inv('in-7', 'INV-3005', SEED.unitRes, 'Folake Bello', 'user-resident', 'draft', 30000, 0, '2026-08-20', -25),
+  inv('in-8', 'INV-3006', SEED.unitResShop, 'Folake Bello', 'user-resident', 'issued', 40000, 0, '2026-08-10', -5),
   // Tenant B
   inv('in-b1', 'INV-9001', 'u-ikoyi-1', 'Kunle Bakare', 'user-ikoyi-res', 'in_arrears', 500000, 120000, '2026-06-10', 46, B, SEED.estateIkoyi),
 ];
@@ -199,8 +200,9 @@ export const sosEvents: SosEvent[] = [
 ] as unknown as SosEvent[];
 
 export const wallets = ([
-  // Folake's home unit — funded; her shop unit — empty (Top-Up-emphasised edge case).
-  { tenantId: A, id: 'wal-c12b', unitId: SEED.unitRes, ownerUserId: 'user-resident', available: ngn(120000) },
+  // Home unit — funded enough to auto-clear its charges, leaving a balance;
+  // shop unit — empty with a pending charge, so a top-up clears it live.
+  { tenantId: A, id: 'wal-c12b', unitId: SEED.unitRes, ownerUserId: 'user-resident', available: ngn(160000) },
   { tenantId: A, id: 'wal-shop', unitId: SEED.unitResShop, ownerUserId: 'user-resident', available: ngn(0) },
   { tenantId: A, id: 'wal-c09a', unitId: 'u-c09a', ownerUserId: 'user-tobi', available: ngn(50000) },
 ] as unknown) as Wallet[];

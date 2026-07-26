@@ -13,7 +13,7 @@ import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { getActor } from '@/server/session';
 import { ForbiddenError, assertCan } from '@/lib/authz';
-import { db } from '@/server/data/store';
+import { db, settleUnitFromWallet } from '@/server/data/store';
 import { addMoney, money } from '@/domain/primitives';
 import { ACTIVE_UNIT_COOKIE } from '@/server/active-unit';
 
@@ -43,6 +43,9 @@ export async function topUpWallet(unitId: string, amountNaira: number): Promise<
   if (!wallet) return { ok: false, error: 'No wallet found for this unit.' };
 
   wallet.available = addMoney(wallet.available, money(Math.round(amountNaira * 100), wallet.available.currency));
-  revalidatePath('/portal');
+  // Auto-deduct: new funds clear pending charges first (PRD open question #1).
+  settleUnitFromWallet(unitId);
+
+  ['/portal', '/portal/bills', '/billing', '/dashboard'].forEach((p) => revalidatePath(p));
   return { ok: true };
 }
