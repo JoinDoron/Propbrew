@@ -27,6 +27,7 @@ export const db = {
   bookings: clone(seed.bookings),
   sosEvents: clone(seed.sosEvents),
   marketplaceOrders: clone(seed.marketplaceOrders),
+  wallets: clone(seed.wallets),
 };
 
 export type HistoryEntry = {

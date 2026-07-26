@@ -23,7 +23,8 @@ export const SEED = {
   estateVictoria: 's-victoria', // Victoria Court (facility)
   // tenant B estate
   estateIkoyi: 's-ikoyi',
-  unitRes: 'u-c12b', // the demo resident's unit
+  unitRes: 'u-c12b', // the demo resident's home unit
+  unitResShop: 'u-c12b-shop', // her second unit — exercises the unit selector
   vendorOrg: 'v-brightworks',
   investorProject: 'p-marina',
 } as const;
@@ -81,7 +82,7 @@ export const DEV_IDENTITIES: readonly DevIdentity[] = [
   }),
   id('resident', 'Folake — Resident', ['resident'], 'Resident', 'Lekki · Unit C-12B', {
     allEstates: true,
-    unitIds: [SEED.unitRes],
+    unitIds: [SEED.unitRes, SEED.unitResShop], // two units → the selector is live
   }),
   id('security', 'Musa — Security', ['security'], 'Security', 'Lekki · Gardens Estate', {
     estateIds: [SEED.estateGardens],

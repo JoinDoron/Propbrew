@@ -1,89 +1,106 @@
+import Link from 'next/link';
+import { HelpCircle } from 'lucide-react';
 import { requireCapability } from '@/server/guard';
-import { can } from '@/lib/authz';
-import { repos } from '@/server/data';
+import { getActiveUnitId } from '@/server/active-unit';
+import { repos, seed } from '@/server/data';
 import { addMoney, money, type Money as MoneyValue } from '@/domain/primitives';
-import { Card, CardHeader, KpiCard, Mono, Table, Td, Th, TableRow } from '@/components/ui';
+import { Card } from '@/components/ui';
 import { DomainStatus, Money } from '@/components/domain';
-import { Receipt, Wrench } from 'lucide-react';
+import { WalletCard } from '@/components/portal/wallet-card';
+import { UnitSelector } from '@/components/portal/unit-selector';
+import { PromoBanner } from '@/components/portal/promo-banner';
+import { ContentToggle } from '@/components/portal/content-toggle';
+import { QuickActions } from '@/components/portal/quick-actions';
 
-/** Resident home — everything scoped to THIS resident's own records (§7 O).
- *  The counts here are computed under the same ScopeFilter as the lists, so the
- *  home never shows a number the resident could not also see in a list. */
-export default async function PortalHome() {
+const UNPAID = ['issued', 'partially_paid', 'overdue', 'in_arrears', 'escalated'];
+
+/**
+ * Resident Home — the post-login landing (resident-home PRD). Everything below
+ * the header reflects the ACTIVE unit: the wallet, the pending charges and the
+ * "For You" content are all re-scoped when the unit selector changes.
+ */
+export default async function ResidentHome() {
   const { actor } = await requireCapability('work_orders');
 
-  const requests = repos.workOrders.list(actor).items;
-  const bills = can(actor, 'charges_invoicing', 'read').allowed ? repos.invoices.list(actor).items : [];
+  const unitOptions = actor.unitIds
+    .map((id) => seed.units.find((u) => u.id === id))
+    .filter(Boolean)
+    .map((u) => ({ id: u!.id, label: u!.label }));
+  const activeUnitId = (await getActiveUnitId(actor.unitIds)) ?? unitOptions[0]?.id ?? '';
 
-  const openReq = requests.filter((w) => !['closed', 'cancelled', 'rejected', 'verified'].includes(w.status)).length;
-  const outstanding = bills
-    .filter((b) => b.status !== 'paid')
-    .reduce<MoneyValue>((a, b) => addMoney(a, money(b.amount.minor - b.paid.minor)), money(0));
+  // Wallet for the active unit (default ₦0 if none).
+  const wallet = repos.wallets.list(actor).items.find((w) => w.unitId === activeUnitId);
+  const available = wallet?.available ?? money(0);
+
+  // Pending = uncleared issued charges for the active unit (derived, never stored).
+  const unitInvoices = repos.invoices.list(actor).items.filter((i) => i.unitId === activeUnitId && UNPAID.includes(i.status));
+  const pending = unitInvoices.reduce<MoneyValue>((a, i) => addMoney(a, money(i.amount.minor - i.paid.minor, i.amount.currency)), money(0));
+
+  // "For You" — personalised from the resident's own records.
+  const myRequests = repos.workOrders.list(actor).items;
+  const myBookings = repos.bookings.list(actor).items.filter((b) => ['approved', 'auto_approved', 'confirmed'].includes(b.status));
+  const nextBooking = myBookings.sort((a, b) => (a.slot < b.slot ? -1 : 1))[0];
+  const recentRequest = myRequests[0];
+
+  const firstName = 'Folake';
 
   return (
-    <div className="max-w-[900px] mx-auto flex flex-col gap-3.5">
-      <div className="grid grid-cols-1 min-[560px]:grid-cols-2 gap-3.5">
-        <KpiCard label="Open requests" value={String(openReq)} icon={<Wrench size={18} />} />
-        <KpiCard label="Outstanding balance" value={outstanding.minor > 0 ? formatShort(outstanding) : '₦0'} delta={outstanding.minor > 0 ? 'due' : 'all paid'} positive={outstanding.minor === 0} icon={<Receipt size={18} />} iconBg="rgba(245,159,11,.15)" iconColor="#f59e0b" />
+    <div className="max-w-[560px] mx-auto flex flex-col gap-4">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="text-[12.5px] text-text-3">Welcome back</div>
+          <h1 className="text-[19px] font-bold tracking-[-0.02em] leading-tight">Hi, {firstName} 👋</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <UnitSelector units={unitOptions} activeId={activeUnitId} />
+          <Link href="/portal/announcements" aria-label="Help" className="w-10 h-10 rounded-xl grid place-items-center border border-border bg-surface text-text-2 hover:bg-surface-2 transition">
+            <HelpCircle size={17} />
+          </Link>
+        </div>
       </div>
 
-      <Card padded={false}>
-        <div className="p-4 sm:p-[18px] pb-0">
-          <CardHeader title="My recent requests" subtitle="Maintenance you have raised" />
-        </div>
-        <Table>
-          <thead>
-            <tr>
-              <Th>Ref</Th>
-              <Th>Job</Th>
-              <Th>Status</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {requests.slice(0, 5).map((w) => (
-              <TableRow key={w.id}>
-                <Td><Mono className="font-semibold text-[13px]">{w.ref}</Mono></Td>
-                <Td className="text-[13px]">{w.title}</Td>
-                <Td><DomainStatus type="work_order" status={w.status} /></Td>
-              </TableRow>
-            ))}
-          </tbody>
-        </Table>
-      </Card>
+      <WalletCard unitId={activeUnitId} available={available} pending={pending} pendingCount={unitInvoices.length} />
 
-      {bills.length > 0 && (
-        <Card padded={false}>
-          <div className="p-4 sm:p-[18px] pb-0">
-            <CardHeader title="My bills" subtitle="Your service charges" />
+      <PromoBanner />
+
+      <ContentToggle
+        community={<QuickActions />}
+        forYou={
+          <div className="flex flex-col gap-2.5">
+            {unitInvoices.length > 0 && (
+              <ForYouRow href="/portal/bills" title="You have pending charges" sub={`${unitInvoices.length} charge(s) on this unit`}>
+                <Money value={pending} />
+              </ForYouRow>
+            )}
+            {nextBooking && (
+              <ForYouRow href="/portal/bookings" title={`Upcoming: ${nextBooking.amenity}`} sub={new Date(nextBooking.slot).toLocaleString('en-NG', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}>
+                <DomainStatus type="booking" status={nextBooking.status} />
+              </ForYouRow>
+            )}
+            {recentRequest && (
+              <ForYouRow href="/portal/requests" title={recentRequest.title} sub={`Request ${recentRequest.ref}`}>
+                <DomainStatus type="work_order" status={recentRequest.status} />
+              </ForYouRow>
+            )}
+            <div className="text-[12px] text-text-3 text-center py-2">Personalised for you · more coming soon</div>
           </div>
-          <Table>
-            <thead>
-              <tr>
-                <Th>Invoice</Th>
-                <Th>Status</Th>
-                <Th className="text-right">Amount</Th>
-                <Th className="text-right">Due</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {bills.map((b) => (
-                <TableRow key={b.id}>
-                  <Td><Mono className="font-semibold text-[13px]">{b.ref}</Mono></Td>
-                  <Td><DomainStatus type="invoice" status={b.status} /></Td>
-                  <Td className="text-right"><Money value={b.amount} /></Td>
-                  <Td className="text-right font-mono text-[12.5px] text-text-3">{b.dueDate}</Td>
-                </TableRow>
-              ))}
-            </tbody>
-          </Table>
-        </Card>
-      )}
+        }
+      />
     </div>
   );
 }
 
-function formatShort(m: MoneyValue): string {
-  const major = m.minor / 100;
-  if (major >= 1_000) return `₦${(major / 1_000).toFixed(0)}k`;
-  return `₦${major}`;
+function ForYouRow({ href, title, sub, children }: { href: string; title: string; sub: string; children: React.ReactNode }) {
+  return (
+    <Link href={href} className="block">
+      <Card className="flex items-center gap-3 hover:bg-surface-2 transition-colors">
+        <div className="flex-1 min-w-0">
+          <div className="text-[13px] font-medium truncate">{title}</div>
+          <div className="text-[11.5px] text-text-3">{sub}</div>
+        </div>
+        <div className="flex-none">{children}</div>
+      </Card>
+    </Link>
+  );
 }

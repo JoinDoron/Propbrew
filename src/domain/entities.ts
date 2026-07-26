@@ -212,6 +212,21 @@ export type SosEvent = TenantScoped & {
   channel: 'in_app' | 'queued_offline' | 'sms_fallback';
 };
 
+/* --- wallet (resident home PRD) ------------------------------------------- */
+
+/**
+ * Per-unit estate wallet. `available` is funded balance the resident tops up;
+ * `pending` (uncleared estate charges) is DERIVED at read time from the unit's
+ * unpaid invoices, never stored, so the wallet and the billing ledger cannot
+ * drift. One wallet per unit; a multi-unit resident has several.
+ */
+export type Wallet = TenantScoped & {
+  id: string;
+  unitId: UnitId;
+  ownerUserId: UserId;
+  available: Money;
+};
+
 /* --- documents (EM-08, Should) -------------------------------------------- */
 
 export type EstateDocument = TenantScoped & {

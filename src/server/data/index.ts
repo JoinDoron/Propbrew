@@ -71,6 +71,9 @@ export const repos = {
   ppmPlans: {
     list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', seed.ppmPlans, o),
   },
+  wallets: {
+    list: (a: Actor, o?: ListOpts) => scopedList(a, 'charges_invoicing', db.wallets, o),
+  },
   invoices: {
     list: (a: Actor, o?: ListOpts) => scopedList(a, 'charges_invoicing', db.invoices, o),
     getByRef: (a: Actor, ref: string) => {

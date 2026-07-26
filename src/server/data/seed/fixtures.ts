@@ -28,6 +28,7 @@ import type {
   Unit,
   User,
   Vendor,
+  Wallet,
   WorkOrder,
 } from '@/domain/entities';
 
@@ -54,6 +55,7 @@ export const buildings = [
 
 export const units = [
   { tenantId: A, id: SEED.unitRes, siteId: SEED.estateGardens, buildingId: 'b-gardens-c', label: 'Block C · 12B', type: '3-bed apartment', occupancy: 'occupied' },
+  { tenantId: A, id: SEED.unitResShop, siteId: SEED.estateGardens, buildingId: 'b-gardens-c', label: 'Block C · Shop 4', type: 'Retail unit', occupancy: 'occupied' },
   { tenantId: A, id: 'u-c09a', siteId: SEED.estateGardens, buildingId: 'b-gardens-c', label: 'Block C · 09A', type: '2-bed apartment', occupancy: 'occupied' },
   { tenantId: A, id: 'u-d04c', siteId: SEED.estateGardens, buildingId: 'b-gardens-d', label: 'Block D · 04C', type: '3-bed apartment', occupancy: 'vacant' },
   { tenantId: B, id: 'u-ikoyi-1', siteId: SEED.estateIkoyi, buildingId: 'b-ikoyi', label: 'Tower A · 21', type: 'Penthouse', occupancy: 'occupied' },
@@ -195,6 +197,13 @@ export const sosEvents: SosEvent[] = [
   { tenantId: A, id: 'sos-2', ref: 'SOS-0041', estateId: SEED.estateGardens, unitId: 'u-c09a', residentName: 'Tobi Ade', ownerUserId: 'user-tobi', status: 'reviewed', raisedAt: '2026-07-25T22:10:00Z', acknowledgedAt: '2026-07-25T22:10:52Z', ackSeconds: 52, responder: 'Musa Ibrahim', channel: 'in_app' },
   { tenantId: A, id: 'sos-3', ref: 'SOS-0043', estateId: SEED.estateGardens, unitId: 'u-d04c', residentName: 'Amina Sule', ownerUserId: 'user-amina', status: 'raised', raisedAt: '2026-07-26T08:58:00Z', acknowledgedAt: null, ackSeconds: null, responder: null, channel: 'sms_fallback' },
 ] as unknown as SosEvent[];
+
+export const wallets = ([
+  // Folake's home unit — funded; her shop unit — empty (Top-Up-emphasised edge case).
+  { tenantId: A, id: 'wal-c12b', unitId: SEED.unitRes, ownerUserId: 'user-resident', available: ngn(120000) },
+  { tenantId: A, id: 'wal-shop', unitId: SEED.unitResShop, ownerUserId: 'user-resident', available: ngn(0) },
+  { tenantId: A, id: 'wal-c09a', unitId: 'u-c09a', ownerUserId: 'user-tobi', available: ngn(50000) },
+] as unknown) as Wallet[];
 
 export const documents = ([
   { tenantId: A, id: 'doc-1', name: 'Estate Handbook 2026.pdf', folder: 'Policies', estateId: SEED.estateGardens, audience: 'All residents', sizeKb: 2400, updatedAt: '2026-01-15', indexed: true },
