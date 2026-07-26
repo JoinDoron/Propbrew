@@ -148,10 +148,11 @@ export function legalTransitionsFor<S extends string>(
   return outgoing(machine, state).filter((t) => (t.actors as readonly string[]).includes(actor));
 }
 
-/** The specific edge for a (from, event) pair, or undefined if none is legal. */
+/** The specific edge for a (from, event) pair, or undefined if none is legal.
+ *  `from` may be null to match creation edges. */
 export function findTransition<S extends string>(
   machine: Machine<S>,
-  from: S,
+  from: S | null,
   event: string,
 ): Transition<S> | undefined {
   return machine.transitions.find((t) => t.from === from && t.event === event);

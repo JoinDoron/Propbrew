@@ -1,7 +1,8 @@
+import Link from 'next/link';
 import { requireCapability } from '@/server/guard';
 import { effectiveLevel } from '@/lib/authz';
 import { repos } from '@/server/data';
-import { Button, Card, CardHeader, Mono, Table, Td, Th, TableRow } from '@/components/ui';
+import { Button, Card, CardHeader, Table, Td, Th, TableRow } from '@/components/ui';
 import { DomainStatus, Money, ReadOnlyChip, ScopeBanner, SlaBadge } from '@/components/domain';
 import { humanizeStatus } from '@/lib/status-tones';
 import { Plus } from 'lucide-react';
@@ -57,10 +58,16 @@ export default async function WorkOrdersPage() {
               const breached = !CLOSED.includes(w.status) && (w.respondDueAt ?? '') < NOW;
               return (
                 <TableRow key={w.id}>
-                  <Td><Mono className="font-semibold text-[13px]">{w.ref}</Mono></Td>
                   <Td>
-                    <div className="text-[13px] font-medium">{w.title}</div>
-                    <div className="text-[11.5px] text-text-3">{w.origin.replace(/_/g, ' ')} · {w.requesterName}</div>
+                    <Link href={`/work-orders/${w.ref}`} className="font-mono font-semibold text-[13px] text-primary hover:underline">
+                      {w.ref}
+                    </Link>
+                  </Td>
+                  <Td>
+                    <Link href={`/work-orders/${w.ref}`} className="block">
+                      <div className="text-[13px] font-medium hover:text-primary transition-colors">{w.title}</div>
+                      <div className="text-[11.5px] text-text-3">{w.origin.replace(/_/g, ' ')} · {w.requesterName}</div>
+                    </Link>
                   </Td>
                   <Td><DomainStatus type="work_order" status={w.status} /></Td>
                   <Td className="max-[720px]:hidden text-[13px] capitalize">{w.priority}</Td>

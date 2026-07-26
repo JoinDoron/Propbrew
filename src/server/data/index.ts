@@ -16,6 +16,7 @@ import 'server-only';
 import { assertCan, applyScope, type Action, type Actor, type Capability, type ScopableRow } from '@/lib/authz';
 import type { Page } from '@/domain/primitives';
 import * as seed from './seed/fixtures';
+import { db } from './store';
 
 const DEFAULT_PAGE = 50;
 
@@ -53,8 +54,15 @@ type ListOpts = { cursor?: string | null; limit?: number };
 
 export const repos = {
   workOrders: {
-    list: (a: Actor, o?: ListOpts) => scopedList(a, 'work_orders', seed.workOrders, o),
-    get: (a: Actor, id: string) => scopedGet(a, 'work_orders', seed.workOrders, id),
+    // Reads the mutable store, not the seed — transitions are visible here.
+    list: (a: Actor, o?: ListOpts) => scopedList(a, 'work_orders', db.workOrders, o),
+    get: (a: Actor, id: string) => scopedGet(a, 'work_orders', db.workOrders, id),
+    /** Scoped lookup by human ref (e.g. "WO-24817"); null if out of scope. */
+    getByRef: (a: Actor, ref: string) => {
+      const scope = assertCan(a, 'work_orders', 'read');
+      const [match] = applyScope(db.workOrders.filter((w) => w.ref === ref), scope);
+      return match ?? null;
+    },
   },
   assets: {
     list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', seed.assets, o),
