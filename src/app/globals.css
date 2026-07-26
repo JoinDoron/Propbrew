@@ -1,0 +1,218 @@
+@import 'tailwindcss';
+
+/* ==========================================================================
+   Cargoflow design system
+   Tokens ported from the Cargoflow TMS template. Every surface, border and
+   text colour in the app resolves through these variables, so the light and
+   dark themes stay in lockstep and re-branding is a one-line change.
+   ========================================================================== */
+
+:root {
+  /* Surfaces */
+  --app: #f4f5f7;
+  --surface: #ffffff;
+  --surface-2: #f7f7f9;
+  --surface-3: #f0f0f3;
+
+  /* Lines */
+  --border: #ececef;
+  --border-2: #e2e2e7;
+
+  /* Type */
+  --text: #16182a;
+  --text-2: #5f636b;
+  --text-3: #9aa1ad;
+
+  /* Brand */
+  --primary: #2563eb;
+  --primary-weak: rgb(37 99 235 / 0.1);
+  --primary-weak-2: rgb(37 99 235 / 0.16);
+  --on-primary: #ffffff;
+
+  /* Elevation */
+  --shadow: 0 1px 2px rgb(16 18 32 / 0.04), 0 4px 16px rgb(16 18 32 / 0.05);
+  --shadow-lg: 0 8px 40px rgb(16 18 32 / 0.14);
+}
+
+[data-theme='dark'] {
+  --app: #0e0f18;
+  --surface: #171826;
+  --surface-2: #1d1f30;
+  --surface-3: #242741;
+
+  --border: #2a2c42;
+  --border-2: #333653;
+
+  --text: #eef0f6;
+  --text-2: #a3acb9;
+  --text-3: #6b7180;
+
+  /* Brand lifts slightly in dark so it keeps contrast against deep surfaces. */
+  --primary: #5b8def;
+  --primary-weak: rgb(91 141 239 / 0.14);
+  --primary-weak-2: rgb(91 141 239 / 0.22);
+  --on-primary: #ffffff;
+
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 6px 20px rgb(0 0 0 / 0.35);
+  --shadow-lg: 0 12px 48px rgb(0 0 0 / 0.5);
+}
+
+/* Expose the tokens to Tailwind so `bg-surface`, `text-text-2`,
+   `border-border`, `shadow-card` etc. work as first-class utilities. */
+@theme inline {
+  --color-app: var(--app);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+
+  --color-border: var(--border);
+  --color-border-2: var(--border-2);
+
+  --color-text: var(--text);
+  --color-text-2: var(--text-2);
+  --color-text-3: var(--text-3);
+
+  --color-primary: var(--primary);
+  --color-primary-weak: var(--primary-weak);
+  --color-primary-weak-2: var(--primary-weak-2);
+  --color-on-primary: var(--on-primary);
+
+  /* Status scale — Draft, Posted, Booked, In Transit, Delivered, Closed. */
+  --color-status-draft: #8b93a1;
+  --color-status-posted: #3b82f6;
+  --color-status-booked: #8b5cf6;
+  --color-status-transit: #f59e0b;
+  --color-status-delivered: #10b981;
+  --color-status-closed: #6b7280;
+
+  --color-positive: #10b981;
+  --color-negative: #ef4444;
+  --color-warning: #f59e0b;
+
+  --shadow-card: var(--shadow);
+  --shadow-float: var(--shadow-lg);
+
+  --font-sans: 'Inter Tight', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  /* The template's signature 16px card radius. */
+  --radius-card: 16px;
+  --radius-control: 10px;
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    background: var(--app);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Slim, token-aware scrollbars — lifted from the template. */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border-2);
+    border-radius: 8px;
+    border: 3px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--text-3);
+    background-clip: padding-box;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Motion — the template's keyframe vocabulary.
+   -------------------------------------------------------------------------- */
+@keyframes tms-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes tms-pop {
+  from {
+    transform: scale(0.96) translateY(8px);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+@keyframes tms-slidein {
+  from {
+    transform: translateX(28px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+@keyframes tms-slideup {
+  from {
+    transform: translateY(18px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+@keyframes tms-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+@keyframes tms-ping {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  80%,
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+@utility animate-fade {
+  animation: tms-fade 0.18s ease-out;
+}
+@utility animate-pop {
+  animation: tms-pop 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+@utility animate-slidein {
+  animation: tms-slidein 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+@utility animate-slideup {
+  animation: tms-slideup 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Respect users who ask for reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
