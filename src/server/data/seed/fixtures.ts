@@ -58,6 +58,18 @@ export const units = [
   { tenantId: A, id: SEED.unitResShop, siteId: SEED.estateGardens, buildingId: 'b-gardens-c', label: 'Block C · Shop 4', type: 'Retail unit', occupancy: 'occupied' },
   { tenantId: A, id: 'u-c09a', siteId: SEED.estateGardens, buildingId: 'b-gardens-c', label: 'Block C · 09A', type: '2-bed apartment', occupancy: 'occupied' },
   { tenantId: A, id: 'u-d04c', siteId: SEED.estateGardens, buildingId: 'b-gardens-d', label: 'Block D · 04C', type: '3-bed apartment', occupancy: 'vacant' },
+  // Block C
+  { tenantId: A, id: 'u-c03b', siteId: SEED.estateGardens, buildingId: 'b-gardens-c', label: 'Block C · 03B', type: '2-bed apartment', occupancy: 'occupied' },
+  { tenantId: A, id: 'u-c06a', siteId: SEED.estateGardens, buildingId: 'b-gardens-c', label: 'Block C · 06A', type: '3-bed apartment', occupancy: 'vacant' },
+  { tenantId: A, id: 'u-c11c', siteId: SEED.estateGardens, buildingId: 'b-gardens-c', label: 'Block C · 11C', type: 'Studio', occupancy: 'occupied' },
+  // Block D
+  { tenantId: A, id: 'u-d01a', siteId: SEED.estateGardens, buildingId: 'b-gardens-d', label: 'Block D · 01A', type: '2-bed apartment', occupancy: 'occupied' },
+  { tenantId: A, id: 'u-d07b', siteId: SEED.estateGardens, buildingId: 'b-gardens-d', label: 'Block D · 07B', type: '3-bed apartment', occupancy: 'occupied' },
+  { tenantId: A, id: 'u-d10c', siteId: SEED.estateGardens, buildingId: 'b-gardens-d', label: 'Block D · 10C', type: 'Penthouse', occupancy: 'reserved' },
+  // Victoria Court — Tower 1 (office/facility)
+  { tenantId: A, id: 'u-v302', siteId: SEED.estateVictoria, buildingId: 'b-victoria-1', label: 'Tower 1 · Suite 302', type: 'Office suite', occupancy: 'occupied' },
+  { tenantId: A, id: 'u-v508', siteId: SEED.estateVictoria, buildingId: 'b-victoria-1', label: 'Tower 1 · Suite 508', type: 'Office suite', occupancy: 'vacant' },
+  { tenantId: A, id: 'u-v710', siteId: SEED.estateVictoria, buildingId: 'b-victoria-1', label: 'Tower 1 · Suite 710', type: 'Co-working floor', occupancy: 'occupied' },
   { tenantId: B, id: 'u-ikoyi-1', siteId: SEED.estateIkoyi, buildingId: 'b-ikoyi', label: 'Tower A · 21', type: 'Penthouse', occupancy: 'occupied' },
 ] as unknown as Unit[];
 
