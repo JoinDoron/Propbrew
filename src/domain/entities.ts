@@ -252,16 +252,32 @@ export type Wallet = TenantScoped & {
 
 /* --- documents (EM-08, Should) -------------------------------------------- */
 
+export type DocType = 'certificate' | 'contract' | 'policy' | 'invoice' | 'handbook' | 'report' | 'notice' | 'other';
+export type ExtractedField = { label: string; value: string };
+
 export type EstateDocument = TenantScoped & {
   id: string;
   name: string;
   folder: string;
+  type: DocType;
   estateId: SiteId;
   audience: string;
   sizeKb: number;
   updatedAt: ISODate;
+  uploadedBy: string;
   /** EM-08 / AI-S-03: indexed for document intelligence. */
   indexed: boolean;
+  /** AI-S-03: OCR field extraction (editable before save). */
+  extracted: readonly ExtractedField[];
+  /** How the OCR read: printed (high confidence) vs scanned (lower). */
+  scanned: boolean;
+  extractionConfidence: number; // 0–1
+  /** Extra terms for semantic search beyond the name. */
+  keywords: readonly string[];
+  /** Certificates/contracts/policies expire — surfaced in the expiry radar. */
+  expiryDate?: ISODate;
+  /** Cross-link: this document evidences a compliance obligation (FM-06). */
+  linkedObligationId?: string;
 };
 
 /* --- inspections (FM-06, Should) ------------------------------------------ */

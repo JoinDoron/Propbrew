@@ -34,6 +34,7 @@ export const db = {
   assetRuntime: clone(seed.assetRuntime),
   inspections: clone(seed.inspections),
   complianceObligations: clone(seed.complianceObligations),
+  documents: clone(seed.documents),
 };
 
 export type HistoryEntry = {
