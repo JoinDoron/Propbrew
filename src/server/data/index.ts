@@ -69,7 +69,10 @@ export const repos = {
     get: (a: Actor, id: string) => scopedGet(a, 'assets_ppm', seed.assets, id),
   },
   ppmPlans: {
-    list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', seed.ppmPlans, o),
+    list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', db.ppmPlans, o),
+  },
+  ppmOccurrences: {
+    list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', db.ppmOccurrences, o),
   },
   wallets: {
     list: (a: Actor, o?: ListOpts) => scopedList(a, 'charges_invoicing', db.wallets, o),
@@ -118,5 +121,15 @@ export const repos = {
     all: (a: Actor) => scopedList(a, 'assets_ppm', seed.sites, { limit: 100 }).items,
   },
 };
+
+/**
+ * Runtime feeds carry no estate column, so they are JOINED onto the actor's
+ * already-scoped asset set (never scanned globally) — §8.2 isolation is
+ * inherited from the asset scope.
+ */
+export function runtimeForActor(actor: Actor) {
+  const ids = new Set(repos.assets.list(actor).items.map((x) => String(x.id)));
+  return db.assetRuntime.filter((r) => ids.has(String(r.assetId)));
+}
 
 export { seed };

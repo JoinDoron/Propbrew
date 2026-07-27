@@ -127,16 +127,38 @@ export type Asset = TenantScoped &
     archivedAt: ISODateTime | null;
   };
 
+export type PpmFrequency = 'weekly' | 'monthly' | 'quarterly' | 'biannual' | 'annual';
+export type PpmBasis = 'calendar' | 'runtime' | 'both';
+export type ChecklistItem = { id: string; label: string; requiresPhoto: boolean };
+
 export type PpmPlan = TenantScoped & {
   id: PpmPlanId;
   assetId: AssetId;
   assetName: string;
+  category: string; // asset trade (Power/Elevators/HVAC/Plumbing/Access) — drives colour, season, risk
   siteId: SiteId;
-  frequency: 'weekly' | 'monthly' | 'quarterly' | 'biannual' | 'annual';
+  buildingId?: BuildingId;
+  frequency: PpmFrequency;
   nextDue: ISODate;
   overdue: boolean;
-  checklistItems: number;
-  assignee: string;
+  /** Days before nextDue the work order should be generated (the lead-time queue). */
+  leadTimeDays: number;
+  /** Trigger basis — generators/pumps are runtime-driven (whichever comes first). */
+  basis: PpmBasis;
+  /** Service interval in engine-hours, for runtime/both plans. */
+  runtimeIntervalHours?: number;
+  checklistItems: number; // display count (kept for the assets explorer)
+  checklist: readonly ChecklistItem[];
+  /** FM-02: completion requires an evidence photo when true. */
+  evidenceRequired: boolean;
+  lastServicedAt: ISODate | null;
+  estimatedHours: number; // per-visit labour — feeds the workload heatmap
+  assignee: string; // display fallback
+  assigneeRule?: { kind: 'person' | 'vendor'; ref: string };
+  /** Statutory inspections (lifts) cannot be pushed past their legal deadline. */
+  statutory: boolean;
+  statutoryDeadline?: ISODate;
+  rescheduleCount: number;
 };
 
 export type WorkOrder = TenantScoped &

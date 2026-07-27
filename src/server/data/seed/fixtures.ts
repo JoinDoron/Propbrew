@@ -10,6 +10,7 @@
 
 import { SEED } from '@/server/identities';
 import { money, type Money } from '@/domain/primitives';
+import { projectPlanOccurrences, type AssetRuntime, type PpmOccurrence } from '@/domain/ppm';
 import type {
   Announcement,
   Asset,
@@ -107,15 +108,47 @@ export const assets = [
   { tenantId: A, ...audit, id: 'ast-hvac-v1', name: 'Chiller — Victoria Tower 1', category: 'HVAC', serial: 'CHL-2200-0043', siteId: SEED.estateVictoria, buildingId: 'b-victoria-1', locationLabel: 'Tower 1 · Rooftop', status: 'under_maintenance', purchaseDate: '2023-08-15', warrantyExpiry: '2028-08-15', photos: [], archivedAt: null },
   { tenantId: A, ...audit, id: 'ast-pump-d', name: 'Water Pump — Block D', category: 'Plumbing', serial: 'PMP-GRUND-7781', siteId: SEED.estateGardens, buildingId: 'b-gardens-d', locationLabel: 'Block D · Basement', status: 'out_of_service', purchaseDate: '2020-01-20', warrantyExpiry: '2025-01-20', photos: [], archivedAt: null },
   { tenantId: A, ...audit, id: 'ast-gate-1', name: 'Main Gate Barrier', category: 'Access', serial: 'GTE-CAME-1120', siteId: SEED.estateGardens, locationLabel: 'Estate · Main entrance', status: 'operational', purchaseDate: '2023-03-01', warrantyExpiry: '2026-03-01', photos: [], archivedAt: null },
+  { tenantId: A, ...audit, id: 'ast-gen-d', name: 'Generator — Block D (250kVA)', category: 'Power', serial: 'GEN-250-0044', siteId: SEED.estateGardens, buildingId: 'b-gardens-d', locationLabel: 'Block D · Plant room', status: 'operational', purchaseDate: '2023-01-10', warrantyExpiry: '2028-01-10', photos: [], archivedAt: null },
   { tenantId: B, ...audit, id: 'ast-ikoyi-gen', name: 'Generator — Ikoyi (750kVA)', category: 'Power', serial: 'GEN-750-0012', siteId: SEED.estateIkoyi, locationLabel: 'Ikoyi · Plant room', status: 'operational', purchaseDate: '2024-01-01', warrantyExpiry: '2029-01-01', photos: [], archivedAt: null },
 ] as unknown as Asset[];
 
+// Reusable checklist templates (FM-02: completion enforces each item + evidence).
+const genChecklist = [
+  { id: 'c1', label: 'Check oil level & top up', requiresPhoto: false },
+  { id: 'c2', label: 'Replace oil filter', requiresPhoto: true },
+  { id: 'c3', label: 'Inspect fuel lines & injectors', requiresPhoto: false },
+  { id: 'c4', label: 'Test auto-start on grid failure', requiresPhoto: false },
+  { id: 'c5', label: 'Log runtime hours & coolant', requiresPhoto: true },
+];
+const liftChecklist = [
+  { id: 'l1', label: 'Statutory safety-gear test', requiresPhoto: true },
+  { id: 'l2', label: 'Inspect ropes & sheaves', requiresPhoto: true },
+  { id: 'l3', label: 'Door interlock & levelling', requiresPhoto: false },
+  { id: 'l4', label: 'Emergency alarm & phone', requiresPhoto: false },
+];
+const pumpChecklist = [
+  { id: 'p1', label: 'Check seals & bearings', requiresPhoto: false },
+  { id: 'p2', label: 'Prime & pressure test', requiresPhoto: true },
+  { id: 'p3', label: 'Clean intake strainer', requiresPhoto: false },
+];
+
 export const ppmPlans = [
-  { tenantId: A, id: 'ppm-gen-c', assetId: 'ast-gen-c', assetName: 'Generator — Block C', siteId: SEED.estateGardens, frequency: 'monthly', nextDue: '2026-08-02', overdue: false, checklistItems: 12, assignee: 'Emeka Nwosu' },
-  { tenantId: A, id: 'ppm-lift-c1', assetId: 'ast-lift-c1', assetName: 'Passenger Lift — Block C #1', siteId: SEED.estateGardens, frequency: 'quarterly', nextDue: '2026-07-18', overdue: true, checklistItems: 20, assignee: 'CoolAir Nigeria' },
-  { tenantId: A, id: 'ppm-hvac-v1', assetId: 'ast-hvac-v1', assetName: 'Chiller — Victoria', siteId: SEED.estateVictoria, frequency: 'monthly', nextDue: '2026-08-05', overdue: false, checklistItems: 15, assignee: 'Brightworks Facilities' },
-  { tenantId: A, id: 'ppm-pump-d', assetId: 'ast-pump-d', assetName: 'Water Pump — Block D', siteId: SEED.estateGardens, frequency: 'weekly', nextDue: '2026-07-14', overdue: true, checklistItems: 6, assignee: 'Emeka Nwosu' },
+  { tenantId: A, id: 'ppm-gen-c', assetId: 'ast-gen-c', assetName: 'Generator — Block C (500kVA)', category: 'Power', siteId: SEED.estateGardens, buildingId: 'b-gardens-c', frequency: 'monthly', nextDue: '2026-08-02', overdue: false, leadTimeDays: 5, basis: 'both', runtimeIntervalHours: 250, checklistItems: genChecklist.length, checklist: genChecklist, evidenceRequired: true, lastServicedAt: '2026-07-02', estimatedHours: 4, assignee: 'Emeka Nwosu', assigneeRule: { kind: 'person', ref: 'user-technician' }, statutory: false, rescheduleCount: 0 },
+  { tenantId: A, id: 'ppm-gen-d', assetId: 'ast-gen-d', assetName: 'Generator — Block D (250kVA)', category: 'Power', siteId: SEED.estateGardens, buildingId: 'b-gardens-d', frequency: 'monthly', nextDue: '2026-08-18', overdue: false, leadTimeDays: 5, basis: 'both', runtimeIntervalHours: 250, checklistItems: genChecklist.length, checklist: genChecklist, evidenceRequired: true, lastServicedAt: '2026-07-18', estimatedHours: 4, assignee: 'Emeka Nwosu', assigneeRule: { kind: 'person', ref: 'user-technician' }, statutory: false, rescheduleCount: 0 },
+  { tenantId: A, id: 'ppm-lift-c1', assetId: 'ast-lift-c1', assetName: 'Passenger Lift — Block C #1', category: 'Elevators', siteId: SEED.estateGardens, buildingId: 'b-gardens-c', frequency: 'quarterly', nextDue: '2026-07-18', overdue: true, leadTimeDays: 10, basis: 'calendar', checklistItems: liftChecklist.length, checklist: liftChecklist, evidenceRequired: true, lastServicedAt: '2026-04-15', estimatedHours: 6, assignee: 'CoolAir Nigeria', assigneeRule: { kind: 'vendor', ref: 'v-coolair' }, statutory: true, statutoryDeadline: '2026-08-15', rescheduleCount: 1 },
+  { tenantId: A, id: 'ppm-hvac-v1', assetId: 'ast-hvac-v1', assetName: 'Chiller — Victoria Tower 1', category: 'HVAC', siteId: SEED.estateVictoria, buildingId: 'b-victoria-1', frequency: 'monthly', nextDue: '2026-08-05', overdue: false, leadTimeDays: 4, basis: 'calendar', checklistItems: 8, checklist: genChecklist.slice(0, 3), evidenceRequired: false, lastServicedAt: '2026-07-05', estimatedHours: 3, assignee: 'Brightworks Facilities', assigneeRule: { kind: 'vendor', ref: 'v-brightworks' }, statutory: false, rescheduleCount: 0 },
+  { tenantId: A, id: 'ppm-pump-d', assetId: 'ast-pump-d', assetName: 'Water Pump — Block D', category: 'Plumbing', siteId: SEED.estateGardens, buildingId: 'b-gardens-d', frequency: 'weekly', nextDue: '2026-07-14', overdue: true, leadTimeDays: 2, basis: 'calendar', checklistItems: pumpChecklist.length, checklist: pumpChecklist, evidenceRequired: true, lastServicedAt: '2026-06-30', estimatedHours: 2, assignee: 'Emeka Nwosu', assigneeRule: { kind: 'person', ref: 'user-technician' }, statutory: false, rescheduleCount: 2 },
+  { tenantId: B, id: 'ppm-ikoyi-gen', assetId: 'ast-ikoyi-gen', assetName: 'Generator — Ikoyi (750kVA)', category: 'Power', siteId: SEED.estateIkoyi, frequency: 'monthly', nextDue: '2026-08-10', overdue: false, leadTimeDays: 5, basis: 'both', runtimeIntervalHours: 300, checklistItems: genChecklist.length, checklist: genChecklist, evidenceRequired: true, lastServicedAt: '2026-07-10', estimatedHours: 4, assignee: 'Ikoyi Maintenance Co', statutory: false, rescheduleCount: 0 },
 ] as unknown as PpmPlan[];
+
+/** Sensor-style runtime feeds. ast-gen-c is deliberately near its 250h interval:
+ *  238h accrued at 8.4h/day → crosses in ~12 running-hrs (~1.4 days), well before
+ *  the calendar due date of Aug 2 — the flagship runtime-driven pull-forward. */
+export const assetRuntime = [
+  { tenantId: A, assetId: 'ast-gen-c', runtimeHours: 1900, runtimeHoursAtLastService: 1662, runtimeServiceInterval: 250, dailyRuntimeHours: 8.4, lastReadingAt: '2026-07-26' },
+  { tenantId: A, assetId: 'ast-gen-d', runtimeHours: 900, runtimeHoursAtLastService: 780, runtimeServiceInterval: 250, dailyRuntimeHours: 6.0, lastReadingAt: '2026-07-26' },
+  { tenantId: B, assetId: 'ast-ikoyi-gen', runtimeHours: 1200, runtimeHoursAtLastService: 1080, runtimeServiceInterval: 300, dailyRuntimeHours: 7.0, lastReadingAt: '2026-07-26' },
+] as unknown as AssetRuntime[];
 
 const wo = (
   id: string,
@@ -186,6 +219,19 @@ for (let i = 0; i < workOrders.length; i++) {
   const aid = WO_ASSET[workOrders[i].ref];
   if (aid) workOrders[i] = { ...workOrders[i], assetId: aid } as WorkOrder;
 }
+
+// Extra reactive failures with DISTINCT createdAt in the last 90 days, so the
+// AI-F-01 failure signal is real (the engine reads WorkOrder.createdAt).
+workOrders.push(
+  { tenantId: A, ...audit, createdAt: '2026-06-15T10:00:00Z', id: 'wo-r1', ref: 'WO-24790', title: 'Generator overheating alarm', siteId: SEED.estateGardens, estateId: SEED.estateGardens, assetId: 'ast-gen-c', status: 'closed', priority: 'high', origin: 'resident_request', requesterUserId: 'user-resident', requesterName: 'Folake Bello', assigneeName: 'Emeka Nwosu', respondDueAt: null, resolveDueAt: null, cost: money(3800000, 'NGN') } as unknown as WorkOrder,
+  { tenantId: A, ...audit, createdAt: '2026-06-28T10:00:00Z', id: 'wo-r2', ref: 'WO-24795', title: 'Water pump seal leak', siteId: SEED.estateGardens, estateId: SEED.estateGardens, assetId: 'ast-pump-d', status: 'closed', priority: 'high', origin: 'manager', requesterUserId: 'user-facility_manager', requesterName: 'Bola Adeyemi', assigneeName: 'Emeka Nwosu', respondDueAt: null, resolveDueAt: null, cost: money(5200000, 'NGN') } as unknown as WorkOrder,
+);
+
+/** Six weeks of dated occurrences projected from the plans (calendar+runtime,
+ *  whichever comes first). The calendar, heatmap and overdue rail render these. */
+export const ppmOccurrences: PpmOccurrence[] = ppmPlans.flatMap((p) =>
+  projectPlanOccurrences(p, assetRuntime.find((r) => r.assetId === p.assetId), 8),
+);
 
 const inv = (
   id: string,

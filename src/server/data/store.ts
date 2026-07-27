@@ -29,6 +29,9 @@ export const db = {
   sosEvents: clone(seed.sosEvents),
   marketplaceOrders: clone(seed.marketplaceOrders),
   wallets: clone(seed.wallets),
+  ppmPlans: clone(seed.ppmPlans),
+  ppmOccurrences: clone(seed.ppmOccurrences),
+  assetRuntime: clone(seed.assetRuntime),
 };
 
 export type HistoryEntry = {
