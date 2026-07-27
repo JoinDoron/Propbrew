@@ -4,7 +4,8 @@ import { repos } from '@/server/data';
 import { addMoney, money, type Money as MoneyValue } from '@/domain/primitives';
 import { humanizeStatus, statusTone, toneVar } from '@/lib/status-tones';
 import { Card, CardHeader, KpiCard } from '@/components/ui';
-import { AiSuggestionCard, ScopeBanner } from '@/components/domain';
+import { ScopeBanner } from '@/components/domain';
+import { AskData } from '@/components/reports/ask-data';
 import { Banknote, Wrench, Download } from 'lucide-react';
 
 /** FM-07 / AI-S-02 — reporting & analytics. Every figure is scoped exactly as
@@ -30,16 +31,7 @@ export default async function ReportsPage() {
     <div className="max-w-[1100px] mx-auto flex flex-col gap-3.5">
       <ScopeBanner label={actor.allEstates ? 'all estates' : `${actor.estateIds.length} estate(s)`} />
 
-      <AiSuggestionCard
-        featureId="AI-S-02"
-        title="Ask about your data"
-        confidence={0.92}
-        sources={[`${workOrders.length} work orders`, `${invoices.length} invoices`]}
-        onApprove={<span />}
-      >
-        Try: “Which estate has the most overdue work orders this week?” — answers come grounded, with the
-        underlying records one click away. Every figure below is traceable to its source list.
-      </AiSuggestionCard>
+      <AskData />
 
       <div className="grid grid-cols-1 min-[560px]:grid-cols-3 gap-3.5">
         <KpiCard label="Preventive vs reactive" value={`${ppmShare}%`} delta="PPM share" positive={ppmShare >= 50} icon={<Wrench size={18} />} />

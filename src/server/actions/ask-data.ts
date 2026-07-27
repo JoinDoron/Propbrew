@@ -1,0 +1,197 @@
+'use server';
+
+/**
+ * AI-S-02 — natural-language search & reporting, demo engine.
+ *
+ * No LLM is wired yet (the PRD keeps AI behind a provider abstraction, AI-S-06),
+ * so this is a deterministic intent matcher that answers a curated set of
+ * questions by COMPUTING over the caller's scoped data. That preserves the two
+ * properties the PRD actually cares about for this surface:
+ *   • §11.4 tenant isolation — every figure comes from the scoped repos, so an
+ *     answer can never cross the estate/tenant boundary the actor is confined to.
+ *   • §11.4 grounding — each answer ships the underlying record links and a
+ *     confidence, and unmatched questions fall back rather than hallucinate.
+ * Swapping this for a real RAG call changes only this file.
+ */
+
+import { getActor } from '@/server/session';
+import { can } from '@/lib/authz';
+import { repos, seed } from '@/server/data';
+
+export type DataAnswer = {
+  matched: boolean;
+  answer: string;
+  metric?: string;
+  detail?: string[];
+  sources: { label: string; href: string }[];
+  confidence: number; // 0–1
+  scopeLabel: string;
+};
+
+const OPEN = (s: string) => !['closed', 'cancelled', 'rejected', 'verified'].includes(s);
+const naira = (minor: number) => '₦' + Math.round(minor / 100).toLocaleString('en-NG');
+const has = (q: string, ...words: string[]) => words.some((w) => q.includes(w));
+
+export async function askData(question: string): Promise<DataAnswer> {
+  const actor = await getActor();
+  const q = question.toLowerCase().trim();
+  const scopeLabel = actor.allEstates ? 'all your estates' : `your ${actor.estateIds.length} estate(s)`;
+
+  const workOrders = repos.workOrders.list(actor).items;
+  const seesInvoices = can(actor, 'charges_invoicing', 'read').allowed;
+  const invoices = seesInvoices ? repos.invoices.list(actor).items : [];
+  const seesSos = can(actor, 'security_sos', 'read').allowed;
+  const sos = seesSos ? repos.sosEvents.list(actor).items : [];
+  const vendors = repos.vendors.list(actor).items;
+
+  const siteName = (id: string) => seed.sites.find((s) => s.id === id)?.name ?? id;
+  const base = { matched: true, scopeLabel };
+
+  if (!q) {
+    return { ...base, matched: false, answer: 'Ask me something about your work orders, billing, arrears, SOS or vendors.', sources: [], confidence: 0 };
+  }
+
+  // 1 — overdue / SLA-breached work orders, grouped by estate
+  if (has(q, 'overdue', 'breach', 'sla', 'late', 'behind') && has(q, 'work order', 'job', 'maintenance', 'wo', 'repair', 'request')) {
+    const breached = workOrders.filter((w) => OPEN(w.status) && (w.respondDueAt ?? '') < '2026-07-26T09:00:00Z');
+    const byEstate = breached.reduce<Record<string, number>>((a, w) => ((a[w.estateId] = (a[w.estateId] ?? 0) + 1), a), {});
+    const ranked = Object.entries(byEstate).sort((a, b) => b[1] - a[1]);
+    const top = ranked[0];
+    return {
+      ...base,
+      answer: breached.length === 0
+        ? `No work orders are breaching SLA across ${scopeLabel} right now.`
+        : `${breached.length} work order${breached.length > 1 ? 's are' : ' is'} breaching SLA across ${scopeLabel}${top ? `, most at ${siteName(top[0])} (${top[1]})` : ''}.`,
+      metric: String(breached.length),
+      detail: ranked.map(([id, n]) => `${siteName(id)}: ${n} breaching`),
+      sources: [{ label: `${breached.length} work orders`, href: '/work-orders' }],
+      confidence: 0.93,
+    };
+  }
+
+  // 2 — collection rate
+  if (has(q, 'collection', 'collected', 'paid') && has(q, 'rate', '%', 'percent', 'how much', 'charge', 'service')) {
+    if (!seesInvoices) return noAccess(base, 'billing');
+    const billed = invoices.reduce((a, i) => a + i.amount.minor, 0);
+    const collected = invoices.reduce((a, i) => a + i.paid.minor, 0);
+    const rate = billed ? Math.round((collected / billed) * 100) : 0;
+    return {
+      ...base,
+      answer: `Collection rate across ${scopeLabel} is ${rate}% — ${naira(collected)} collected of ${naira(billed)} billed.`,
+      metric: `${rate}%`,
+      sources: [{ label: `${invoices.length} invoices`, href: '/billing' }],
+      confidence: 0.95,
+    };
+  }
+
+  // 3 — arrears / who owes
+  if (has(q, 'arrears', 'owe', 'owed', 'outstanding', 'debt', 'defaulter', 'unpaid')) {
+    if (!seesInvoices) return noAccess(base, 'billing');
+    const arrears = invoices.filter((i) => ['overdue', 'in_arrears', 'escalated'].includes(i.status));
+    const outstanding = arrears.reduce((a, i) => a + (i.amount.minor - i.paid.minor), 0);
+    const worst = [...arrears].sort((a, b) => b.agingDays - a.agingDays)[0];
+    return {
+      ...base,
+      answer: arrears.length === 0
+        ? `No units are in arrears across ${scopeLabel}.`
+        : `${arrears.length} unit${arrears.length > 1 ? 's are' : ' is'} in arrears across ${scopeLabel}, ${naira(outstanding)} outstanding${worst ? `. Oldest: ${worst.residentName} (${worst.agingDays}d, ${worst.status.replace(/_/g, ' ')})` : ''}.`,
+      metric: naira(outstanding),
+      detail: arrears.map((i) => `${i.residentName} · ${i.ref} · ${naira(i.amount.minor - i.paid.minor)} · ${i.agingDays}d`),
+      sources: [{ label: `${arrears.length} invoices`, href: '/billing' }],
+      confidence: 0.94,
+    };
+  }
+
+  // 4 — open work orders
+  if (has(q, 'open', 'active', 'ongoing', 'how many') && has(q, 'work order', 'job', 'maintenance', 'wo', 'repair', 'request', 'ticket')) {
+    const open = workOrders.filter((w) => OPEN(w.status));
+    const byStatus = open.reduce<Record<string, number>>((a, w) => ((a[w.status] = (a[w.status] ?? 0) + 1), a), {});
+    return {
+      ...base,
+      answer: `${open.length} open work order${open.length === 1 ? '' : 's'} across ${scopeLabel}.`,
+      metric: String(open.length),
+      detail: Object.entries(byStatus).map(([s, n]) => `${s.replace(/_/g, ' ')}: ${n}`),
+      sources: [{ label: `${open.length} work orders`, href: '/work-orders' }],
+      confidence: 0.95,
+    };
+  }
+
+  // 5 — preventive vs reactive
+  if (has(q, 'preventive', 'reactive', 'ppm', 'planned')) {
+    const preventive = workOrders.filter((w) => w.origin === 'ppm_schedule').length;
+    const reactive = workOrders.filter((w) => w.origin === 'resident_request').length;
+    const share = Math.round((preventive / (preventive + reactive || 1)) * 100);
+    return {
+      ...base,
+      answer: `${share}% of maintenance is preventive across ${scopeLabel} (${preventive} planned vs ${reactive} reactive).`,
+      metric: `${share}%`,
+      sources: [{ label: 'Work orders', href: '/work-orders' }],
+      confidence: 0.9,
+    };
+  }
+
+  // 6 — SOS / emergencies
+  if (has(q, 'sos', 'emergency', 'panic', 'alert', 'security', 'incident')) {
+    if (!seesSos) return noAccess(base, 'security');
+    const active = sos.filter((s) => s.status !== 'reviewed');
+    const acked = sos.filter((s) => s.ackSeconds !== null);
+    const avg = acked.length ? Math.round(acked.reduce((a, s) => a + (s.ackSeconds ?? 0), 0) / acked.length) : 0;
+    return {
+      ...base,
+      answer: `${active.length} active SOS event${active.length === 1 ? '' : 's'} across ${scopeLabel}. Average acknowledge time is ${avg}s (target < 60s).`,
+      metric: String(active.length),
+      detail: sos.map((s) => `${s.ref} · ${s.residentName} · ${s.status}${s.ackSeconds !== null ? ` · ${s.ackSeconds}s` : ' · pending'}`),
+      sources: [{ label: `${sos.length} SOS events`, href: '/security' }],
+      confidence: 0.92,
+    };
+  }
+
+  // 7 — vendors
+  if (has(q, 'vendor', 'contractor', 'supplier')) {
+    const best = [...vendors].sort((a, b) => b.slaHitRate - a.slaHitRate)[0];
+    const expiring = vendors.filter((v) => v.compliance !== 'valid');
+    return {
+      ...base,
+      answer: vendors.length === 0
+        ? `No vendors are visible in ${scopeLabel}.`
+        : `${vendors.length} vendors in ${scopeLabel}. Best on-time: ${best.name} (${best.slaHitRate}% SLA). ${expiring.length} have compliance issues.`,
+      metric: String(vendors.length),
+      detail: vendors.map((v) => `${v.name} · ${v.slaHitRate}% SLA · ${v.compliance}`),
+      sources: [{ label: `${vendors.length} vendors`, href: '/vendors' }],
+      confidence: 0.9,
+    };
+  }
+
+  // 8 — residents / occupancy
+  if (has(q, 'resident', 'occupanc', 'tenant', 'unit', 'vacant')) {
+    const residents = can(actor, 'users_roles', 'read').allowed ? repos.residents.list(actor).items : [];
+    const sites = repos.sites.all(actor);
+    const units = sites.reduce((a, s) => a + s.unitCount, 0);
+    return {
+      ...base,
+      answer: `${residents.length} resident${residents.length === 1 ? '' : 's'} across ${sites.length} site(s) (${units.toLocaleString()} units) in ${scopeLabel}.`,
+      metric: String(residents.length),
+      sources: [{ label: 'Residents', href: '/people' }, { label: 'Spaces', href: '/spaces' }],
+      confidence: 0.88,
+    };
+  }
+
+  // fallback
+  return {
+    ...base,
+    matched: false,
+    answer: 'I can’t answer that yet. Try asking about SLA breaches, collection rate, arrears, open work orders, SOS response times or vendors — all scoped to your estates.',
+    sources: [],
+    confidence: 0,
+  };
+}
+
+function noAccess(base: { scopeLabel: string }, what: string): DataAnswer {
+  return {
+    ...base,
+    matched: true,
+    answer: `Your role doesn’t have access to ${what} data, so I can’t report on it. This mirrors your §7 permissions — the assistant can never exceed them (§11.4).`,
+    sources: [],
+    confidence: 1,
+  };
+}
