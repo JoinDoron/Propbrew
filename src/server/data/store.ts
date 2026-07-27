@@ -32,6 +32,8 @@ export const db = {
   ppmPlans: clone(seed.ppmPlans),
   ppmOccurrences: clone(seed.ppmOccurrences),
   assetRuntime: clone(seed.assetRuntime),
+  inspections: clone(seed.inspections),
+  complianceObligations: clone(seed.complianceObligations),
 };
 
 export type HistoryEntry = {

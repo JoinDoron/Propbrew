@@ -16,6 +16,7 @@ import type {
   Asset,
   Booking,
   Building,
+  ComplianceObligation,
   EstateDocument,
   Inspection,
   InvestorProject,
@@ -291,13 +292,65 @@ export const documents = ([
   { tenantId: B, id: 'doc-b1', name: 'Ikoyi House Rules.pdf', folder: 'Policies', estateId: SEED.estateIkoyi, audience: 'All residents', sizeKb: 900, updatedAt: '2026-05-01', indexed: true },
 ] as unknown) as EstateDocument[];
 
+// Inspection checklist templates (FM-06: pass/fail/severity + photo per item).
+type CI = { id: string; label: string; severity: 'minor' | 'major' | 'critical'; requiresPhoto: boolean; result: 'pass' | 'fail' | 'na' | null; note?: string };
+const fireItems = (r: (i: number) => 'pass' | 'fail' | null): CI[] => [
+  { id: 'f1', label: 'Extinguishers charged & in date', severity: 'critical', requiresPhoto: true, result: r(0) },
+  { id: 'f2', label: 'Smoke & heat alarms functional', severity: 'critical', requiresPhoto: false, result: r(1) },
+  { id: 'f3', label: 'Escape routes clear & signed', severity: 'major', requiresPhoto: true, result: r(2) },
+  { id: 'f4', label: 'Emergency lighting works', severity: 'major', requiresPhoto: false, result: r(3) },
+  { id: 'f5', label: 'Fire-drill log up to date', severity: 'minor', requiresPhoto: false, result: r(4) },
+];
+const liftItems = (r: (i: number) => 'pass' | 'fail' | null): CI[] => [
+  { id: 'l1', label: 'Safety-gear (overspeed) test', severity: 'critical', requiresPhoto: true, result: r(0) },
+  { id: 'l2', label: 'Ropes & sheaves within wear limit', severity: 'critical', requiresPhoto: true, result: r(1) },
+  { id: 'l3', label: 'Door interlocks engage', severity: 'major', requiresPhoto: false, result: r(2) },
+  { id: 'l4', label: 'Emergency alarm & intercom', severity: 'major', requiresPhoto: false, result: r(3) },
+  { id: 'l5', label: 'Car levelling accuracy', severity: 'minor', requiresPhoto: false, result: r(4) },
+];
+const waterItems = (r: (i: number) => 'pass' | 'fail' | null): CI[] => [
+  { id: 'w1', label: 'Tank cleaned & sealed', severity: 'major', requiresPhoto: true, result: r(0) },
+  { id: 'w2', label: 'Chlorination within range', severity: 'critical', requiresPhoto: false, result: r(1) },
+  { id: 'w3', label: 'Water sample bacteriology pass', severity: 'critical', requiresPhoto: false, result: r(2) },
+];
+const genItems = (r: (i: number) => 'pass' | 'fail' | null): CI[] => [
+  { id: 'g1', label: 'Emissions within NESREA limit', severity: 'major', requiresPhoto: false, result: r(0) },
+  { id: 'g2', label: 'Full-load test 30 min', severity: 'major', requiresPhoto: false, result: r(1) },
+  { id: 'g3', label: 'Fuel & exhaust integrity', severity: 'minor', requiresPhoto: true, result: r(2) },
+];
+const elecItems = (r: (i: number) => 'pass' | 'fail' | null): CI[] => [
+  { id: 'e1', label: 'Earthing & bonding continuity', severity: 'critical', requiresPhoto: false, result: r(0) },
+  { id: 'e2', label: 'RCD/ELCB trip test', severity: 'critical', requiresPhoto: false, result: r(1) },
+  { id: 'e3', label: 'Distribution board thermography', severity: 'major', requiresPhoto: true, result: r(2) },
+];
+const pass = () => 'pass' as const;
+const nul = () => null;
+const liftFail = (i: number) => (i < 3 ? 'fail' : 'pass') as 'pass' | 'fail'; // 3 fails (2 critical, 1 major)
+const counts = (items: CI[]) => ({ passItems: items.filter((x) => x.result === 'pass').length, failItems: items.filter((x) => x.result === 'fail').length });
+
+const insp1 = fireItems(pass), insp2 = liftItems(liftFail), insp3 = genItems(nul), insp4 = waterItems(nul), insp5 = elecItems(nul);
+
 export const inspections = ([
-  { tenantId: A, id: 'insp-1', ref: 'INS-1201', template: 'Fire safety — quarterly', siteId: SEED.estateGardens, estateId: SEED.estateGardens, assetName: 'Block C — common areas', status: 'passed', scheduledDate: '2026-07-10', passItems: 18, failItems: 0, inspector: 'Bola Adeyemi', raisedWorkOrders: 0 },
-  { tenantId: A, id: 'insp-2', ref: 'INS-1202', template: 'Lift statutory inspection', siteId: SEED.estateGardens, estateId: SEED.estateGardens, assetName: 'Passenger Lift — Block C #1', status: 'failed', scheduledDate: '2026-07-18', passItems: 14, failItems: 3, inspector: 'CoolAir Nigeria', raisedWorkOrders: 3 },
-  { tenantId: A, id: 'insp-3', ref: 'INS-1203', template: 'Generator load test', siteId: SEED.estateVictoria, estateId: SEED.estateVictoria, assetName: 'Chiller — Victoria Tower 1', status: 'scheduled', scheduledDate: '2026-07-30', passItems: 0, failItems: 0, inspector: 'Brightworks Facilities', raisedWorkOrders: 0 },
-  { tenantId: A, id: 'insp-4', ref: 'INS-1198', template: 'Water tank hygiene', siteId: SEED.estateGardens, estateId: SEED.estateGardens, assetName: 'Water Pump — Block D', status: 'overdue', scheduledDate: '2026-07-05', passItems: 0, failItems: 0, inspector: 'Emeka Nwosu', raisedWorkOrders: 0 },
-  { tenantId: B, id: 'insp-b1', ref: 'INS-9001', template: 'Fire safety — quarterly', siteId: SEED.estateIkoyi, estateId: SEED.estateIkoyi, assetName: 'Tower A — common areas', status: 'passed', scheduledDate: '2026-07-12', passItems: 20, failItems: 0, inspector: 'Zainab Yusuf', raisedWorkOrders: 0 },
+  { tenantId: A, id: 'insp-1', ref: 'INS-1201', template: 'Fire safety certification', obligationId: 'ob-fire-c', criticality: 'statutory', siteId: SEED.estateGardens, estateId: SEED.estateGardens, assetName: 'Block C — common areas', status: 'passed', scheduledDate: '2026-05-09', completedDate: '2026-05-09', checklist: insp1, ...counts(insp1), inspector: 'Lagos State Fire Service', raisedWorkOrders: 0, raisedWorkOrderRefs: [] },
+  { tenantId: A, id: 'insp-2', ref: 'INS-1202', template: 'Lift statutory inspection', obligationId: 'ob-lift-c', criticality: 'statutory', siteId: SEED.estateGardens, estateId: SEED.estateGardens, assetId: 'ast-lift-c1', assetName: 'Passenger Lift — Block C #1', status: 'failed', scheduledDate: '2026-07-18', completedDate: '2026-07-18', checklist: insp2, ...counts(insp2), inspector: 'Lagos State Safety Commission', raisedWorkOrders: 3, raisedWorkOrderRefs: ['WO-24817'] },
+  { tenantId: A, id: 'insp-3', ref: 'INS-1203', template: 'Generator emissions & load test', obligationId: 'ob-gen-c', criticality: 'important', siteId: SEED.estateGardens, estateId: SEED.estateGardens, assetId: 'ast-gen-c', assetName: 'Generator — Block C (500kVA)', status: 'scheduled', scheduledDate: '2026-07-30', checklist: insp3, ...counts(insp3), inspector: 'Brightworks Facilities', raisedWorkOrders: 0, raisedWorkOrderRefs: [] },
+  { tenantId: A, id: 'insp-4', ref: 'INS-1198', template: 'Water tank hygiene', obligationId: 'ob-water-d', criticality: 'important', siteId: SEED.estateGardens, estateId: SEED.estateGardens, assetId: 'ast-pump-d', assetName: 'Water Pump — Block D', status: 'overdue', scheduledDate: '2026-07-05', checklist: insp4, ...counts(insp4), inspector: 'Emeka Nwosu', raisedWorkOrders: 0, raisedWorkOrderRefs: [] },
+  { tenantId: A, id: 'insp-5', ref: 'INS-1205', template: 'Fixed electrical installation', obligationId: 'ob-electrical', criticality: 'statutory', siteId: SEED.estateGardens, estateId: SEED.estateGardens, assetName: 'Estate — distribution', status: 'scheduled', scheduledDate: '2026-08-02', checklist: insp5, ...counts(insp5), inspector: 'PowerSafe Electricals', raisedWorkOrders: 0, raisedWorkOrderRefs: [] },
+  { tenantId: B, id: 'insp-b1', ref: 'INS-9001', template: 'Fire safety certification', obligationId: 'ob-fire-ikoyi', criticality: 'statutory', siteId: SEED.estateIkoyi, estateId: SEED.estateIkoyi, assetName: 'Tower A — common areas', status: 'passed', scheduledDate: '2026-07-12', completedDate: '2026-07-12', checklist: fireItems(pass), passItems: 5, failItems: 0, inspector: 'Zainab Yusuf', raisedWorkOrders: 0, raisedWorkOrderRefs: [] },
 ] as unknown) as Inspection[];
+
+/** FM-06 compliance register — standing obligations with their expiry. Chosen for
+ *  a realistic RAG spread: 2 valid, 2 expiring, 2 expired, 1 never-evidenced. */
+export const complianceObligations = ([
+  { tenantId: A, id: 'ob-lift-c', name: 'Lift statutory inspection', scopeLabel: 'Passenger Lift — Block C #1', assetId: 'ast-lift-c1', siteId: SEED.estateGardens, estateId: SEED.estateGardens, criticality: 'statutory', cadenceDays: 90, validUntil: '2026-07-21', lastInspectionRef: 'INS-1202', authority: 'Lagos State Safety Commission' },
+  { tenantId: A, id: 'ob-water-d', name: 'Water tank hygiene', scopeLabel: 'Water Pump — Block D', assetId: 'ast-pump-d', siteId: SEED.estateGardens, estateId: SEED.estateGardens, criticality: 'important', cadenceDays: 180, validUntil: '2026-07-20', lastInspectionRef: 'INS-1188', authority: 'Lagos Water Regulatory Commission' },
+  { tenantId: A, id: 'ob-fire-c', name: 'Fire safety certificate', scopeLabel: 'Block C — common areas', siteId: SEED.estateGardens, estateId: SEED.estateGardens, criticality: 'statutory', cadenceDays: 90, validUntil: '2026-08-07', lastInspectionRef: 'INS-1201', authority: 'Lagos State Fire Service' },
+  { tenantId: A, id: 'ob-insurance', name: 'Property & liability insurance', scopeLabel: 'Estate-wide', siteId: SEED.estateGardens, estateId: SEED.estateGardens, criticality: 'important', cadenceDays: 365, validUntil: '2026-08-16', authority: 'Leadway Assurance' },
+  { tenantId: A, id: 'ob-electrical', name: 'Fixed electrical installation cert', scopeLabel: 'Estate — distribution', siteId: SEED.estateGardens, estateId: SEED.estateGardens, criticality: 'statutory', cadenceDays: 365, validUntil: '2026-09-28', authority: 'IEE / NEMSA' },
+  { tenantId: A, id: 'ob-gen-c', name: 'Generator emissions permit', scopeLabel: 'Generator — Block C (500kVA)', assetId: 'ast-gen-c', siteId: SEED.estateGardens, estateId: SEED.estateGardens, criticality: 'important', cadenceDays: 365, validUntil: '2027-05-10', authority: 'NESREA' },
+  { tenantId: A, id: 'ob-cctv-ndpa', name: 'CCTV data-protection (NDPA)', scopeLabel: 'Estate — surveillance', siteId: SEED.estateGardens, estateId: SEED.estateGardens, criticality: 'routine', cadenceDays: 365, validUntil: null, authority: 'NDPC' },
+  { tenantId: B, id: 'ob-fire-ikoyi', name: 'Fire safety certificate', scopeLabel: 'Tower A — Ikoyi', siteId: SEED.estateIkoyi, estateId: SEED.estateIkoyi, criticality: 'statutory', cadenceDays: 90, validUntil: '2026-09-01', authority: 'Lagos State Fire Service' },
+] as unknown) as ComplianceObligation[];
 
 export const investorProjects = ([
   { tenantId: A, id: SEED.investorProject, projectId: SEED.investorProject, name: 'Marina Heights (off-plan)', location: 'Lekki Phase 2, Lagos', status: 'selling', unitsTotal: 120, unitsSold: 78, salesTarget: ngn(4_800_000_000), salesToDate: ngn(3_120_000_000), occupancyPct: 0, projectedRoiPct: 18.5, handoverDate: '2027-06-30' },

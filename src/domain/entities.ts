@@ -266,20 +266,56 @@ export type EstateDocument = TenantScoped & {
 
 /* --- inspections (FM-06, Should) ------------------------------------------ */
 
+export type InspectionSeverity = 'minor' | 'major' | 'critical';
+export type InspectionResult = 'pass' | 'fail' | 'na' | null;
+export type InspectionItem = {
+  id: string;
+  label: string;
+  severity: InspectionSeverity;
+  requiresPhoto: boolean;
+  result: InspectionResult;
+  note?: string;
+};
+
 export type Inspection = TenantScoped & {
   id: string;
   ref: string;
   template: string;
+  /** The compliance obligation this run evidences (links to a ComplianceObligation). */
+  obligationId: string;
+  criticality: 'statutory' | 'important' | 'routine';
   siteId: SiteId;
   estateId: SiteId;
+  assetId?: AssetId;
   assetName: string;
-  status: 'scheduled' | 'passed' | 'failed' | 'overdue';
+  status: 'scheduled' | 'in_progress' | 'passed' | 'failed' | 'overdue';
   scheduledDate: ISODate;
+  completedDate?: ISODate;
+  /** FM-06: checklist items with pass/fail/severity and photo capture. */
+  checklist: readonly InspectionItem[];
   passItems: number;
   failItems: number;
   inspector: string;
   /** FM-06: failed items auto-raise work orders. */
   raisedWorkOrders: number;
+  raisedWorkOrderRefs: readonly string[];
+};
+
+/** FM-06: "compliance register shows status and expiry per obligation." A
+ *  standing legal/operational obligation, renewed by a passing inspection. */
+export type ComplianceObligation = TenantScoped & {
+  id: string;
+  name: string;
+  scopeLabel: string; // asset or area the obligation covers
+  assetId?: AssetId;
+  siteId: SiteId;
+  estateId: SiteId;
+  criticality: 'statutory' | 'important' | 'routine';
+  cadenceDays: number; // renewal cadence
+  /** When the current certificate/compliance lapses; null = never evidenced. */
+  validUntil: ISODate | null;
+  lastInspectionRef?: string;
+  authority?: string; // e.g. Lagos State Safety Commission
 };
 
 /* --- investor off-plan projects (SC-08, Should) --------------------------- */
