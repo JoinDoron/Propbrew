@@ -87,6 +87,10 @@ export const residents = [
   { tenantId: A, id: 'res-folake', userId: 'user-resident', name: 'Folake Bello', unitId: SEED.unitRes, siteId: SEED.estateGardens, status: 'active', household: 4, balance: ngn(85000), moveInDate: '2024-03-01' },
   { tenantId: A, id: 'res-tobi', userId: 'user-tobi', name: 'Tobi Ade', unitId: 'u-c09a', siteId: SEED.estateGardens, status: 'active', household: 2, balance: ngn(0), moveInDate: '2023-11-15' },
   { tenantId: A, id: 'res-amina', userId: 'user-amina', name: 'Amina Sule', unitId: 'u-d04c', siteId: SEED.estateGardens, status: 'invited', household: 1, balance: ngn(0), moveInDate: '2026-08-01' },
+  { tenantId: A, id: 'res-kemi', userId: 'user-kemi', name: 'Kemi Adeyinka', unitId: 'u-c03b', siteId: SEED.estateGardens, status: 'active', household: 3, balance: ngn(0), moveInDate: '2023-06-01' },
+  { tenantId: A, id: 'res-yusuf', userId: 'user-yusuf', name: 'Yusuf Bello', unitId: 'u-c11c', siteId: SEED.estateGardens, status: 'active', household: 1, balance: ngn(30000), moveInDate: '2025-02-15' },
+  { tenantId: A, id: 'res-ada2', userId: 'user-ada2', name: 'Ada Obi', unitId: 'u-d01a', siteId: SEED.estateGardens, status: 'active', household: 2, balance: ngn(0), moveInDate: '2024-09-10' },
+  { tenantId: A, id: 'res-david', userId: 'user-david', name: 'David Okon', unitId: 'u-d07b', siteId: SEED.estateGardens, status: 'active', household: 4, balance: ngn(0), moveInDate: '2024-03-22' },
   { tenantId: B, id: 'res-ikoyi', userId: 'user-ikoyi-res', name: 'Kunle Bakare', unitId: 'u-ikoyi-1', siteId: SEED.estateIkoyi, status: 'active', household: 3, balance: ngn(120000), moveInDate: '2025-01-10' },
 ] as unknown as Resident[];
 
