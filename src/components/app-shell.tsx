@@ -9,15 +9,20 @@
  * only renders and handles interactivity.
  */
 
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, useTransition, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Bell, ChevronLeft, Menu, MessageSquare, Moon, Search, Sun, Truck } from 'lucide-react';
+import { ChevronLeft, LogOut, Menu, Moon, Search, Sun, Truck } from 'lucide-react';
 import { brand } from '@/config/brand';
 import { PAGE_META, type NavGroup } from '@/config/nav';
 import { useTheme } from '@/components/theme-provider';
 import { Icon } from '@/components/icon';
 import { Avatar, IconButton } from '@/components/ui';
+import { NotificationsMenu } from '@/components/inbox/notifications-menu';
+import { MessagesMenu } from '@/components/inbox/messages-menu';
+import { ProfileMenu } from '@/components/inbox/profile-menu';
+import { signOut } from '@/server/actions/auth';
+import type { Notification, Thread } from '@/server/data/inbox';
 
 const SIDEBAR_WIDTH = 248;
 const SIDEBAR_COLLAPSED = 72;
@@ -31,11 +36,19 @@ export type ShellIdentity = {
 export function AppShell({
   groups,
   identity,
+  notifications,
+  unreadNotifications,
+  threads,
+  unreadMessages,
   devSwitcher,
   children,
 }: {
   groups: NavGroup[];
   identity: ShellIdentity;
+  notifications: Notification[];
+  unreadNotifications: number;
+  threads: Thread[];
+  unreadMessages: number;
   devSwitcher?: ReactNode;
   children: ReactNode;
 }) {
@@ -43,6 +56,7 @@ export function AppShell({
   const { theme, toggleTheme } = useTheme();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
+  const [signingOut, startSignOut] = useTransition();
 
   const meta = PAGE_META[pathname] ?? { title: brand.name, subtitle: '' };
   const showLabels = !collapsed;
@@ -165,10 +179,22 @@ export function AppShell({
           <div className="flex items-center gap-2.5 p-1.5 rounded-[10px]">
             <Avatar name={identity.name} />
             {showLabels && (
-              <div className="flex-1 min-w-0 leading-tight">
-                <div className="font-semibold text-[13px] truncate">{identity.name}</div>
-                <div className="text-[11px] text-text-3 truncate">{identity.roleSummary}</div>
-              </div>
+              <>
+                <div className="flex-1 min-w-0 leading-tight">
+                  <div className="font-semibold text-[13px] truncate">{identity.name}</div>
+                  <div className="text-[11px] text-text-3 truncate">{identity.roleSummary}</div>
+                </div>
+                <IconButton
+                  bordered={false}
+                  title="Sign out"
+                  aria-label="Sign out"
+                  disabled={signingOut}
+                  onClick={() => startSignOut(async () => { await signOut(); })}
+                  className="!w-8 !h-8 flex-none hover:!text-negative"
+                >
+                  <LogOut size={16} />
+                </IconButton>
+              </>
             )}
           </div>
         </div>
@@ -205,19 +231,11 @@ export function AppShell({
           <IconButton onClick={toggleTheme} title="Toggle theme" aria-label="Toggle theme">
             {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
           </IconButton>
-          <IconButton title="Chat" aria-label="Chat" className="max-[560px]:hidden">
-            <MessageSquare size={17} />
-          </IconButton>
-          <IconButton title="Notifications" aria-label="Notifications">
-            <Bell size={17} />
-            <span className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-1 rounded-lg bg-[#ef4444] text-white text-[10px] font-bold flex items-center justify-center border-2 border-surface">
-              3
-            </span>
-          </IconButton>
-          <div className="flex items-center gap-2.5 h-[38px] pl-[3px] pr-3 border border-border rounded-[20px] bg-surface max-[560px]:hidden">
-            <Avatar name={identity.name} size={30} />
-            <span className="font-semibold text-[13px]">{identity.name.split(' ')[0]}</span>
+          <div className="max-[560px]:hidden">
+            <MessagesMenu threads={threads} unread={unreadMessages} />
           </div>
+          <NotificationsMenu notifications={notifications} unread={unreadNotifications} />
+          <ProfileMenu name={identity.name} roleSummary={identity.roleSummary} tenantLabel={identity.tenantLabel} />
         </header>
 
         <main className="flex-1 overflow-y-auto overflow-x-hidden px-4 sm:px-6 pt-[22px] pb-10">{children}</main>
