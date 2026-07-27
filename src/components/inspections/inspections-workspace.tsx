@@ -1,20 +1,23 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ClipboardCheck, Download, ShieldCheck, ShieldX, TriangleAlert } from 'lucide-react';
-import { KpiCard } from '@/components/ui';
+import { ClipboardCheck, Download, Plus, ShieldCheck, ShieldX, TriangleAlert } from 'lucide-react';
+import { Button, KpiCard } from '@/components/ui';
+import { ReadOnlyChip } from '@/components/domain';
 import { auditReadiness, complianceState, daysUntil } from '@/domain/inspections';
 import { toneVar } from '@/lib/status-tones';
 import type { InspectionsData } from './types';
 import { ComplianceRegister } from './compliance-register';
 import { InspectionsList } from './inspections-list';
 import { RunInspectionDrawer } from './run-drawer';
+import { ScheduleDialog } from './schedule-dialog';
 
 type Tab = 'compliance' | 'inspections';
 
 export function InspectionsWorkspace(data: InspectionsData) {
   const [tab, setTab] = useState<Tab>('compliance');
   const [runId, setRunId] = useState<string | null>(null);
+  const [scheduleFor, setScheduleFor] = useState<{ obligationId?: string } | null>(null);
 
   const audit = useMemo(() => auditReadiness(data.obligations), [data.obligations]);
   const expired = data.obligations.filter((o) => complianceState(o.validUntil) === 'expired');
@@ -63,17 +66,25 @@ export function InspectionsWorkspace(data: InspectionsData) {
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="inline-flex rounded-lg border border-border-2 bg-surface p-0.5 w-fit">
-        <TabBtn active={tab === 'compliance'} onClick={() => setTab('compliance')} label="Compliance register" />
-        <TabBtn active={tab === 'inspections'} onClick={() => setTab('inspections')} label={`Inspections (${data.inspections.length})`} />
+      {/* Tabs + create */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="inline-flex rounded-lg border border-border-2 bg-surface p-0.5">
+          <TabBtn active={tab === 'compliance'} onClick={() => setTab('compliance')} label="Compliance register" />
+          <TabBtn active={tab === 'inspections'} onClick={() => setTab('inspections')} label={`Inspections (${data.inspections.length})`} />
+        </div>
+        <div className="ml-auto">
+          {data.canMutate
+            ? <Button variant="primary" icon={<Plus size={15} />} className="!h-8 !text-[12px]" onClick={() => setScheduleFor({})}>New inspection</Button>
+            : <ReadOnlyChip />}
+        </div>
       </div>
 
       {tab === 'compliance'
-        ? <ComplianceRegister data={data} onRun={setRunId} />
+        ? <ComplianceRegister data={data} onRun={setRunId} onSchedule={(id) => setScheduleFor({ obligationId: id })} />
         : <InspectionsList data={data} onRun={setRunId} />}
 
       {runInsp && <RunInspectionDrawer inspection={runInsp} canMutate={data.canMutate} onClose={() => setRunId(null)} />}
+      {scheduleFor && <ScheduleDialog obligations={data.obligations} preselect={scheduleFor.obligationId} now={data.now} onClose={() => setScheduleFor(null)} />}
     </div>
   );
 }

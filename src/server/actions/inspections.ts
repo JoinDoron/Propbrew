@@ -15,6 +15,7 @@ import { ForbiddenError, assertCan, type Actor } from '@/lib/authz';
 import { repos } from '@/server/data';
 import { db } from '@/server/data/store';
 import { NOW, addDaysISO, SEVERITY_PRIORITY } from '@/domain/inspections';
+import { INSPECTION_TEMPLATES, templateChecklist } from '@/domain/inspection-templates';
 
 export type InspResult = { ok: true; raised?: number; passed?: boolean } | { ok: false; error: string };
 
@@ -103,6 +104,48 @@ export async function runInspection(
 
   REVALIDATE.forEach((p) => revalidatePath(p));
   return { ok: true, raised: refs.length, passed: failed.length === 0 };
+}
+
+let inspCounter = 0;
+
+/** Schedule a NEW inspection against an obligation (FM-06 ad-hoc/scheduled runs).
+ *  Builds a fresh checklist from the obligation's template. */
+export async function scheduleInspection(input: { obligationId: string; date: string; inspector: string }): Promise<InspResult> {
+  const actor = await getActor();
+  const denied = gate(actor);
+  if (denied) return denied;
+
+  const ob = repos.complianceObligations.list(actor).items.find((o) => o.id === input.obligationId);
+  if (!ob) return { ok: false, error: 'Obligation not found.' };
+  if (!input.date) return { ok: false, error: 'Pick a date.' };
+
+  const template = INSPECTION_TEMPLATES[ob.templateKey] ?? INSPECTION_TEMPLATES.general;
+  const ref = `INS-${1300 + inspCounter++}`;
+  const status = Date.parse(input.date) < Date.parse(NOW) ? 'overdue' : 'scheduled';
+
+  db.inspections.push({
+    tenantId: ob.tenantId,
+    id: `insp-new-${ref}`,
+    ref,
+    template: template.name,
+    obligationId: ob.id,
+    criticality: ob.criticality,
+    siteId: ob.siteId,
+    estateId: ob.estateId,
+    assetId: ob.assetId,
+    assetName: ob.scopeLabel,
+    status,
+    scheduledDate: input.date,
+    checklist: templateChecklist(ob.templateKey),
+    passItems: 0,
+    failItems: 0,
+    inspector: input.inspector || 'Unassigned',
+    raisedWorkOrders: 0,
+    raisedWorkOrderRefs: [],
+  } as unknown as (typeof db.inspections)[number]);
+
+  REVALIDATE.forEach((p) => revalidatePath(p));
+  return { ok: true };
 }
 
 /** Reschedule a scheduled/overdue inspection. */

@@ -9,7 +9,7 @@ import type { InspectionsData, ObView } from './types';
 
 const CRIT_TONE: Record<string, Tone> = { statutory: 'danger', important: 'warn', routine: 'neutral' };
 
-export function ComplianceRegister({ data, onRun }: { data: InspectionsData; onRun: (id: string) => void }) {
+export function ComplianceRegister({ data, onRun, onSchedule }: { data: InspectionsData; onRun: (id: string) => void; onSchedule: (obligationId: string) => void }) {
   // sort: never-evidenced first, then soonest-to-expire (expired = negative → top)
   const ranked = [...data.obligations].sort((a, b) => rank(a) - rank(b));
 
@@ -61,7 +61,7 @@ export function ComplianceRegister({ data, onRun }: { data: InspectionsData; onR
                   <Button variant="primary" className="!h-8 !text-[12px]" icon={<Play size={13} />} onClick={() => onRun(openInsp.id)}>Run</Button>
                 )}
                 {data.canMutate && !openInsp && (
-                  <Button variant="secondary" className="!h-8 !text-[12px]" icon={<CalendarClock size={13} />}>Schedule</Button>
+                  <Button variant="secondary" className="!h-8 !text-[12px]" icon={<CalendarClock size={13} />} onClick={() => onSchedule(o.id)}>Schedule</Button>
                 )}
               </div>
             </div>

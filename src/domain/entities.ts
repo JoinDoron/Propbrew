@@ -312,6 +312,8 @@ export type ComplianceObligation = TenantScoped & {
   estateId: SiteId;
   criticality: 'statutory' | 'important' | 'routine';
   cadenceDays: number; // renewal cadence
+  /** Which inspection template a new run for this obligation uses. */
+  templateKey: 'fire' | 'lift' | 'water' | 'generator' | 'electrical' | 'document' | 'general';
   /** When the current certificate/compliance lapses; null = never evidenced. */
   validUntil: ISODate | null;
   lastInspectionRef?: string;
