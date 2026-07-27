@@ -169,6 +169,20 @@ export const workOrders: WorkOrder[] = [
 // fix tenant B row's tenantId (wo() hard-codes tenant A)
 workOrders[workOrders.length - 1] = { ...workOrders[workOrders.length - 1], tenantId: B } as WorkOrder;
 
+// Link work orders to the asset they concern (FM-01: asset service history).
+const WO_ASSET: Record<string, string> = {
+  'WO-24817': 'ast-lift-c1', // Passenger Lift — Block C #1
+  'WO-24816': 'ast-gen-c', //   Generator — Block C
+  'WO-24814': 'ast-hvac-v1', // Chiller — Victoria Tower 1
+  'WO-24813': 'ast-pump-d', //  Water Pump — Block D
+  'WO-24812': 'ast-gate-1', //  Main Gate Barrier
+  'WO-90001': 'ast-ikoyi-gen', // tenant B
+};
+for (let i = 0; i < workOrders.length; i++) {
+  const aid = WO_ASSET[workOrders[i].ref];
+  if (aid) workOrders[i] = { ...workOrders[i], assetId: aid } as WorkOrder;
+}
+
 const inv = (
   id: string,
   ref: string,

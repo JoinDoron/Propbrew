@@ -147,6 +147,7 @@ export type WorkOrder = TenantScoped &
     siteId: SiteId;
     estateId: SiteId; // scope column mirror of siteId
     unitId?: UnitId;
+    assetId?: AssetId;
     assetName?: string;
     status: WorkOrderStatus;
     priority: WorkOrderPriority;
