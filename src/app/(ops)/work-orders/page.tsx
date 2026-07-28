@@ -4,6 +4,8 @@ import { repos } from '@/server/data';
 import { CardHeader } from '@/components/ui';
 import { ScopeBanner } from '@/components/domain';
 import { WorkOrdersBoard } from '@/components/work-orders/work-orders-board';
+import { WorkOrdersIntel } from '@/components/work-orders/work-orders-intel';
+import { NOW_MS } from '@/domain/ppm';
 
 const NOW = '2026-07-26T09:00:00Z';
 const CLOSED = ['closed', 'cancelled', 'rejected', 'verified'];
@@ -15,6 +17,7 @@ export default async function WorkOrdersPage() {
   const { actor } = await requireCapability('work_orders');
   const canMutate = ['F', 'M'].includes(effectiveLevel(actor, 'work_orders'));
   const rows = repos.workOrders.list(actor).items;
+  const wos = [...rows];
   const open = rows.filter((w) => !CLOSED.includes(w.status)).length;
 
   const boardRows = rows.map((w) => ({
@@ -34,7 +37,8 @@ export default async function WorkOrdersPage() {
   return (
     <div className="max-w-[1200px] mx-auto flex flex-col gap-3.5">
       <ScopeBanner label={actor.allEstates ? 'all estates' : `${actor.estateIds.length} estate(s)`} />
-      <CardHeader title={`${open} open · ${rows.length} total`} subtitle="Every maintenance job from request to close" />
+      <CardHeader title={`${open} open · ${rows.length} total`} subtitle="Live SLA countdowns, AI triage and workload — every job from request to close" />
+      <WorkOrdersIntel wos={wos} nowMs={NOW_MS} canMutate={canMutate} />
       <WorkOrdersBoard rows={boardRows} canMutate={canMutate} />
     </div>
   );
