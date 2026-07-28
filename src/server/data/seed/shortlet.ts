@@ -10,6 +10,7 @@ import { SEED } from '@/server/identities';
 import { money } from '@/domain/primitives';
 import { nightsBetween } from '@/domain/shortlet/types';
 import type { SlProperty, Apartment, SlBooking, SlExpense, SlInspection, BookingSource, CautionStatus } from '@/domain/shortlet/types';
+import type { TeamMember } from '@/domain/shortlet/plan';
 
 const A = SEED.tenantA;
 const ngn = (n: number) => money(n * 100, 'NGN');
@@ -112,3 +113,14 @@ export const shortletInspections: SlInspection[] = [
     outcome: 'deductions', damageTotal: money(3300000, 'NGN'), notes: 'Deducted ₦33,000 from caution fee; guest notified.',
   },
 ] as unknown as SlInspection[];
+
+/* --- team (FR-TM) + current plan ------------------------------------------ */
+export const shortletTeam: TeamMember[] = [
+  { tenantId: A, id: 'tm-1', name: 'Amaka Obi (you)', phone: '+2348030000001', role: 'owner', status: 'active', lastActive: 'now' },
+  { tenantId: A, id: 'tm-2', name: 'Kunle Bello', phone: '+2348030000002', role: 'manager', status: 'active', lastActive: '2h ago' },
+  { tenantId: A, id: 'tm-3', name: 'Ada Cleaning Co', phone: '+2348030000003', role: 'housekeeper', status: 'active', lastActive: '1d ago' },
+  { tenantId: A, id: 'tm-4', name: 'Femi Adey* (accountant)', phone: '+2348030000004', role: 'accountant', status: 'invited', lastActive: '—' },
+] as unknown as TeamMember[];
+
+/** The account's current subscription tier (mutable via changePlan). */
+export const shortletPlanKey = 'growth';

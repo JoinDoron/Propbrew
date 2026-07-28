@@ -91,6 +91,8 @@ const OPS_NAV: NavGroup[] = [
       { id: 'sl-whatsapp', label: 'WhatsApp', href: '/shortlet/whatsapp', icon: 'bell', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
       { id: 'sl-channels', label: 'Channels', href: '/shortlet/channels', icon: 'store', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
       { id: 'sl-properties', label: 'Properties', href: '/shortlet/properties', icon: 'boxes', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
+      { id: 'sl-team', label: 'Team', href: '/shortlet/team', icon: 'users', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
+      { id: 'sl-plan', label: 'Plan & billing', href: '/shortlet/plan', icon: 'banknote', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
     ],
   },
   {
@@ -204,6 +206,8 @@ export const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   '/shortlet/guests': { title: 'Guests', subtitle: 'Your guest CRM — repeat and VIP guests' },
   '/shortlet/whatsapp': { title: 'WhatsApp', subtitle: 'Automated guest messaging' },
   '/shortlet/channels': { title: 'Channels', subtitle: 'iCal sync and double-booking guard' },
+  '/shortlet/team': { title: 'Team', subtitle: 'Members and role-based access' },
+  '/shortlet/plan': { title: 'Plan & billing', subtitle: 'Your subscription and apartment usage' },
   '/shortlet/properties': { title: 'Properties', subtitle: 'Buildings, apartments and access details' },
   '/portal': { title: 'My Estate', subtitle: 'Everything for your home in one place' },
   '/portal/requests': { title: 'My Requests', subtitle: 'Maintenance you have raised' },

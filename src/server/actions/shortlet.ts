@@ -17,8 +17,9 @@ import { NOW } from '@/domain/ppm';
 import { nightsBetween } from '@/domain/shortlet';
 import { shortletBookingMachine } from '@/domain/workflows';
 import type { SlBooking, SlInspection, InspectionItem, ExpenseCategory, BookingSource, Channel } from '@/domain/shortlet/types';
+import type { PlanKey, TeamRole, TeamMember } from '@/domain/shortlet/plan';
 
-const PATHS = ['/shortlet', '/shortlet/bookings', '/shortlet/calendar', '/shortlet/inspections', '/shortlet/expenses', '/shortlet/analytics', '/shortlet/guests', '/shortlet/whatsapp', '/shortlet/channels'];
+const PATHS = ['/shortlet', '/shortlet/bookings', '/shortlet/calendar', '/shortlet/inspections', '/shortlet/expenses', '/shortlet/analytics', '/shortlet/guests', '/shortlet/whatsapp', '/shortlet/channels', '/shortlet/plan', '/shortlet/team'];
 const revalidate = () => PATHS.forEach((p) => revalidatePath(p));
 
 export type Res = { ok: true; ref?: string } | { ok: false; error: string };
@@ -117,6 +118,44 @@ export async function toggleChannel(apartmentId: string, channel: Channel): Prom
   const live = db.shortletApartments.find((a) => a.id === apartmentId);
   if (!live) return { ok: false, error: 'Apartment not found.' };
   live.channels = live.channels.includes(channel) ? live.channels.filter((c) => c !== channel) : [...live.channels, channel];
+  revalidate();
+  return { ok: true };
+}
+
+/* --- FR-PL: change subscription plan -------------------------------------- */
+export async function changePlan(planKey: PlanKey): Promise<Res> {
+  const g = await gate('update'); if ('ok' in g) return g;
+  db.shortletPlanKey = planKey;
+  revalidate();
+  return { ok: true };
+}
+
+/* --- FR-TM: team management ------------------------------------------------ */
+let tmSeq = 0;
+export async function inviteMember(input: { name: string; phone: string; role: TeamRole }): Promise<Res> {
+  const g = await gate('create'); if ('ok' in g) return g;
+  if (!input.name.trim()) return { ok: false, error: 'Name is required.' };
+  db.shortletTeam.push({ tenantId: g.actor.tenantId, id: `tm-new-${++tmSeq}`, name: input.name.trim(), phone: input.phone.trim(), role: input.role, status: 'invited', lastActive: '—' } as unknown as TeamMember);
+  revalidate();
+  return { ok: true };
+}
+
+export async function setMemberRole(id: string, role: TeamRole): Promise<Res> {
+  const g = await gate('update'); if ('ok' in g) return g;
+  const m = db.shortletTeam.find((x) => x.id === id);
+  if (!m) return { ok: false, error: 'Member not found.' };
+  if (m.role === 'owner') return { ok: false, error: 'The owner role cannot be changed here.' };
+  m.role = role;
+  revalidate();
+  return { ok: true };
+}
+
+export async function removeMember(id: string): Promise<Res> {
+  const g = await gate('update'); if ('ok' in g) return g;
+  const m = db.shortletTeam.find((x) => x.id === id);
+  if (!m) return { ok: false, error: 'Member not found.' };
+  if (m.role === 'owner') return { ok: false, error: 'You cannot remove the account owner.' };
+  db.shortletTeam = db.shortletTeam.filter((x) => x.id !== id);
   revalidate();
   return { ok: true };
 }

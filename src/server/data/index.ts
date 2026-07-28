@@ -147,6 +147,9 @@ export const repos = {
   shortletInspections: {
     list: (a: Actor, o?: ListOpts) => scopedList(a, 'bookings_amenities', db.shortletInspections, o ?? { limit: 100 }),
   },
+  shortletTeam: {
+    list: (a: Actor, o?: ListOpts) => scopedList(a, 'bookings_amenities', db.shortletTeam, o ?? { limit: 100 }),
+  },
 };
 
 /**

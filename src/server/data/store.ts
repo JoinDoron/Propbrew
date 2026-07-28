@@ -43,6 +43,8 @@ export const db = {
   shortletBookings: clone(seed.shortletBookings),
   shortletExpenses: clone(seed.shortletExpenses),
   shortletInspections: clone(seed.shortletInspections),
+  shortletTeam: clone(seed.shortletTeam),
+  shortletPlanKey: seed.shortletPlanKey as string,
 };
 
 export type HistoryEntry = {

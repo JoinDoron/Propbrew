@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import * as seed from '@/server/data/seed/fixtures';
 import { periodKpis, occupancyRate, profitByProperty, sourcePerformance, suggestNightlyRate, turnovers, guestProfiles, expenseInsights, cautionExposure } from '@/domain/shortlet/engine';
 import { renderTemplate, messageSchedule, whatsappStats, detectConflicts, channelSummary, DEFAULT_TEMPLATES } from '@/domain/shortlet/automation';
+import { PLANS, planFor, entitlements, recommendPlan, TEAM_PERMISSIONS } from '@/domain/shortlet/plan';
 import type { Apartment, SlBooking, SlExpense } from '@/domain/shortlet/types';
 
 const apts = seed.shortletApartments as Apartment[];
@@ -91,5 +92,26 @@ describe('iCal channels (FR-IC)', () => {
     const conflicts = detectConflicts(bookings);
     expect(conflicts.length).toBeGreaterThanOrEqual(1); // Sophia vs Airbnb import on ap-4
     expect(conflicts[0].nights).toBeGreaterThan(0);
+  });
+});
+
+describe('plans (FR-PL) + team RBAC (FR-TM)', () => {
+  it('entitlements are cumulative and premium features gate by tier', () => {
+    expect(PLANS).toHaveLength(5);
+    expect(entitlements('lite')).not.toContain('WhatsApp automation');
+    expect(entitlements('starter')).toContain('WhatsApp automation');
+    expect(entitlements('growth')).toContain('iCal channel sync');
+    expect(planFor('growth').apartmentCap).toBe(6);
+  });
+  it('recommends the smallest fitting plan', () => {
+    expect(recommendPlan(6, true, true).key).toBe('growth'); // iCal → growth, 6 apts ok
+    expect(recommendPlan(2, false, false).key).toBe('lite');
+    expect(recommendPlan(10, true, true).key).toBe('pro'); // >6 apts
+  });
+  it('housekeeper is limited to inspections + calendar; owner has all', () => {
+    expect(TEAM_PERMISSIONS.housekeeper.Inspections).toBe('manage');
+    expect(TEAM_PERMISSIONS.housekeeper.Financials).toBe('none');
+    expect(TEAM_PERMISSIONS.owner['Team & plan']).toBe('manage');
+    expect(TEAM_PERMISSIONS.accountant.Financials).toBe('manage');
   });
 });
