@@ -101,6 +101,7 @@ const PORTAL_NAV: NavGroup[] = [
     label: 'Vendor',
     items: [
       { id: 'jobs', label: 'My Jobs', href: '/portal/jobs', icon: 'wrench', capability: 'work_orders', roles: ['vendor'] },
+      { id: 'orders', label: 'Orders', href: '/portal/orders', icon: 'receipt', capability: 'marketplace', roles: ['vendor'] },
       { id: 'listings', label: 'My Listings', href: '/portal/listings', icon: 'package', capability: 'marketplace', roles: ['vendor'] },
     ],
   },
@@ -180,6 +181,7 @@ export const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   '/portal/marketplace': { title: 'Marketplace', subtitle: 'Buy from approved vendors' },
   '/portal/announcements': { title: 'Announcements', subtitle: 'Updates from your estate' },
   '/portal/jobs': { title: 'My Jobs', subtitle: 'Work assigned to you' },
+  '/portal/orders': { title: 'Orders', subtitle: 'Accept and fulfil resident orders' },
   '/portal/listings': { title: 'My Listings', subtitle: 'Your marketplace products and services' },
   '/portal/projects': { title: 'My Projects', subtitle: 'Your off-plan investments' },
   '/admin/tenants': { title: 'Tenants', subtitle: 'Organisations on the platform' },
