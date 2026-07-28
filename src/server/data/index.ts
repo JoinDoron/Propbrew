@@ -93,7 +93,7 @@ export const repos = {
     list: (a: Actor, o?: ListOpts) => scopedList(a, 'work_orders', seed.vendors, o),
   },
   announcements: {
-    list: (a: Actor, o?: ListOpts) => scopedList(a, 'announcements', seed.announcements, o),
+    list: (a: Actor, o?: ListOpts) => scopedList(a, 'announcements', db.announcements, o),
   },
   sosEvents: {
     list: (a: Actor, o?: ListOpts) => scopedList(a, 'security_sos', db.sosEvents, o),
