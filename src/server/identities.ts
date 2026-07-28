@@ -93,7 +93,7 @@ export const DEV_IDENTITIES: readonly DevIdentity[] = [
   }),
   id('investor', 'Tunde — Investor', ['investor'], 'Investor', 'Lekki · Marina Heights (off-plan)', {
     allEstates: true,
-    investorProjectIds: [SEED.investorProject],
+    investorProjectIds: [SEED.investorProject, 'p-cedar'],
   }),
   // Multi-role combinations that genuinely occur — exercise union semantics.
   id(
