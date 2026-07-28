@@ -59,7 +59,7 @@ export const shortletBookings: SlBooking[] = [
   bk('ap-3', 'David Okon', '+2348033333333', '2026-07-20', '2026-07-25', 'checked_out', 'booking_com', { caution: 15000000 }),
   // upcoming (confirmed / arriving)
   bk('ap-4', 'Sophia Adeyemi', '+2348034444444', '2026-07-27', '2026-07-29', 'confirmed', 'airbnb'),
-  bk('ap-5', 'Blessing Eze', '+2348035555555', '2026-07-29', '2026-08-01', 'confirmed', 'booking_com'),
+  bk('ap-5', 'Blessing Eze', '+2348035555555', '2026-07-28', '2026-08-01', 'confirmed', 'booking_com'), // same-day flip with Chidinma's checkout
   bk('ap-3', 'Grace Nwosu', '+2348036666666', '2026-07-30', '2026-08-04', 'confirmed', 'agent', { agent: 'Kunle Bookings' }),
   bk('ap-2', 'Aisha Mohammed', '+2348037777777', '2026-08-02', '2026-08-05', 'confirmed', 'whatsapp'),
   bk('ap-1', 'Chidinma Eze', '+2348031111111', '2026-08-10', '2026-08-13', 'confirmed', 'direct'), // repeat → VIP

@@ -77,6 +77,21 @@ const OPS_NAV: NavGroup[] = [
     ],
   },
   {
+    // Short-Let PMS (new module). Rides the §7 bookings capability (matrix is
+    // CR-locked); role-restricted to operator personas so Security doesn't see it.
+    label: 'Short-Let',
+    items: [
+      { id: 'sl-dash', label: 'Dashboard', href: '/shortlet', icon: 'gauge', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
+      { id: 'sl-calendar', label: 'Calendar', href: '/shortlet/calendar', icon: 'calendar', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
+      { id: 'sl-bookings', label: 'Bookings', href: '/shortlet/bookings', icon: 'receipt', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
+      { id: 'sl-inspections', label: 'Inspections', href: '/shortlet/inspections', icon: 'clipboard', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
+      { id: 'sl-expenses', label: 'Expenses', href: '/shortlet/expenses', icon: 'banknote', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
+      { id: 'sl-analytics', label: 'Analytics', href: '/shortlet/analytics', icon: 'trending', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
+      { id: 'sl-guests', label: 'Guests', href: '/shortlet/guests', icon: 'users', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
+      { id: 'sl-properties', label: 'Properties', href: '/shortlet/properties', icon: 'boxes', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
+    ],
+  },
+  {
     label: 'Admin',
     items: [{ id: 'settings', label: 'Settings', href: '/settings', icon: 'settings', capability: 'tenant_config' }],
   },
@@ -178,6 +193,14 @@ export const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   '/reports': { title: 'Reports', subtitle: 'Portfolio performance and KPIs' },
   '/investors': { title: 'Investors', subtitle: 'Off-plan projects, sales and returns' },
   '/settings': { title: 'Settings', subtitle: 'Estate configuration and preferences' },
+  '/shortlet': { title: 'Short-Let', subtitle: 'Your short-let portfolio at a glance' },
+  '/shortlet/calendar': { title: 'Calendar', subtitle: 'Occupancy across every unit' },
+  '/shortlet/bookings': { title: 'Bookings', subtitle: 'Stays, payments and caution fees' },
+  '/shortlet/inspections': { title: 'Inspections', subtitle: 'Checkout inspections and caution decisions' },
+  '/shortlet/expenses': { title: 'Expenses', subtitle: 'Know your real profit — diesel included' },
+  '/shortlet/analytics': { title: 'Analytics', subtitle: 'Revenue, occupancy and source performance' },
+  '/shortlet/guests': { title: 'Guests', subtitle: 'Your guest CRM — repeat and VIP guests' },
+  '/shortlet/properties': { title: 'Properties', subtitle: 'Buildings, apartments and access details' },
   '/portal': { title: 'My Estate', subtitle: 'Everything for your home in one place' },
   '/portal/requests': { title: 'My Requests', subtitle: 'Maintenance you have raised' },
   '/portal/bills': { title: 'My Bills', subtitle: 'Your service charges and payments' },
