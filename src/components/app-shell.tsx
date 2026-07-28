@@ -158,14 +158,6 @@ export function AppShell({
                   >
                     <Icon name={item.icon} className={`flex-none ${active ? 'text-primary' : 'text-text-3'}`} />
                     {showLabels && <span className="flex-1 truncate">{item.label}</span>}
-                    {showLabels && item.proposed && (
-                      <span
-                        title="Nav mapping proposed — not specified in the PRD §7 matrix"
-                        className="text-[9px] font-bold uppercase tracking-wide text-text-3 border border-border-2 rounded px-1 py-px"
-                      >
-                        ?
-                      </span>
-                    )}
                   </Link>
                 );
               })}
