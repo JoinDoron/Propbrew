@@ -121,6 +121,7 @@ const ADMIN_NAV: NavGroup[] = [
   {
     label: 'Platform',
     items: [
+      { id: 'overview', label: 'Overview', href: '/admin/overview', icon: 'gauge', capability: 'tenant_config' },
       { id: 'tenants', label: 'Tenants', href: '/admin/tenants', icon: 'building', capability: 'tenant_config' },
       { id: 'users', label: 'Users & Roles', href: '/admin/users', icon: 'users', capability: 'users_roles' },
       { id: 'investor-projects', label: 'Investor Projects', href: '/admin/investors', icon: 'trending', capability: 'investor_projects' },
@@ -190,6 +191,7 @@ export const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   '/portal/projects': { title: 'My Projects', subtitle: 'Your off-plan investments' },
   '/portal/returns': { title: 'Returns', subtitle: 'Project your investment returns' },
   '/portal/updates': { title: 'Updates', subtitle: 'Construction progress and documents' },
+  '/admin/overview': { title: 'Platform Overview', subtitle: 'Tenants, revenue, AI spend and system health' },
   '/admin/tenants': { title: 'Tenants', subtitle: 'Organisations on the platform' },
   '/admin/users': { title: 'Users & Roles', subtitle: 'Everyone across every tenant' },
   '/admin/investors': { title: 'Investor Projects', subtitle: 'Off-plan projects platform-wide' },
