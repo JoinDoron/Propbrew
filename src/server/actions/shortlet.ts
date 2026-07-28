@@ -34,7 +34,7 @@ async function gate(action: 'create' | 'update' | 'transition'): Promise<{ actor
 let seq = 5200;
 
 /* --- create a booking (FR-BM-01) ------------------------------------------ */
-export async function createBooking(input: { apartmentId: string; guestName: string; guestPhone: string; checkIn: string; checkOut: string; source: BookingSource; cautionNaira: number }): Promise<Res> {
+export async function createBooking(input: { apartmentId: string; guestName: string; guestPhone: string; guestEmail?: string; checkIn: string; checkOut: string; source: BookingSource; agentName?: string; status?: string; cautionNaira: number; paidNaira?: number; specialRequests?: string }): Promise<Res> {
   const g = await gate('create'); if ('ok' in g) return g;
   const apt = repos.shortletApartments.list(g.actor).items.find((a) => a.id === input.apartmentId);
   if (!apt) return { ok: false, error: 'Apartment not found.' };
@@ -44,17 +44,18 @@ export async function createBooking(input: { apartmentId: string; guestName: str
   const nights = nightsBetween(input.checkIn, input.checkOut);
   const totalMinor = nights * apt.nightlyRate.minor;
   const ref = `SL-${seq++}`;
+  const status = input.status === 'confirmed' ? 'confirmed' : 'enquiry';
   const booking = {
     tenantId: g.actor.tenantId, id: `slb-new-${ref}`, ref, apartmentId: apt.id, propertyId: apt.propertyId,
-    guestName: input.guestName.trim(), guestPhone: input.guestPhone.trim(),
-    checkIn: input.checkIn, checkOut: input.checkOut, nights, source: input.source,
-    nightlyRate: apt.nightlyRate, total: money(totalMinor, 'NGN'), paid: money(0, 'NGN'),
+    guestName: input.guestName.trim(), guestPhone: input.guestPhone.trim(), guestEmail: input.guestEmail?.trim() || undefined,
+    checkIn: input.checkIn, checkOut: input.checkOut, nights, source: input.source, agentName: input.agentName?.trim() || undefined,
+    nightlyRate: apt.nightlyRate, total: money(totalMinor, 'NGN'), paid: money(Math.min(totalMinor, Math.round((input.paidNaira ?? 0) * 100)), 'NGN'),
     cautionFee: money(Math.round(input.cautionNaira * 100), 'NGN'), cautionStatus: 'held', cautionDeducted: money(0, 'NGN'),
-    status: 'enquiry', guestToken: `g-${ref}`, createdAt: NOW,
+    status, guestToken: `g-${ref}`, specialRequests: input.specialRequests?.trim() || undefined, createdAt: NOW,
   } as unknown as SlBooking;
 
   db.shortletBookings.unshift(booking);
-  recordHistory('shortlet-booking', booking.id, { at: NOW, event: 'CREATE', from: null, to: 'enquiry', actorId: g.actor.userId, actorName: 'Operator', actorRole: (g.actor.roles[0] as Role) ?? 'estate_manager', note: `${apt.name} · ${nights} nights` });
+  recordHistory('shortlet-booking', booking.id, { at: NOW, event: 'CREATE', from: null, to: status, actorId: g.actor.userId, actorName: 'Operator', actorRole: (g.actor.roles[0] as Role) ?? 'estate_manager', note: `${apt.name} · ${nights} nights` });
   revalidate();
   return { ok: true, ref };
 }

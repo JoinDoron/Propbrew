@@ -112,42 +112,74 @@ export function BookingsWorkspace({ bookings, apartments }: { bookings: BookingR
   );
 }
 
+function Section({ n, title }: { n: number; title: string }) {
+  return <div className="flex items-center gap-2 mt-3 mb-1.5 first:mt-0"><span className="w-4 h-4 rounded-full bg-primary text-white text-[9px] font-bold grid place-items-center">{n}</span><span className="text-[10.5px] font-bold uppercase tracking-[0.06em] text-text-3">{title}</span></div>;
+}
+
 function NewBookingDialog({ apartments, onClose, onDone }: { apartments: AptOption[]; onClose: () => void; onDone: (ref: string) => void }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [aptId, setAptId] = useState(apartments[0]?.id ?? '');
-  const [guest, setGuest] = useState(''); const [phone, setPhone] = useState('');
+  const [guest, setGuest] = useState(''); const [phone, setPhone] = useState(''); const [email, setEmail] = useState('');
   const [ci, setCi] = useState('2026-07-29'); const [co, setCo] = useState('2026-08-01');
-  const [source, setSource] = useState('direct');
-  const [error, setError] = useState<string | null>(null);
+  const [source, setSource] = useState('direct'); const [agent, setAgent] = useState(''); const [status, setStatus] = useState('confirmed');
+  const [caution, setCaution] = useState(''); const [requests, setRequests] = useState('');
+  const [paid, setPaid] = useState(''); const [error, setError] = useState<string | null>(null);
   const apt = apartments.find((a) => a.id === aptId);
   const nights = Math.max(1, Math.round((Date.parse(co) - Date.parse(ci)) / 86400000));
   const total = (apt?.rateMinor ?? 0) * nights;
-  const caution = Math.round((apt?.rateMinor ?? 0) / 100);
+  const totalNaira = Math.round(total / 100);
+  const cautionN = caution === '' ? Math.round((apt?.rateMinor ?? 0) / 100) : Number(caution);
+  const paidN = Number(paid || 0);
+  const balance = Math.max(0, totalNaira - paidN);
 
   function submit() {
     setError(null);
     start(async () => {
-      const r = await createBooking({ apartmentId: aptId, guestName: guest, guestPhone: phone, checkIn: ci, checkOut: co, source: source as never, cautionNaira: caution });
+      const r = await createBooking({ apartmentId: aptId, guestName: guest, guestPhone: phone, guestEmail: email, checkIn: ci, checkOut: co, source: source as never, agentName: source === 'agent' ? agent : undefined, status, cautionNaira: cautionN, paidNaira: paidN, specialRequests: requests });
       if (!r.ok) { setError(r.error); return; }
       router.refresh(); onDone(r.ref ?? '');
     });
   }
   return (
-    <Modal title="New booking" onClose={onClose} wide>
-      <label className="lbl">Apartment</label>
+    <Modal title="Create a booking" onClose={onClose} wide>
+      <Section n={1} title="Guest details" />
+      <div className="grid grid-cols-2 gap-2">
+        <div className="col-span-2"><label className="lbl">Guest name *</label><input value={guest} onChange={(e) => setGuest(e.target.value)} className="inp" placeholder="Full name" autoFocus /></div>
+        <div><label className="lbl">Phone (WhatsApp)</label><input value={phone} onChange={(e) => setPhone(e.target.value)} className="inp" placeholder="+234…" /></div>
+        <div><label className="lbl">Email</label><input value={email} onChange={(e) => setEmail(e.target.value)} className="inp" placeholder="guest@example.com" /></div>
+      </div>
+
+      <Section n={2} title="Stay details" />
+      <label className="lbl">Apartment *</label>
       <select value={aptId} onChange={(e) => setAptId(e.target.value)} className="inp mb-2">{apartments.map((a) => <option key={a.id} value={a.id}>{a.name} · {a.property} · {money(a.rateMinor)}/night</option>)}</select>
       <div className="grid grid-cols-2 gap-2">
-        <div><label className="lbl">Guest name</label><input value={guest} onChange={(e) => setGuest(e.target.value)} className="inp" placeholder="Full name" autoFocus /></div>
-        <div><label className="lbl">Phone (WhatsApp)</label><input value={phone} onChange={(e) => setPhone(e.target.value)} className="inp" placeholder="+234…" /></div>
-        <div><label className="lbl">Check-in</label><input type="date" value={ci} onChange={(e) => setCi(e.target.value)} className="inp" /></div>
-        <div><label className="lbl">Check-out</label><input type="date" value={co} onChange={(e) => setCo(e.target.value)} className="inp" /></div>
+        <div><label className="lbl">Check-in *</label><input type="date" value={ci} onChange={(e) => setCi(e.target.value)} className="inp" /></div>
+        <div><label className="lbl">Check-out *</label><input type="date" value={co} onChange={(e) => setCo(e.target.value)} className="inp" /></div>
         <div><label className="lbl">Source</label><select value={source} onChange={(e) => setSource(e.target.value)} className="inp">{Object.entries(SOURCE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
+        {source === 'agent' ? <div><label className="lbl">Agent</label><input value={agent} onChange={(e) => setAgent(e.target.value)} className="inp" placeholder="Agent name" /></div> : <div><label className="lbl">Status</label><select value={status} onChange={(e) => setStatus(e.target.value)} className="inp"><option value="confirmed">Confirmed</option><option value="enquiry">Enquiry</option></select></div>}
       </div>
-      <div className="mt-3 rounded-xl bg-surface-2 p-3 flex items-center justify-between text-[12.5px]"><span className="text-text-2">{nights} nights · caution ₦{caution.toLocaleString()}</span><span className="font-bold font-mono">{money(total)}</span></div>
+
+      <Section n={3} title="Payment" />
+      <div className="grid grid-cols-2 gap-2">
+        <div><label className="lbl">Total ({nights}n)</label><div className="inp flex items-center font-mono font-semibold !bg-surface-2">{money(total)}</div></div>
+        <div><label className="lbl">Amount paid (₦)</label><input value={paid} onChange={(e) => setPaid(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" className="inp" placeholder="0" /></div>
+      </div>
+      <div className="flex gap-1.5 mt-1.5">
+        <button type="button" onClick={() => setPaid(String(totalNaira))} className="text-[11px] px-2.5 h-7 rounded-lg border border-[color:var(--tone-success)]/40 text-positive">✓ Paid in full</button>
+        <button type="button" onClick={() => setPaid(String(Math.round(totalNaira / 2)))} className="text-[11px] px-2.5 h-7 rounded-lg border border-[color:var(--tone-warn)]/40 text-warning">½ Half paid</button>
+        <span className="ml-auto text-[11.5px] self-center">Balance <b className={balance ? 'text-warning' : 'text-positive'}>₦{balance.toLocaleString()}</b></span>
+      </div>
+
+      <Section n={4} title="Extras & notes" />
+      <div className="grid grid-cols-2 gap-2">
+        <div><label className="lbl">Caution fee (₦) *</label><input value={caution} onChange={(e) => setCaution(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" className="inp" placeholder={String(Math.round((apt?.rateMinor ?? 0) / 100))} /></div>
+      </div>
+      <label className="lbl mt-2">Special requests</label>
+      <textarea value={requests} onChange={(e) => setRequests(e.target.value)} rows={2} placeholder="Early check-in, airport pickup, allergies…" className="inp !h-auto py-2 resize-none" />
       <p className="text-[10.5px] text-text-3 mt-1.5 flex items-center gap-1"><Sparkles size={11} /> A personalised guest link + WhatsApp confirmation generate on confirm.</p>
       {error && <div className="text-[12px] text-negative mt-2">{error}</div>}
-      <Actions onClose={onClose} onSubmit={submit} pending={pending} disabled={!guest.trim()} label="Create booking" />
+      <Actions onClose={onClose} onSubmit={submit} pending={pending} disabled={!guest.trim()} label="Save booking" />
     </Modal>
   );
 }

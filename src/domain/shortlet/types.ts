@@ -122,6 +122,7 @@ export type SlBooking = TenantScoped & {
   cautionDeducted: Money; // set by inspection outcome
   status: SlBookingStatus;
   guestToken: string; // FR-GL-01 personalised link token
+  specialRequests?: string; // early check-in, airport pickup, allergies…
   createdAt: string;
 };
 
