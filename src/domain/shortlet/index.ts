@@ -3,3 +3,4 @@ export * from './types';
 export * from './engine';
 export * from './automation';
 export * from './plan';
+export * from './operations';

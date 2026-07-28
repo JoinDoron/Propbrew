@@ -3,6 +3,8 @@ import * as seed from '@/server/data/seed/fixtures';
 import { periodKpis, occupancyRate, profitByProperty, sourcePerformance, suggestNightlyRate, turnovers, guestProfiles, expenseInsights, cautionExposure } from '@/domain/shortlet/engine';
 import { renderTemplate, messageSchedule, whatsappStats, detectConflicts, channelSummary, DEFAULT_TEMPLATES } from '@/domain/shortlet/automation';
 import { PLANS, planFor, entitlements, recommendPlan, TEAM_PERMISSIONS } from '@/domain/shortlet/plan';
+import { effectiveRate, suggestPriority, issueStats, agentPerformance, reviewStats } from '@/domain/shortlet/operations';
+import * as seedAll from '@/server/data/seed/fixtures';
 import type { Apartment, SlBooking, SlExpense } from '@/domain/shortlet/types';
 
 const apts = seed.shortletApartments as Apartment[];
@@ -113,5 +115,34 @@ describe('plans (FR-PL) + team RBAC (FR-TM)', () => {
     expect(TEAM_PERMISSIONS.housekeeper.Financials).toBe('none');
     expect(TEAM_PERMISSIONS.owner['Team & plan']).toBe('manage');
     expect(TEAM_PERMISSIONS.accountant.Financials).toBe('manage');
+  });
+});
+
+describe('operations: pricing / maintenance / agents / reviews', () => {
+  it('applies seasonal pricing rules over the base rate', () => {
+    const rules = seedAll.shortletPricingRules;
+    const inc = effectiveRate(120_000_00, rules, '2026-12-20'); // ap-3 +25%
+    expect(inc.minor).toBe(150_000_00);
+    const base = effectiveRate(120_000_00, rules, '2026-08-01'); // no rule
+    expect(base.minor).toBe(120_000_00);
+  });
+  it('suggests issue priority from the title', () => {
+    expect(suggestPriority('Water leak under sink')).toBe('urgent');
+    expect(suggestPriority('AC not cooling')).toBe('high');
+    expect(suggestPriority('Replace bulb')).toBe('low');
+    const s = issueStats(seedAll.shortletIssues, Date.parse('2026-07-26'));
+    expect(s.open + s.inProgress + s.resolvedThisMonth).toBeGreaterThan(0);
+  });
+  it('computes agent performance + commission', () => {
+    const perf = agentPerformance(seedAll.shortletAgents, bookings);
+    const kunle = perf.find((p) => p.agent.name === 'Kunle Bookings');
+    expect(kunle?.bookings).toBeGreaterThanOrEqual(1);
+    expect(kunle?.commissionMinor).toBe(Math.round((kunle!.revenueMinor * 10) / 100));
+  });
+  it('aggregates review ratings + distribution', () => {
+    const s = reviewStats(seedAll.shortletReviews);
+    expect(s.count).toBe(4);
+    expect(s.avg).toBeGreaterThan(0);
+    expect(s.distribution.reduce((a, b) => a + b, 0)).toBe(s.count);
   });
 });

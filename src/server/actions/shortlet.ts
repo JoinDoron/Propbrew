@@ -18,8 +18,9 @@ import { nightsBetween } from '@/domain/shortlet';
 import { shortletBookingMachine } from '@/domain/workflows';
 import type { SlBooking, SlInspection, InspectionItem, ExpenseCategory, BookingSource, Channel } from '@/domain/shortlet/types';
 import type { PlanKey, TeamRole, TeamMember } from '@/domain/shortlet/plan';
+import { suggestPriority, ISSUE_NEXT, type RuleType, type IssuePriority, type PricingRule, type MaintenanceIssue, type Agent } from '@/domain/shortlet/operations';
 
-const PATHS = ['/shortlet', '/shortlet/bookings', '/shortlet/calendar', '/shortlet/inspections', '/shortlet/expenses', '/shortlet/analytics', '/shortlet/guests', '/shortlet/whatsapp', '/shortlet/channels', '/shortlet/plan', '/shortlet/team'];
+const PATHS = ['/shortlet', '/shortlet/bookings', '/shortlet/calendar', '/shortlet/inspections', '/shortlet/expenses', '/shortlet/analytics', '/shortlet/guests', '/shortlet/whatsapp', '/shortlet/channels', '/shortlet/plan', '/shortlet/team', '/shortlet/pricing', '/shortlet/maintenance', '/shortlet/agents', '/shortlet/reviews'];
 const revalidate = () => PATHS.forEach((p) => revalidatePath(p));
 
 export type Res = { ok: true; ref?: string } | { ok: false; error: string };
@@ -156,6 +157,55 @@ export async function removeMember(id: string): Promise<Res> {
   if (!m) return { ok: false, error: 'Member not found.' };
   if (m.role === 'owner') return { ok: false, error: 'You cannot remove the account owner.' };
   db.shortletTeam = db.shortletTeam.filter((x) => x.id !== id);
+  revalidate();
+  return { ok: true };
+}
+
+/* --- dynamic pricing: seasonal rate rules --------------------------------- */
+let prSeq = 0;
+export async function addPricingRule(input: { apartmentId: string; label: string; fromISO: string; toISO: string; type: RuleType; amountNaira?: number; pct?: number }): Promise<Res> {
+  const g = await gate('create'); if ('ok' in g) return g;
+  if (!repos.shortletApartments.list(g.actor).items.some((a) => a.id === input.apartmentId)) return { ok: false, error: 'Apartment not found.' };
+  if (!input.label.trim()) return { ok: false, error: 'Give the rule a label.' };
+  if (Date.parse(input.toISO) < Date.parse(input.fromISO)) return { ok: false, error: 'End date must be after start date.' };
+  db.shortletPricingRules.unshift({ tenantId: g.actor.tenantId, id: `pr-new-${++prSeq}`, apartmentId: input.apartmentId, label: input.label.trim(), fromISO: input.fromISO, toISO: input.toISO, type: input.type, amountMinor: input.type === 'fixed' ? Math.round((input.amountNaira ?? 0) * 100) : undefined, pct: input.type !== 'fixed' ? input.pct : undefined } as unknown as PricingRule);
+  revalidate();
+  return { ok: true };
+}
+export async function removePricingRule(id: string): Promise<Res> {
+  const g = await gate('update'); if ('ok' in g) return g;
+  db.shortletPricingRules = db.shortletPricingRules.filter((r) => r.id !== id);
+  revalidate();
+  return { ok: true };
+}
+
+/* --- maintenance issue tracker -------------------------------------------- */
+let miSeq = 0;
+export async function logIssue(input: { apartmentId: string; title: string; description: string; priority: IssuePriority }): Promise<Res> {
+  const g = await gate('create'); if ('ok' in g) return g;
+  if (!input.title.trim()) return { ok: false, error: 'Describe the issue.' };
+  db.shortletIssues.unshift({ tenantId: g.actor.tenantId, id: `mi-new-${++miSeq}`, apartmentId: input.apartmentId, title: input.title.trim(), description: input.description.trim(), priority: input.priority ?? suggestPriority(input.title), status: 'open', createdAt: NOW } as unknown as MaintenanceIssue);
+  revalidate();
+  return { ok: true };
+}
+export async function advanceIssue(id: string): Promise<Res> {
+  const g = await gate('update'); if ('ok' in g) return g;
+  const issue = db.shortletIssues.find((i) => i.id === id);
+  if (!issue) return { ok: false, error: 'Issue not found.' };
+  const next = ISSUE_NEXT[issue.status];
+  if (!next) return { ok: false, error: 'Already resolved.' };
+  issue.status = next.to;
+  if (next.to === 'resolved') issue.resolvedAt = NOW;
+  revalidate();
+  return { ok: true };
+}
+
+/* --- agents --------------------------------------------------------------- */
+let agSeq = 0;
+export async function inviteAgent(input: { name: string; phone: string; commissionPct: number }): Promise<Res> {
+  const g = await gate('create'); if ('ok' in g) return g;
+  if (!input.name.trim()) return { ok: false, error: 'Agent name is required.' };
+  db.shortletAgents.push({ tenantId: g.actor.tenantId, id: `ag-new-${++agSeq}`, name: input.name.trim(), phone: input.phone.trim(), commissionPct: Math.max(0, Math.min(30, input.commissionPct || 0)), status: 'invited' } as unknown as Agent);
   revalidate();
   return { ok: true };
 }

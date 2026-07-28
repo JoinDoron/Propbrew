@@ -11,6 +11,7 @@ import { money } from '@/domain/primitives';
 import { nightsBetween } from '@/domain/shortlet/types';
 import type { SlProperty, Apartment, SlBooking, SlExpense, SlInspection, BookingSource, CautionStatus } from '@/domain/shortlet/types';
 import type { TeamMember } from '@/domain/shortlet/plan';
+import type { PricingRule, MaintenanceIssue, Agent, Review } from '@/domain/shortlet/operations';
 
 const A = SEED.tenantA;
 const ngn = (n: number) => money(n * 100, 'NGN');
@@ -124,3 +125,31 @@ export const shortletTeam: TeamMember[] = [
 
 /** The account's current subscription tier (mutable via changePlan). */
 export const shortletPlanKey = 'growth';
+
+/* --- operations: pricing / maintenance / agents / reviews ----------------- */
+
+export const shortletPricingRules: PricingRule[] = [
+  { tenantId: A, id: 'pr-1', apartmentId: 'ap-3', label: 'December peak', fromISO: '2026-12-15', toISO: '2027-01-05', type: 'increase', pct: 25 },
+  { tenantId: A, id: 'pr-2', apartmentId: 'ap-1', label: 'Low-season discount', fromISO: '2026-09-01', toISO: '2026-09-30', type: 'decrease', pct: 15 },
+  { tenantId: A, id: 'pr-3', apartmentId: 'ap-4', label: 'Detty December', fromISO: '2026-12-20', toISO: '2026-12-31', type: 'fixed', amountMinor: 8000000 },
+] as unknown as PricingRule[];
+
+export const shortletIssues: MaintenanceIssue[] = [
+  { tenantId: A, id: 'mi-1', apartmentId: 'ap-2', title: 'AC not cooling in bedroom', description: 'Guest reported weak cooling; likely low gas.', priority: 'high', status: 'in_progress', createdAt: '2026-07-24' },
+  { tenantId: A, id: 'mi-2', apartmentId: 'ap-5', title: 'Kitchen tap dripping', description: 'Slow drip under the sink.', priority: 'medium', status: 'open', createdAt: '2026-07-26' },
+  { tenantId: A, id: 'mi-3', apartmentId: 'ap-1', title: 'Replace bedside bulb', description: '', priority: 'low', status: 'resolved', createdAt: '2026-07-12', resolvedAt: '2026-07-13' },
+  { tenantId: A, id: 'mi-4', apartmentId: 'ap-3', title: 'Water leak under bathroom sink', description: 'Pooling water; turned off for now.', priority: 'urgent', status: 'open', createdAt: '2026-07-27' },
+] as unknown as MaintenanceIssue[];
+
+export const shortletAgents: Agent[] = [
+  { tenantId: A, id: 'ag-1', name: 'Kunle Bookings', phone: '+2348030000010', commissionPct: 10, status: 'active' },
+  { tenantId: A, id: 'ag-2', name: 'Lagos Stays Agency', phone: '+2348030000011', commissionPct: 12, status: 'active' },
+  { tenantId: A, id: 'ag-3', name: 'Bola Concierge', phone: '+2348030000012', commissionPct: 8, status: 'invited' },
+] as unknown as Agent[];
+
+export const shortletReviews: Review[] = [
+  { tenantId: A, id: 'rv-1', bookingId: 'slb-ap-1-4212', apartmentId: 'ap-1', guestName: 'Michael Ade', rating: 5, comment: 'Spotless and great location. WiFi was fast. Will rebook!', tags: ['Clean', 'Location', 'WiFi'], atISO: '2026-07-17' },
+  { tenantId: A, id: 'rv-2', bookingId: 'slb-ap-6-4211', apartmentId: 'ap-6', guestName: 'Emeka Obi', rating: 3, comment: 'Nice space but AC struggled and check-in was slow.', tags: ['AC', 'Check-in'], atISO: '2026-07-25' },
+  { tenantId: A, id: 'rv-3', bookingId: 'slb-ap-4-4214', apartmentId: 'ap-4', guestName: 'James Bello', rating: 4, comment: 'Comfortable and quiet. Host very responsive on WhatsApp.', tags: ['Host', 'Quiet'], atISO: '2026-07-27' },
+  { tenantId: A, id: 'rv-4', bookingId: 'slb-ap-3-4215', apartmentId: 'ap-3', guestName: 'Ngozi Peters', rating: 5, comment: 'The penthouse view is unreal. Worth every naira.', tags: ['View', 'Luxury'], atISO: '2026-06-26' },
+] as unknown as Review[];
