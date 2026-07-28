@@ -14,9 +14,14 @@ export default async function VendorsPage() {
   const vendors = repos.vendors.list(actor).items;
 
   // A vendor's assigned jobs — scoped work orders that name it as the vendor.
-  const jobs = repos.workOrders.list(actor).items
+  const woList = repos.workOrders.list(actor).items;
+  const jobs = woList
     .filter((w) => w.vendorOrgId)
     .map((w) => ({ id: w.id, ref: w.ref, title: w.title, status: w.status, vendorOrgId: w.vendorOrgId }));
+
+  // Spend-to-date per vendor, summed from real work-order costs (minor units).
+  const spend: Record<string, number> = {};
+  for (const w of woList) if (w.vendorOrgId && w.cost) spend[String(w.vendorOrgId)] = (spend[String(w.vendorOrgId)] ?? 0) + w.cost.minor;
 
   return (
     <div className="max-w-[1200px] mx-auto flex flex-col gap-3.5">
@@ -25,6 +30,7 @@ export default async function VendorsPage() {
       <VendorsExplorer
         vendors={vendors.map((v) => ({ id: v.id, name: v.name, services: [...v.services], coverage: v.coverage, compliance: v.compliance, insuranceExpiry: v.insuranceExpiry, jobsCompleted: v.jobsCompleted, slaHitRate: v.slaHitRate, rating: v.rating }))}
         jobs={jobs}
+        spend={spend}
         canMutate={canMutate}
       />
     </div>
