@@ -107,7 +107,11 @@ const PORTAL_NAV: NavGroup[] = [
   },
   {
     label: 'Investor',
-    items: [{ id: 'projects', label: 'My Projects', href: '/portal/projects', icon: 'building', capability: 'investor_projects', roles: ['investor'] }],
+    items: [
+      { id: 'projects', label: 'My Projects', href: '/portal/projects', icon: 'building', capability: 'investor_projects', roles: ['investor'] },
+      { id: 'returns', label: 'Returns', href: '/portal/returns', icon: 'trending', capability: 'investor_projects', roles: ['investor'] },
+      { id: 'updates', label: 'Updates', href: '/portal/updates', icon: 'bell', capability: 'investor_projects', roles: ['investor'] },
+    ],
   },
 ];
 
@@ -184,6 +188,8 @@ export const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   '/portal/orders': { title: 'Orders', subtitle: 'Accept and fulfil resident orders' },
   '/portal/listings': { title: 'My Listings', subtitle: 'Your marketplace products and services' },
   '/portal/projects': { title: 'My Projects', subtitle: 'Your off-plan investments' },
+  '/portal/returns': { title: 'Returns', subtitle: 'Project your investment returns' },
+  '/portal/updates': { title: 'Updates', subtitle: 'Construction progress and documents' },
   '/admin/tenants': { title: 'Tenants', subtitle: 'Organisations on the platform' },
   '/admin/users': { title: 'Users & Roles', subtitle: 'Everyone across every tenant' },
   '/admin/investors': { title: 'Investor Projects', subtitle: 'Off-plan projects platform-wide' },
