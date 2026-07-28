@@ -1,82 +1,45 @@
 import { requireCapability } from '@/server/guard';
+import { effectiveLevel } from '@/lib/authz';
 import { repos } from '@/server/data';
 import { marketplaceOrderMachine } from '@/domain/workflows';
 import { legalEvents } from '@/lib/legal-events';
-import { Card, CardHeader, Mono, Table, Td, Th, TableRow, StatusPill } from '@/components/ui';
-import { DomainStatus, Money, ScopeBanner } from '@/components/domain';
-import { InlineActions } from '@/components/inline-actions';
+import { gmvSummary, vendorScores, fraudFlags } from '@/domain/marketplace';
+import { CardHeader } from '@/components/ui';
+import { ScopeBanner } from '@/components/domain';
+import { MarketplaceWorkspace, type OrderView } from '@/components/marketplace/marketplace-workspace';
 
-/** EM-09 — marketplace oversight (Should). Managers see listings and the order
- *  pipeline; the order state track is Placed → Accepted → Fulfilled → Closed. */
+/** EM-09 / AI-E-05 — marketplace oversight. An order pipeline board drives the
+ *  §10 machine (Placed → Accepted → Fulfilled → Closed), a GMV counter tracks
+ *  live vs realized value, vendor scorecards rank acceptance/fulfilment, and a
+ *  fraud-signal queue flags orders for HUMAN review (AI-E-05 — never auto-block,
+ *  never auto-decline). Scoped (§8.2); managers manage, others read. Payout is a
+ *  separate lifecycle blocked by Q3. */
 export default async function MarketplacePage() {
   const { actor } = await requireCapability('marketplace');
-  const listings = repos.listings.list(actor).items;
-  const orders = repos.marketplaceOrders.list(actor).items;
+  const canMutate = ['F', 'M'].includes(effectiveLevel(actor, 'marketplace'));
+  const listings = [...repos.listings.list(actor).items];
+  const rawOrders = [...repos.marketplaceOrders.list(actor).items];
+  const vendorName = new Map(listings.map((l) => [l.vendorOrgId, l.vendorName]));
+
+  const orders: OrderView[] = rawOrders.map((o) => ({
+    id: o.id, ref: o.ref, residentName: o.residentName, listingTitle: o.listingTitle,
+    vendorName: vendorName.get(o.vendorOrgId) ?? o.vendorOrgId,
+    status: o.status, amountMinor: o.amount.minor, currency: o.amount.currency,
+    actions: legalEvents(marketplaceOrderMachine, o.status, actor),
+  }));
 
   return (
     <div className="max-w-[1200px] mx-auto flex flex-col gap-3.5">
       <ScopeBanner label={actor.allEstates ? 'all estates' : `${actor.estateIds.length} estate(s)`} />
-
-      <Card padded={false}>
-        <div className="p-4 sm:p-[18px] pb-0">
-          <CardHeader title="Listings" subtitle="Approved vendor products and services" />
-        </div>
-        <Table>
-          <thead>
-            <tr>
-              <Th>Listing</Th>
-              <Th>Vendor</Th>
-              <Th>Status</Th>
-              <Th className="text-right">Price</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {listings.map((l) => (
-              <TableRow key={l.id}>
-                <Td>
-                  <div className="text-[13px] font-medium">{l.title}</div>
-                  <div className="text-[11.5px] text-text-3">{l.category}</div>
-                </Td>
-                <Td className="text-[13px] text-text-2">{l.vendorName}</Td>
-                <Td><StatusPill status={l.status} tone={l.status === 'active' ? 'success' : 'muted'} /></Td>
-                <Td className="text-right"><Money value={l.price} /></Td>
-              </TableRow>
-            ))}
-          </tbody>
-        </Table>
-      </Card>
-
-      <Card padded={false}>
-        <div className="p-4 sm:p-[18px] pb-0">
-          <CardHeader title="Orders" subtitle="Resident purchases and their fulfilment" />
-        </div>
-        <Table>
-          <thead>
-            <tr>
-              <Th>Order</Th>
-              <Th>Resident</Th>
-              <Th>Item</Th>
-              <Th>Status</Th>
-              <Th className="text-right">Amount</Th>
-              <Th className="text-right">Actions</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {orders.map((o) => (
-              <TableRow key={o.id}>
-                <Td><Mono className="font-semibold text-[13px]">{o.ref}</Mono></Td>
-                <Td className="text-[13px] text-text-2">{o.residentName}</Td>
-                <Td className="text-[13px]">{o.listingTitle}</Td>
-                <Td><DomainStatus type="order" status={o.status} /></Td>
-                <Td className="text-right"><Money value={o.amount} /></Td>
-                <Td className="text-right">
-                  <InlineActions machineKey="marketplace-order" id={o.id} events={legalEvents(marketplaceOrderMachine, o.status, actor)} />
-                </Td>
-              </TableRow>
-            ))}
-          </tbody>
-        </Table>
-      </Card>
+      <CardHeader title="Marketplace" subtitle="Order pipeline, GMV, vendor scorecards and a human fraud-review queue — AI flags, never auto-blocks" />
+      <MarketplaceWorkspace
+        orders={orders}
+        listings={listings}
+        gmv={gmvSummary(rawOrders)}
+        vendors={vendorScores(rawOrders, listings)}
+        flags={fraudFlags(rawOrders, listings)}
+        canMutate={canMutate}
+      />
     </div>
   );
 }
