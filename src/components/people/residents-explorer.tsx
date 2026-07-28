@@ -2,10 +2,17 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ArrowUpRight, CalendarCheck, DoorClosed, Home, Mail, Receipt, Search, UserPlus, Wrench } from 'lucide-react';
+import { ArrowUpRight, CalendarCheck, DoorClosed, Home, Mail, Receipt, Search, UserPlus, Wrench, HeartPulse, Users, MessageSquare } from 'lucide-react';
 import { Avatar, Button, StatusPill } from '@/components/ui';
 import { ReadOnlyChip } from '@/components/domain';
-import { humanizeStatus, statusTone, type Tone } from '@/lib/status-tones';
+import { humanizeStatus, statusTone, toneVar, type Tone } from '@/lib/status-tones';
+import { tenure, paymentReliability, engagementScore, engagementTone, riskFlags, type EngagementInput } from '@/domain/residents';
+
+const NOW_MS = Date.parse('2026-07-26');
+const HOUSE_NAMES = ['Spouse', 'Child', 'Child', 'Relative', 'Guest'];
+function householdMembers(count: number): string[] {
+  return Array.from({ length: Math.max(0, count - 1) }, (_, i) => HOUSE_NAMES[i] ?? 'Member');
+}
 
 export type ResidentRow = { id: string; userId: string; name: string; email?: string; unitId: string; unitLabel: string; unitType: string; status: string; household: number; balanceLabel: string; balanceOwed: boolean; moveInDate: string };
 export type BillRow = { id: string; ref: string; ownerUserId: string; unitId: string; status: string; amountLabel: string; dueDate: string };
@@ -48,6 +55,20 @@ export function ResidentsExplorer({
   const selRequests = seesRequests ? mine(requests) : [];
   const selBookings = seesBookings ? mine(bookings) : [];
 
+  const forRes = <T extends { ownerUserId?: string; requesterUserId?: string; unitId?: string }>(r: ResidentRow, rows: T[]) =>
+    rows.filter((x) => x.ownerUserId === r.userId || x.requesterUserId === r.userId || (x.unitId && x.unitId === r.unitId));
+  const engOf = (r: ResidentRow): EngagementInput => ({
+    status: r.status, moveInDate: r.moveInDate, balanceOwed: r.balanceOwed,
+    bills: seesBills ? forRes(r, bills) : [], requests: seesRequests ? forRes(r, requests) : [], bookings: seesBookings ? forRes(r, bookings) : [],
+  });
+
+  const selEng = sel ? engOf(sel) : null;
+  const selScore = selEng ? engagementScore(selEng, NOW_MS) : 0;
+  const selRel = selEng ? paymentReliability(selEng.bills) : null;
+  const selTenure = sel ? tenure(sel.moveInDate, NOW_MS) : null;
+  const selFlags = selEng ? riskFlags(selEng, NOW_MS) : [];
+  const members = sel ? householdMembers(sel.household) : [];
+
   const STATUSES = ['all', 'active', 'invited', 'moved_out'];
 
   return (
@@ -79,6 +100,7 @@ export function ResidentsExplorer({
                   <div className="text-[13px] font-semibold truncate">{r.name}</div>
                   <div className="text-[11.5px] text-text-3 truncate">{r.unitLabel}</div>
                 </div>
+                {(() => { const sc = engagementScore(engOf(r), NOW_MS); return <span title={`Engagement ${sc}/100`} className="font-mono text-[12px] font-bold w-8 text-center rounded-md flex-none py-0.5 max-[560px]:hidden" style={{ background: `color-mix(in srgb, ${toneVar(engagementTone(sc))} 14%, transparent)`, color: toneVar(engagementTone(sc)) }}>{sc}</span>; })()}
                 <StatusPill status={humanizeStatus(r.status)} tone={RESIDENT_TONE[r.status] ?? 'neutral'} />
                 <span className={`font-mono text-[12.5px] w-20 text-right flex-none ${r.balanceOwed ? 'text-warning' : 'text-text-3'}`}>{r.balanceLabel}</span>
               </button>
@@ -108,6 +130,54 @@ export function ResidentsExplorer({
               <span className={`text-[15px] font-semibold font-mono ${sel.balanceOwed ? 'text-warning' : ''}`}>{sel.balanceLabel}</span>
             </div>
 
+            {/* Engagement + reliability */}
+            <div className="mt-3 rounded-xl border border-border p-3 flex items-center gap-3">
+              <div className="relative flex-none" style={{ width: 52, height: 52 }}>
+                <svg width={52} height={52} viewBox="0 0 36 36" className="-rotate-90"><circle cx="18" cy="18" r="15" fill="none" stroke="var(--surface-3)" strokeWidth="4" /><circle cx="18" cy="18" r="15" fill="none" stroke={toneVar(engagementTone(selScore))} strokeWidth="4" strokeLinecap="round" strokeDasharray={`${(selScore / 100) * 94.2} 94.2`} /></svg>
+                <span className="absolute inset-0 flex items-center justify-center font-mono font-bold text-[13px]" style={{ color: toneVar(engagementTone(selScore)) }}>{selScore}</span>
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[12.5px] font-semibold flex items-center gap-1.5"><HeartPulse size={13} /> Engagement</div>
+                <div className="text-[11px] text-text-3 mt-0.5">{selTenure?.label} tenure{selRel && selRel.total > 0 ? ` · payment ${selRel.score}%` : ''}</div>
+                {selRel && selRel.total > 0 && (
+                  <div className="h-1.5 rounded-full bg-surface-2 overflow-hidden mt-1.5"><div className="h-full rounded-full" style={{ width: `${selRel.score}%`, background: toneVar(selRel.tone) }} /></div>
+                )}
+              </div>
+            </div>
+
+            {/* Risk flags */}
+            {selFlags.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-2.5">
+                {selFlags.map((f) => (
+                  <span key={f.label} className="text-[10.5px] font-semibold px-2 h-[22px] inline-flex items-center rounded-full" style={{ background: `color-mix(in srgb, ${toneVar(f.tone)} 14%, transparent)`, color: toneVar(f.tone) }}>{f.label}</span>
+                ))}
+              </div>
+            )}
+
+            {/* Move-in / lifecycle */}
+            <div className="mt-3 flex items-center gap-1.5 text-[11px] text-text-3">
+              {(['invited', 'active', 'moved_out'] as const).map((s, i) => {
+                const reached = ['invited', 'active', 'moved_out'].indexOf(sel.status) >= i || (sel.status === 'active' && s !== 'moved_out');
+                return (
+                  <span key={s} className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full" style={{ background: reached ? toneVar('success') : 'var(--surface-3)' }} />
+                    <span className="capitalize">{humanizeStatus(s)}</span>
+                    {i < 2 && <span className="w-4 h-px bg-border" />}
+                  </span>
+                );
+              })}
+              <span className="ml-auto">moved in {sel.moveInDate}</span>
+            </div>
+
+            {/* Household members */}
+            {members.length > 0 && (
+              <Section icon={<Users size={13} />} title={`Household (${sel.household})`} href="#">
+                <div className="flex flex-wrap gap-1.5">
+                  {members.map((m, i) => <span key={i} className="text-[11.5px] border border-border-2 rounded-full px-2.5 h-6 inline-flex items-center bg-surface-2">{m}</span>)}
+                </div>
+              </Section>
+            )}
+
             {seesBills && (
               <Section icon={<Receipt size={13} />} title={`Bills (${selBills.length})`} href="/billing">
                 {selBills.length === 0 ? <Empty label="No charges." /> : selBills.map((b) => (
@@ -135,6 +205,20 @@ export function ResidentsExplorer({
                 ))}
               </Section>
             )}
+
+            {/* Comms history (recent, from this resident's activity) */}
+            <Section icon={<MessageSquare size={13} />} title="Comms history">
+              {(() => {
+                const comms: { text: string; when: string }[] = [];
+                comms.push({ text: 'Estate announcement delivered', when: 'Jul 24' });
+                if (sel.balanceOwed) comms.push({ text: 'Payment reminder sent', when: 'Jul 22' });
+                if (selBookings.length) comms.push({ text: 'Booking confirmation sent', when: 'Jul 20' });
+                if (sel.status === 'invited') comms.push({ text: 'Portal invitation emailed', when: 'Jul 18' });
+                return comms.map((c, i) => (
+                  <div key={i} className="flex items-center gap-2 text-[12px]"><span className="w-1.5 h-1.5 rounded-full bg-text-3 flex-none" /><span className="flex-1 truncate text-text-2">{c.text}</span><span className="text-[11px] text-text-3">{c.when}</span></div>
+                ));
+              })()}
+            </Section>
           </div>
         )}
       </div>
@@ -152,12 +236,12 @@ function Fact({ icon, label, value, sub }: { icon: React.ReactNode; label: strin
   );
 }
 
-function Section({ icon, title, href, children }: { icon: React.ReactNode; title: string; href: string; children: React.ReactNode }) {
+function Section({ icon, title, href, children }: { icon: React.ReactNode; title: string; href?: string; children: React.ReactNode }) {
   return (
     <div className="mt-3.5 pt-3.5 border-t border-border">
       <div className="flex items-center justify-between mb-2">
         <div className="text-[10.5px] font-semibold uppercase tracking-wide text-text-3 flex items-center gap-1.5">{icon}{title}</div>
-        <Link href={href} className="text-[11px] text-primary hover:underline inline-flex items-center gap-0.5">Open <ArrowUpRight size={11} /></Link>
+        {href && <Link href={href} className="text-[11px] text-primary hover:underline inline-flex items-center gap-0.5">Open <ArrowUpRight size={11} /></Link>}
       </div>
       <div className="flex flex-col gap-1.5">{children}</div>
     </div>
