@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as seed from '@/server/data/seed/fixtures';
 import { periodKpis, occupancyRate, profitByProperty, sourcePerformance, suggestNightlyRate, turnovers, guestProfiles, expenseInsights, cautionExposure } from '@/domain/shortlet/engine';
+import { renderTemplate, messageSchedule, whatsappStats, detectConflicts, channelSummary, DEFAULT_TEMPLATES } from '@/domain/shortlet/automation';
 import type { Apartment, SlBooking, SlExpense } from '@/domain/shortlet/types';
 
 const apts = seed.shortletApartments as Apartment[];
@@ -63,5 +64,32 @@ describe('smart features', () => {
     const c = cautionExposure(bookings);
     expect(c.heldMinor).toBeGreaterThan(0);
     expect(c.deductedMinor).toBeGreaterThan(0); // Emeka partial deduction
+  });
+});
+
+describe('WhatsApp automation (FR-WA)', () => {
+  const NOW = Date.parse('2026-07-26');
+  it('fills template variables from a booking', () => {
+    const confirmation = DEFAULT_TEMPLATES.find((t) => t.key === 'confirmation')!;
+    const out = renderTemplate(confirmation.body, bookings[0], apts.find((a) => a.id === bookings[0].apartmentId));
+    expect(out).not.toContain('{{guest}}');
+    expect(out).toContain(bookings[0].guestName.split(' ')[0]);
+  });
+  it('schedules five messages and counts sent vs scheduled', () => {
+    const sched = messageSchedule(bookings[0], NOW);
+    expect(sched).toHaveLength(5);
+    const stats = whatsappStats(bookings, NOW);
+    expect(stats.sent).toBeGreaterThan(0);
+    expect(stats.read).toBeLessThanOrEqual(stats.sent);
+  });
+});
+
+describe('iCal channels (FR-IC)', () => {
+  it('summarises connections and detects the seeded double-booking', () => {
+    const s = channelSummary(apts);
+    expect(s.connections).toBeGreaterThan(0);
+    const conflicts = detectConflicts(bookings);
+    expect(conflicts.length).toBeGreaterThanOrEqual(1); // Sophia vs Airbnb import on ap-4
+    expect(conflicts[0].nights).toBeGreaterThan(0);
   });
 });

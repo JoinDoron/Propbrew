@@ -65,6 +65,8 @@ export const shortletBookings: SlBooking[] = [
   bk('ap-1', 'Chidinma Eze', '+2348031111111', '2026-08-10', '2026-08-13', 'confirmed', 'direct'), // repeat → VIP
   // enquiry (pending)
   bk('ap-6', 'Fatima Sani', '+2348038888888', '2026-08-05', '2026-08-09', 'enquiry', 'whatsapp'),
+  // an iCal-imported Airbnb booking that CLASHES with Sophia on ap-4 (double-booking guard demo)
+  bk('ap-4', 'Airbnb import — R. Cole', '+2348030505050', '2026-07-28', '2026-07-31', 'confirmed', 'airbnb'),
   // recently closed (feed analytics)
   bk('ap-4', 'James Bello', '+2348039999999', '2026-07-22', '2026-07-26', 'closed', 'direct', { cautionStatus: 'refunded' }),
   bk('ap-6', 'Emeka Obi', '+2348030000000', '2026-07-18', '2026-07-24', 'closed', 'agent', { agent: 'Kunle Bookings', cautionStatus: 'partly_deducted', cautionDeducted: 3300000 }),

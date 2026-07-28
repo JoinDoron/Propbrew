@@ -16,9 +16,9 @@ import { money } from '@/domain/primitives';
 import { NOW } from '@/domain/ppm';
 import { nightsBetween } from '@/domain/shortlet';
 import { shortletBookingMachine } from '@/domain/workflows';
-import type { SlBooking, SlInspection, InspectionItem, ExpenseCategory, BookingSource } from '@/domain/shortlet/types';
+import type { SlBooking, SlInspection, InspectionItem, ExpenseCategory, BookingSource, Channel } from '@/domain/shortlet/types';
 
-const PATHS = ['/shortlet', '/shortlet/bookings', '/shortlet/calendar', '/shortlet/inspections', '/shortlet/expenses', '/shortlet/analytics', '/shortlet/guests'];
+const PATHS = ['/shortlet', '/shortlet/bookings', '/shortlet/calendar', '/shortlet/inspections', '/shortlet/expenses', '/shortlet/analytics', '/shortlet/guests', '/shortlet/whatsapp', '/shortlet/channels'];
 const revalidate = () => PATHS.forEach((p) => revalidatePath(p));
 
 export type Res = { ok: true; ref?: string } | { ok: false; error: string };
@@ -105,6 +105,18 @@ export async function saveInspection(bookingId: string, items: InspectionItem[],
   const from = live.status;
   if (live.status === 'checked_out') live.status = 'closed';
   recordHistory('shortlet-booking', live.id, { at: NOW, event: 'CLOSE', from, to: live.status, actorId: g.actor.userId, actorName: 'Operator', actorRole: (g.actor.roles[0] as Role) ?? 'estate_manager', note: outcome === 'clear' ? 'Caution refunded in full' : `₦${(damageTotal / 100).toLocaleString()} deducted` });
+  revalidate();
+  return { ok: true };
+}
+
+/* --- FR-IC: connect / disconnect an iCal channel on an apartment ---------- */
+export async function toggleChannel(apartmentId: string, channel: Channel): Promise<Res> {
+  const g = await gate('update'); if ('ok' in g) return g;
+  const owned = repos.shortletApartments.list(g.actor).items.find((a) => a.id === apartmentId);
+  if (!owned) return { ok: false, error: 'Apartment not found.' };
+  const live = db.shortletApartments.find((a) => a.id === apartmentId);
+  if (!live) return { ok: false, error: 'Apartment not found.' };
+  live.channels = live.channels.includes(channel) ? live.channels.filter((c) => c !== channel) : [...live.channels, channel];
   revalidate();
   return { ok: true };
 }
