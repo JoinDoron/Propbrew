@@ -115,6 +115,11 @@ export const repos = {
   },
   listings: {
     list: (a: Actor, o?: ListOpts) => scopedList(a, 'marketplace', seed.listings, o),
+    /** The marketplace CATALOG is estate-public: any resident may browse the
+     *  active listings on their estate. Unlike orders, a listing has no owner,
+     *  so it is scoped by tenant + estate only (not by the O ownership clause,
+     *  which would drop every row). Read access is still gated by the page. */
+    catalog: (a: Actor) => applyScope(seed.listings, { tenantId: a.tenantId ?? '', estateIds: a.allEstates ? 'all' : a.estateIds, ownership: null }),
   },
   marketplaceOrders: {
     list: (a: Actor, o?: ListOpts) => scopedList(a, 'marketplace', db.marketplaceOrders, o),

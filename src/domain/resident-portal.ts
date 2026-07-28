@@ -70,3 +70,19 @@ export function etaLabel(hours: number): string {
   if (hours < 24) return `~${hours} hours`;
   return `~${Math.round(hours / 24)} day${hours >= 48 ? 's' : ''}`;
 }
+
+/* --- Marketplace: order tracking ------------------------------------------ */
+
+export const ORDER_STEPS = ['Placed', 'Accepted', 'Fulfilled', 'Closed'] as const;
+
+const ORDER_STEP: Record<string, number> = {
+  placed: 0, accepted: 1, fulfilled: 2, closed: 3,
+  declined: -1, refunded: -1, expired: -1,
+};
+
+export function orderStepIndex(status: string): number {
+  return ORDER_STEP[status] ?? 0;
+}
+export function isOrderOpen(status: string): boolean {
+  return orderStepIndex(status) >= 0 && orderStepIndex(status) < 3;
+}
