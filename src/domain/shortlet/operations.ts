@@ -16,8 +16,10 @@ import type { SlBooking } from './types';
 export type RuleType = 'fixed' | 'increase' | 'decrease';
 export type PricingRule = TenantScoped & { id: string; apartmentId: string; label: string; fromISO: string; toISO: string; type: RuleType; amountMinor?: number; pct?: number };
 
+export type RateRuleLike = { fromISO: string; toISO: string; type: RuleType; amountMinor?: number; pct?: number };
+
 /** The nightly rate in effect on a date: the first rule that covers it, else base. */
-export function effectiveRate(baseMinor: number, rules: readonly PricingRule[], dateISO: string): { minor: number; rule?: PricingRule } {
+export function effectiveRate(baseMinor: number, rules: readonly RateRuleLike[], dateISO: string): { minor: number; rule?: RateRuleLike } {
   const d = Date.parse(dateISO);
   const rule = rules.find((r) => Date.parse(r.fromISO) <= d && d <= Date.parse(r.toISO));
   if (!rule) return { minor: baseMinor };
