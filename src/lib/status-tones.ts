@@ -93,12 +93,23 @@ export const SEVERITY_TONES: Record<Severity, Tone> = {
 
 /** Tone for a status given the machine it belongs to — used where the machine
  *  is known only at runtime (e.g. the shared transition timeline). */
+/** Short-Let PMS booking statuses (new module). */
+export const SHORTLET_TONES: Record<string, Tone> = {
+  enquiry: 'neutral',
+  confirmed: 'info',
+  checked_in: 'progress',
+  checked_out: 'warn',
+  closed: 'success',
+  cancelled: 'danger',
+};
+
 const MACHINE_TONES: Record<string, Record<string, Tone>> = {
   'work-order': WORK_ORDER_TONES,
   'service-charge': INVOICE_TONES,
   booking: BOOKING_TONES,
   'sos-event': SOS_TONES,
   'marketplace-order': ORDER_TONES,
+  'shortlet-booking': SHORTLET_TONES,
 };
 
 export function statusTone(machineKey: string, status: string): Tone {

@@ -47,6 +47,10 @@ export const BOOKING_STATES = [
 ] as const;
 export type BookingStatus = (typeof BOOKING_STATES)[number];
 
+/** Short-Let PMS booking lifecycle (new module, FR-BM). */
+export const SHORTLET_BOOKING_STATES = ['enquiry', 'confirmed', 'checked_in', 'checked_out', 'closed', 'cancelled'] as const;
+export type ShortLetBookingStatus = (typeof SHORTLET_BOOKING_STATES)[number];
+
 /** SOS event (§10, EM-06). */
 export const SOS_STATES = [
   'raised',

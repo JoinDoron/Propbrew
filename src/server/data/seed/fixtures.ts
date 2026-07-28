@@ -381,3 +381,6 @@ export const bookings: Booking[] = [
   { tenantId: A, id: 'bk-2', amenity: 'Tennis Court', estateId: SEED.estateGardens, ownerUserId: 'user-tobi', residentName: 'Tobi Ade', status: 'requested', slot: '2026-07-27T07:00:00Z', fee: null },
   { tenantId: A, id: 'bk-3', amenity: 'Pool (private session)', estateId: SEED.estateGardens, ownerUserId: 'user-resident', residentName: 'Folake Bello', status: 'completed', slot: '2026-07-20T10:00:00Z', fee: ngn(10000) },
 ] as unknown as Booking[];
+
+/* --- Short-Let PMS (new module) ------------------------------------------- */
+export * from './shortlet';

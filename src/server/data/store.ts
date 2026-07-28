@@ -38,6 +38,11 @@ export const db = {
   announcements: clone(seed.announcements),
   listings: clone(seed.listings),
   users: clone(seed.users),
+  shortletProperties: clone(seed.shortletProperties),
+  shortletApartments: clone(seed.shortletApartments),
+  shortletBookings: clone(seed.shortletBookings),
+  shortletExpenses: clone(seed.shortletExpenses),
+  shortletInspections: clone(seed.shortletInspections),
 };
 
 export type HistoryEntry = {

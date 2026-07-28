@@ -128,6 +128,25 @@ export const repos = {
     // Sites carry no per-row ownership; scoped by tenant + estate via siteId.
     all: (a: Actor) => scopedList(a, 'assets_ppm', seed.sites, { limit: 100 }).items,
   },
+
+  /* --- Short-Let PMS (new module). Rides the §7 bookings capability (the
+   *  matrix is CR-locked); rows are tenant-scoped, no estate/ownership column,
+   *  so the operator (estate_manager/executive) sees the whole portfolio. */
+  shortletProperties: {
+    list: (a: Actor, o?: ListOpts) => scopedList(a, 'bookings_amenities', db.shortletProperties, o ?? { limit: 100 }),
+  },
+  shortletApartments: {
+    list: (a: Actor, o?: ListOpts) => scopedList(a, 'bookings_amenities', db.shortletApartments, o ?? { limit: 100 }),
+  },
+  shortletBookings: {
+    list: (a: Actor, o?: ListOpts) => scopedList(a, 'bookings_amenities', db.shortletBookings, o ?? { limit: 200 }),
+  },
+  shortletExpenses: {
+    list: (a: Actor, o?: ListOpts) => scopedList(a, 'bookings_amenities', db.shortletExpenses, o ?? { limit: 200 }),
+  },
+  shortletInspections: {
+    list: (a: Actor, o?: ListOpts) => scopedList(a, 'bookings_amenities', db.shortletInspections, o ?? { limit: 100 }),
+  },
 };
 
 /**

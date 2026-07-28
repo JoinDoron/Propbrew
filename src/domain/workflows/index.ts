@@ -10,6 +10,7 @@ export { bookingMachine } from './booking';
 export { sosEventMachine } from './sos-event';
 export { marketplaceOrderMachine } from './marketplace-order';
 export { ppmMachine } from './ppm';
+export { shortletBookingMachine } from './shortlet-booking';
 
 import { workOrderMachine } from './work-order';
 import { serviceChargeMachine } from './service-charge';
@@ -17,6 +18,7 @@ import { bookingMachine } from './booking';
 import { sosEventMachine } from './sos-event';
 import { marketplaceOrderMachine } from './marketplace-order';
 import { ppmMachine } from './ppm';
+import { shortletBookingMachine } from './shortlet-booking';
 
 /** Every machine, keyed for the /admin/requirements traceability page. */
 export const MACHINES = {
@@ -26,6 +28,7 @@ export const MACHINES = {
   'sos-event': sosEventMachine,
   'marketplace-order': marketplaceOrderMachine,
   ppm: ppmMachine,
+  'shortlet-booking': shortletBookingMachine,
 } as const;
 
 export type MachineKey = keyof typeof MACHINES;
