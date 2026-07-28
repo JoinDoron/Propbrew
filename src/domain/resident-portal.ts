@@ -86,3 +86,27 @@ export function orderStepIndex(status: string): number {
 export function isOrderOpen(status: string): boolean {
   return orderStepIndex(status) >= 0 && orderStepIndex(status) < 3;
 }
+
+/* --- My Bills: categorisation + spend -------------------------------------- */
+
+const BILL_CATS: { key: string; match: RegExp }[] = [
+  { key: 'Service charge', match: /service charge|levy|dues|maintenance fee/i },
+  { key: 'Water', match: /water|borehole/i },
+  { key: 'Electricity', match: /electric|power|energy|diesel|generator/i },
+  { key: 'Security', match: /security|guard|patrol/i },
+  { key: 'Waste', match: /waste|refuse|sanitation|cleaning/i },
+  { key: 'Repair', match: /repair|damage|replace|fix/i },
+];
+
+export function billCategory(description: string): string {
+  return BILL_CATS.find((c) => c.match.test(description))?.key ?? 'Other';
+}
+
+export type SpendSlice = { category: string; minor: number };
+
+/** Group PAID charges by category, largest first. */
+export function spendBreakdown(paid: readonly { description: string; paidMinor: number }[]): SpendSlice[] {
+  const m = new Map<string, number>();
+  for (const p of paid) m.set(billCategory(p.description), (m.get(billCategory(p.description)) ?? 0) + p.paidMinor);
+  return [...m.entries()].map(([category, minor]) => ({ category, minor })).sort((a, b) => b.minor - a.minor);
+}
