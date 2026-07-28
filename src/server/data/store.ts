@@ -36,6 +36,7 @@ export const db = {
   complianceObligations: clone(seed.complianceObligations),
   documents: clone(seed.documents),
   announcements: clone(seed.announcements),
+  listings: clone(seed.listings),
 };
 
 export type HistoryEntry = {
