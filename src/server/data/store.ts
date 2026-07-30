@@ -87,6 +87,8 @@ export const db = {
   // One-vote-per-resident ledgers for portal e-voting (userId keyed).
   residentVotes: [] as { motionId: string; userId: string; choice: string }[],
   electionVotes: [] as { electionId: string; userId: string; candidateId: string }[],
+  // Notices to residents whose proxy was returned (e.g. a mid-chain link revoked).
+  proxyReturnNotices: [] as { id: string; userId: string; motionId: string; motionRef: string; motionTitle: string; reason: string; atISO: string; seen: boolean }[],
 };
 
 export type HistoryEntry = {
@@ -115,6 +117,12 @@ export function recordHistory(machine: MachineKey, id: string, entry: Omit<Histo
 
 export function getHistory(machine: MachineKey, id: string): HistoryEntry[] {
   return history.get(key(machine, id)) ?? [];
+}
+
+/** Notify a resident their proxy was returned (userId-keyed; newest first). */
+let prnSeq = 0;
+export function recordProxyReturnNotice(userId: string, m: { id: string; ref: string; title: string } | undefined, reason: string): void {
+  db.proxyReturnNotices.unshift({ id: `prn-${++prnSeq}`, userId, motionId: m?.id ?? '', motionRef: m?.ref ?? '', motionTitle: m?.title ?? '', reason, atISO: '2026-07-26T09:00:00Z', seen: false });
 }
 
 /* --- wallet auto-deduct (resident-home PRD, open question #1) -------------- */

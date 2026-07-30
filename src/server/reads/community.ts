@@ -31,5 +31,6 @@ export function residentCommunityData(actor: Actor) {
     myVotes: new Map(db.residentVotes.filter((v) => v.userId === actor.userId).map((v) => [v.motionId, v.choice] as const)),
     myElectionVotes: new Map(db.electionVotes.filter((v) => v.userId === actor.userId).map((v) => [v.electionId, v.candidateId] as const)),
     myProxies: new Map(db.proxyAssignments.filter((p) => p.grantorUserId === actor.userId && p.status !== 'revoked').map((p) => [p.motionId, { holderName: p.holderName, direction: p.direction, status: p.status }] as const)),
+    proxyNotices: db.proxyReturnNotices.filter((n) => n.userId === actor.userId && !n.seen),
   };
 }

@@ -10,7 +10,7 @@
 import { revalidatePath } from 'next/cache';
 import { getActor } from '@/server/session';
 import { ForbiddenError, assertCan, type Capability } from '@/lib/authz';
-import { db } from '@/server/data/store';
+import { db, recordProxyReturnNotice } from '@/server/data/store';
 import { NOW } from '@/domain/ppm';
 import { nextDunningStage, nextTenancyStage, motionOutcome, motionTally, isEventFull, tierFor, EARN_POINTS, electionWinner, cascadeRevokeUpstream, type VoteChoice, type EarnReason } from '@/domain/estate';
 
@@ -374,8 +374,10 @@ export async function revokeProxyLink(proxyId: string): Promise<Res> {
   if (!px) return { ok: false, error: 'Proxy not found.' };
   if (px.status !== 'held') return { ok: false, error: 'Only a held proxy can be revoked.' };
   const cascaded = cascadeRevokeUpstream(px.grantorName, db.proxyAssignments, px.motionId);
+  const m = db.motions.find((x) => x.id === px.motionId);
   px.status = 'revoked';
-  for (const c of cascaded) c.status = 'revoked';
+  recordProxyReturnNotice(px.grantorUserId, m, 'The committee revoked the proxy you had assigned. Your vote is yours again.');
+  for (const c of cascaded) { c.status = 'revoked'; recordProxyReturnNotice(c.grantorUserId, m, `${px.grantorName}, who you delegated through, was removed from the chain.`); }
   ['/board', '/governance', '/portal/community'].forEach((path) => revalidatePath(path));
   return { ok: true, ref: `${px.grantorName} withdrawn${cascaded.length ? ` · ${cascaded.length} cascaded` : ''}` };
 }

@@ -2,10 +2,10 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Vote, PartyPopper, Award, ThumbsUp, ThumbsDown, MinusCircle, Check, Star, Gift, CalendarDays, MapPin, Crown, Scale, X, Package, Megaphone, ClipboardList, Trophy } from 'lucide-react';
+import { Vote, PartyPopper, Award, ThumbsUp, ThumbsDown, MinusCircle, Check, Star, Gift, CalendarDays, MapPin, Crown, Scale, X, Package, Megaphone, ClipboardList, Trophy, Undo2 } from 'lucide-react';
 import { toneVar } from '@/lib/status-tones';
 import { motionTally, electionTally, tierFor, tierProgress, TIER_TONE, eventFillPct, isEventFull, type VoteChoice, type MotionStatus, type RewardTier, type EventCategory } from '@/domain/estate';
-import { residentVote, residentRsvp, residentRedeem, residentVoteCandidate, residentAssignProxy, residentRevokeProxy, residentSelfNominate, residentCollectParcel } from '@/server/actions/resident-community';
+import { residentVote, residentRsvp, residentRedeem, residentVoteCandidate, residentAssignProxy, residentRevokeProxy, residentSelfNominate, residentCollectParcel, dismissProxyNotice } from '@/server/actions/resident-community';
 
 export type MyProxy = { holderName: string; direction: VoteChoice; status: string };
 export type PMotion = { id: string; ref: string; title: string; summary: string; status: MotionStatus; forWeight: number; againstWeight: number; abstainWeight: number; eligibleWeight: number; quorumPct: number; thresholdPct: number; closesISO: string; myChoice?: VoteChoice; egm?: boolean; myProxy?: MyProxy };
@@ -18,14 +18,15 @@ export type PPerk = { id: string; title: string; detail: string; cost: number; s
 export type PCandidate = { id: string; residentName: string; unitLabel: string; statement: string; votes: number };
 export type PElection = { id: string; ref: string; seatTitle: string; portfolio: string; closesISO: string; eligibleWeight: number; quorumPct: number; candidates: PCandidate[]; myCandidateId?: string; canStand: boolean; myStanding?: { votes: number } } | null;
 export type PParcel = { id: string; code: string; courier: string; size: string; status: string; lockerLabel?: string; receivedISO: string; overdue: boolean };
+export type PNotice = { id: string; motionRef: string; motionTitle: string; reason: string };
 
 const TIER_LABEL: Record<RewardTier, string> = { bronze: 'Bronze', silver: 'Silver', gold: 'Gold', platinum: 'Platinum' };
 const CHOICE_LABEL: Record<VoteChoice, string> = { for: 'For', against: 'Against', abstain: 'Abstain' };
 const pts = (n: number) => n.toLocaleString('en-NG');
 const day = (iso: string) => new Date(iso).toLocaleDateString('en-NG', { weekday: 'short', day: 'numeric', month: 'short' });
 
-export function CommunityHub({ firstName, motions, events, rewards, perks, election, parcels }: {
-  firstName: string; motions: PMotion[]; events: PEvent[]; rewards: MyRewards; perks: PPerk[]; election: PElection; parcels: PParcel[];
+export function CommunityHub({ firstName, motions, events, rewards, perks, election, parcels, notices }: {
+  firstName: string; motions: PMotion[]; events: PEvent[]; rewards: MyRewards; perks: PPerk[]; election: PElection; parcels: PParcel[]; notices: PNotice[];
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -55,6 +56,18 @@ export function CommunityHub({ firstName, motions, events, rewards, perks, elect
           )}
         </div>
       </div>
+
+      {/* Returned-proxy notices */}
+      {notices.map((n) => (
+        <div key={n.id} className="rounded-2xl border shadow-card p-3.5 flex items-start gap-3 animate-fade" style={{ borderColor: 'color-mix(in srgb, var(--tone-warn) 40%, transparent)', background: 'color-mix(in srgb, var(--tone-warn) 7%, transparent)' }}>
+          <span className="w-9 h-9 rounded-xl grid place-items-center flex-none" style={{ background: `color-mix(in srgb, ${toneVar('warn')} 15%, transparent)`, color: toneVar('warn') }}><Undo2 size={17} /></span>
+          <div className="min-w-0 flex-1">
+            <div className="text-[13px] font-semibold">Your proxy was returned</div>
+            <div className="text-[11.5px] text-text-2 mt-0.5">{n.reason} Your vote on <span className="font-medium">{n.motionRef}{n.motionTitle ? ` · ${n.motionTitle}` : ''}</span> is yours again — vote directly below.</div>
+          </div>
+          <button disabled={pending} onClick={() => act(() => dismissProxyNotice(n.id), 'Dismissed')} className="text-[11.5px] px-2.5 h-8 rounded-lg font-medium border border-border-2 flex-none disabled:opacity-50">Got it</button>
+        </div>
+      ))}
 
       {/* My parcels */}
       {parcels.length > 0 && (

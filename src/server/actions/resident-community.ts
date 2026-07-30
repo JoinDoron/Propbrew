@@ -16,7 +16,7 @@ import { revalidatePath } from 'next/cache';
 import { getActor } from '@/server/session';
 import { ForbiddenError, assertCan } from '@/lib/authz';
 import { repos } from '@/server/data';
-import { db } from '@/server/data/store';
+import { db, recordProxyReturnNotice } from '@/server/data/store';
 import { units } from '@/server/data/seed/fixtures';
 import { NOW } from '@/domain/ppm';
 import { isEventFull, proxyWouldCycle, cascadeRevokeUpstream, type VoteChoice } from '@/domain/estate';
@@ -91,9 +91,19 @@ export async function residentRevokeProxy(motionId: string): Promise<Res> {
   // Cascade: anyone who delegated THROUGH you loses their route — return their proxy.
   const cascaded = cascadeRevokeUpstream(px.grantorName, db.proxyAssignments, motionId);
   px.status = 'revoked';
-  for (const c of cascaded) c.status = 'revoked';
+  const m = db.motions.find((x) => x.id === motionId);
+  for (const c of cascaded) { c.status = 'revoked'; recordProxyReturnNotice(c.grantorUserId, m, `${px.grantorName}, who you delegated through, stepped out of the chain.`); }
   paths();
   return { ok: true, ref: cascaded.length ? `${cascaded.length} delegated ${cascaded.length === 1 ? 'proxy' : 'proxies'} returned` : undefined };
+}
+
+export async function dismissProxyNotice(id: string): Promise<Res> {
+  const actor = await getActor();
+  const notRes = requireResident(actor); if (notRes) return notRes;
+  const n = db.proxyReturnNotices.find((x) => x.id === id && x.userId === actor.userId);
+  if (n) n.seen = true;
+  paths();
+  return { ok: true };
 }
 
 /** Cast a resident's single unit-weighted ballot for a candidate in the board
