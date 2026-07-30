@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Vote, PartyPopper, Award, ThumbsUp, ThumbsDown, MinusCircle, Check, Star, Gift, CalendarDays, MapPin, Crown, Scale, X } from 'lucide-react';
+import { Vote, PartyPopper, Award, ThumbsUp, ThumbsDown, MinusCircle, Check, Star, Gift, CalendarDays, MapPin, Crown, Scale, X, Package } from 'lucide-react';
 import { toneVar } from '@/lib/status-tones';
 import { motionTally, electionTally, tierFor, tierProgress, TIER_TONE, eventFillPct, isEventFull, type VoteChoice, type MotionStatus, type RewardTier, type EventCategory } from '@/domain/estate';
 import { residentVote, residentRsvp, residentRedeem, residentVoteCandidate, residentAssignProxy, residentRevokeProxy } from '@/server/actions/resident-community';
@@ -16,14 +16,15 @@ export type MyRewards = { points: number; onTimeStreak: number; eventsAttended: 
 export type PPerk = { id: string; title: string; detail: string; cost: number; stock: number };
 export type PCandidate = { id: string; residentName: string; unitLabel: string; statement: string; votes: number };
 export type PElection = { id: string; ref: string; seatTitle: string; portfolio: string; closesISO: string; eligibleWeight: number; quorumPct: number; candidates: PCandidate[]; myCandidateId?: string } | null;
+export type PParcel = { id: string; code: string; courier: string; size: string; status: string; lockerLabel?: string; receivedISO: string; overdue: boolean };
 
 const TIER_LABEL: Record<RewardTier, string> = { bronze: 'Bronze', silver: 'Silver', gold: 'Gold', platinum: 'Platinum' };
 const CHOICE_LABEL: Record<VoteChoice, string> = { for: 'For', against: 'Against', abstain: 'Abstain' };
 const pts = (n: number) => n.toLocaleString('en-NG');
 const day = (iso: string) => new Date(iso).toLocaleDateString('en-NG', { weekday: 'short', day: 'numeric', month: 'short' });
 
-export function CommunityHub({ firstName, motions, events, rewards, perks, election }: {
-  firstName: string; motions: PMotion[]; events: PEvent[]; rewards: MyRewards; perks: PPerk[]; election: PElection;
+export function CommunityHub({ firstName, motions, events, rewards, perks, election, parcels }: {
+  firstName: string; motions: PMotion[]; events: PEvent[]; rewards: MyRewards; perks: PPerk[]; election: PElection; parcels: PParcel[];
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -53,6 +54,29 @@ export function CommunityHub({ firstName, motions, events, rewards, perks, elect
           )}
         </div>
       </div>
+
+      {/* My parcels */}
+      {parcels.length > 0 && (
+        <section className="bg-surface border border-border rounded-2xl shadow-card overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-border flex items-center gap-2"><Package size={15} className="text-text-3" /><span className="text-[13px] font-semibold">My parcels</span><span className="ml-auto text-[10.5px] text-text-3">{parcels.length} waiting{parcels.some((p) => p.overdue) ? ' · collect soon' : ''}</span></div>
+          <div className="divide-y divide-border">
+            {parcels.map((p) => (
+              <div key={p.id} className="px-4 py-3 flex items-center gap-3">
+                <span className="w-9 h-9 rounded-xl grid place-items-center flex-none" style={{ background: `color-mix(in srgb, ${toneVar(p.overdue ? 'danger' : 'progress')} 13%, transparent)`, color: toneVar(p.overdue ? 'danger' : 'progress') }}><Package size={17} /></span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13px] font-semibold flex items-center gap-1.5">{p.courier} <span className="text-[10.5px] text-text-3 font-normal">· size {p.size}</span>{p.overdue && <span className="text-[9.5px] font-semibold px-1.5 h-4 inline-flex items-center rounded-full" style={{ background: `color-mix(in srgb, ${toneVar('danger')} 14%, transparent)`, color: toneVar('danger') }}>overdue</span>}</div>
+                  <div className="text-[10.5px] text-text-3 flex items-center gap-1 mt-0.5">{p.lockerLabel ? <><MapPin size={10} /> Locker {p.lockerLabel}</> : 'At the front desk'} · {day(p.receivedISO)}</div>
+                </div>
+                <div className="text-right flex-none">
+                  <div className="text-[10px] text-text-3 uppercase tracking-wide">Pickup code</div>
+                  <div className="text-[15px] font-bold font-mono tracking-[0.02em] leading-tight" style={{ color: toneVar('progress') }}>{p.code}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="px-4 py-2 bg-surface-2 text-[10.5px] text-text-3">Show your pickup code at the locker or front desk to collect.</div>
+        </section>
+      )}
 
       {/* Votes */}
       <section className="bg-surface border border-border rounded-2xl shadow-card overflow-hidden">

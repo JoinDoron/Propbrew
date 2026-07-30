@@ -24,6 +24,8 @@ export function residentCommunityData(actor: Actor) {
     rewardMembers: repos.rewardMembers.list(actor).items,
     perks: repos.perks.list(actor).items,
     events: applyScope(db.communityEvents, annScope),
+    // The resident's own parcels (the page filters by name); estate-scoped read.
+    parcels: applyScope(db.parcels, annScope),
     elections: repos.boardElections.list(actor).items,
     proxies: repos.proxyAssignments.list(actor).items,
     myVotes: new Map(db.residentVotes.filter((v) => v.userId === actor.userId).map((v) => [v.motionId, v.choice] as const)),

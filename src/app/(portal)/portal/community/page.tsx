@@ -3,8 +3,8 @@ import { repos } from '@/server/data';
 import { NOW_MS } from '@/domain/ppm';
 import { residentCommunityData } from '@/server/reads/community';
 import { leaderboard } from '@/domain/estate';
-import { CommunityHub, type PMotion, type PEvent, type PPerk, type MyRewards, type PElection } from '@/components/portal/community-hub';
-import type { VoteChoice } from '@/domain/estate';
+import { CommunityHub, type PMotion, type PEvent, type PPerk, type MyRewards, type PElection, type PParcel } from '@/components/portal/community-hub';
+import { isParcelOverdue, type VoteChoice } from '@/domain/estate';
 
 /** Resident community hub — vote on AGM motions, RSVP to events, and see/spend
  *  loyalty points, all from the resident's own shell. Reads ride announcements:V
@@ -12,7 +12,7 @@ import type { VoteChoice } from '@/domain/estate';
  *  (see server/actions/resident-community.ts). */
 export default async function ResidentCommunityPage() {
   const { actor } = await requireCapability('announcements');
-  const { motions, events, rewardMembers, perks, myVotes, elections, myElectionVotes, myProxies } = residentCommunityData(actor);
+  const { motions, events, parcels, rewardMembers, perks, myVotes, elections, myElectionVotes, myProxies } = residentCommunityData(actor);
   const myName = repos.residents.list(actor).items.find((r) => r.userId === actor.userId)?.name;
 
   const board = leaderboard(rewardMembers);
@@ -40,9 +40,14 @@ export default async function ResidentCommunityPage() {
     myCandidateId: myElectionVotes.get(openEl.id),
   } : null;
 
+  const myParcels: PParcel[] = parcels
+    .filter((p) => p.residentName === myName && p.status !== 'collected')
+    .sort((a, b) => (isParcelOverdue(b, NOW_MS) ? 1 : 0) - (isParcelOverdue(a, NOW_MS) ? 1 : 0) || Date.parse(a.receivedISO) - Date.parse(b.receivedISO))
+    .map((p) => ({ id: p.id, code: p.code, courier: p.courier, size: p.size, status: p.status, lockerLabel: p.lockerLabel, receivedISO: p.receivedISO, overdue: isParcelOverdue(p, NOW_MS) }));
+
   return (
     <div className="max-w-[640px] mx-auto">
-      <CommunityHub firstName={(myName ?? 'there').split(' ')[0]} motions={motionRows} events={eventRows} rewards={rewards} perks={perkRows} election={election} />
+      <CommunityHub firstName={(myName ?? 'there').split(' ')[0]} motions={motionRows} events={eventRows} rewards={rewards} perks={perkRows} election={election} parcels={myParcels} />
     </div>
   );
 }
