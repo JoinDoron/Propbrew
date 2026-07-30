@@ -146,3 +146,16 @@ describe('operations: pricing / maintenance / agents / reviews', () => {
     expect(s.distribution.reduce((a, b) => a + b, 0)).toBe(s.count);
   });
 });
+
+describe('direct booking page funnel', () => {
+  it('builds a self-consistent funnel from direct/WhatsApp bookings', async () => {
+    const { bookingPageFunnel } = await import('@/domain/shortlet/operations');
+    const f = bookingPageFunnel(bookings);
+    expect(f.enquiries).toBeGreaterThan(0);
+    expect(f.confirmed).toBeLessThanOrEqual(f.enquiries);
+    expect(f.visits).toBeGreaterThanOrEqual(f.searches);
+    expect(f.searches).toBeGreaterThanOrEqual(f.views);
+    expect(f.conversionPct).toBeGreaterThanOrEqual(0);
+    expect(f.conversionPct).toBeLessThanOrEqual(100);
+  });
+});

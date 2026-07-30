@@ -115,10 +115,11 @@ export function suggestNightlyRate(apartment: Apartment, forDateISO: string, rec
 /* --- SMART: turnover / cleaning scheduler (beyond PRD) -------------------- */
 
 export type Turnover = { apartmentId: string; checkoutBookingId: string; checkoutISO: string; nextBookingId: string | null; nextCheckInISO: string | null; sameDay: boolean; gapDays: number | null };
+type TurnoverBooking = Pick<SlBooking, 'id' | 'apartmentId' | 'status' | 'checkIn' | 'checkOut'>;
 
 /** For each upcoming checkout, find the next check-in on the same apartment and
  *  flag same-day flips (a real operational gap the PRD omits). */
-export function turnovers(bookings: readonly SlBooking[], nowMs: number, horizonDays = 21): Turnover[] {
+export function turnovers(bookings: readonly TurnoverBooking[], nowMs: number, horizonDays = 21): Turnover[] {
   const endMs = nowMs + horizonDays * DAY;
   const out: Turnover[] = [];
   for (const b of bookings) {
@@ -187,9 +188,10 @@ export function cautionExposure(bookings: readonly SlBooking[]): { heldMinor: nu
 /* --- calendar projection (FR-BM-04) --------------------------------------- */
 
 export type CalBar = { bookingId: string; ref: string; guestName: string; status: string; startCol: number; span: number; source: BookingSource };
+type BarBooking = Pick<SlBooking, 'id' | 'apartmentId' | 'status' | 'checkIn' | 'checkOut' | 'ref' | 'guestName' | 'source'>;
 
 /** Bars for a `days`-day window starting at weekStartMs, per apartment. */
-export function calendarBars(bookings: readonly SlBooking[], apartmentId: string, weekStartMs: number, days = 7): CalBar[] {
+export function calendarBars(bookings: readonly BarBooking[], apartmentId: string, weekStartMs: number, days = 7): CalBar[] {
   const endMs = weekStartMs + days * DAY;
   return bookings
     .filter((b) => b.apartmentId === apartmentId && b.status !== 'cancelled' && Date.parse(b.checkOut) > weekStartMs && Date.parse(b.checkIn) < endMs)

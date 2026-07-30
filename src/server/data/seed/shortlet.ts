@@ -11,7 +11,7 @@ import { money } from '@/domain/primitives';
 import { nightsBetween } from '@/domain/shortlet/types';
 import type { SlProperty, Apartment, SlBooking, SlExpense, SlInspection, BookingSource, CautionStatus } from '@/domain/shortlet/types';
 import type { TeamMember } from '@/domain/shortlet/plan';
-import type { PricingRule, MaintenanceIssue, Agent, Review } from '@/domain/shortlet/operations';
+import type { PricingRule, MaintenanceIssue, Agent, Review, BookingPageConfig } from '@/domain/shortlet/operations';
 
 const A = SEED.tenantA;
 const ngn = (n: number) => money(n * 100, 'NGN');
@@ -153,3 +153,15 @@ export const shortletReviews: Review[] = [
   { tenantId: A, id: 'rv-3', bookingId: 'slb-ap-4-4214', apartmentId: 'ap-4', guestName: 'James Bello', rating: 4, comment: 'Comfortable and quiet. Host very responsive on WhatsApp.', tags: ['Host', 'Quiet'], atISO: '2026-07-27' },
   { tenantId: A, id: 'rv-4', bookingId: 'slb-ap-3-4215', apartmentId: 'ap-3', guestName: 'Ngozi Peters', rating: 5, comment: 'The penthouse view is unreal. Worth every naira.', tags: ['View', 'Luxury'], atISO: '2026-06-26' },
 ] as unknown as Review[];
+
+export const shortletBookingPage: BookingPageConfig = {
+  enabled: true,
+  slug: 'marina-stays',
+  cancellationPolicy: 'Full refund up to 7 days before check-in, 50% within 7 days.',
+  holdHours: 2,
+  promoCodes: [
+    { code: 'WELCOME10', pct: 10, active: true },
+    { code: 'DETTYDEC', pct: 15, active: true },
+    { code: 'EARLYBIRD', pct: 8, active: false },
+  ],
+};

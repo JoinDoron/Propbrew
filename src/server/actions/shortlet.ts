@@ -201,6 +201,41 @@ export async function advanceIssue(id: string): Promise<Res> {
   return { ok: true };
 }
 
+/* --- direct booking page -------------------------------------------------- */
+export async function toggleBookingPage(): Promise<Res> {
+  const g = await gate('update'); if ('ok' in g) return g;
+  db.shortletBookingPage.enabled = !db.shortletBookingPage.enabled;
+  revalidate();
+  return { ok: true };
+}
+export async function saveBookingPage(input: { slug: string; cancellationPolicy: string; holdHours: number }): Promise<Res> {
+  const g = await gate('update'); if ('ok' in g) return g;
+  const slug = input.slug.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
+  if (!slug) return { ok: false, error: 'Choose a link name.' };
+  db.shortletBookingPage.slug = slug;
+  db.shortletBookingPage.cancellationPolicy = input.cancellationPolicy.trim();
+  db.shortletBookingPage.holdHours = Math.max(0, Math.min(48, Math.round(input.holdHours || 0)));
+  revalidate();
+  return { ok: true };
+}
+export async function addPromoCode(input: { code: string; pct: number }): Promise<Res> {
+  const g = await gate('update'); if ('ok' in g) return g;
+  const code = input.code.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!code) return { ok: false, error: 'Enter a code.' };
+  if (db.shortletBookingPage.promoCodes.some((p) => p.code === code)) return { ok: false, error: 'That code already exists.' };
+  db.shortletBookingPage.promoCodes.unshift({ code, pct: Math.max(1, Math.min(90, Math.round(input.pct || 0))), active: true });
+  revalidate();
+  return { ok: true };
+}
+export async function togglePromoCode(code: string): Promise<Res> {
+  const g = await gate('update'); if ('ok' in g) return g;
+  const p = db.shortletBookingPage.promoCodes.find((x) => x.code === code);
+  if (!p) return { ok: false, error: 'Code not found.' };
+  p.active = !p.active;
+  revalidate();
+  return { ok: true };
+}
+
 /* --- agents --------------------------------------------------------------- */
 let agSeq = 0;
 export async function inviteAgent(input: { name: string; phone: string; commissionPct: number }): Promise<Res> {

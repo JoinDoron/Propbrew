@@ -102,3 +102,36 @@ export function reviewsByApartment(reviews: readonly Review[]): Map<string, { av
   for (const r of reviews) { const cur = m.get(r.apartmentId) ?? { sum: 0, count: 0 }; cur.sum += r.rating; cur.count += 1; m.set(r.apartmentId, cur); }
   return new Map([...m].map(([k, v]) => [k, { avg: Math.round((v.sum / v.count) * 10) / 10, count: v.count }]));
 }
+
+/* --- direct booking page (flow idea) -------------------------------------- */
+
+export type PromoCode = { code: string; pct: number; active: boolean };
+export type BookingPageConfig = { enabled: boolean; slug: string; cancellationPolicy: string; holdHours: number; promoCodes: PromoCode[] };
+
+export type Funnel = { visits: number; searches: number; views: number; enquiries: number; confirmed: number; conversionPct: number };
+
+/** A deterministic conversion funnel derived from the direct-booking pipeline
+ *  (direct + WhatsApp sources drive the public page). Confirmed → back-fills the
+ *  upper funnel at industry-shaped ratios so the numbers stay self-consistent. */
+export function bookingPageFunnel(bookings: readonly SlBooking[]): Funnel {
+  const direct = bookings.filter((b) => (b.source === 'direct' || b.source === 'whatsapp') && b.status !== 'cancelled');
+  const confirmed = direct.filter((b) => b.status !== 'enquiry').length;
+  const enquiries = direct.length;
+  const views = enquiries * 6 + 4;
+  const searches = Math.round(views * 1.6);
+  const visits = searches * 2;
+  return { visits, searches, views, enquiries, confirmed, conversionPct: enquiries ? Math.round((confirmed / enquiries) * 100) : 0 };
+}
+
+export type AptFunnel = { apartmentId: string; views: number; enquiries: number; confirmed: number; conversionPct: number };
+
+export function bookingPageByApartment(bookings: readonly SlBooking[]): AptFunnel[] {
+  const m = new Map<string, { enq: number; conf: number }>();
+  for (const b of bookings) {
+    if ((b.source !== 'direct' && b.source !== 'whatsapp') || b.status === 'cancelled') continue;
+    const cur = m.get(b.apartmentId) ?? { enq: 0, conf: 0 };
+    cur.enq += 1; if (b.status !== 'enquiry') cur.conf += 1;
+    m.set(b.apartmentId, cur);
+  }
+  return [...m.entries()].map(([apartmentId, v]) => ({ apartmentId, views: v.enq * 6 + 2, enquiries: v.enq, confirmed: v.conf, conversionPct: v.enq ? Math.round((v.conf / v.enq) * 100) : 0 }));
+}

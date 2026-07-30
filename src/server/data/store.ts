@@ -49,6 +49,7 @@ export const db = {
   shortletIssues: clone(seed.shortletIssues),
   shortletAgents: clone(seed.shortletAgents),
   shortletReviews: clone(seed.shortletReviews),
+  shortletBookingPage: { ...seed.shortletBookingPage, promoCodes: seed.shortletBookingPage.promoCodes.map((p) => ({ ...p })) },
 };
 
 export type HistoryEntry = {
