@@ -6,7 +6,7 @@
  */
 
 import { SEED } from '@/server/identities';
-import type { ResidentFeedback, EngagementSnapshot, Complaint, CollectionCase, Tenancy, Locker, Parcel } from '@/domain/estate/types';
+import type { ResidentFeedback, EngagementSnapshot, Complaint, CollectionCase, Tenancy, Locker, Parcel, Motion, CommunityEvent, RewardMember, Perk } from '@/domain/estate/types';
 
 const A = SEED.tenantA;
 const G = SEED.estateGardens;
@@ -73,3 +73,37 @@ export const parcels = ([
   { tenantId: A, id: 'pc-5', estateId: G, code: 'PKG-7744', residentName: 'Yusuf Bello', unitLabel: 'Block C · 11C', courier: 'Konga', size: 'S', status: 'received', receivedISO: '2026-07-26T10:15:00Z' },
   { tenantId: A, id: 'pc-6', estateId: G, code: 'PKG-7730', residentName: 'Ada Obi', unitLabel: 'Block D · 01A', courier: 'Jumia', size: 'M', status: 'collected', receivedISO: '2026-07-24T13:00:00Z', collectedISO: '2026-07-26T07:40:00Z' },
 ] as unknown as Parcel[]);
+
+// eligibleWeight 240 units. mo-2 sits just under its 33% quorum — a few votes flip it.
+export const motions = ([
+  { tenantId: A, id: 'mo-1', estateId: G, ref: 'AGM-01', title: '2026/27 service-charge budget (+8%)', summary: 'Approve the annual budget with an 8% increase covering diesel, security and sinking fund.', category: 'budget', status: 'open', opensISO: '2026-07-20', closesISO: '2026-08-03', eligibleWeight: 240, forWeight: 96, againstWeight: 54, abstainWeight: 12, quorumPct: 33, thresholdPct: 50 },
+  { tenantId: A, id: 'mo-2', estateId: G, ref: 'AGM-02', title: 'Install solar + inverter for common areas', summary: 'Capital project to cut diesel reliance on common-area power via a 40kVA solar/inverter system.', category: 'works', status: 'open', opensISO: '2026-07-22', closesISO: '2026-08-05', eligibleWeight: 240, forWeight: 69, againstWeight: 6, abstainWeight: 2, quorumPct: 33, thresholdPct: 66 },
+  { tenantId: A, id: 'mo-3', estateId: G, ref: 'AGM-03', title: 'Amend bylaw: short-let restrictions', summary: 'Restrict unregistered short-let subleasing; require estate registration for any guest stay under 30 days.', category: 'rule', status: 'passed', opensISO: '2026-06-15', closesISO: '2026-06-29', eligibleWeight: 240, forWeight: 130, againstWeight: 60, abstainWeight: 10, quorumPct: 33, thresholdPct: 50 },
+  { tenantId: A, id: 'mo-4', estateId: G, ref: 'AGM-04', title: 'Playground renovation levy (₦15k/unit)', summary: 'One-off levy to rebuild the Block D playground and add shade sails.', category: 'works', status: 'quorum_failed', opensISO: '2026-06-01', closesISO: '2026-06-15', eligibleWeight: 240, forWeight: 40, againstWeight: 10, abstainWeight: 5, quorumPct: 33, thresholdPct: 50 },
+  { tenantId: A, id: 'mo-5', estateId: G, ref: 'AGM-05', title: 'Elect a new resident board member', summary: 'Open nominations and vote for the vacant residents’ committee seat.', category: 'board', status: 'draft', opensISO: '2026-08-10', closesISO: '2026-08-24', eligibleWeight: 240, forWeight: 0, againstWeight: 0, abstainWeight: 0, quorumPct: 33, thresholdPct: 50 },
+] as unknown as Motion[]);
+
+export const communityEvents = ([
+  { tenantId: A, id: 'ev-1', estateId: G, title: 'Saturday Morning Yoga', category: 'fitness', venue: 'Rooftop Deck', host: 'Wellness Club', startISO: '2026-08-01T07:00:00Z', endISO: '2026-08-01T08:00:00Z', capacity: 20, rsvps: 14 },
+  { tenantId: A, id: 'ev-2', estateId: G, title: 'Kids’ Pool Party', category: 'kids', venue: 'Swimming Pool', host: 'Estate Office', startISO: '2026-08-02T15:00:00Z', endISO: '2026-08-02T18:00:00Z', capacity: 40, rsvps: 38 },
+  { tenantId: A, id: 'ev-3', estateId: G, title: 'Residents’ AGM 2026', category: 'meeting', venue: 'Clubhouse Hall', host: 'Estate Manager', startISO: '2026-08-03T17:00:00Z', endISO: '2026-08-03T19:00:00Z', capacity: 120, rsvps: 72 },
+  { tenantId: A, id: 'ev-4', estateId: G, title: 'Independence Day BBQ', category: 'festive', venue: 'Central Lawn', host: 'Social Committee', startISO: '2026-10-01T13:00:00Z', endISO: '2026-10-01T18:00:00Z', capacity: 150, rsvps: 61 },
+  { tenantId: A, id: 'ev-5', estateId: G, title: 'Wine & Cheese Mixer', category: 'social', venue: 'Clubhouse Lounge', host: 'Social Committee', startISO: '2026-08-09T19:00:00Z', endISO: '2026-08-09T22:00:00Z', capacity: 30, rsvps: 30 },
+  { tenantId: A, id: 'ev-6', estateId: G, title: 'Spin Class', category: 'fitness', venue: 'Gym Studio', host: 'Wellness Club', startISO: '2026-07-21T06:30:00Z', endISO: '2026-07-21T07:30:00Z', capacity: 15, rsvps: 15 },
+] as unknown as CommunityEvent[]);
+
+export const rewardMembers = ([
+  { tenantId: A, id: 'rw-1', estateId: G, residentName: 'Yusuf Bello', unitLabel: 'Block C · 11C', points: 3240, onTimeStreak: 18, eventsAttended: 12, pollsVoted: 9, lastEarnedISO: '2026-07-25' },
+  { tenantId: A, id: 'rw-2', estateId: G, residentName: 'Ada Obi', unitLabel: 'Block D · 01A', points: 1880, onTimeStreak: 11, eventsAttended: 8, pollsVoted: 6, lastEarnedISO: '2026-07-24' },
+  { tenantId: A, id: 'rw-3', estateId: G, residentName: 'Kemi Adeyinka', unitLabel: 'Block C · 03B', points: 1420, onTimeStreak: 9, eventsAttended: 5, pollsVoted: 5, lastEarnedISO: '2026-07-22' },
+  { tenantId: A, id: 'rw-4', estateId: G, residentName: 'Folake Bello', unitLabel: 'Block C · 12B', points: 640, onTimeStreak: 3, eventsAttended: 4, pollsVoted: 2, lastEarnedISO: '2026-07-20' },
+  { tenantId: A, id: 'rw-5', estateId: G, residentName: 'Tobi Ade', unitLabel: 'Block C · 09A', points: 380, onTimeStreak: 1, eventsAttended: 2, pollsVoted: 1, lastEarnedISO: '2026-07-15' },
+  { tenantId: A, id: 'rw-6', estateId: G, residentName: 'David Okon', unitLabel: 'Block D · 07B', points: 210, onTimeStreak: 0, eventsAttended: 1, pollsVoted: 1, lastEarnedISO: '2026-07-10' },
+] as unknown as RewardMember[]);
+
+export const perks = ([
+  { tenantId: A, id: 'pk-1', estateId: G, title: '1 month service-charge credit', detail: '₦25,000 off your next service charge', cost: 2500, category: 'Billing', stock: 5 },
+  { tenantId: A, id: 'pk-2', estateId: G, title: 'Free clubhouse hall booking', detail: 'A weekend hall reservation, on the house', cost: 1200, category: 'Amenity', stock: 8 },
+  { tenantId: A, id: 'pk-3', estateId: G, title: 'Priority parcel locker', detail: 'A dedicated large locker for a month', cost: 600, category: 'Parcels', stock: 10 },
+  { tenantId: A, id: 'pk-4', estateId: G, title: 'Pool cabana for a day', detail: 'Reserved poolside cabana + towels', cost: 900, category: 'Amenity', stock: 6 },
+] as unknown as Perk[]);

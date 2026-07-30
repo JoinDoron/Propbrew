@@ -5,6 +5,8 @@ import {
   debtorRisk, recoveryForecast, nextDunningStage,
   nextTenancyStage, leaseRunwayDays, depositExposureMinor,
   isParcelOverdue, parcelStats, lockerUtilization,
+  motionTally, motionOutcome, eventFillPct, isEventFull, eventState, amenityLoad,
+  tierFor, tierProgress, pointsIssued, leaderboard,
 } from '@/domain/estate/engine';
 
 const NOW = Date.parse('2026-07-26');
@@ -60,5 +62,45 @@ describe('parcels & lockers', () => {
     const s = parcelStats(seed.parcels, NOW);
     expect(s.inLocker).toBe(3); expect(s.awaiting).toBe(1); expect(s.overdue).toBe(1); expect(s.collectedToday).toBe(1);
     expect(lockerUtilization(seed.lockers).pct).toBe(50); // 4 of 8 used
+  });
+});
+
+describe('governance & e-voting', () => {
+  it('tallies turnout vs quorum and approval vs threshold', () => {
+    const solar = seed.motions.find((m) => m.id === 'mo-2')!; // 77 turnout of 240 = 32% < 33% quorum
+    const t = motionTally(solar);
+    expect(t.quorumMet).toBe(false);
+    expect(t.approvalPct).toBeGreaterThanOrEqual(solar.thresholdPct); // approval clears, quorum doesn't
+    expect(t.passing).toBe(false);
+    // one more 'for' vote crosses quorum (78/240 → 33%)
+    const nudged = { ...solar, forWeight: solar.forWeight + 1 };
+    expect(motionTally(nudged).quorumMet).toBe(true);
+    expect(motionOutcome(nudged)).toBe('passed');
+  });
+  it('resolves outcomes: passed vs quorum_failed', () => {
+    expect(motionOutcome(seed.motions.find((m) => m.id === 'mo-1')!)).toBe('passed');
+    expect(motionOutcome(seed.motions.find((m) => m.id === 'mo-4')!)).toBe('quorum_failed');
+  });
+});
+
+describe('events & amenities', () => {
+  it('computes fill, fullness and ranks amenity demand (excluding past)', () => {
+    expect(eventFillPct(seed.communityEvents.find((e) => e.id === 'ev-2')!)).toBe(95); // 38/40
+    expect(isEventFull(seed.communityEvents.find((e) => e.id === 'ev-5')!)).toBe(true); // 30/30
+    expect(eventState(seed.communityEvents.find((e) => e.id === 'ev-6')!, NOW)).toBe('past'); // ended 07-21
+    expect(amenityLoad(seed.communityEvents, NOW)[0].venue).toBe('Clubhouse Hall'); // AGM draws most RSVPs
+  });
+});
+
+describe('loyalty & rewards', () => {
+  it('assigns tiers, progress and leaderboard order', () => {
+    expect(tierFor(3240)).toBe('platinum');
+    expect(tierFor(1880)).toBe('gold');
+    expect(tierFor(640)).toBe('silver');
+    expect(tierFor(210)).toBe('bronze');
+    const p = tierProgress(640);
+    expect(p.next).toBe('gold'); expect(p.toNext).toBe(860);
+    expect(pointsIssued(seed.rewardMembers)).toBe(7770);
+    expect(leaderboard(seed.rewardMembers)[0].residentName).toBe('Yusuf Bello');
   });
 });

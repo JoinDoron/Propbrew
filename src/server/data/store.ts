@@ -75,6 +75,10 @@ export const db = {
   tenancies: clone(seed.tenancies),
   lockers: clone(seed.lockers),
   parcels: clone(seed.parcels),
+  motions: clone(seed.motions),
+  communityEvents: clone(seed.communityEvents),
+  rewardMembers: clone(seed.rewardMembers),
+  perks: clone(seed.perks),
 };
 
 export type HistoryEntry = {

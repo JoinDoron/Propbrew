@@ -9,6 +9,7 @@ import type { Tone } from '@/lib/status-tones';
 import type {
   ResidentFeedback, Sentiment, EngagementSnapshot, Complaint,
   CollectionCase, DunningStage, Tenancy, TenancyStage, Parcel, Locker,
+  Motion, MotionStatus, CommunityEvent, RewardTier, RewardMember,
 } from './types';
 
 const DAY = 24 * 3600 * 1000;
@@ -133,3 +134,97 @@ export function lockerUtilization(lockers: readonly Locker[]): { used: number; t
   const used = lockers.filter((l) => l.parcelId).length;
   return { used, total: lockers.length, pct: lockers.length ? Math.round((used / lockers.length) * 100) : 0 };
 }
+
+/* --- governance & e-voting ------------------------------------------------ */
+
+export type MotionTally = {
+  turnoutWeight: number; turnoutPct: number; quorumMet: boolean;
+  approvalPct: number; thresholdMet: boolean; passing: boolean;
+};
+
+export type MotionLike = Pick<Motion, 'forWeight' | 'againstWeight' | 'abstainWeight' | 'eligibleWeight' | 'quorumPct' | 'thresholdPct'>;
+
+/** Live tally for a motion: turnout vs quorum and approval vs threshold. */
+export function motionTally(m: MotionLike): MotionTally {
+  const turnoutWeight = m.forWeight + m.againstWeight + m.abstainWeight;
+  const turnoutPct = m.eligibleWeight ? Math.round((turnoutWeight / m.eligibleWeight) * 100) : 0;
+  const decisive = m.forWeight + m.againstWeight; // abstentions don't count toward approval
+  const approvalPct = decisive ? Math.round((m.forWeight / decisive) * 100) : 0;
+  const quorumMet = turnoutPct >= m.quorumPct;
+  const thresholdMet = approvalPct >= m.thresholdPct;
+  return { turnoutWeight, turnoutPct, quorumMet, approvalPct, thresholdMet, passing: quorumMet && thresholdMet };
+}
+
+/** The outcome a motion would record if closed now. */
+export function motionOutcome(m: MotionLike): MotionStatus {
+  const t = motionTally(m);
+  if (!t.quorumMet) return 'quorum_failed';
+  return t.thresholdMet ? 'passed' : 'rejected';
+}
+
+export function motionStatusTone(status: MotionStatus): Tone {
+  switch (status) {
+    case 'passed': return 'success';
+    case 'rejected': return 'danger';
+    case 'quorum_failed': return 'warn';
+    case 'open': return 'progress';
+    default: return 'muted';
+  }
+}
+export const MOTION_STATUS_LABEL: Record<MotionStatus, string> = {
+  draft: 'Draft', open: 'Voting open', passed: 'Passed', rejected: 'Rejected', quorum_failed: 'Quorum failed',
+};
+
+/* --- events & amenities --------------------------------------------------- */
+
+export function eventFillPct(e: Pick<CommunityEvent, 'rsvps' | 'capacity'>): number {
+  return e.capacity ? Math.min(100, Math.round((e.rsvps / e.capacity) * 100)) : 0;
+}
+export function isEventFull(e: Pick<CommunityEvent, 'rsvps' | 'capacity'>): boolean {
+  return e.rsvps >= e.capacity;
+}
+export function eventState(e: Pick<CommunityEvent, 'cancelled' | 'endISO' | 'rsvps' | 'capacity'>, nowMs: number): 'past' | 'full' | 'filling' | 'open' {
+  if (e.cancelled) return 'past';
+  if (Date.parse(e.endISO) < nowMs) return 'past';
+  if (isEventFull(e)) return 'full';
+  return eventFillPct(e) >= 70 ? 'filling' : 'open';
+}
+export function amenityLoad(events: readonly CommunityEvent[], nowMs: number): { venue: string; rsvps: number; events: number }[] {
+  const map = new Map<string, { venue: string; rsvps: number; events: number }>();
+  for (const e of events) {
+    if (e.cancelled || Date.parse(e.endISO) < nowMs) continue;
+    const row = map.get(e.venue) ?? { venue: e.venue, rsvps: 0, events: 0 };
+    row.rsvps += e.rsvps; row.events += 1;
+    map.set(e.venue, row);
+  }
+  return [...map.values()].sort((a, b) => b.rsvps - a.rsvps);
+}
+
+/* --- loyalty & rewards ---------------------------------------------------- */
+
+export const TIER_MIN: Record<RewardTier, number> = { bronze: 0, silver: 500, gold: 1500, platinum: 3000 };
+const TIER_ORDER: RewardTier[] = ['bronze', 'silver', 'gold', 'platinum'];
+
+export function tierFor(points: number): RewardTier {
+  return [...TIER_ORDER].reverse().find((t) => points >= TIER_MIN[t]) ?? 'bronze';
+}
+/** Progress to the next tier, and points remaining (0 at platinum). */
+export function tierProgress(points: number): { tier: RewardTier; next: RewardTier | null; pct: number; toNext: number } {
+  const tier = tierFor(points);
+  const i = TIER_ORDER.indexOf(tier);
+  const next = i < TIER_ORDER.length - 1 ? TIER_ORDER[i + 1] : null;
+  if (!next) return { tier, next: null, pct: 100, toNext: 0 };
+  const span = TIER_MIN[next] - TIER_MIN[tier];
+  const into = points - TIER_MIN[tier];
+  return { tier, next, pct: Math.round((into / span) * 100), toNext: TIER_MIN[next] - points };
+}
+export const TIER_TONE: Record<RewardTier, Tone> = { bronze: 'muted', silver: 'info', gold: 'warn', platinum: 'success' };
+
+export function leaderboard(members: readonly RewardMember[]): RewardMember[] {
+  return [...members].sort((a, b) => b.points - a.points);
+}
+export function pointsIssued(members: readonly RewardMember[]): number {
+  return members.reduce((n, m) => n + m.points, 0);
+}
+export const EARN_POINTS = { on_time_payment: 100, event: 50, poll: 30 } as const;
+export type EarnReason = keyof typeof EARN_POINTS;

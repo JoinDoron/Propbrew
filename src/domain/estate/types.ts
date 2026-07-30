@@ -59,3 +59,36 @@ export type Parcel = TenantScoped & {
   id: string; estateId: string; code: string; residentName: string; unitLabel: string; courier: string;
   lockerLabel?: string; size: LockerSize; status: ParcelStatus; receivedISO: string; collectedISO?: string;
 };
+
+/* --- governance & e-voting ------------------------------------------------ */
+
+export type MotionCategory = 'budget' | 'rule' | 'works' | 'board';
+export type MotionStatus = 'draft' | 'open' | 'passed' | 'rejected' | 'quorum_failed';
+export type VoteChoice = 'for' | 'against' | 'abstain';
+export type Motion = TenantScoped & {
+  id: string; estateId: string; ref: string; title: string; summary: string; category: MotionCategory;
+  status: MotionStatus; opensISO: string; closesISO: string;
+  /** Vote weights (unit-weighted). eligibleWeight is the whole electorate. */
+  eligibleWeight: number; forWeight: number; againstWeight: number; abstainWeight: number;
+  quorumPct: number; thresholdPct: number; // pass needs quorum met AND approval ≥ threshold
+};
+
+/* --- events & amenities --------------------------------------------------- */
+
+export type EventCategory = 'social' | 'fitness' | 'kids' | 'meeting' | 'festive';
+export type CommunityEvent = TenantScoped & {
+  id: string; estateId: string; title: string; category: EventCategory; venue: string; host: string;
+  startISO: string; endISO: string; capacity: number; rsvps: number; cancelled?: boolean;
+};
+
+/* --- loyalty & rewards ---------------------------------------------------- */
+
+export type RewardTier = 'bronze' | 'silver' | 'gold' | 'platinum';
+export type RewardMember = TenantScoped & {
+  id: string; estateId: string; residentName: string; unitLabel: string;
+  points: number; onTimeStreak: number; eventsAttended: number; pollsVoted: number; lastEarnedISO: string;
+};
+
+export type Perk = TenantScoped & {
+  id: string; estateId: string; title: string; detail: string; cost: number; category: string; stock: number;
+};

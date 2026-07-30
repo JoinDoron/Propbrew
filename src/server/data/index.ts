@@ -187,6 +187,10 @@ export const repos = {
   tenancies: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'users_roles', db.tenancies, o ?? { limit: 100 }) },
   lockers: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'security_sos', db.lockers, o ?? { limit: 100 }) },
   parcels: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'security_sos', db.parcels, o ?? { limit: 100 }) },
+  motions: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'announcements', db.motions, o ?? { limit: 100 }) },
+  communityEvents: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'bookings_amenities', db.communityEvents, o ?? { limit: 100 }) },
+  rewardMembers: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'announcements', db.rewardMembers, o ?? { limit: 100 }) },
+  perks: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'announcements', db.perks, o ?? { limit: 100 }) },
 };
 
 /**
