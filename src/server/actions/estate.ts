@@ -12,7 +12,7 @@ import { getActor } from '@/server/session';
 import { ForbiddenError, assertCan, type Capability } from '@/lib/authz';
 import { db } from '@/server/data/store';
 import { NOW } from '@/domain/ppm';
-import { nextDunningStage, nextTenancyStage, motionOutcome, isEventFull, tierFor, EARN_POINTS, type VoteChoice, type EarnReason } from '@/domain/estate';
+import { nextDunningStage, nextTenancyStage, motionOutcome, isEventFull, tierFor, EARN_POINTS, electionWinner, type VoteChoice, type EarnReason } from '@/domain/estate';
 
 const PATHS = ['/community', '/collections', '/tenancy', '/parcels', '/governance', '/events', '/rewards', '/billing', '/people', '/dashboard'];
 const revalidate = () => PATHS.forEach((p) => revalidatePath(p));
@@ -262,4 +262,55 @@ export async function redeemPerk(memberId: string, perkId: string): Promise<Res>
   const _tier = tierFor(m.points); void _tier;
   revalidate();
   return { ok: true, ref: p.title };
+}
+
+/* --- board election (vacant seat) ----------------------------------------- */
+const ELECTION_PATHS = ['/board', '/governance', '/portal/community'];
+const revalidateElection = () => ELECTION_PATHS.forEach((p) => revalidatePath(p));
+
+let candSeq = 0;
+export type NominateInput = { name: string; unitLabel: string; statement: string };
+
+/** Nominate a candidate for the seat (allowed while the election isn't decided). */
+export async function nominateCandidate(electionId: string, input: NominateInput): Promise<Res> {
+  const g = await gate('announcements', 'create'); if (!g.ok) return g;
+  const el = db.boardElections.find((x) => x.id === electionId);
+  if (!el) return { ok: false, error: 'Election not found.' };
+  if (el.status === 'decided') return { ok: false, error: 'This election is already decided.' };
+  if (!input.name?.trim()) return { ok: false, error: 'Enter the candidate’s name.' };
+  if (el.candidates.some((c) => c.residentName.toLowerCase() === input.name.trim().toLowerCase())) return { ok: false, error: 'That resident is already standing.' };
+  el.candidates.push({ id: `cand-new-${++candSeq}`, residentName: input.name.trim(), unitLabel: input.unitLabel.trim() || '—', statement: input.statement.trim() || 'Standing for the committee.', votes: 0 });
+  revalidateElection();
+  return { ok: true, ref: input.name.trim() };
+}
+
+export async function openElectionVoting(electionId: string): Promise<Res> {
+  const g = await gate('announcements'); if (!g.ok) return g;
+  const el = db.boardElections.find((x) => x.id === electionId);
+  if (!el) return { ok: false, error: 'Election not found.' };
+  if (el.status !== 'nominations') return { ok: false, error: 'Voting can only open from nominations.' };
+  if (el.candidates.length < 2) return { ok: false, error: 'Need at least two candidates to open voting.' };
+  el.status = 'voting';
+  revalidateElection();
+  return { ok: true, ref: el.ref };
+}
+
+/** Close voting: the plurality winner (if quorate, no tie) takes the seat and
+ *  joins the committee roster. */
+export async function decideElection(electionId: string): Promise<Res> {
+  const g = await gate('announcements'); if (!g.ok) return g;
+  const el = db.boardElections.find((x) => x.id === electionId);
+  if (!el) return { ok: false, error: 'Election not found.' };
+  if (el.status !== 'voting') return { ok: false, error: 'Only an open election can be decided.' };
+  const winner = electionWinner(el);
+  if (!winner) return { ok: false, error: 'Cannot decide yet — quorum not met or the vote is tied.' };
+  el.status = 'decided'; el.winnerCandidateId = winner.id;
+  const termEnd = new Date(Date.parse(NOW) + 2 * 365 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+  const first = db.boardMembers[0];
+  db.boardMembers.push({
+    tenantId: first?.tenantId ?? 't-lekki', id: `bd-el-${el.id}`, estateId: (first?.estateId as string) ?? 's-gardens',
+    name: winner.residentName, unitLabel: winner.unitLabel, role: 'Member', portfolio: el.portfolio, sinceISO: NOW.slice(0, 10), termEndISO: termEnd,
+  } as (typeof db.boardMembers)[number]);
+  revalidateElection();
+  return { ok: true, ref: winner.residentName };
 }

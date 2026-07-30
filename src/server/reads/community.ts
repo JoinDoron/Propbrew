@@ -24,6 +24,8 @@ export function residentCommunityData(actor: Actor) {
     rewardMembers: repos.rewardMembers.list(actor).items,
     perks: repos.perks.list(actor).items,
     events: applyScope(db.communityEvents, annScope),
+    elections: repos.boardElections.list(actor).items,
     myVotes: new Map(db.residentVotes.filter((v) => v.userId === actor.userId).map((v) => [v.motionId, v.choice] as const)),
+    myElectionVotes: new Map(db.electionVotes.filter((v) => v.userId === actor.userId).map((v) => [v.electionId, v.candidateId] as const)),
   };
 }

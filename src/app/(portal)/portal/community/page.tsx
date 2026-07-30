@@ -3,7 +3,7 @@ import { repos } from '@/server/data';
 import { NOW_MS } from '@/domain/ppm';
 import { residentCommunityData } from '@/server/reads/community';
 import { leaderboard } from '@/domain/estate';
-import { CommunityHub, type PMotion, type PEvent, type PPerk, type MyRewards } from '@/components/portal/community-hub';
+import { CommunityHub, type PMotion, type PEvent, type PPerk, type MyRewards, type PElection } from '@/components/portal/community-hub';
 import type { VoteChoice } from '@/domain/estate';
 
 /** Resident community hub — vote on AGM motions, RSVP to events, and see/spend
@@ -12,7 +12,7 @@ import type { VoteChoice } from '@/domain/estate';
  *  (see server/actions/resident-community.ts). */
 export default async function ResidentCommunityPage() {
   const { actor } = await requireCapability('announcements');
-  const { motions, events, rewardMembers, perks, myVotes } = residentCommunityData(actor);
+  const { motions, events, rewardMembers, perks, myVotes, elections, myElectionVotes } = residentCommunityData(actor);
   const myName = repos.residents.list(actor).items.find((r) => r.userId === actor.userId)?.name;
 
   const board = leaderboard(rewardMembers);
@@ -31,9 +31,17 @@ export default async function ResidentCommunityPage() {
   const perkRows: PPerk[] = perks.map((p) => ({ id: p.id, title: p.title, detail: p.detail, cost: p.cost, stock: p.stock }));
   const rewards: MyRewards = mine ? { points: mine.points, onTimeStreak: mine.onTimeStreak, eventsAttended: mine.eventsAttended, pollsVoted: mine.pollsVoted, rank: myIdx + 1, total: board.length } : null;
 
+  const openEl = elections.find((e) => e.status === 'voting');
+  const election: PElection = openEl ? {
+    id: openEl.id, ref: openEl.ref, seatTitle: openEl.seatTitle, portfolio: openEl.portfolio,
+    closesISO: openEl.closesISO, eligibleWeight: openEl.eligibleWeight, quorumPct: openEl.quorumPct,
+    candidates: openEl.candidates.map((c) => ({ id: c.id, residentName: c.residentName, unitLabel: c.unitLabel, statement: c.statement, votes: c.votes })),
+    myCandidateId: myElectionVotes.get(openEl.id),
+  } : null;
+
   return (
     <div className="max-w-[640px] mx-auto">
-      <CommunityHub firstName={(myName ?? 'there').split(' ')[0]} motions={motionRows} events={eventRows} rewards={rewards} perks={perkRows} />
+      <CommunityHub firstName={(myName ?? 'there').split(' ')[0]} motions={motionRows} events={eventRows} rewards={rewards} perks={perkRows} election={election} />
     </div>
   );
 }

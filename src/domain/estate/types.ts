@@ -105,3 +105,15 @@ export type MeetingStatus = 'scheduled' | 'held';
 export type Meeting = TenantScoped & {
   id: string; estateId: string; title: string; type: MeetingType; whenISO: string; venue: string; status: MeetingStatus; resolutions: number; attendees: number; quorumRequired: number;
 };
+
+/* --- board election (vacant-seat) ----------------------------------------- */
+
+export type ElectionStatus = 'nominations' | 'voting' | 'decided';
+export type Candidate = { id: string; residentName: string; unitLabel: string; statement: string; votes: number };
+export type BoardElection = TenantScoped & {
+  id: string; estateId: string; ref: string; seatTitle: string; portfolio: string;
+  status: ElectionStatus; opensISO: string; closesISO: string;
+  /** whole electorate + quorum needed for the result to stand (unit-weighted). */
+  eligibleWeight: number; quorumPct: number;
+  candidates: Candidate[]; winnerCandidateId?: string;
+};

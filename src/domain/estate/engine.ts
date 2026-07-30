@@ -10,7 +10,7 @@ import type {
   ResidentFeedback, Sentiment, EngagementSnapshot, Complaint,
   CollectionCase, DunningStage, Tenancy, TenancyStage, Parcel, Locker,
   Motion, MotionStatus, CommunityEvent, RewardTier, RewardMember,
-  BoardMember, Meeting,
+  BoardMember, Meeting, BoardElection, Candidate,
 } from './types';
 
 const DAY = 24 * 3600 * 1000;
@@ -244,4 +244,32 @@ export function meetingState(m: Pick<Meeting, 'status' | 'whenISO' | 'attendees'
   if (m.status === 'held') return { tone: quorate ? 'success' : 'warn', label: quorate ? 'Held · quorate' : 'Held · inquorate', quorate };
   const soon = Date.parse(m.whenISO) - nowMs <= 7 * DAY;
   return { tone: soon ? 'progress' : 'info', label: soon ? 'This week' : 'Scheduled', quorate };
+}
+
+/* --- board election ------------------------------------------------------- */
+
+type ElectionLike = Pick<BoardElection, 'candidates' | 'eligibleWeight' | 'quorumPct'>;
+export type ElectionTally = { totalVotes: number; turnoutPct: number; quorumMet: boolean; ranked: { candidate: Candidate; pct: number }[]; leader: Candidate | null; tie: boolean };
+
+/** Plurality election tally: turnout vs quorum, and candidates ranked by votes. */
+export function electionTally(e: ElectionLike): ElectionTally {
+  const totalVotes = e.candidates.reduce((n, c) => n + c.votes, 0);
+  const turnoutPct = e.eligibleWeight ? Math.round((totalVotes / e.eligibleWeight) * 100) : 0;
+  const ranked = [...e.candidates].sort((a, b) => b.votes - a.votes).map((c) => ({ candidate: c, pct: totalVotes ? Math.round((c.votes / totalVotes) * 100) : 0 }));
+  const tie = ranked.length >= 2 && ranked[0].candidate.votes > 0 && ranked[0].candidate.votes === ranked[1].candidate.votes;
+  return { totalVotes, turnoutPct, quorumMet: turnoutPct >= e.quorumPct, ranked, leader: ranked[0]?.candidate ?? null, tie };
+}
+
+/** The candidate who would take the seat if closed now — needs quorum, votes, and no tie. */
+export function electionWinner(e: ElectionLike): Candidate | null {
+  const t = electionTally(e);
+  if (!t.quorumMet || t.tie || !t.leader || t.leader.votes === 0) return null;
+  return t.leader;
+}
+
+export const ELECTION_STATUS_LABEL: Record<BoardElection['status'], string> = {
+  nominations: 'Nominations open', voting: 'Voting open', decided: 'Decided',
+};
+export function electionStatusTone(s: BoardElection['status']): Tone {
+  return s === 'decided' ? 'success' : s === 'voting' ? 'progress' : 'info';
 }

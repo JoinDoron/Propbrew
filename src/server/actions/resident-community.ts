@@ -21,7 +21,7 @@ import { isEventFull, type VoteChoice } from '@/domain/estate';
 
 export type Res = { ok: true; ref?: string } | { ok: false; error: string };
 
-const paths = () => ['/portal/community', '/portal', '/governance', '/events', '/rewards'].forEach((p) => revalidatePath(p));
+const paths = () => ['/portal/community', '/portal', '/governance', '/events', '/rewards', '/board'].forEach((p) => revalidatePath(p));
 function requireResident(actor: Awaited<ReturnType<typeof getActor>>): Res | null {
   return actor.roles.includes('resident') ? null : { ok: false, error: 'This is a resident action.' };
 }
@@ -50,6 +50,23 @@ export async function residentVote(motionId: string, choice: VoteChoice): Promis
   if (choice === 'for') m.forWeight += 1; else if (choice === 'against') m.againstWeight += 1; else m.abstainWeight += 1;
   paths();
   return { ok: true, ref: m.ref };
+}
+
+/** Cast a resident's single unit-weighted ballot for a candidate in the board
+ *  election (proposed resident participation — role-checked, one vote per home). */
+export async function residentVoteCandidate(electionId: string, candidateId: string): Promise<Res> {
+  const actor = await getActor();
+  const notRes = requireResident(actor); if (notRes) return notRes;
+  const el = db.boardElections.find((x) => x.id === electionId && x.tenantId === actor.tenantId);
+  if (!el) return { ok: false, error: 'Election not found.' };
+  if (el.status !== 'voting') return { ok: false, error: 'Voting is not open for this seat.' };
+  if (db.electionVotes.some((v) => v.electionId === electionId && v.userId === actor.userId)) return { ok: false, error: 'You have already voted in this election.' };
+  const cand = el.candidates.find((c) => c.id === candidateId);
+  if (!cand) return { ok: false, error: 'Candidate not found.' };
+  db.electionVotes.push({ electionId, userId: actor.userId, candidateId });
+  cand.votes += 1;
+  paths();
+  return { ok: true, ref: cand.residentName };
 }
 
 export async function residentRedeem(perkId: string): Promise<Res> {

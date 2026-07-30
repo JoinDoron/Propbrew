@@ -7,7 +7,7 @@ import {
   isParcelOverdue, parcelStats, lockerUtilization,
   motionTally, motionOutcome, eventFillPct, isEventFull, eventState, amenityLoad,
   tierFor, tierProgress, pointsIssued, leaderboard,
-  termStatus, meetingState,
+  termStatus, meetingState, electionTally, electionWinner,
 } from '@/domain/estate/engine';
 
 const NOW = Date.parse('2026-07-26');
@@ -115,5 +115,26 @@ describe('board & committee', () => {
     const held = seed.meetings.find((m) => m.id === 'mt-3')!; // 5 present, quorum 3
     expect(meetingState(held, NOW).quorate).toBe(true);
     expect(meetingState(held, NOW).label).toBe('Held · quorate');
+  });
+});
+
+describe('board election', () => {
+  it('tallies turnout vs quorum and gates the winner on quorum + plurality', () => {
+    const el = seed.boardElections.find((e) => e.id === 'el-1')!; // 77/240 = 32% < 33% quorum
+    const t = electionTally(el);
+    expect(t.turnoutPct).toBe(32);
+    expect(t.quorumMet).toBe(false);
+    expect(t.leader?.residentName).toBe('Tobi Ade'); // 44 votes leads
+    expect(electionWinner(el)).toBeNull(); // quorum not met → no winner yet
+    // one more resident ballot crosses quorum → the leader wins
+    const nudged = { ...el, candidates: el.candidates.map((c) => c.id === 'cand-1' ? { ...c, votes: c.votes + 1 } : c) };
+    expect(electionTally(nudged).quorumMet).toBe(true);
+    expect(electionWinner(nudged)?.residentName).toBe('Tobi Ade');
+  });
+  it('returns no winner on a tie even when quorate', () => {
+    const tie = { candidates: [{ id: 'a', residentName: 'A', unitLabel: '', statement: '', votes: 50 }, { id: 'b', residentName: 'B', unitLabel: '', statement: '', votes: 50 }], eligibleWeight: 240, quorumPct: 33 };
+    expect(electionTally(tie).quorumMet).toBe(true);
+    expect(electionTally(tie).tie).toBe(true);
+    expect(electionWinner(tie)).toBeNull();
   });
 });

@@ -6,7 +6,7 @@
  */
 
 import { SEED } from '@/server/identities';
-import type { ResidentFeedback, EngagementSnapshot, Complaint, CollectionCase, Tenancy, Locker, Parcel, Motion, CommunityEvent, RewardMember, Perk, BoardMember, Meeting } from '@/domain/estate/types';
+import type { ResidentFeedback, EngagementSnapshot, Complaint, CollectionCase, Tenancy, Locker, Parcel, Motion, CommunityEvent, RewardMember, Perk, BoardMember, Meeting, BoardElection } from '@/domain/estate/types';
 
 const A = SEED.tenantA;
 const G = SEED.estateGardens;
@@ -122,3 +122,18 @@ export const meetings = ([
   { tenantId: A, id: 'mt-3', estateId: G, title: 'July committee meeting', type: 'committee', whenISO: '2026-07-12T18:00:00Z', venue: 'Clubhouse Lounge', status: 'held', resolutions: 4, attendees: 5, quorumRequired: 3 },
   { tenantId: A, id: 'mt-4', estateId: G, title: 'Q2 budget review', type: 'committee', whenISO: '2026-06-20T18:00:00Z', venue: 'Clubhouse Lounge', status: 'held', resolutions: 3, attendees: 4, quorumRequired: 3 },
 ] as unknown as Meeting[]);
+
+/** The vacant residents' committee seat (Welfare & sustainability) — a member
+ *  resigned mid-term. Voting is open; turnout sits at 77/240 = 32%, one unit
+ *  short of the 33% quorum, so a single resident ballot makes it quorate. */
+export const boardElections = ([
+  {
+    tenantId: A, id: 'el-1', estateId: G, ref: 'BE-2026-01', seatTitle: "Residents' Committee Member", portfolio: 'Welfare & sustainability',
+    status: 'voting', opensISO: '2026-07-24', closesISO: '2026-08-07', eligibleWeight: 240, quorumPct: 33,
+    candidates: [
+      { id: 'cand-1', residentName: 'Tobi Ade', unitLabel: 'Block C · 09A', statement: 'Ran the last community clean-up. I’ll push for better waste, recycling and greener common areas.', votes: 44 },
+      { id: 'cand-2', residentName: 'Chinelo Umeh', unitLabel: 'Block C · 06A', statement: 'Chartered accountant and new resident. I want transparent welfare spending and open books.', votes: 33 },
+      { id: 'cand-3', residentName: 'Ibrahim Sani', unitLabel: 'Block D · 10C', statement: 'Just moved in and keen to help — focus on family welfare and inclusive events.', votes: 0 },
+    ],
+  },
+] as unknown as BoardElection[]);

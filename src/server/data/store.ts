@@ -81,8 +81,11 @@ export const db = {
   perks: clone(seed.perks),
   boardMembers: clone(seed.boardMembers),
   meetings: clone(seed.meetings),
-  // One-vote-per-resident ledger for portal e-voting (userId keyed).
+  // Deep-clone: candidate vote counts mutate, so the nested array must not alias the seed.
+  boardElections: seed.boardElections.map((e) => ({ ...e, candidates: e.candidates.map((c) => ({ ...c })) })),
+  // One-vote-per-resident ledgers for portal e-voting (userId keyed).
   residentVotes: [] as { motionId: string; userId: string; choice: string }[],
+  electionVotes: [] as { electionId: string; userId: string; candidateId: string }[],
 };
 
 export type HistoryEntry = {

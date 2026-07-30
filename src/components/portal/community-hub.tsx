@@ -2,23 +2,25 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Vote, PartyPopper, Award, ThumbsUp, ThumbsDown, MinusCircle, Check, Star, Gift, CalendarDays, MapPin } from 'lucide-react';
+import { Vote, PartyPopper, Award, ThumbsUp, ThumbsDown, MinusCircle, Check, Star, Gift, CalendarDays, MapPin, Crown } from 'lucide-react';
 import { toneVar } from '@/lib/status-tones';
-import { motionTally, tierFor, tierProgress, TIER_TONE, eventFillPct, isEventFull, type VoteChoice, type MotionStatus, type RewardTier, type EventCategory } from '@/domain/estate';
-import { residentVote, residentRsvp, residentRedeem } from '@/server/actions/resident-community';
+import { motionTally, electionTally, tierFor, tierProgress, TIER_TONE, eventFillPct, isEventFull, type VoteChoice, type MotionStatus, type RewardTier, type EventCategory } from '@/domain/estate';
+import { residentVote, residentRsvp, residentRedeem, residentVoteCandidate } from '@/server/actions/resident-community';
 
 export type PMotion = { id: string; ref: string; title: string; summary: string; status: MotionStatus; forWeight: number; againstWeight: number; abstainWeight: number; eligibleWeight: number; quorumPct: number; thresholdPct: number; closesISO: string; myChoice?: VoteChoice };
 export type PEvent = { id: string; title: string; category: EventCategory; venue: string; startISO: string; capacity: number; rsvps: number };
 export type MyRewards = { points: number; onTimeStreak: number; eventsAttended: number; pollsVoted: number; rank: number; total: number } | null;
 export type PPerk = { id: string; title: string; detail: string; cost: number; stock: number };
+export type PCandidate = { id: string; residentName: string; unitLabel: string; statement: string; votes: number };
+export type PElection = { id: string; ref: string; seatTitle: string; portfolio: string; closesISO: string; eligibleWeight: number; quorumPct: number; candidates: PCandidate[]; myCandidateId?: string } | null;
 
 const TIER_LABEL: Record<RewardTier, string> = { bronze: 'Bronze', silver: 'Silver', gold: 'Gold', platinum: 'Platinum' };
 const CHOICE_LABEL: Record<VoteChoice, string> = { for: 'For', against: 'Against', abstain: 'Abstain' };
 const pts = (n: number) => n.toLocaleString('en-NG');
 const day = (iso: string) => new Date(iso).toLocaleDateString('en-NG', { weekday: 'short', day: 'numeric', month: 'short' });
 
-export function CommunityHub({ firstName, motions, events, rewards, perks }: {
-  firstName: string; motions: PMotion[]; events: PEvent[]; rewards: MyRewards; perks: PPerk[];
+export function CommunityHub({ firstName, motions, events, rewards, perks, election }: {
+  firstName: string; motions: PMotion[]; events: PEvent[]; rewards: MyRewards; perks: PPerk[]; election: PElection;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -80,6 +82,39 @@ export function CommunityHub({ firstName, motions, events, rewards, perks }: {
           {openMotions.length === 0 && <div className="px-4 py-6 text-center text-[12.5px] text-text-3">No open votes right now.</div>}
         </div>
       </section>
+
+      {/* Board election */}
+      {election && (() => {
+        const t = electionTally(election);
+        const voted = election.candidates.find((c) => c.id === election.myCandidateId);
+        return (
+          <section className="bg-surface border rounded-2xl shadow-card overflow-hidden" style={{ borderColor: 'color-mix(in srgb, var(--tone-warn) 35%, transparent)' }}>
+            <div className="px-4 py-2.5 border-b border-border flex items-center gap-2"><Crown size={15} style={{ color: toneVar('warn') }} /><span className="text-[13px] font-semibold">Board election</span><span className="ml-auto text-[10.5px] text-text-3">one vote per home</span></div>
+            <div className="px-4 pt-3">
+              <div className="text-[12.5px] font-semibold">{election.seatTitle}</div>
+              <div className="text-[11px] text-text-3">Vacant seat · {election.portfolio} · closes {day(election.closesISO)}</div>
+              <div className="text-[10.5px] mt-1.5" style={{ color: toneVar(t.quorumMet ? 'success' : 'warn') }}>{t.turnoutPct}% turnout {t.quorumMet ? '· quorate ✓' : `· needs ${election.quorumPct}% to count`}</div>
+            </div>
+            <div className="p-3 flex flex-col gap-2">
+              {election.candidates.map((c) => {
+                const mine = election.myCandidateId === c.id;
+                const pct = t.ranked.find((r) => r.candidate.id === c.id)?.pct ?? 0;
+                return (
+                  <div key={c.id} className="rounded-xl border p-2.5" style={{ borderColor: mine ? toneVar('success') : 'var(--border)', background: mine ? `color-mix(in srgb, ${toneVar('success')} 7%, transparent)` : 'transparent' }}>
+                    <div className="flex items-center gap-2">
+                      <div className="min-w-0 flex-1"><div className="text-[12.5px] font-semibold truncate">{c.residentName} <span className="text-[10.5px] text-text-3 font-normal">· {c.unitLabel}</span></div><div className="text-[10.5px] text-text-3">{c.statement}</div></div>
+                      {election.myCandidateId ? <span className="text-[10.5px] font-mono text-text-3 flex-none">{c.votes} · {pct}%</span>
+                        : <button disabled={pending} onClick={() => act(() => residentVoteCandidate(election.id, c.id), `Voted · ${c.residentName}`)} className="text-[11.5px] px-3 h-8 rounded-lg font-medium bg-primary text-white disabled:opacity-50 flex-none">Vote</button>}
+                    </div>
+                    {election.myCandidateId && <div className="h-1.5 rounded-full bg-surface-2 overflow-hidden mt-1.5"><div className="h-full rounded-full" style={{ width: `${pct}%`, background: toneVar(mine ? 'success' : 'progress') }} /></div>}
+                  </div>
+                );
+              })}
+            </div>
+            {voted && <div className="px-4 pb-3 -mt-1 text-[12px] font-medium inline-flex items-center gap-1.5" style={{ color: toneVar('success') }}><Check size={13} /> You voted for {voted.residentName}</div>}
+          </section>
+        );
+      })()}
 
       {/* Events */}
       <section className="bg-surface border border-border rounded-2xl shadow-card overflow-hidden">
