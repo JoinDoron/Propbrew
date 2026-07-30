@@ -194,6 +194,7 @@ export const repos = {
   boardMembers: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'announcements', db.boardMembers, o ?? { limit: 50 }) },
   meetings: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'announcements', db.meetings, o ?? { limit: 50 }) },
   boardElections: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'announcements', db.boardElections, o ?? { limit: 20 }) },
+  proxyAssignments: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'announcements', db.proxyAssignments, o ?? { limit: 200 }) },
 };
 
 /**

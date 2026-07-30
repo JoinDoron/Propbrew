@@ -1,7 +1,7 @@
 import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
 import { NOW_MS } from '@/domain/ppm';
-import { BoardWorkspace, type BoardRow, type MeetingRow, type ElectionRow } from '@/components/estate/board-workspace';
+import { BoardWorkspace, type BoardRow, type MeetingRow, type ElectionRow, type EgmData } from '@/components/estate/board-workspace';
 import type { MotionStatus } from '@/domain/estate';
 
 /** Board & Committee — the residents' committee roster (roles, portfolios, term
@@ -13,6 +13,14 @@ export default async function BoardPage() {
   const meetings = repos.meetings.list(actor).items;
   const motions = repos.motions.list(actor).items;
   const elections = repos.boardElections.list(actor).items;
+  const proxies = repos.proxyAssignments.list(actor).items;
+
+  const egmMotion = motions.find((m) => m.egm && m.status === 'open');
+  const egmMeeting = egmMotion?.egmMeetingId ? meetings.find((mt) => mt.id === egmMotion.egmMeetingId) : undefined;
+  const egm: EgmData = egmMotion ? {
+    motion: { id: egmMotion.id, ref: egmMotion.ref, title: egmMotion.title, meetingLabel: egmMeeting ? `${egmMeeting.type} · ${egmMeeting.whenISO.slice(0, 10)}` : 'EGM', forWeight: egmMotion.forWeight, againstWeight: egmMotion.againstWeight, abstainWeight: egmMotion.abstainWeight, eligibleWeight: egmMotion.eligibleWeight, quorumPct: egmMotion.quorumPct, thresholdPct: egmMotion.thresholdPct },
+    proxies: proxies.filter((p) => p.motionId === egmMotion.id).map((p) => ({ id: p.id, grantorName: p.grantorName, grantorUnit: p.grantorUnit, holderName: p.holderName, direction: p.direction, status: p.status })),
+  } : null;
 
   const motionCounts = { draft: 0, open: 0, passed: 0, rejected: 0, quorum_failed: 0 } as Record<MotionStatus, number>;
   for (const m of motions) motionCounts[m.status] += 1;
@@ -23,7 +31,7 @@ export default async function BoardPage() {
 
   return (
     <div className="max-w-[1000px] mx-auto">
-      <BoardWorkspace members={memberRows} meetings={meetingRows} elections={electionRows} motionCounts={motionCounts} nowMs={NOW_MS} />
+      <BoardWorkspace members={memberRows} meetings={meetingRows} elections={electionRows} egm={egm} motionCounts={motionCounts} nowMs={NOW_MS} />
     </div>
   );
 }

@@ -71,6 +71,19 @@ export type Motion = TenantScoped & {
   /** Vote weights (unit-weighted). eligibleWeight is the whole electorate. */
   eligibleWeight: number; forWeight: number; againstWeight: number; abstainWeight: number;
   quorumPct: number; thresholdPct: number; // pass needs quorum met AND approval ≥ threshold
+  /** Decided at an EGM — residents who can't attend may assign a directed proxy. */
+  egm?: boolean; egmMeetingId?: string;
+};
+
+/* --- proxy voting (for an EGM motion) ------------------------------------- */
+
+export type ProxyStatus = 'held' | 'exercised' | 'revoked';
+export type ProxyAssignment = TenantScoped & {
+  id: string; estateId: string; motionId: string;
+  grantorName: string; grantorUnit: string; grantorUserId: string; // the home giving its proxy
+  holderName: string;        // who carries it (e.g. "Chair · Ngozi Okafor")
+  direction: VoteChoice;     // the instructed direction the holder must cast
+  status: ProxyStatus;
 };
 
 /* --- events & amenities --------------------------------------------------- */

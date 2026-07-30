@@ -2,12 +2,15 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Vote, PartyPopper, Award, ThumbsUp, ThumbsDown, MinusCircle, Check, Star, Gift, CalendarDays, MapPin, Crown } from 'lucide-react';
+import { Vote, PartyPopper, Award, ThumbsUp, ThumbsDown, MinusCircle, Check, Star, Gift, CalendarDays, MapPin, Crown, Scale, X } from 'lucide-react';
 import { toneVar } from '@/lib/status-tones';
 import { motionTally, electionTally, tierFor, tierProgress, TIER_TONE, eventFillPct, isEventFull, type VoteChoice, type MotionStatus, type RewardTier, type EventCategory } from '@/domain/estate';
-import { residentVote, residentRsvp, residentRedeem, residentVoteCandidate } from '@/server/actions/resident-community';
+import { residentVote, residentRsvp, residentRedeem, residentVoteCandidate, residentAssignProxy, residentRevokeProxy } from '@/server/actions/resident-community';
 
-export type PMotion = { id: string; ref: string; title: string; summary: string; status: MotionStatus; forWeight: number; againstWeight: number; abstainWeight: number; eligibleWeight: number; quorumPct: number; thresholdPct: number; closesISO: string; myChoice?: VoteChoice };
+export type MyProxy = { holderName: string; direction: VoteChoice; status: string };
+export type PMotion = { id: string; ref: string; title: string; summary: string; status: MotionStatus; forWeight: number; againstWeight: number; abstainWeight: number; eligibleWeight: number; quorumPct: number; thresholdPct: number; closesISO: string; myChoice?: VoteChoice; egm?: boolean; myProxy?: MyProxy };
+
+const PROXY_HOLDERS = ['Chair · Ngozi Okafor', 'Secretary · Ada Obi'];
 export type PEvent = { id: string; title: string; category: EventCategory; venue: string; startISO: string; capacity: number; rsvps: number };
 export type MyRewards = { points: number; onTimeStreak: number; eventsAttended: number; pollsVoted: number; rank: number; total: number } | null;
 export type PPerk = { id: string; title: string; detail: string; cost: number; stock: number };
@@ -66,15 +69,23 @@ export function CommunityHub({ firstName, motions, events, rewards, perks, elect
                   <div style={{ width: `${(m.againstWeight / total) * 100}%`, background: toneVar('danger') }} />
                   <div style={{ width: `${(m.abstainWeight / total) * 100}%`, background: toneVar('muted') }} />
                 </div>
-                <div className="text-[10.5px] text-text-3 mt-1">{t.turnoutPct}% turnout {t.quorumMet ? '· quorate' : `· needs ${m.quorumPct}%`} · {t.approvalPct}% in favour · closes {day(m.closesISO)}</div>
+                <div className="text-[10.5px] text-text-3 mt-1">{t.turnoutPct}% turnout {t.quorumMet ? '· quorate' : `· needs ${m.quorumPct}%`} · {t.approvalPct}% in favour · closes {day(m.closesISO)}{m.egm ? ' · EGM' : ''}</div>
                 {m.myChoice ? (
                   <div className="mt-2 text-[12px] font-medium inline-flex items-center gap-1.5 px-2.5 h-8 rounded-lg" style={{ background: `color-mix(in srgb, ${toneVar('success')} 12%, transparent)`, color: toneVar('success') }}><Check size={13} /> You voted {CHOICE_LABEL[m.myChoice]}</div>
-                ) : (
-                  <div className="flex gap-1.5 mt-2">
-                    <button disabled={pending} onClick={() => act(() => residentVote(m.id, 'for'), 'Your vote is in · For')} className="flex-1 text-[12px] px-2.5 h-9 rounded-lg font-medium inline-flex items-center justify-center gap-1 disabled:opacity-50" style={{ background: `color-mix(in srgb, ${toneVar('success')} 12%, transparent)`, color: toneVar('success') }}><ThumbsUp size={13} /> For</button>
-                    <button disabled={pending} onClick={() => act(() => residentVote(m.id, 'against'), 'Your vote is in · Against')} className="flex-1 text-[12px] px-2.5 h-9 rounded-lg font-medium inline-flex items-center justify-center gap-1 disabled:opacity-50" style={{ background: `color-mix(in srgb, ${toneVar('danger')} 12%, transparent)`, color: toneVar('danger') }}><ThumbsDown size={13} /> Against</button>
-                    <button disabled={pending} onClick={() => act(() => residentVote(m.id, 'abstain'), 'Your vote is in · Abstain')} className="text-[12px] px-2.5 h-9 rounded-lg font-medium inline-flex items-center justify-center gap-1 border border-border-2 disabled:opacity-50"><MinusCircle size={13} /></button>
+                ) : m.myProxy ? (
+                  <div className="mt-2 flex items-center gap-2 flex-wrap">
+                    <span className="text-[12px] font-medium inline-flex items-center gap-1.5 px-2.5 h-8 rounded-lg" style={{ background: `color-mix(in srgb, ${toneVar('progress')} 12%, transparent)`, color: toneVar('progress') }}><Scale size={13} /> Proxy to {m.myProxy.holderName.replace(/^.*· /, '')} · {CHOICE_LABEL[m.myProxy.direction]}{m.myProxy.status === 'exercised' ? ' · cast ✓' : ''}</span>
+                    {m.myProxy.status === 'held' && <button disabled={pending} onClick={() => act(() => residentRevokeProxy(m.id), 'Proxy revoked')} className="text-[11px] px-2.5 h-8 rounded-lg border border-border-2 disabled:opacity-50">Revoke</button>}
                   </div>
+                ) : (
+                  <>
+                    <div className="flex gap-1.5 mt-2">
+                      <button disabled={pending} onClick={() => act(() => residentVote(m.id, 'for'), 'Your vote is in · For')} className="flex-1 text-[12px] px-2.5 h-9 rounded-lg font-medium inline-flex items-center justify-center gap-1 disabled:opacity-50" style={{ background: `color-mix(in srgb, ${toneVar('success')} 12%, transparent)`, color: toneVar('success') }}><ThumbsUp size={13} /> For</button>
+                      <button disabled={pending} onClick={() => act(() => residentVote(m.id, 'against'), 'Your vote is in · Against')} className="flex-1 text-[12px] px-2.5 h-9 rounded-lg font-medium inline-flex items-center justify-center gap-1 disabled:opacity-50" style={{ background: `color-mix(in srgb, ${toneVar('danger')} 12%, transparent)`, color: toneVar('danger') }}><ThumbsDown size={13} /> Against</button>
+                      <button disabled={pending} onClick={() => act(() => residentVote(m.id, 'abstain'), 'Your vote is in · Abstain')} className="text-[12px] px-2.5 h-9 rounded-lg font-medium inline-flex items-center justify-center gap-1 border border-border-2 disabled:opacity-50"><MinusCircle size={13} /></button>
+                    </div>
+                    {m.egm && <ProxyPicker motionId={m.id} pending={pending} onAssign={(holder, dir) => act(() => residentAssignProxy(m.id, holder, dir), 'Proxy assigned')} />}
+                  </>
                 )}
               </div>
             );
@@ -170,6 +181,29 @@ export function CommunityHub({ firstName, motions, events, rewards, perks, elect
       )}
 
       {toast && <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[90] bg-text text-surface text-[13px] font-medium px-4 py-2.5 rounded-xl shadow-float animate-fade">{toast}</div>}
+    </div>
+  );
+}
+
+function ProxyPicker({ pending, onAssign }: { motionId: string; pending: boolean; onAssign: (holder: string, dir: VoteChoice) => void }) {
+  const [open, setOpen] = useState(false);
+  const [holder, setHolder] = useState(PROXY_HOLDERS[0]);
+  const [dir, setDir] = useState<VoteChoice>('for');
+  if (!open) return (
+    <button onClick={() => setOpen(true)} className="mt-2 text-[11.5px] text-text-3 inline-flex items-center gap-1.5 hover:text-text-2"><Scale size={12} /> Can’t attend the EGM? Assign a proxy</button>
+  );
+  return (
+    <div className="mt-2 rounded-xl border border-border p-2.5 bg-surface-2">
+      <div className="flex items-center justify-between mb-2"><span className="text-[11.5px] font-semibold">Assign your proxy</span><button onClick={() => setOpen(false)} className="w-6 h-6 rounded grid place-items-center hover:bg-surface"><X size={14} /></button></div>
+      <label className="block text-[10.5px] text-text-3 mb-1">Who carries your vote</label>
+      <select value={holder} onChange={(e) => setHolder(e.target.value)} className="w-full h-8 px-2 rounded-lg border border-border-2 bg-surface text-[12.5px] mb-2">{PROXY_HOLDERS.map((h) => <option key={h} value={h}>{h}</option>)}</select>
+      <label className="block text-[10.5px] text-text-3 mb-1">Instruct them to vote</label>
+      <div className="flex gap-1.5 mb-2.5">
+        {(['for', 'against', 'abstain'] as VoteChoice[]).map((d) => (
+          <button key={d} onClick={() => setDir(d)} className="flex-1 text-[11.5px] h-8 rounded-lg font-medium capitalize border" style={{ borderColor: dir === d ? toneVar(d === 'for' ? 'success' : d === 'against' ? 'danger' : 'muted') : 'var(--border-2)', background: dir === d ? `color-mix(in srgb, ${toneVar(d === 'for' ? 'success' : d === 'against' ? 'danger' : 'muted')} 12%, transparent)` : 'transparent', color: dir === d ? toneVar(d === 'for' ? 'success' : d === 'against' ? 'danger' : 'muted') : 'var(--text-2)' }}>{d}</button>
+        ))}
+      </div>
+      <button disabled={pending} onClick={() => onAssign(holder, dir)} className="w-full h-9 rounded-lg bg-primary text-white text-[12.5px] font-medium disabled:opacity-50">{pending ? 'Assigning…' : 'Assign proxy'}</button>
     </div>
   );
 }

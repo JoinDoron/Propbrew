@@ -2,21 +2,24 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Landmark, Users, CalendarClock, Vote, Gavel, Plus, X, Check, CalendarCheck, FileText, UserPlus, Crown, Trophy } from 'lucide-react';
+import { Landmark, Users, CalendarClock, Vote, Gavel, Plus, X, Check, CalendarCheck, FileText, UserPlus, Crown, Trophy, Scale, Zap } from 'lucide-react';
 import { toneVar, type Tone } from '@/lib/status-tones';
-import { termStatus, meetingState, MOTION_STATUS_LABEL, electionTally, electionWinner, ELECTION_STATUS_LABEL, electionStatusTone, type BoardRole, type MeetingType, type MeetingStatus, type MotionStatus, type ElectionStatus } from '@/domain/estate';
-import { createMotion, recordMeetingHeld, nominateCandidate, openElectionVoting, decideElection, type CreateMotionInput, type NominateInput } from '@/server/actions/estate';
+import { termStatus, meetingState, MOTION_STATUS_LABEL, electionTally, electionWinner, ELECTION_STATUS_LABEL, electionStatusTone, motionTally, proxyWeights, projectedTally, type BoardRole, type MeetingType, type MeetingStatus, type MotionStatus, type ElectionStatus, type ProxyStatus, type VoteChoice } from '@/domain/estate';
+import { createMotion, recordMeetingHeld, nominateCandidate, openElectionVoting, decideElection, exerciseProxies, type CreateMotionInput, type NominateInput } from '@/server/actions/estate';
 
 export type BoardRow = { id: string; name: string; unitLabel: string; role: BoardRole; portfolio: string; sinceISO: string; termEndISO: string };
 export type MeetingRow = { id: string; title: string; type: MeetingType; whenISO: string; venue: string; status: MeetingStatus; resolutions: number; attendees: number; quorumRequired: number };
 export type CandidateRow = { id: string; residentName: string; unitLabel: string; statement: string; votes: number };
 export type ElectionRow = { id: string; ref: string; seatTitle: string; portfolio: string; status: ElectionStatus; closesISO: string; eligibleWeight: number; quorumPct: number; candidates: CandidateRow[]; winnerCandidateId?: string };
+export type ProxyRow = { id: string; grantorName: string; grantorUnit: string; holderName: string; direction: VoteChoice; status: ProxyStatus };
+export type EgmMotion = { id: string; ref: string; title: string; meetingLabel: string; forWeight: number; againstWeight: number; abstainWeight: number; eligibleWeight: number; quorumPct: number; thresholdPct: number };
+export type EgmData = { motion: EgmMotion; proxies: ProxyRow[] } | null;
 
 const ROLE_TONE: Record<BoardRole, Tone> = { Chair: 'success', Treasurer: 'info', Secretary: 'progress', Member: 'muted' };
 const day = (iso: string) => new Date(iso).toLocaleDateString('en-NG', { weekday: 'short', day: 'numeric', month: 'short' });
 
-export function BoardWorkspace({ members, meetings, elections, motionCounts, nowMs }: {
-  members: BoardRow[]; meetings: MeetingRow[]; elections: ElectionRow[];
+export function BoardWorkspace({ members, meetings, elections, egm, motionCounts, nowMs }: {
+  members: BoardRow[]; meetings: MeetingRow[]; elections: ElectionRow[]; egm: EgmData;
   motionCounts: Record<MotionStatus, number>; nowMs: number;
 }) {
   const [showMotion, setShowMotion] = useState(false);
@@ -52,6 +55,7 @@ export function BoardWorkspace({ members, meetings, elections, motionCounts, now
         <Kpi label="Terms ending" value={String(termsEnding)} tone={termsEnding ? 'warn' : 'success'} icon={<Gavel size={16} />} />
       </div>
 
+      {egm && <EgmCard egm={egm} onToast={flash} />}
       {elections.map((el) => <ElectionCard key={el.id} el={el} nowMs={nowMs} onNominate={() => setNominateFor(el)} onToast={flash} />)}
 
       <div className="grid grid-cols-1 min-[900px]:grid-cols-[1fr_320px] gap-3.5 items-start">
@@ -167,6 +171,62 @@ function HeldDialog({ meeting, onClose, onDone }: { meeting: MeetingRow; onClose
     </div>
   );
 }
+const DIR_TONE: Record<VoteChoice, Tone> = { for: 'success', against: 'danger', abstain: 'muted' };
+const PROXY_TONE: Record<ProxyStatus, Tone> = { held: 'progress', exercised: 'success', revoked: 'muted' };
+
+function EgmCard({ egm, onToast }: { egm: NonNullable<EgmData>; onToast: (m: string) => void }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const { motion: m, proxies } = egm;
+  const t = motionTally(m);
+  const held = proxies.filter((p) => p.status === 'held');
+  const w = proxyWeights(held);
+  const proj = projectedTally(m, held);
+  const exercised = proxies.filter((p) => p.status === 'exercised').length;
+  const act = () => start(async () => { const r = await exerciseProxies(m.id); if (r.ok) { router.refresh(); onToast(`Proxies cast · ${r.ref}`); } else onToast(r.error ?? 'Failed'); });
+
+  return (
+    <section className="bg-surface border rounded-2xl shadow-card overflow-hidden" style={{ borderColor: 'color-mix(in srgb, var(--tone-progress) 40%, transparent)' }}>
+      <div className="px-4 py-3 border-b border-border flex items-center gap-2 flex-wrap">
+        <span className="w-8 h-8 rounded-lg grid place-items-center flex-none" style={{ background: `color-mix(in srgb, ${toneVar('progress')} 14%, transparent)`, color: toneVar('progress') }}><Scale size={16} /></span>
+        <div className="min-w-0">
+          <div className="text-[13px] font-semibold flex items-center gap-1.5">EGM · {m.title}<span className="text-[10px] font-mono text-text-3">{m.ref}</span></div>
+          <div className="text-[11px] text-text-3">{m.meetingLabel} · proxy voting open</div>
+        </div>
+        <span className="ml-auto text-[10.5px] font-semibold px-2 h-6 inline-flex items-center rounded-full flex-none" style={{ background: `color-mix(in srgb, ${toneVar(t.quorumMet ? 'success' : 'warn')} 14%, transparent)`, color: toneVar(t.quorumMet ? 'success' : 'warn') }}>{t.turnoutPct}% turnout {t.quorumMet ? '· quorate' : `· needs ${m.quorumPct}%`}</span>
+      </div>
+
+      {/* quorum meter with projected extension */}
+      <div className="px-4 pt-3">
+        <div className="flex items-center justify-between text-[11px] mb-1"><span className="text-text-3">Quorum {held.length > 0 && !t.quorumMet && <span style={{ color: toneVar('progress') }}>· +{held.length} proxies projected</span>}</span><span className="font-mono" style={{ color: toneVar(proj.quorumMet ? 'success' : 'warn') }}>{proj.turnoutPct}% with proxies</span></div>
+        <div className="h-2.5 rounded-full bg-surface-2 overflow-hidden relative flex">
+          <div className="h-full" style={{ width: `${Math.min(100, t.turnoutPct)}%`, background: toneVar('progress') }} />
+          <div className="h-full" style={{ width: `${Math.max(0, Math.min(100, proj.turnoutPct) - t.turnoutPct)}%`, background: `repeating-linear-gradient(45deg, ${toneVar('progress')}, ${toneVar('progress')} 3px, transparent 3px, transparent 6px)` }} />
+          <span className="absolute top-[-2px] bottom-[-2px] w-px bg-text" style={{ left: `${Math.min(100, m.quorumPct)}%` }} />
+        </div>
+        <div className="text-[10.5px] mt-1" style={{ color: toneVar(proj.addsQuorum ? 'success' : 'muted') }}>{proj.addsQuorum ? `Exercising ${held.length} held ${held.length === 1 ? 'proxy' : 'proxies'} carries quorum → ${proj.passing ? 'motion passes' : 'still below approval threshold'}.` : t.quorumMet ? 'Quorum already met.' : `${held.length} held · not enough to reach quorum yet.`}</div>
+      </div>
+
+      {/* proxy register */}
+      <div className="px-4 py-2 mt-1 text-[11px] font-semibold text-text-2 flex items-center gap-1.5"><Users size={12} /> Proxy register · {w.forW} for · {w.againstW} against{exercised ? ` · ${exercised} cast` : ''}</div>
+      <div className="divide-y divide-border max-h-[200px] overflow-y-auto">
+        {proxies.map((p) => (
+          <div key={p.id} className="px-4 py-2 flex items-center gap-2">
+            <div className="min-w-0 flex-1"><div className="text-[12px] font-medium truncate">{p.grantorUnit} <span className="text-text-3 font-normal">→ {p.holderName}</span></div><div className="text-[10px] text-text-3">{p.grantorName}</div></div>
+            <span className="text-[10px] font-semibold px-1.5 h-4 inline-flex items-center rounded-full flex-none capitalize" style={{ background: `color-mix(in srgb, ${toneVar(DIR_TONE[p.direction])} 14%, transparent)`, color: toneVar(DIR_TONE[p.direction]) }}>{p.direction}</span>
+            <span className="text-[10px] font-semibold px-1.5 h-4 inline-flex items-center rounded-full flex-none capitalize" style={{ background: `color-mix(in srgb, ${toneVar(PROXY_TONE[p.status])} 14%, transparent)`, color: toneVar(PROXY_TONE[p.status]) }}>{p.status}</span>
+          </div>
+        ))}
+        {proxies.length === 0 && <div className="px-4 py-4 text-center text-[12px] text-text-3">No proxies assigned yet.</div>}
+      </div>
+      <div className="px-4 py-3 border-t border-border flex items-center gap-2">
+        <span className="text-[11px] text-text-3">{held.length} awaiting the Chair</span>
+        <button disabled={pending || held.length === 0} onClick={act} className="ml-auto text-[11.5px] px-3 h-8 rounded-lg font-medium bg-primary text-white inline-flex items-center gap-1 disabled:opacity-40"><Zap size={12} /> {pending ? 'Casting…' : 'Exercise proxies'}</button>
+      </div>
+    </section>
+  );
+}
+
 function ElectionCard({ el, nowMs, onNominate, onToast }: { el: ElectionRow; nowMs: number; onNominate: () => void; onToast: (m: string) => void }) {
   const router = useRouter();
   const [pending, start] = useTransition();

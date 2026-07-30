@@ -46,10 +46,45 @@ export async function residentVote(motionId: string, choice: VoteChoice): Promis
   if (!m) return { ok: false, error: 'Motion not found.' };
   if (m.status !== 'open') return { ok: false, error: 'Voting is not open on this motion.' };
   if (db.residentVotes.some((v) => v.motionId === motionId && v.userId === actor.userId)) return { ok: false, error: 'You have already voted on this motion.' };
+  // One weight per home: can't vote directly if you've handed someone your proxy.
+  if (db.proxyAssignments.some((p) => p.motionId === motionId && p.grantorUserId === actor.userId && p.status !== 'revoked')) return { ok: false, error: 'You’ve assigned a proxy for this motion — revoke it to vote yourself.' };
   db.residentVotes.push({ motionId, userId: actor.userId, choice });
   if (choice === 'for') m.forWeight += 1; else if (choice === 'against') m.againstWeight += 1; else m.abstainWeight += 1;
   paths();
   return { ok: true, ref: m.ref };
+}
+
+/** Hand your unit's vote to a holder (e.g. the Chair) with an instruction — for
+ *  when you can't attend the EGM. One proxy per home per motion; mutually
+ *  exclusive with voting directly. */
+export async function residentAssignProxy(motionId: string, holderName: string, direction: VoteChoice): Promise<Res> {
+  const actor = await getActor();
+  const notRes = requireResident(actor); if (notRes) return notRes;
+  const m = db.motions.find((x) => x.id === motionId && x.tenantId === actor.tenantId);
+  if (!m) return { ok: false, error: 'Motion not found.' };
+  if (m.status !== 'open') return { ok: false, error: 'Voting is not open on this motion.' };
+  if (!m.egm) return { ok: false, error: 'Proxies are only for EGM motions.' };
+  if (!holderName?.trim()) return { ok: false, error: 'Choose who will carry your proxy.' };
+  if (db.residentVotes.some((v) => v.motionId === motionId && v.userId === actor.userId)) return { ok: false, error: 'You’ve already voted directly on this motion.' };
+  if (db.proxyAssignments.some((p) => p.motionId === motionId && p.grantorUserId === actor.userId && p.status !== 'revoked')) return { ok: false, error: 'You’ve already assigned a proxy for this motion.' };
+  const me = repos.residents.list(actor).items.find((r) => r.userId === actor.userId);
+  db.proxyAssignments.push({
+    tenantId: actor.tenantId, id: `px-${actor.userId}-${motionId}`, estateId: (m.estateId as string),
+    motionId, grantorName: me?.name ?? 'Resident', grantorUnit: '—', grantorUserId: actor.userId,
+    holderName: holderName.trim(), direction, status: 'held',
+  } as (typeof db.proxyAssignments)[number]);
+  paths();
+  return { ok: true, ref: holderName.trim() };
+}
+
+export async function residentRevokeProxy(motionId: string): Promise<Res> {
+  const actor = await getActor();
+  const notRes = requireResident(actor); if (notRes) return notRes;
+  const px = db.proxyAssignments.find((p) => p.motionId === motionId && p.grantorUserId === actor.userId && p.status === 'held');
+  if (!px) return { ok: false, error: 'No proxy to revoke (it may already be exercised).' };
+  px.status = 'revoked';
+  paths();
+  return { ok: true };
 }
 
 /** Cast a resident's single unit-weighted ballot for a candidate in the board

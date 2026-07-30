@@ -314,3 +314,21 @@ export async function decideElection(electionId: string): Promise<Res> {
   revalidateElection();
   return { ok: true, ref: winner.residentName };
 }
+
+/* --- proxy voting (EGM) --------------------------------------------------- */
+/** The Chair casts the held proxy block onto the motion — each directed proxy
+ *  adds its grantor's unit weight, then is marked exercised. */
+export async function exerciseProxies(motionId: string): Promise<Res> {
+  const g = await gate('announcements'); if (!g.ok) return g;
+  const m = db.motions.find((x) => x.id === motionId);
+  if (!m) return { ok: false, error: 'Motion not found.' };
+  if (m.status !== 'open') return { ok: false, error: 'Voting is not open on this motion.' };
+  const held = db.proxyAssignments.filter((p) => p.motionId === motionId && p.status === 'held');
+  if (held.length === 0) return { ok: false, error: 'No proxies waiting to be exercised.' };
+  for (const p of held) {
+    if (p.direction === 'for') m.forWeight += 1; else if (p.direction === 'against') m.againstWeight += 1; else m.abstainWeight += 1;
+    p.status = 'exercised';
+  }
+  ['/governance', '/board', '/portal/community'].forEach((path) => revalidatePath(path));
+  return { ok: true, ref: `${held.length} proxies` };
+}

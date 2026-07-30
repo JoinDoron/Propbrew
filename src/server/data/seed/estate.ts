@@ -6,7 +6,7 @@
  */
 
 import { SEED } from '@/server/identities';
-import type { ResidentFeedback, EngagementSnapshot, Complaint, CollectionCase, Tenancy, Locker, Parcel, Motion, CommunityEvent, RewardMember, Perk, BoardMember, Meeting, BoardElection } from '@/domain/estate/types';
+import type { ResidentFeedback, EngagementSnapshot, Complaint, CollectionCase, Tenancy, Locker, Parcel, Motion, CommunityEvent, RewardMember, Perk, BoardMember, Meeting, BoardElection, ProxyAssignment } from '@/domain/estate/types';
 
 const A = SEED.tenantA;
 const G = SEED.estateGardens;
@@ -77,7 +77,7 @@ export const parcels = ([
 // eligibleWeight 240 units. mo-2 sits just under its 33% quorum — a few votes flip it.
 export const motions = ([
   { tenantId: A, id: 'mo-1', estateId: G, ref: 'AGM-01', title: '2026/27 service-charge budget (+8%)', summary: 'Approve the annual budget with an 8% increase covering diesel, security and sinking fund.', category: 'budget', status: 'open', opensISO: '2026-07-20', closesISO: '2026-08-03', eligibleWeight: 240, forWeight: 96, againstWeight: 54, abstainWeight: 12, quorumPct: 33, thresholdPct: 50 },
-  { tenantId: A, id: 'mo-2', estateId: G, ref: 'AGM-02', title: 'Install solar + inverter for common areas', summary: 'Capital project to cut diesel reliance on common-area power via a 40kVA solar/inverter system.', category: 'works', status: 'open', opensISO: '2026-07-22', closesISO: '2026-08-05', eligibleWeight: 240, forWeight: 69, againstWeight: 6, abstainWeight: 2, quorumPct: 33, thresholdPct: 66 },
+  { tenantId: A, id: 'mo-2', estateId: G, ref: 'AGM-02', title: 'Install solar + inverter for common areas', summary: 'Capital project to cut diesel reliance on common-area power via a 40kVA solar/inverter system.', category: 'works', status: 'open', opensISO: '2026-07-22', closesISO: '2026-08-05', eligibleWeight: 240, forWeight: 69, againstWeight: 6, abstainWeight: 2, quorumPct: 33, thresholdPct: 66, egm: true, egmMeetingId: 'mt-2' },
   { tenantId: A, id: 'mo-3', estateId: G, ref: 'AGM-03', title: 'Amend bylaw: short-let restrictions', summary: 'Restrict unregistered short-let subleasing; require estate registration for any guest stay under 30 days.', category: 'rule', status: 'passed', opensISO: '2026-06-15', closesISO: '2026-06-29', eligibleWeight: 240, forWeight: 130, againstWeight: 60, abstainWeight: 10, quorumPct: 33, thresholdPct: 50 },
   { tenantId: A, id: 'mo-4', estateId: G, ref: 'AGM-04', title: 'Playground renovation levy (₦15k/unit)', summary: 'One-off levy to rebuild the Block D playground and add shade sails.', category: 'works', status: 'quorum_failed', opensISO: '2026-06-01', closesISO: '2026-06-15', eligibleWeight: 240, forWeight: 40, againstWeight: 10, abstainWeight: 5, quorumPct: 33, thresholdPct: 50 },
   { tenantId: A, id: 'mo-5', estateId: G, ref: 'AGM-05', title: 'Elect a new resident board member', summary: 'Open nominations and vote for the vacant residents’ committee seat.', category: 'board', status: 'draft', opensISO: '2026-08-10', closesISO: '2026-08-24', eligibleWeight: 240, forWeight: 0, againstWeight: 0, abstainWeight: 0, quorumPct: 33, thresholdPct: 50 },
@@ -137,3 +137,14 @@ export const boardElections = ([
     ],
   },
 ] as unknown as BoardElection[]);
+
+/** Proxy register for the solar EGM motion (mo-2). Four homes can't attend the
+ *  05 Aug EGM and have assigned directed 'for' proxies to the Chair. The motion
+ *  sits at 77/240 = 32% (one below quorum) with ~92% approval — exercising these
+ *  four proxies pushes turnout to 81/240 = 34%, carrying the motion. */
+export const proxyAssignments = ([
+  { tenantId: A, id: 'px-1', estateId: G, motionId: 'mo-2', grantorName: 'Ada Obi', grantorUnit: 'Block D · 01A', grantorUserId: 'u-ada', holderName: 'Chair · Ngozi Okafor', direction: 'for', status: 'held' },
+  { tenantId: A, id: 'px-2', estateId: G, motionId: 'mo-2', grantorName: 'Yusuf Bello', grantorUnit: 'Block C · 11C', grantorUserId: 'u-yusuf', holderName: 'Chair · Ngozi Okafor', direction: 'for', status: 'held' },
+  { tenantId: A, id: 'px-3', estateId: G, motionId: 'mo-2', grantorName: 'David Okon', grantorUnit: 'Block D · 07B', grantorUserId: 'u-david', holderName: 'Chair · Ngozi Okafor', direction: 'for', status: 'held' },
+  { tenantId: A, id: 'px-4', estateId: G, motionId: 'mo-2', grantorName: 'Kemi Adeyinka', grantorUnit: 'Block C · 03B', grantorUserId: 'u-kemi', holderName: 'Chair · Ngozi Okafor', direction: 'against', status: 'held' },
+] as unknown as ProxyAssignment[]);

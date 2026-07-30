@@ -83,6 +83,7 @@ export const db = {
   meetings: clone(seed.meetings),
   // Deep-clone: candidate vote counts mutate, so the nested array must not alias the seed.
   boardElections: seed.boardElections.map((e) => ({ ...e, candidates: e.candidates.map((c) => ({ ...c })) })),
+  proxyAssignments: clone(seed.proxyAssignments),
   // One-vote-per-resident ledgers for portal e-voting (userId keyed).
   residentVotes: [] as { motionId: string; userId: string; choice: string }[],
   electionVotes: [] as { electionId: string; userId: string; candidateId: string }[],

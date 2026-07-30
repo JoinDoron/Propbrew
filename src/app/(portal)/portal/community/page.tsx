@@ -12,7 +12,7 @@ import type { VoteChoice } from '@/domain/estate';
  *  (see server/actions/resident-community.ts). */
 export default async function ResidentCommunityPage() {
   const { actor } = await requireCapability('announcements');
-  const { motions, events, rewardMembers, perks, myVotes, elections, myElectionVotes } = residentCommunityData(actor);
+  const { motions, events, rewardMembers, perks, myVotes, elections, myElectionVotes, myProxies } = residentCommunityData(actor);
   const myName = repos.residents.list(actor).items.find((r) => r.userId === actor.userId)?.name;
 
   const board = leaderboard(rewardMembers);
@@ -23,6 +23,7 @@ export default async function ResidentCommunityPage() {
     id: m.id, ref: m.ref, title: m.title, summary: m.summary, status: m.status,
     forWeight: m.forWeight, againstWeight: m.againstWeight, abstainWeight: m.abstainWeight, eligibleWeight: m.eligibleWeight,
     quorumPct: m.quorumPct, thresholdPct: m.thresholdPct, closesISO: m.closesISO, myChoice: myVotes.get(m.id) as VoteChoice | undefined,
+    egm: m.egm, myProxy: myProxies.get(m.id),
   }));
   const eventRows: PEvent[] = events
     .filter((e) => !e.cancelled && Date.parse(e.endISO) >= NOW_MS)

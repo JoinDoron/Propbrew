@@ -10,7 +10,7 @@ import type {
   ResidentFeedback, Sentiment, EngagementSnapshot, Complaint,
   CollectionCase, DunningStage, Tenancy, TenancyStage, Parcel, Locker,
   Motion, MotionStatus, CommunityEvent, RewardTier, RewardMember,
-  BoardMember, Meeting, BoardElection, Candidate,
+  BoardMember, Meeting, BoardElection, Candidate, ProxyAssignment,
 } from './types';
 
 const DAY = 24 * 3600 * 1000;
@@ -272,4 +272,30 @@ export const ELECTION_STATUS_LABEL: Record<BoardElection['status'], string> = {
 };
 export function electionStatusTone(s: BoardElection['status']): Tone {
   return s === 'decided' ? 'success' : s === 'voting' ? 'progress' : 'info';
+}
+
+/* --- proxy voting --------------------------------------------------------- */
+
+/** The proxies still to be exercised on a motion (held, not revoked/spent). */
+export function heldProxies<T extends Pick<ProxyAssignment, 'motionId' | 'status'>>(proxies: readonly T[], motionId: string): T[] {
+  return proxies.filter((p) => p.motionId === motionId && p.status === 'held');
+}
+
+/** Directed weight a block of proxies would add to a motion when exercised. */
+export function proxyWeights(proxies: readonly Pick<ProxyAssignment, 'direction'>[]): { forW: number; againstW: number; abstainW: number; total: number } {
+  const forW = proxies.filter((p) => p.direction === 'for').length;
+  const againstW = proxies.filter((p) => p.direction === 'against').length;
+  const abstainW = proxies.filter((p) => p.direction === 'abstain').length;
+  return { forW, againstW, abstainW, total: proxies.length };
+}
+
+/** How the tally WOULD look if the held proxies were exercised now — the pitch
+ *  for exercising them (usually: crosses quorum). */
+export function projectedTally(m: MotionLike, held: readonly Pick<ProxyAssignment, 'direction'>[]): { turnoutPct: number; approvalPct: number; quorumMet: boolean; passing: boolean; addsQuorum: boolean } {
+  const w = proxyWeights(held);
+  const projected: MotionLike = {
+    ...m, forWeight: m.forWeight + w.forW, againstWeight: m.againstWeight + w.againstW, abstainWeight: m.abstainWeight + w.abstainW,
+  };
+  const now = motionTally(m); const then = motionTally(projected);
+  return { turnoutPct: then.turnoutPct, approvalPct: then.approvalPct, quorumMet: then.quorumMet, passing: then.passing, addsQuorum: !now.quorumMet && then.quorumMet };
 }

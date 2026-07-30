@@ -8,6 +8,7 @@ import {
   motionTally, motionOutcome, eventFillPct, isEventFull, eventState, amenityLoad,
   tierFor, tierProgress, pointsIssued, leaderboard,
   termStatus, meetingState, electionTally, electionWinner,
+  heldProxies, proxyWeights, projectedTally,
 } from '@/domain/estate/engine';
 
 const NOW = Date.parse('2026-07-26');
@@ -136,5 +137,21 @@ describe('board election', () => {
     expect(electionTally(tie).quorumMet).toBe(true);
     expect(electionTally(tie).tie).toBe(true);
     expect(electionWinner(tie)).toBeNull();
+  });
+});
+
+describe('proxy voting (EGM)', () => {
+  it('exercising the held proxy block carries the solar EGM motion over quorum', () => {
+    const solar = seed.motions.find((m) => m.id === 'mo-2')!; // 77/240 = 32%, below the 33% quorum
+    expect(motionTally(solar).quorumMet).toBe(false);
+    const held = heldProxies(seed.proxyAssignments, 'mo-2');
+    expect(held).toHaveLength(4); // all four seeded proxies are held
+    const w = proxyWeights(held);
+    expect(w.forW).toBe(3); expect(w.againstW).toBe(1); // directed mix
+    const proj = projectedTally(solar, held);
+    expect(proj.turnoutPct).toBe(34); // 81/240
+    expect(proj.quorumMet).toBe(true);
+    expect(proj.addsQuorum).toBe(true); // this block is what carries quorum
+    expect(proj.passing).toBe(true); // approval still clears 66%
   });
 });
