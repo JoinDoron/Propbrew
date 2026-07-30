@@ -209,6 +209,34 @@ export async function createEvent(input: CreateEventInput): Promise<Res> {
   return { ok: true, ref: input.title.trim() };
 }
 
+/* --- board & committee ---------------------------------------------------- */
+let moSeq = 0;
+export type CreateMotionInput = { title: string; summary: string; category: 'budget' | 'rule' | 'works' | 'board'; quorumPct: number; thresholdPct: number };
+export async function createMotion(input: CreateMotionInput): Promise<Res> {
+  const g = await gate('announcements', 'create'); if (!g.ok) return g;
+  if (!input.title?.trim()) return { ok: false, error: 'Enter a motion title.' };
+  const seq = db.motions.length + (++moSeq);
+  const first = db.motions[0];
+  db.motions.push({
+    tenantId: first?.tenantId ?? 't-lekki', id: `mo-new-${moSeq}`, estateId: (first?.estateId as string) ?? 's-gardens',
+    ref: `AGM-${String(seq).padStart(2, '0')}`, title: input.title.trim(), summary: input.summary.trim() || 'Motion tabled by the committee.',
+    category: input.category, status: 'draft', opensISO: NOW.slice(0, 10), closesISO: NOW.slice(0, 10),
+    eligibleWeight: 240, forWeight: 0, againstWeight: 0, abstainWeight: 0,
+    quorumPct: Math.min(100, Math.max(1, Math.round(input.quorumPct || 33))), thresholdPct: Math.min(100, Math.max(1, Math.round(input.thresholdPct || 50))),
+  } as (typeof db.motions)[number]);
+  revalidate();
+  return { ok: true, ref: `AGM-${String(seq).padStart(2, '0')}` };
+}
+
+export async function recordMeetingHeld(id: string, attendees: number): Promise<Res> {
+  const g = await gate('announcements'); if (!g.ok) return g;
+  const m = db.meetings.find((x) => x.id === id);
+  if (!m) return { ok: false, error: 'Meeting not found.' };
+  m.status = 'held'; m.attendees = Math.max(0, Math.round(attendees));
+  revalidate();
+  return { ok: true, ref: m.title };
+}
+
 /* --- loyalty & rewards ---------------------------------------------------- */
 export async function awardPoints(memberId: string, reason: EarnReason): Promise<Res> {
   const g = await gate('announcements'); if (!g.ok) return g;

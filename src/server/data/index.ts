@@ -191,6 +191,8 @@ export const repos = {
   communityEvents: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'bookings_amenities', db.communityEvents, o ?? { limit: 100 }) },
   rewardMembers: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'announcements', db.rewardMembers, o ?? { limit: 100 }) },
   perks: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'announcements', db.perks, o ?? { limit: 100 }) },
+  boardMembers: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'announcements', db.boardMembers, o ?? { limit: 50 }) },
+  meetings: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'announcements', db.meetings, o ?? { limit: 50 }) },
 };
 
 /**

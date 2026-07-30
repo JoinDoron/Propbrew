@@ -79,6 +79,10 @@ export const db = {
   communityEvents: clone(seed.communityEvents),
   rewardMembers: clone(seed.rewardMembers),
   perks: clone(seed.perks),
+  boardMembers: clone(seed.boardMembers),
+  meetings: clone(seed.meetings),
+  // One-vote-per-resident ledger for portal e-voting (userId keyed).
+  residentVotes: [] as { motionId: string; userId: string; choice: string }[],
 };
 
 export type HistoryEntry = {

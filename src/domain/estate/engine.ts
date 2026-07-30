@@ -10,6 +10,7 @@ import type {
   ResidentFeedback, Sentiment, EngagementSnapshot, Complaint,
   CollectionCase, DunningStage, Tenancy, TenancyStage, Parcel, Locker,
   Motion, MotionStatus, CommunityEvent, RewardTier, RewardMember,
+  BoardMember, Meeting,
 } from './types';
 
 const DAY = 24 * 3600 * 1000;
@@ -228,3 +229,19 @@ export function pointsIssued(members: readonly RewardMember[]): number {
 }
 export const EARN_POINTS = { on_time_payment: 100, event: 50, poll: 30 } as const;
 export type EarnReason = keyof typeof EARN_POINTS;
+
+/* --- board & committee ---------------------------------------------------- */
+
+/** Board term status by expiry date. */
+export function termStatus(m: Pick<BoardMember, 'termEndISO'>, nowMs: number): { daysLeft: number; band: Tone; label: string } {
+  const daysLeft = Math.round((Date.parse(m.termEndISO) - nowMs) / DAY);
+  const band: Tone = daysLeft < 0 ? 'danger' : daysLeft <= 90 ? 'warn' : 'success';
+  return { daysLeft, band, label: daysLeft < 0 ? 'Term ended' : daysLeft <= 90 ? 'Term ending' : 'In term' };
+}
+
+export function meetingState(m: Pick<Meeting, 'status' | 'whenISO' | 'attendees' | 'quorumRequired'>, nowMs: number): { tone: Tone; label: string; quorate: boolean } {
+  const quorate = m.attendees >= m.quorumRequired;
+  if (m.status === 'held') return { tone: quorate ? 'success' : 'warn', label: quorate ? 'Held · quorate' : 'Held · inquorate', quorate };
+  const soon = Date.parse(m.whenISO) - nowMs <= 7 * DAY;
+  return { tone: soon ? 'progress' : 'info', label: soon ? 'This week' : 'Scheduled', quorate };
+}

@@ -7,6 +7,7 @@ import {
   isParcelOverdue, parcelStats, lockerUtilization,
   motionTally, motionOutcome, eventFillPct, isEventFull, eventState, amenityLoad,
   tierFor, tierProgress, pointsIssued, leaderboard,
+  termStatus, meetingState,
 } from '@/domain/estate/engine';
 
 const NOW = Date.parse('2026-07-26');
@@ -102,5 +103,17 @@ describe('loyalty & rewards', () => {
     expect(p.next).toBe('gold'); expect(p.toNext).toBe(860);
     expect(pointsIssued(seed.rewardMembers)).toBe(7770);
     expect(leaderboard(seed.rewardMembers)[0].residentName).toBe('Yusuf Bello');
+  });
+});
+
+describe('board & committee', () => {
+  it('flags term expiry and meeting quorum', () => {
+    const kemi = seed.boardMembers.find((m) => m.id === 'bd-4')!; // term ends 2026-08-31 (~36d)
+    const yusuf = seed.boardMembers.find((m) => m.id === 'bd-2')!; // term ends 2027-08-31
+    expect(termStatus(kemi, NOW).band).toBe('warn');
+    expect(termStatus(yusuf, NOW).band).toBe('success');
+    const held = seed.meetings.find((m) => m.id === 'mt-3')!; // 5 present, quorum 3
+    expect(meetingState(held, NOW).quorate).toBe(true);
+    expect(meetingState(held, NOW).label).toBe('Held · quorate');
   });
 });

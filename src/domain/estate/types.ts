@@ -92,3 +92,16 @@ export type RewardMember = TenantScoped & {
 export type Perk = TenantScoped & {
   id: string; estateId: string; title: string; detail: string; cost: number; category: string; stock: number;
 };
+
+/* --- board & committee ---------------------------------------------------- */
+
+export type BoardRole = 'Chair' | 'Treasurer' | 'Secretary' | 'Member';
+export type BoardMember = TenantScoped & {
+  id: string; estateId: string; name: string; unitLabel: string; role: BoardRole; portfolio: string; sinceISO: string; termEndISO: string;
+};
+
+export type MeetingType = 'AGM' | 'EGM' | 'committee';
+export type MeetingStatus = 'scheduled' | 'held';
+export type Meeting = TenantScoped & {
+  id: string; estateId: string; title: string; type: MeetingType; whenISO: string; venue: string; status: MeetingStatus; resolutions: number; attendees: number; quorumRequired: number;
+};

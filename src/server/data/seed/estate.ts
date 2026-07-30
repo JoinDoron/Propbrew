@@ -6,7 +6,7 @@
  */
 
 import { SEED } from '@/server/identities';
-import type { ResidentFeedback, EngagementSnapshot, Complaint, CollectionCase, Tenancy, Locker, Parcel, Motion, CommunityEvent, RewardMember, Perk } from '@/domain/estate/types';
+import type { ResidentFeedback, EngagementSnapshot, Complaint, CollectionCase, Tenancy, Locker, Parcel, Motion, CommunityEvent, RewardMember, Perk, BoardMember, Meeting } from '@/domain/estate/types';
 
 const A = SEED.tenantA;
 const G = SEED.estateGardens;
@@ -107,3 +107,18 @@ export const perks = ([
   { tenantId: A, id: 'pk-3', estateId: G, title: 'Priority parcel locker', detail: 'A dedicated large locker for a month', cost: 600, category: 'Parcels', stock: 10 },
   { tenantId: A, id: 'pk-4', estateId: G, title: 'Pool cabana for a day', detail: 'Reserved poolside cabana + towels', cost: 900, category: 'Amenity', stock: 6 },
 ] as unknown as Perk[]);
+
+export const boardMembers = ([
+  { tenantId: A, id: 'bd-1', estateId: G, name: 'Ngozi Okafor', unitLabel: 'Block A · 02A', role: 'Chair', portfolio: 'Strategy & governance', sinceISO: '2024-09-01', termEndISO: '2026-08-31' },
+  { tenantId: A, id: 'bd-2', estateId: G, name: 'Yusuf Bello', unitLabel: 'Block C · 11C', role: 'Treasurer', portfolio: 'Budget & service charge', sinceISO: '2024-09-01', termEndISO: '2027-08-31' },
+  { tenantId: A, id: 'bd-3', estateId: G, name: 'Ada Obi', unitLabel: 'Block D · 01A', role: 'Secretary', portfolio: 'Minutes & communications', sinceISO: '2025-01-15', termEndISO: '2027-01-14' },
+  { tenantId: A, id: 'bd-4', estateId: G, name: 'Kemi Adeyinka', unitLabel: 'Block C · 03B', role: 'Member', portfolio: 'Amenities & events', sinceISO: '2024-09-01', termEndISO: '2026-08-31' },
+  { tenantId: A, id: 'bd-5', estateId: G, name: 'David Okon', unitLabel: 'Block D · 07B', role: 'Member', portfolio: 'Security liaison', sinceISO: '2025-03-01', termEndISO: '2027-02-28' },
+] as unknown as BoardMember[]);
+
+export const meetings = ([
+  { tenantId: A, id: 'mt-1', estateId: G, title: 'Residents’ AGM 2026', type: 'AGM', whenISO: '2026-08-03T17:00:00Z', venue: 'Clubhouse Hall', status: 'scheduled', resolutions: 0, attendees: 0, quorumRequired: 80 },
+  { tenantId: A, id: 'mt-2', estateId: G, title: 'EGM — solar capital project', type: 'EGM', whenISO: '2026-08-05T18:00:00Z', venue: 'Clubhouse Hall', status: 'scheduled', resolutions: 0, attendees: 0, quorumRequired: 80 },
+  { tenantId: A, id: 'mt-3', estateId: G, title: 'July committee meeting', type: 'committee', whenISO: '2026-07-12T18:00:00Z', venue: 'Clubhouse Lounge', status: 'held', resolutions: 4, attendees: 5, quorumRequired: 3 },
+  { tenantId: A, id: 'mt-4', estateId: G, title: 'Q2 budget review', type: 'committee', whenISO: '2026-06-20T18:00:00Z', venue: 'Clubhouse Lounge', status: 'held', resolutions: 3, attendees: 4, quorumRequired: 3 },
+] as unknown as Meeting[]);
