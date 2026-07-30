@@ -49,10 +49,15 @@ const OPS_NAV: NavGroup[] = [
   {
     label: 'Facility',
     items: [
+      { id: 'control-center', label: 'Control Center', href: '/control-center', icon: 'gauge', capability: 'assets_ppm', proposed: true },
       { id: 'work-orders', label: 'Work Orders', href: '/work-orders', icon: 'wrench', capability: 'work_orders' },
       { id: 'assets', label: 'Assets', href: '/assets', icon: 'boxes', capability: 'assets_ppm' },
       { id: 'ppm', label: 'Maintenance Plans', href: '/ppm', icon: 'calendar', capability: 'assets_ppm' },
       { id: 'inspections', label: 'Inspections', href: '/inspections', icon: 'clipboard', capability: 'inspections_compliance' },
+      { id: 'energy', label: 'Energy & Utilities', href: '/energy', icon: 'trending', capability: 'assets_ppm', proposed: true },
+      { id: 'inventory', label: 'Inventory', href: '/inventory', icon: 'package', capability: 'assets_ppm', proposed: true },
+      { id: 'contracts', label: 'Contracts & SLAs', href: '/contracts', icon: 'scroll', capability: 'assets_ppm', proposed: true },
+      { id: 'safety', label: 'Safety & Permits', href: '/safety', icon: 'shield', capability: 'assets_ppm', proposed: true },
       { id: 'spaces', label: 'Spaces', href: '/spaces', icon: 'grid', capability: 'assets_ppm', proposed: true },
       { id: 'vendors', label: 'Vendors', href: '/vendors', icon: 'truck', capability: 'work_orders', proposed: true },
     ],
@@ -186,6 +191,11 @@ export function visibleNav(shell: Shell, actor: Actor): NavGroup[] {
 /** Page title + subtitle per route. */
 export const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   '/dashboard': { title: 'Dashboard', subtitle: 'Your operation at a glance' },
+  '/control-center': { title: 'Control Center', subtitle: 'Live building operations at a glance' },
+  '/energy': { title: 'Energy & Utilities', subtitle: 'Generators, diesel, grid and water' },
+  '/inventory': { title: 'Inventory', subtitle: 'Spare parts and stock levels' },
+  '/contracts': { title: 'Contracts & SLAs', subtitle: 'Service contracts, renewals and SLA' },
+  '/safety': { title: 'Safety & Permits', subtitle: 'Permits to work and incidents' },
   '/work-orders': { title: 'Work Orders', subtitle: 'Every maintenance job from request to close' },
   '/assets': { title: 'Assets', subtitle: 'The register of everything under management' },
   '/ppm': { title: 'Maintenance Plans', subtitle: 'Preventive maintenance, scheduled before failure' },
