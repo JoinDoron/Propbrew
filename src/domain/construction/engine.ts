@@ -11,6 +11,7 @@ import type { Tone } from '@/lib/status-tones';
 import type {
   Project, Phase, Task, CostCode, Quote, PurchaseOrder, PurchaseRequest, Material, StockItem,
   StockMovement, Milestone, Issue, DailyReport, RFI, Worker, Vendor, Attendance,
+  Zone, Subcontractor, SafetyEvent, SafetyPermit, SafetyPermitType, SafetyEventKind, ToolboxTalk,
 } from './types';
 
 const DAY = 24 * 3600 * 1000;
@@ -278,6 +279,8 @@ export type ConWorld = {
   materials: readonly Material[]; stock: readonly StockItem[]; movements: readonly StockMovement[];
   rfis: readonly RFI[]; workers: readonly Worker[]; issues: readonly Issue[];
   milestones: readonly Milestone[]; attendance: readonly Attendance[];
+  zones: readonly Zone[]; subcontractors: readonly Subcontractor[];
+  safetyEvents: readonly SafetyEvent[]; safetyPermits: readonly SafetyPermit[]; toolboxTalks: readonly ToolboxTalk[];
 };
 
 /** Actual cost booked against a project (its cost codes' actuals). */
@@ -474,6 +477,240 @@ export function reportCompleteness(r: Pick<DailyReport, 'completed' | 'ongoing' 
   ];
   const done = checks.filter(([ok]) => ok).length;
   return { pct: Math.round((done / checks.length) * 100), missing: checks.filter(([ok]) => !ok).map(([, l]) => l) };
+}
+
+/* --- what-if simulator: recovery / crash optimizer ------------------------ */
+
+export type CrashCandidate = { taskId: string; name: string; days: number; costPerDayMinor: number; totalMinor: number };
+export type RecoveryPlan = { crashes: CrashCandidate[]; daysRecovered: number; extraCostMinor: number; costPerDayMinor: number; shortfallDays: number };
+
+/** Buy back `targetDays` for the least money: only CRITICAL tasks shorten the
+ *  project, so we crash those cheapest-first. Deterministic and explainable —
+ *  a greedy pass over cost-per-day, which is optimal for independent day-buys. */
+export function recoveryPlan(tasks: readonly Task[], critical: ReadonlySet<string>, targetDays: number): RecoveryPlan {
+  const candidates = tasks
+    .filter((t) => critical.has(t.id) && t.crash && t.crash.crashableDays > 0 && t.status !== 'done')
+    .map((t) => ({ taskId: t.id, name: t.name, maxDays: t.crash!.crashableDays, costPerDayMinor: minor(t.crash!.crashCostPerDay) }))
+    .sort((a, b) => a.costPerDayMinor - b.costPerDayMinor);
+
+  const crashes: CrashCandidate[] = [];
+  let remaining = Math.max(0, Math.round(targetDays));
+  for (const c of candidates) {
+    if (remaining <= 0) break;
+    const days = Math.min(c.maxDays, remaining);
+    crashes.push({ taskId: c.taskId, name: c.name, days, costPerDayMinor: c.costPerDayMinor, totalMinor: days * c.costPerDayMinor });
+    remaining -= days;
+  }
+  const daysRecovered = crashes.reduce((n, c) => n + c.days, 0);
+  const extraCostMinor = crashes.reduce((n, c) => n + c.totalMinor, 0);
+  return { crashes, daysRecovered, extraCostMinor, costPerDayMinor: daysRecovered ? Math.round(extraCostMinor / daysRecovered) : 0, shortfallDays: remaining };
+}
+
+/** Re-forecast EAC/finish under simulator assumptions. Pure: nothing is saved. */
+export type Assumptions = { productivityPct: number; dieselShockPct: number; extraRainDays: number; crashDays: number };
+export type SimResult = { eac: number; vac: number; finishISO: string; slipDays: number; extraCostMinor: number; spi: number; cpi: number };
+
+export function simulate(p: Project, evm: EVM, plan: RecoveryPlan, a: Assumptions, dieselExposureMinor: number): SimResult {
+  // Productivity scales SPI; rain adds raw days; crashing buys days back.
+  const spi = Math.max(0.1, evm.spi * (a.productivityPct / 100));
+  // Derive from the SAME forecast the rest of the app uses, then apply the
+  // scenario's own day adjustments — so at default assumptions the scenario is
+  // identical to the baseline rather than a rounding step away from it.
+  const ff = forecastFinishISO(p, spi);
+  const adjust = a.extraRainDays - plan.daysRecovered;
+  const slipDays = ff.slipDays + adjust;
+  const finishISO = new Date(Date.parse(ff.iso) + adjust * DAY).toISOString().slice(0, 10);
+  // Cost: baseline EAC + diesel shock on the exposed spend + the crash bill.
+  const dieselExtra = Math.round(dieselExposureMinor * (a.dieselShockPct / 100));
+  const eac = evm.eac + dieselExtra + plan.extraCostMinor;
+  const cpi = eac > 0 ? Math.round((evm.bac / eac) * 100) / 100 : evm.cpi;
+  return { eac, vac: evm.bac - eac, finishISO, slipDays, extraCostMinor: dieselExtra + plan.extraCostMinor, spi: Math.round(spi * 100) / 100, cpi };
+}
+
+/* --- site twin ------------------------------------------------------------ */
+
+const LAYER_WEIGHT = { structure: 0.4, blockwork: 0.2, mep: 0.2, finishes: 0.2 } as const;
+
+/** A zone's overall completion — the construction sequence, weighted. */
+export function zoneProgress(z: Pick<Zone, 'layers'>): number {
+  return Math.round(z.layers.structure * LAYER_WEIGHT.structure + z.layers.blockwork * LAYER_WEIGHT.blockwork + z.layers.mep * LAYER_WEIGHT.mep + z.layers.finishes * LAYER_WEIGHT.finishes);
+}
+export function zoneBand(pct: number): Tone {
+  return pct >= 95 ? 'success' : pct >= 40 ? 'progress' : pct > 0 ? 'warn' : 'muted';
+}
+/** The level currently being worked — the visible top of the build. */
+export function activeLevel(zones: readonly Zone[]): number {
+  const started = zones.filter((z) => zoneProgress(z) > 0 && zoneProgress(z) < 100);
+  return started.length ? Math.max(...started.map((z) => z.level)) : Math.max(0, ...zones.map((z) => z.level));
+}
+export function twinRollup(zones: readonly Zone[]): { levels: number; avgProgress: number; topped: number; openIssues: number } {
+  const levels = new Set(zones.map((z) => z.level)).size;
+  const avg = zones.length ? Math.round(zones.reduce((n, z) => n + zoneProgress(z), 0) / zones.length) : 0;
+  return { levels, avgProgress: avg, topped: zones.filter((z) => z.layers.structure >= 100).length, openIssues: zones.reduce((n, z) => n + z.openIssues, 0) };
+}
+
+/* --- subcontractor league ------------------------------------------------- */
+
+export type SubScore = {
+  sub: Subcontractor; score: number; band: Tone; rank: number;
+  deliveryPct: number; qualityScore: number; safetyScore: number; valueMinor: number; defectRate: number;
+};
+
+/** Composite 0–100: delivery 45%, quality 30%, safety 25%. Transparent and
+ *  comparable across trades — the league every subcontractor can audit. */
+export function scoreSubcontractors(subs: readonly Subcontractor[]): SubScore[] {
+  const scored = subs.map((s) => {
+    const deliveryPct = s.tasksCompleted > 0 ? Math.round((s.tasksOnTime / s.tasksCompleted) * 100) : 0;
+    const defectRate = s.tasksCompleted > 0 ? s.defects / s.tasksCompleted : 0;
+    const qualityScore = Math.max(0, Math.round(100 - defectRate * 40));
+    const safetyScore = Math.max(0, 100 - s.safetyIncidents * 25);
+    const score = Math.round(0.45 * deliveryPct + 0.3 * qualityScore + 0.25 * safetyScore);
+    const band: Tone = score >= 85 ? 'success' : score >= 70 ? 'warn' : 'danger';
+    return { sub: s, score, band, rank: 0, deliveryPct, qualityScore, safetyScore, valueMinor: minor(s.contractValue), defectRate: Math.round(defectRate * 100) / 100 };
+  }).sort((a, b) => b.score - a.score);
+  scored.forEach((s, i) => { s.rank = i + 1; });
+  return scored;
+}
+
+/* --- safety --------------------------------------------------------------- */
+
+export type SafetyStats = { daysSinceLTI: number | null; lostTimeEvents: number; nearMisses: number; observations: number; activePermits: number; expiredPermits: number; talksThisMonth: number; score: number; band: Tone };
+
+/** Site-safety posture: days since the last lost-time injury, permit hygiene and
+ *  reporting culture (near-misses reported is a POSITIVE signal). */
+export function safetyStats(events: readonly SafetyEvent[], permits: readonly SafetyPermit[], talks: readonly ToolboxTalk[], nowMs: number): SafetyStats {
+  const lti = events.filter((e) => e.kind === 'lost_time').map((e) => Date.parse(e.atISO)).sort((a, b) => b - a)[0];
+  const daysSinceLTI = lti ? Math.floor((nowMs - lti) / DAY) : null;
+  const openLti = events.filter((e) => e.kind === 'lost_time' && !e.closed).length;
+  const expired = permits.filter((p) => p.status === 'active' && isOverdue(p.validToISO, nowMs)).length;
+  const talksThisMonth = talks.filter((t) => nowMs - Date.parse(t.atISO) <= 30 * DAY).length;
+  const nearMisses = events.filter((e) => e.kind === 'near_miss').length;
+  // Reporting culture earns credit; lapsed permits and open LTIs cost.
+  const score = Math.max(0, Math.min(100, 70 + Math.min(15, nearMisses * 3) + Math.min(15, talksThisMonth * 5) - expired * 10 - openLti * 20));
+  return {
+    daysSinceLTI, lostTimeEvents: events.filter((e) => e.kind === 'lost_time').length, nearMisses,
+    observations: events.filter((e) => e.kind === 'observation').length,
+    activePermits: permits.filter((p) => p.status === 'active').length, expiredPermits: expired, talksThisMonth,
+    score, band: score >= 85 ? 'success' : score >= 65 ? 'warn' : 'danger',
+  };
+}
+
+/** Two live permits overlapping in time AND place — the classic hot-work clash. */
+export function permitClashes(permits: readonly SafetyPermit[]): { a: SafetyPermit; b: SafetyPermit }[] {
+  const live = permits.filter((p) => p.status === 'active' || p.status === 'requested');
+  const out: { a: SafetyPermit; b: SafetyPermit }[] = [];
+  for (let i = 0; i < live.length; i++) for (let j = i + 1; j < live.length; j++) {
+    const a = live[i], b = live[j];
+    if (a.location !== b.location) continue;
+    const start = Math.max(Date.parse(a.validFromISO), Date.parse(b.validFromISO));
+    const end = Math.min(Date.parse(a.validToISO), Date.parse(b.validToISO));
+    if (end > start) out.push({ a, b });
+  }
+  return out;
+}
+
+export const PERMIT_LABEL: Record<SafetyPermitType, string> = {
+  hot_work: 'Hot work', height: 'Work at height', excavation: 'Excavation',
+  confined_space: 'Confined space', lifting: 'Lifting operation', electrical: 'Electrical',
+};
+export const SAFETY_EVENT_LABEL: Record<SafetyEventKind, string> = {
+  near_miss: 'Near miss', first_aid: 'First aid', lost_time: 'Lost time', observation: 'Observation',
+};
+
+/* --- investor build-watch ------------------------------------------------- */
+
+export type BuildConfidence = { score: number; band: Tone; label: string; drivers: { label: string; value: string; tone: Tone }[] };
+
+/** An investor-legible fusion of schedule, cost, quality and reporting —
+ *  deliberately coarser than the operator view, and never exposes vendor prices. */
+export function buildConfidence(evm: EVM, openCritical: number, reportCoveragePct: number, safety: number): BuildConfidence {
+  const sched = Math.min(100, Math.round(evm.spi * 100));
+  const cost = Math.min(100, Math.round(evm.cpi * 100));
+  const score = Math.max(0, Math.round(0.35 * sched + 0.3 * cost + 0.2 * reportCoveragePct + 0.15 * safety - openCritical * 3));
+  const band: Tone = score >= 85 ? 'success' : score >= 70 ? 'warn' : 'danger';
+  return {
+    score, band, label: score >= 85 ? 'On track' : score >= 70 ? 'Watch' : 'At risk',
+    drivers: [
+      { label: 'Schedule', value: `SPI ${evm.spi.toFixed(2)}`, tone: perfBand(evm.spi) },
+      { label: 'Cost', value: `CPI ${evm.cpi.toFixed(2)}`, tone: perfBand(evm.cpi) },
+      { label: 'Reporting', value: `${reportCoveragePct}% days covered`, tone: reportCoveragePct >= 85 ? 'success' : 'warn' },
+      { label: 'Safety', value: `${safety}/100`, tone: safety >= 85 ? 'success' : safety >= 65 ? 'warn' : 'danger' },
+    ],
+  };
+}
+
+/* --- construction copilot (deterministic grounding) ----------------------- */
+
+export type ConAnswer = { answer: string; sources: { label: string; href: string }[]; grounded: boolean };
+
+/** Deterministic, permission-aware Q&A over the world. This is both the offline
+ *  answer AND the grounding an LLM is restricted to — so the numbers are the
+ *  same either way and nothing can be invented. */
+export function askConstruction(question: string, w: ConWorld, nowMs: number): ConAnswer {
+  const q = question.toLowerCase();
+  const src = (label: string, href: string) => ({ label, href });
+  const active = w.projects.filter((p) => p.status === 'active' || p.status === 'closing');
+
+  const has = (...words: string[]) => words.some((x) => q.includes(x));
+
+  if (has('behind', 'late', 'slip', 'schedule', 'delay')) {
+    const rows = active.map((p) => ({ p, e: projectEVMOf(p, w.costCodes) })).filter((r) => r.e.spi < 1).sort((a, b) => a.e.spi - b.e.spi);
+    if (rows.length === 0) return { answer: 'No active project is behind its baseline right now — every SPI is at or above 1.00.', sources: [src('Earned Value', '/construction/evm')], grounded: true };
+    const lines = rows.map((r) => `${r.p.name} is at ${r.p.percentComplete}% against a ${r.p.plannedPercent}% plan (SPI ${r.e.spi}), forecast to finish ${forecastFinishISO(r.p, r.e.spi).iso}`);
+    return { answer: `${rows.length} project${rows.length === 1 ? ' is' : 's are'} behind: ${lines.join('; ')}.`, sources: [src('Critical Path', '/construction/schedule'), src('Earned Value', '/construction/evm')], grounded: true };
+  }
+  if (has('cost', 'budget', 'overrun', 'eac', 'over')) {
+    const rows = active.map((p) => ({ p, e: projectEVMOf(p, w.costCodes) }));
+    const over = rows.filter((r) => r.e.vac < 0);
+    if (over.length === 0) return { answer: 'Every active project is forecast within budget on current performance.', sources: [src('Earned Value', '/construction/evm')], grounded: true };
+    return { answer: over.map((r) => `${r.p.name} is forecast to finish at ₦${fmtM(r.e.eac)} against a ₦${fmtM(r.e.bac)} budget — ₦${fmtM(-r.e.vac)} over, at CPI ${r.e.cpi}`).join('; ') + '.', sources: [src('Earned Value', '/construction/evm'), src('Cost codes', '/construction/evm')], grounded: true };
+  }
+  if (has('material', 'stock', 'leak', 'cement', 'rebar', 'shortage')) {
+    const low = w.materials.filter((m) => { const on = w.stock.filter((s) => s.materialId === m.id).reduce((n, s) => n + s.onHand, 0); return on <= m.reorderLevel; });
+    const leaks = w.materials.map((m) => ({ m, l: materialLeakage(m.id, w.movements, w.stock.filter((s) => s.materialId === m.id).reduce((n, s) => n + s.onHand, 0)) })).filter((x) => x.l.anomalous);
+    const parts: string[] = [];
+    if (low.length) parts.push(`${low.length} material${low.length === 1 ? ' is' : 's are'} at or below reorder level (${low.map((m) => m.name).join(', ')})`);
+    if (leaks.length) parts.push(`${leaks.map((x) => `${x.m.name} shows ${x.l.leakagePct}% unaccounted (${x.l.leakageQty} ${x.m.unit})`).join('; ')}`);
+    return { answer: parts.length ? `${parts.join('. ')}.` : 'Stock levels are healthy and nothing is showing an unexplained variance.', sources: [src('Materials', '/construction/materials')], grounded: true };
+  }
+  if (has('procure', 'purchase', 'vendor', 'supplier', 'delivery', 'po ', 'order')) {
+    const late = w.pos.filter((p) => ['issued', 'acknowledged', 'part_delivered', 'approved'].includes(p.status) && p.deliveredQty < p.qty && isOverdue(p.expectedISO, nowMs));
+    if (late.length === 0) return { answer: 'No purchase order is past its promised delivery date.', sources: [src('Procurement', '/construction/procurement')], grounded: true };
+    return { answer: `${late.length} order${late.length === 1 ? ' is' : 's are'} late: ${late.map((p) => `${p.ref} (${p.item}) from ${p.vendorName}, promised ${p.expectedISO}, ${p.deliveredQty}/${p.qty} ${p.unit} delivered`).join('; ')}.`, sources: late.slice(0, 3).map((p) => src(p.ref, '/construction/procurement')), grounded: true };
+  }
+  if (has('risk', 'worry', 'attention', 'problem', 'wrong')) {
+    const top = scanRisks(w, nowMs).slice(0, 3);
+    if (top.length === 0) return { answer: 'The radar is quiet — no detector is flagging anything right now.', sources: [src('Risk Radar', '/construction/risk')], grounded: true };
+    return { answer: `Top ${top.length}: ${top.map((r) => `${r.title} (${RISK_LABEL[r.kind]}, ${Math.round(r.confidence * 100)}% confidence${r.nairaAtRiskMinor ? `, ₦${fmtM(r.nairaAtRiskMinor)} at risk` : ''})`).join('; ')}.`, sources: [src('Risk Radar', '/construction/risk')], grounded: true };
+  }
+  if (has('crew', 'worker', 'labour', 'labor', 'attendance', 'on site')) {
+    const today = new Date(nowMs).toISOString().slice(0, 10);
+    const present = w.attendance.filter((a) => a.dateISO === today && a.status === 'present').length;
+    return { answer: `${present} of ${w.workers.length} allocated workers are clocked in today. ${w.workers.filter((x) => x.certExpiryISO && certBand(x, nowMs).days !== null && certBand(x, nowMs).days! <= 30).length} certificate(s) expire within 30 days.`, sources: [src('Workforce', '/construction/workforce')], grounded: true };
+  }
+  if (has('safe', 'incident', 'permit', 'injur')) {
+    return { answer: 'Safety detail lives on the Safety & Permits page — it tracks days since the last lost-time injury, live permits and any location clashes.', sources: [src('Safety & Permits', '/construction/safety')], grounded: true };
+  }
+  if (has('progress', 'status', 'how are', 'summary', 'overall')) {
+    const conf = portfolioConfidence(w.projects, w.costCodes, scanRisks(w, nowMs));
+    return { answer: `Portfolio delivery confidence is ${conf.score}/100 (${conf.label}). ${active.map((p) => `${p.name} ${p.percentComplete}%`).join(', ')}. ₦${fmtM(conf.nairaAtRiskMinor)} is flagged at risk across open signals.`, sources: [src('Command Center', '/construction'), src('Weekly Digest', '/construction/digest')], grounded: true };
+  }
+  return {
+    answer: 'I can answer from the construction records on schedule and slippage, cost and forecast out-turn, materials and stock variance, procurement and late deliveries, workforce and certificates, and the risk radar. Ask about any of those and I will cite the records.',
+    sources: [], grounded: false,
+  };
+}
+
+/** Deterministic starter questions, chosen from what is actually wrong today. */
+export function suggestedQuestions(w: ConWorld, nowMs: number): string[] {
+  const out: string[] = [];
+  const risks = scanRisks(w, nowMs);
+  if (risks.some((r) => r.kind === 'schedule_slip')) out.push('Which projects are behind schedule?');
+  if (risks.some((r) => r.kind === 'cost_overrun')) out.push('Are we forecast to go over budget?');
+  if (risks.some((r) => r.kind === 'procurement_late')) out.push('Which deliveries are late?');
+  if (risks.some((r) => r.kind === 'material_leakage' || r.kind === 'low_stock')) out.push('Any material shortages or unexplained stock?');
+  out.push('What should I worry about today?');
+  return out.slice(0, 5);
 }
 
 /* --- misc formatting ------------------------------------------------------ */

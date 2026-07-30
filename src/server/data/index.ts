@@ -215,6 +215,11 @@ export const repos = {
   constructionWorkers: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionWorkers, o ?? { limit: 300 }) },
   constructionAttendance: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionAttendance, o ?? { limit: 500 }) },
   constructionDocs: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionDocs, o ?? { limit: 200 }) },
+  constructionZones: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionZones, o ?? { limit: 200 }) },
+  constructionSubcontractors: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionSubcontractors, o ?? { limit: 100 }) },
+  constructionSafetyPermits: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionSafetyPermits, o ?? { limit: 200 }) },
+  constructionSafetyEvents: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionSafetyEvents, o ?? { limit: 200 }) },
+  constructionToolboxTalks: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionToolboxTalks, o ?? { limit: 100 }) },
   constructionRfis: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionRfis, o ?? { limit: 200 }) },
   proxyAssignments: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'announcements', db.proxyAssignments, o ?? { limit: 200 }) },
 };

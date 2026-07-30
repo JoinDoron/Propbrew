@@ -114,6 +114,11 @@ export const db = {
   constructionAttendance: clone(seed.constructionAttendance),
   constructionDocs: clone(seed.constructionDocs),
   constructionRfis: clone(seed.constructionRfis),
+  constructionZones: seed.constructionZones.map((z) => ({ ...z, layers: { ...z.layers } })),
+  constructionSubcontractors: seed.constructionSubcontractors.map((x) => ({ ...x, projectIds: [...x.projectIds] })),
+  constructionSafetyPermits: seed.constructionSafetyPermits.map((x) => ({ ...x, controls: [...x.controls] })),
+  constructionSafetyEvents: clone(seed.constructionSafetyEvents),
+  constructionToolboxTalks: clone(seed.constructionToolboxTalks),
   // Advisory risk-signal lifecycle (ack/snooze/escalate/dismiss), keyed by deterministic signal id.
   constructionSignalStates: [] as { signalId: string; state: 'ack' | 'snoozed' | 'escalated' | 'dismissed'; atISO: string }[],
   // Copilot threads for the construction assistant (per-actor).

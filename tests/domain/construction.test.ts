@@ -3,7 +3,8 @@ import * as seed from '@/server/data/seed/fixtures';
 import {
   projectEVM, costCodesEVM, projectActualMinor, criticalPath, taskDurationDays,
   scoreQuotes, budgetException, materialLeakage, scanRisks, portfolioConfidence,
-  weeklyDigest, slipPropagation, moneySCurve, projectEVMOf, type ConWorld,
+  weeklyDigest, slipPropagation, moneySCurve, projectEVMOf, recoveryPlan, zoneProgress, activeLevel,
+  scoreSubcontractors, safetyStats, permitClashes, askConstruction, suggestedQuestions, type ConWorld,
 } from '@/domain/construction/engine';
 
 const NOW = Date.parse('2026-07-26');
@@ -14,6 +15,8 @@ const world = (): ConWorld => ({
   materials: seed.constructionMaterials, stock: seed.constructionStock, movements: seed.constructionMovements,
   rfis: seed.constructionRfis, workers: seed.constructionWorkers, issues: seed.constructionIssues,
   milestones: seed.constructionMilestones, attendance: seed.constructionAttendance,
+  zones: seed.constructionZones, subcontractors: seed.constructionSubcontractors,
+  safetyEvents: seed.constructionSafetyEvents, safetyPermits: seed.constructionSafetyPermits, toolboxTalks: seed.constructionToolboxTalks,
 });
 const marina = () => seed.constructionProjects.find((p) => p.id === 'cp-marina')!;
 
@@ -98,5 +101,72 @@ describe('weekly digest', () => {
     expect(d.sections).toHaveLength(4);
     expect(d.sections.every((s) => Array.isArray(s.sources))).toBe(true);
     expect(d.coverageGaps.length).toBeGreaterThan(0); // 07-25 report is only 'submitted', not approved
+  });
+});
+
+describe('what-if simulator', () => {
+  it('buys back days cheapest-first from the critical chain only', () => {
+    const tasks = seed.constructionTasks.filter((t) => t.projectId === 'cp-marina');
+    const cpm = criticalPath(tasks.map((t) => ({ id: t.id, durationDays: taskDurationDays(t), dependsOn: t.dependsOn })));
+    const plan = recoveryPlan(tasks, cpm.critical, 8);
+    // cheapest crashable critical tasks first: tk-m6 (₦1.5m/d, 4d) then tk-m2 (₦1.8m/d)
+    expect(plan.crashes[0].taskId).toBe('tk-m6');
+    expect(plan.crashes[1].taskId).toBe('tk-m2');
+    expect(plan.daysRecovered).toBe(8);
+    expect(plan.extraCostMinor).toBe(4 * 150_000_000 + 4 * 180_000_000); // ₦13.2m
+    expect(plan.shortfallDays).toBe(0);
+    // non-critical blockwork is never crashed — shortening it wouldn't move the finish
+    expect(plan.crashes.some((c) => c.taskId === 'tk-m5')).toBe(false);
+  });
+  it('reports a shortfall when the target exceeds what can be crashed', () => {
+    const tasks = seed.constructionTasks.filter((t) => t.projectId === 'cp-marina');
+    const cpm = criticalPath(tasks.map((t) => ({ id: t.id, durationDays: taskDurationDays(t), dependsOn: t.dependsOn })));
+    expect(recoveryPlan(tasks, cpm.critical, 60).shortfallDays).toBeGreaterThan(0);
+  });
+});
+
+describe('site twin', () => {
+  it('weights the construction sequence and finds the active level', () => {
+    const l4 = seed.constructionZones.find((z) => z.id === 'z-m-l4')!;
+    expect(zoneProgress(l4)).toBe(32); // structure 80% × 0.4
+    expect(zoneProgress(seed.constructionZones.find((z) => z.id === 'z-m-l1')!)).toBe(85);
+    expect(activeLevel(seed.constructionZones.filter((z) => z.projectId === 'cp-marina'))).toBe(4);
+  });
+});
+
+describe('subcontractor league', () => {
+  it('ranks on delivery, quality and safety with a transparent composite', () => {
+    const league = scoreSubcontractors(seed.constructionSubcontractors);
+    expect(league[0].sub.name).toBe('GlazePro Facades'); // perfect delivery, no defects, no incidents
+    expect(league[0].rank).toBe(1);
+    const worst = league[league.length - 1];
+    expect(worst.sub.name).toBe('Lagos Groundworks'); // 7/12 on time, 5 defects, 2 incidents
+    expect(worst.band).toBe('danger');
+  });
+});
+
+describe('safety', () => {
+  it('scores posture and flags lapsed permits + location clashes', () => {
+    const s = safetyStats(seed.constructionSafetyEvents, seed.constructionSafetyPermits, seed.constructionToolboxTalks, NOW);
+    expect(s.daysSinceLTI).toBe(45); // 2026-06-11 → 2026-07-26
+    expect(s.expiredPermits).toBe(1); // PTW-9098 ran to 07-24 but is still active
+    expect(s.nearMisses).toBe(2);
+    const clashes = permitClashes(seed.constructionSafetyPermits);
+    expect(clashes).toHaveLength(1); // hot work + work at height, same place, same window
+    expect(clashes[0].a.ref).toBe('PTW-9101');
+  });
+});
+
+describe('construction copilot', () => {
+  it('answers from records with citations, and refuses what it cannot ground', () => {
+    const behind = askConstruction('which projects are behind schedule?', world(), NOW);
+    expect(behind.grounded).toBe(true);
+    expect(behind.answer).toContain('Marina Heights');
+    expect(behind.sources.length).toBeGreaterThan(0);
+    const cost = askConstruction('are we over budget?', world(), NOW);
+    expect(cost.answer).toMatch(/over/);
+    const nonsense = askConstruction('what is the capital of France?', world(), NOW);
+    expect(nonsense.grounded).toBe(false);
+    expect(suggestedQuestions(world(), NOW).length).toBeGreaterThan(0);
   });
 });

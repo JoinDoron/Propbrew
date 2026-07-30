@@ -29,6 +29,11 @@ export function constructionWorld(actor: Actor): ConWorld {
     issues: repos.constructionIssues.list(actor).items,
     milestones: repos.constructionMilestones.list(actor).items,
     attendance: repos.constructionAttendance.list(actor).items,
+    zones: repos.constructionZones.list(actor).items,
+    subcontractors: repos.constructionSubcontractors.list(actor).items,
+    safetyEvents: repos.constructionSafetyEvents.list(actor).items,
+    safetyPermits: repos.constructionSafetyPermits.list(actor).items,
+    toolboxTalks: repos.constructionToolboxTalks.list(actor).items,
   };
 }
 

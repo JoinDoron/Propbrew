@@ -45,7 +45,15 @@ export type Task = TenantScoped & {
   /** dependency task ids (finish-to-start) — drives the critical path. */
   dependsOn: string[];
   budget: Money;
+  /** optional crash economics (present on tasks that can be accelerated). */
+  crash?: TaskCrash;
+  /** the zone this task builds, for the site twin. */
+  zoneId?: string;
 };
+
+/** Crash economics for the what-if simulator: how many days a task can be
+ *  bought back, and what each day costs in extra crew/plant. */
+export type TaskCrash = { crashableDays: number; crashCostPerDay: Money };
 
 export type MilestoneStatus = 'pending' | 'at_risk' | 'accepted' | 'missed';
 export type Milestone = TenantScoped & {
@@ -156,4 +164,47 @@ export type RFI = TenantScoped & {
   id: string; ref: string; projectId: string; question: string; discipline: string; drawingRef?: string;
   raisedBy: string; assignedTo: string; raisedISO: string; dueISO: string; status: RFIStatus;
   answer?: string; answeredISO?: string;
+};
+
+/* --- site twin (digital-twin-lite: the building, floor by floor) ---------- */
+
+/** Per-trade completion for one physical slice of the building. The four layers
+ *  are the real construction sequence, so a floor reads like a site walk. */
+export type ZoneLayers = { structure: number; blockwork: number; mep: number; finishes: number };
+export type Zone = TenantScoped & {
+  id: string; projectId: string; level: number; label: string; block: string;
+  layers: ZoneLayers;
+  /** open snags/observations pinned to this zone. */
+  openIssues: number; openRfis: number;
+};
+
+/* --- subcontractor league ------------------------------------------------- */
+
+export type Subcontractor = TenantScoped & {
+  id: string; name: string; trade: string; projectIds: string[];
+  /** delivery: tasks finished on/before planned finish vs total finished. */
+  tasksCompleted: number; tasksOnTime: number;
+  /** quality + safety counts feed the composite score. */
+  defects: number; reworkCost: Money; safetyIncidents: number;
+  crewSize: number; contractValue: Money;
+};
+
+/* --- safety (site HSE) ---------------------------------------------------- */
+
+export type SafetyPermitType = 'hot_work' | 'height' | 'excavation' | 'confined_space' | 'lifting' | 'electrical';
+export type SafetyPermitStatus = 'requested' | 'active' | 'closed' | 'expired';
+export type SafetyPermit = TenantScoped & {
+  id: string; ref: string; projectId: string; type: SafetyPermitType; zoneId?: string; location: string;
+  requestedBy: string; supervisor: string; status: SafetyPermitStatus;
+  validFromISO: string; validToISO: string; controls: string[];
+};
+
+export type SafetyEventKind = 'near_miss' | 'first_aid' | 'lost_time' | 'observation';
+export type SafetyEvent = TenantScoped & {
+  id: string; projectId: string; kind: SafetyEventKind; title: string; zoneId?: string;
+  atISO: string; reportedBy: string; lostDays: number; closed: boolean; action?: string;
+};
+
+export type ToolboxTalk = TenantScoped & {
+  id: string; projectId: string; topic: string; atISO: string; attendees: number; deliveredBy: string;
 };

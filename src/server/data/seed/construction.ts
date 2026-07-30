@@ -15,7 +15,7 @@ import { money } from '@/domain/primitives';
 import type {
   Project, Phase, Task, Milestone, Issue, DailyReport, Vendor, PurchaseRequest, RFQ,
   PurchaseOrder, Material, Warehouse, StockItem, StockMovement, CostCode, Variation,
-  Worker, Attendance, ConstructionDoc, RFI,
+  Worker, Attendance, ConstructionDoc, RFI, Zone, Subcontractor, SafetyPermit, SafetyEvent, ToolboxTalk,
 } from '@/domain/construction/types';
 
 const A = SEED.tenantA;
@@ -46,12 +46,12 @@ export const constructionPhases = ([
 
 export const constructionTasks = ([
   { tenantId: A, id: 'tk-m1', projectId: 'cp-marina', phaseId: 'ph-m3', name: 'L4 columns & shear walls', owner: 'Emeka Nwosu', plannedStartISO: '2026-06-01', plannedFinishISO: '2026-06-28', actualStartISO: '2026-06-03', actualFinishISO: '2026-06-30', percentComplete: 100, status: 'done', priority: 'high', dependsOn: [], budget: ngn(180_000_000) },
-  { tenantId: A, id: 'tk-m2', projectId: 'cp-marina', phaseId: 'ph-m3', name: 'L4 slab formwork & rebar', owner: 'Emeka Nwosu', plannedStartISO: '2026-06-29', plannedFinishISO: '2026-07-20', actualStartISO: '2026-07-02', percentComplete: 80, status: 'in_progress', priority: 'high', dependsOn: ['tk-m1'], budget: ngn(150_000_000) },
-  { tenantId: A, id: 'tk-m3', projectId: 'cp-marina', phaseId: 'ph-m3', name: 'L4 slab concrete pour', owner: 'Emeka Nwosu', plannedStartISO: '2026-07-21', plannedFinishISO: '2026-07-27', percentComplete: 0, status: 'blocked', priority: 'high', dependsOn: ['tk-m2'], budget: ngn(90_000_000) },
-  { tenantId: A, id: 'tk-m4', projectId: 'cp-marina', phaseId: 'ph-m3', name: 'L5 columns & shear walls', owner: 'Tunde Bakare', plannedStartISO: '2026-07-28', plannedFinishISO: '2026-08-24', percentComplete: 0, status: 'not_started', priority: 'high', dependsOn: ['tk-m3'], budget: ngn(180_000_000) },
-  { tenantId: A, id: 'tk-m5', projectId: 'cp-marina', phaseId: 'ph-m3', name: 'L4 blockwork', owner: 'Chike Obi', plannedStartISO: '2026-07-28', plannedFinishISO: '2026-08-18', percentComplete: 0, status: 'not_started', priority: 'medium', dependsOn: ['tk-m3'], budget: ngn(70_000_000) },
-  { tenantId: A, id: 'tk-m6', projectId: 'cp-marina', phaseId: 'ph-m3', name: 'L5 slab formwork & rebar', owner: 'Tunde Bakare', plannedStartISO: '2026-08-25', plannedFinishISO: '2026-09-14', percentComplete: 0, status: 'not_started', priority: 'high', dependsOn: ['tk-m4'], budget: ngn(150_000_000) },
-  { tenantId: A, id: 'tk-m7', projectId: 'cp-marina', phaseId: 'ph-m4', name: 'L4 MEP first-fix conduits', owner: 'Sola Adeniyi', plannedStartISO: '2026-08-19', plannedFinishISO: '2026-09-09', percentComplete: 0, status: 'not_started', priority: 'medium', dependsOn: ['tk-m5'], budget: ngn(60_000_000) },
+  { tenantId: A, id: 'tk-m2', projectId: 'cp-marina', phaseId: 'ph-m3', name: 'L4 slab formwork & rebar', owner: 'Emeka Nwosu', plannedStartISO: '2026-06-29', plannedFinishISO: '2026-07-20', actualStartISO: '2026-07-02', percentComplete: 80, status: 'in_progress', priority: 'high', dependsOn: ['tk-m1'], budget: ngn(150_000_000), zoneId: 'z-m-l4', crash: { crashableDays: 5, crashCostPerDay: ngn(1_800_000) } },
+  { tenantId: A, id: 'tk-m3', projectId: 'cp-marina', phaseId: 'ph-m3', name: 'L4 slab concrete pour', owner: 'Emeka Nwosu', plannedStartISO: '2026-07-21', plannedFinishISO: '2026-07-27', percentComplete: 0, status: 'blocked', priority: 'high', dependsOn: ['tk-m2'], budget: ngn(90_000_000), zoneId: 'z-m-l4', crash: { crashableDays: 2, crashCostPerDay: ngn(3_200_000) } },
+  { tenantId: A, id: 'tk-m4', projectId: 'cp-marina', phaseId: 'ph-m3', name: 'L5 columns & shear walls', owner: 'Tunde Bakare', plannedStartISO: '2026-07-28', plannedFinishISO: '2026-08-24', percentComplete: 0, status: 'not_started', priority: 'high', dependsOn: ['tk-m3'], budget: ngn(180_000_000), zoneId: 'z-m-l5', crash: { crashableDays: 6, crashCostPerDay: ngn(2_400_000) } },
+  { tenantId: A, id: 'tk-m5', projectId: 'cp-marina', phaseId: 'ph-m3', name: 'L4 blockwork', owner: 'Chike Obi', plannedStartISO: '2026-07-28', plannedFinishISO: '2026-08-18', percentComplete: 0, status: 'not_started', priority: 'medium', dependsOn: ['tk-m3'], budget: ngn(70_000_000), zoneId: 'z-m-l4' },
+  { tenantId: A, id: 'tk-m6', projectId: 'cp-marina', phaseId: 'ph-m3', name: 'L5 slab formwork & rebar', owner: 'Tunde Bakare', plannedStartISO: '2026-08-25', plannedFinishISO: '2026-09-14', percentComplete: 0, status: 'not_started', priority: 'high', dependsOn: ['tk-m4'], budget: ngn(150_000_000), zoneId: 'z-m-l5', crash: { crashableDays: 4, crashCostPerDay: ngn(1_500_000) } },
+  { tenantId: A, id: 'tk-m7', projectId: 'cp-marina', phaseId: 'ph-m4', name: 'L4 MEP first-fix conduits', owner: 'Sola Adeniyi', plannedStartISO: '2026-08-19', plannedFinishISO: '2026-09-09', percentComplete: 0, status: 'not_started', priority: 'medium', dependsOn: ['tk-m5'], budget: ngn(60_000_000), zoneId: 'z-m-l4' },
   { tenantId: A, id: 'tk-c1', projectId: 'cp-cedar', phaseId: 'ph-c1', name: 'Apartment tiling — Block A', owner: 'Grace Umeh', plannedStartISO: '2026-07-01', plannedFinishISO: '2026-07-31', actualStartISO: '2026-07-02', percentComplete: 70, status: 'in_progress', priority: 'high', dependsOn: [], budget: ngn(85_000_000) },
   { tenantId: A, id: 'tk-c2', projectId: 'cp-cedar', phaseId: 'ph-c2', name: 'Snagging & PC inspection', owner: 'Bola Adeyemi', plannedStartISO: '2026-11-01', plannedFinishISO: '2026-12-10', percentComplete: 0, status: 'not_started', priority: 'high', dependsOn: ['tk-c1'], budget: ngn(30_000_000) },
 ] as unknown) as Task[];
@@ -192,3 +192,54 @@ export const constructionRfis = ([
   { tenantId: A, id: 'rfi-m2', ref: 'RFI-055', projectId: 'cp-marina', question: 'Waterproofing spec for L4 wet areas', discipline: 'Architectural', drawingRef: 'MAR-AR-118', raisedBy: 'Ngozi Okafor', assignedTo: 'Architect', raisedISO: '2026-07-02', dueISO: '2026-07-09', status: 'answered', answer: 'Use 2-coat cementitious membrane per spec 07-14', answeredISO: '2026-07-08' },
   { tenantId: A, id: 'rfi-c1', ref: 'RFI-061', projectId: 'cp-cedar', question: 'Skirting detail at lift lobby', discipline: 'Architectural', drawingRef: 'CED-AR-330', raisedBy: 'Grace Umeh', assignedTo: 'Architect', raisedISO: '2026-07-22', dueISO: '2026-07-29', status: 'open' },
 ] as unknown) as RFI[];
+
+/* --- site twin: Marina Heights, floor by floor ---------------------------- */
+
+/** Structure is topping out at L4/L5 while finishes trail far below — the shape
+ *  of a real superstructure build, and what the twin visualises. */
+export const constructionZones = ([
+  { tenantId: A, id: 'z-m-l1', projectId: 'cp-marina', level: 1, label: 'Level 1', block: 'Tower', layers: { structure: 100, blockwork: 100, mep: 85, finishes: 40 }, openIssues: 0, openRfis: 0 },
+  { tenantId: A, id: 'z-m-l2', projectId: 'cp-marina', level: 2, label: 'Level 2', block: 'Tower', layers: { structure: 100, blockwork: 100, mep: 70, finishes: 15 }, openIssues: 0, openRfis: 0 },
+  { tenantId: A, id: 'z-m-l3', projectId: 'cp-marina', level: 3, label: 'Level 3', block: 'Tower', layers: { structure: 100, blockwork: 90, mep: 30, finishes: 0 }, openIssues: 1, openRfis: 0 },
+  { tenantId: A, id: 'z-m-l4', projectId: 'cp-marina', level: 4, label: 'Level 4', block: 'Tower', layers: { structure: 80, blockwork: 0, mep: 0, finishes: 0 }, openIssues: 1, openRfis: 1 },
+  { tenantId: A, id: 'z-m-l5', projectId: 'cp-marina', level: 5, label: 'Level 5', block: 'Tower', layers: { structure: 0, blockwork: 0, mep: 0, finishes: 0 }, openIssues: 0, openRfis: 0 },
+  { tenantId: A, id: 'z-m-l6', projectId: 'cp-marina', level: 6, label: 'Level 6', block: 'Tower', layers: { structure: 0, blockwork: 0, mep: 0, finishes: 0 }, openIssues: 0, openRfis: 0 },
+  { tenantId: A, id: 'z-c-l1', projectId: 'cp-cedar', level: 1, label: 'Block A · L1', block: 'Block A', layers: { structure: 100, blockwork: 100, mep: 100, finishes: 90 }, openIssues: 1, openRfis: 1 },
+  { tenantId: A, id: 'z-c-l2', projectId: 'cp-cedar', level: 2, label: 'Block A · L2', block: 'Block A', layers: { structure: 100, blockwork: 100, mep: 100, finishes: 75 }, openIssues: 0, openRfis: 0 },
+  { tenantId: A, id: 'z-c-l3', projectId: 'cp-cedar', level: 3, label: 'Block A · L3', block: 'Block A', layers: { structure: 100, blockwork: 100, mep: 95, finishes: 45 }, openIssues: 0, openRfis: 0 },
+] as unknown) as Zone[];
+
+/* --- subcontractor league ------------------------------------------------- */
+
+export const constructionSubcontractors = ([
+  { tenantId: A, id: 'sub-buildright', name: 'BuildRight Subs', trade: 'Concrete & steel', projectIds: ['cp-marina'], tasksCompleted: 24, tasksOnTime: 20, defects: 3, reworkCost: ngn(6_400_000), safetyIncidents: 1, crewSize: 34, contractValue: ngn(720_000_000) },
+  { tenantId: A, id: 'sub-meppro', name: 'MEP Pro Services', trade: 'Mechanical & electrical', projectIds: ['cp-marina', 'cp-cedar'], tasksCompleted: 15, tasksOnTime: 14, defects: 1, reworkCost: ngn(1_200_000), safetyIncidents: 0, crewSize: 18, contractValue: ngn(540_000_000) },
+  { tenantId: A, id: 'sub-finetouch', name: 'FineTouch Interiors', trade: 'Finishes', projectIds: ['cp-cedar'], tasksCompleted: 31, tasksOnTime: 29, defects: 2, reworkCost: ngn(2_100_000), safetyIncidents: 0, crewSize: 22, contractValue: ngn(310_000_000) },
+  { tenantId: A, id: 'sub-groundworks', name: 'Lagos Groundworks', trade: 'Earthworks & piling', projectIds: ['cp-marina'], tasksCompleted: 12, tasksOnTime: 7, defects: 5, reworkCost: ngn(14_800_000), safetyIncidents: 2, crewSize: 26, contractValue: ngn(430_000_000) },
+  { tenantId: A, id: 'sub-glazepro', name: 'GlazePro Facades', trade: 'Facade & glazing', projectIds: ['cp-marina'], tasksCompleted: 8, tasksOnTime: 8, defects: 0, reworkCost: ngn(0), safetyIncidents: 0, crewSize: 12, contractValue: ngn(280_000_000) },
+] as unknown) as Subcontractor[];
+
+/* --- safety --------------------------------------------------------------- */
+
+export const constructionSafetyPermits = ([
+  { tenantId: A, id: 'sp-1', ref: 'PTW-9101', projectId: 'cp-marina', type: 'hot_work', zoneId: 'z-m-l4', location: 'Level 4 · east core', requestedBy: 'Emeka Nwosu', supervisor: 'Ngozi Okafor', status: 'active', validFromISO: '2026-07-26', validToISO: '2026-07-27', controls: ['Fire watch posted', 'Extinguisher within 5m', 'Combustibles cleared 10m'] },
+  { tenantId: A, id: 'sp-2', ref: 'PTW-9102', projectId: 'cp-marina', type: 'height', zoneId: 'z-m-l4', location: 'Level 4 · east core', requestedBy: 'Tunde Bakare', supervisor: 'Ngozi Okafor', status: 'active', validFromISO: '2026-07-26', validToISO: '2026-07-28', controls: ['Harness + twin lanyard', 'Edge protection checked', 'Rescue plan briefed'] },
+  { tenantId: A, id: 'sp-3', ref: 'PTW-9098', projectId: 'cp-marina', type: 'lifting', zoneId: 'z-m-l5', location: 'Level 5 · crane zone', requestedBy: 'Tunde Bakare', supervisor: 'Ngozi Okafor', status: 'active', validFromISO: '2026-07-20', validToISO: '2026-07-24', controls: ['Lift plan signed', 'Exclusion zone barriered'] },
+  { tenantId: A, id: 'sp-4', ref: 'PTW-9103', projectId: 'cp-cedar', type: 'electrical', location: 'Block A · riser', requestedBy: 'Sola Adeniyi', supervisor: 'Bola Adeyemi', status: 'requested', validFromISO: '2026-07-28', validToISO: '2026-07-29', controls: ['Lock-out tag-out', 'Proved dead before touch'] },
+  { tenantId: A, id: 'sp-5', ref: 'PTW-9090', projectId: 'cp-marina', type: 'excavation', location: 'Site perimeter · north', requestedBy: 'Chike Obi', supervisor: 'Ngozi Okafor', status: 'closed', validFromISO: '2026-07-08', validToISO: '2026-07-12', controls: ['Services scanned', 'Shoring installed'] },
+] as unknown) as SafetyPermit[];
+
+export const constructionSafetyEvents = ([
+  { tenantId: A, id: 'se-1', projectId: 'cp-marina', kind: 'first_aid', title: 'Hand laceration handling rebar tie wire', zoneId: 'z-m-l4', atISO: '2026-07-25', reportedBy: 'Emeka Nwosu', lostDays: 0, closed: true, action: 'Cut-resistant gloves reissued to the steel gang' },
+  { tenantId: A, id: 'se-2', projectId: 'cp-marina', kind: 'near_miss', title: 'Scaffold board dislodged near L3 edge', zoneId: 'z-m-l3', atISO: '2026-07-23', reportedBy: 'Chike Obi', lostDays: 0, closed: true, action: 'Board clips checked estate-wide; scaffold inspection brought forward' },
+  { tenantId: A, id: 'se-3', projectId: 'cp-marina', kind: 'near_miss', title: 'Reversing truck without banksman at gate', atISO: '2026-07-19', reportedBy: 'Musa Ibrahim', lostDays: 0, closed: true, action: 'Banksman mandatory for all deliveries; gate marshal briefed' },
+  { tenantId: A, id: 'se-4', projectId: 'cp-marina', kind: 'lost_time', title: 'Ankle fracture — trip on uncovered service duct', zoneId: 'z-m-l2', atISO: '2026-06-11', reportedBy: 'Ngozi Okafor', lostDays: 14, closed: true, action: 'All duct openings covered and marked; housekeeping audit weekly' },
+  { tenantId: A, id: 'se-5', projectId: 'cp-cedar', kind: 'observation', title: 'Good practice — tile offcuts bagged at source', zoneId: 'z-c-l3', atISO: '2026-07-24', reportedBy: 'Grace Umeh', lostDays: 0, closed: true },
+  { tenantId: A, id: 'se-6', projectId: 'cp-marina', kind: 'observation', title: 'Housekeeping poor at L4 material drop', zoneId: 'z-m-l4', atISO: '2026-07-26', reportedBy: 'Ngozi Okafor', lostDays: 0, closed: false, action: 'Clear before next pour' },
+] as unknown) as SafetyEvent[];
+
+export const constructionToolboxTalks = ([
+  { tenantId: A, id: 'tb-1', projectId: 'cp-marina', topic: 'Working at height — edge protection', atISO: '2026-07-24', attendees: 58, deliveredBy: 'Ngozi Okafor' },
+  { tenantId: A, id: 'tb-2', projectId: 'cp-marina', topic: 'Hot work & fire watch discipline', atISO: '2026-07-17', attendees: 61, deliveredBy: 'Emeka Nwosu' },
+  { tenantId: A, id: 'tb-3', projectId: 'cp-cedar', topic: 'Manual handling — tile boxes', atISO: '2026-07-21', attendees: 24, deliveredBy: 'Grace Umeh' },
+] as unknown) as ToolboxTalk[];
