@@ -162,4 +162,12 @@ describe('proxy voting (EGM)', () => {
     expect(seed.proxyAssignments.every((p) => p.motionId === solar.id)).toBe(true);
     expect(heldProxies(seed.proxyAssignments, solar.id).length).toBe(seed.proxyAssignments.length);
   });
+  it('auto-resolves the EGM motion on meeting close: quorum_failed if proxies lapse, passed if cast', () => {
+    const solar = seed.motions.find((m) => m.id === 'mo-2')!;
+    // Chair marks held WITHOUT exercising → proxies lapse, motion decided as recorded (32%).
+    expect(motionOutcome(solar)).toBe('quorum_failed');
+    // Chair exercises the 3 'for' + 1 'against' proxies first, then closes → carries.
+    const cast = { ...solar, forWeight: solar.forWeight + 3, againstWeight: solar.againstWeight + 1 };
+    expect(motionOutcome(cast)).toBe('passed');
+  });
 });

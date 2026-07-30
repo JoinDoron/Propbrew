@@ -240,9 +240,18 @@ export async function recordMeetingHeld(id: string, attendees: number): Promise<
   for (const p of db.proxyAssignments) {
     if (motionIds.has(p.motionId) && p.status === 'held') { p.status = 'expired'; lapsed += 1; }
   }
+  // Closing the meeting concludes voting: each open EGM motion tied to it is
+  // resolved on the weights actually recorded (lapsed proxies don't count).
+  const outcomes: string[] = [];
+  for (const mo of db.motions) {
+    if (mo.egmMeetingId === id && mo.status === 'open') { mo.status = motionOutcome(mo); m.resolutions += 1; outcomes.push(`${mo.ref} ${mo.status.replace('_', ' ')}`); }
+  }
   revalidate();
   ['/board', '/governance', '/portal/community'].forEach((path) => revalidatePath(path));
-  return { ok: true, ref: lapsed > 0 ? `${m.title} · ${lapsed} proxies lapsed` : m.title };
+  const parts = [m.title];
+  if (lapsed > 0) parts.push(`${lapsed} proxies lapsed`);
+  if (outcomes.length) parts.push(outcomes.join(', '));
+  return { ok: true, ref: parts.join(' · ') };
 }
 
 /* --- loyalty & rewards ---------------------------------------------------- */
