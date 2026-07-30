@@ -11,14 +11,14 @@ const SEV_TONE: Record<Insight['severity'], Tone> = { critical: 'danger', warnin
 const CAT_ICON: Record<string, React.ReactNode> = { Alarm: <AlertTriangle size={14} />, Energy: <Zap size={14} />, Inventory: <Package size={14} />, Contracts: <FileText size={14} />, Safety: <ShieldAlert size={14} /> };
 const SUGGESTIONS = ['What needs me right now?', 'How is our diesel and fuel?', 'Which contracts are expiring?', 'Any parts below reorder?', "What's our carbon and spend?"];
 
-type Msg = { q: string; a: string; sources: string[] };
+type Msg = { id: number; q: string; a: string; sources: string[]; streaming: boolean; source?: 'llm' | 'builtin' };
 
 export function CopilotWorkspace({ world, userName }: { world: CopilotWorld; userName: string }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [toast, setToast] = useState<string | null>(null);
   const [q, setQ] = useState('');
-  const [thinking, setThinking] = useState(false);
+  const [seq, setSeq] = useState(0);
   const [thread, setThread] = useState<Msg[]>([]);
   const flash = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3200); };
 
@@ -28,15 +28,23 @@ export function CopilotWorkspace({ world, userName }: { world: CopilotWorld; use
     ? 'Everything is nominal — no open alarms, healthy fuel, and no lapsed cover. Nice and quiet.'
     : `I'm tracking ${insights.length} thing${insights.length === 1 ? '' : 's'} across the estate — ${counts.critical} critical and ${counts.warning} to act on. Top of the list: ${insights[0].title.toLowerCase()}.`;
 
-  function ask(question: string) {
+  async function ask(question: string) {
     const query = question.trim();
     if (!query) return;
-    setQ(''); setThinking(true);
-    setTimeout(() => {
-      const res = askCopilot(query, world);
-      setThread((t) => [{ q: query, a: res.answer, sources: res.sources }, ...t]);
-      setThinking(false);
-    }, 550);
+    setQ('');
+    const id = seq + 1; setSeq(id);
+    const sources = askCopilot(query, world).sources; // instant source chips
+    setThread((t) => [{ id, q: query, a: '', sources, streaming: true }, ...t]);
+    const patch = (fn: (m: Msg) => Msg) => setThread((t) => t.map((m) => (m.id === id ? fn(m) : m)));
+    try {
+      const res = await fetch('/api/copilot', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ question: query }) });
+      const source = res.headers.get('X-Copilot-Source') === 'llm' ? 'llm' : 'builtin';
+      const reader = res.body?.getReader();
+      if (reader) { const dec = new TextDecoder(); for (;;) { const { done, value } = await reader.read(); if (done) break; const chunk = dec.decode(value, { stream: true }); patch((m) => ({ ...m, a: m.a + chunk })); } }
+      patch((m) => ({ ...m, streaming: false, source }));
+    } catch {
+      patch((m) => ({ ...m, a: askCopilot(query, world).answer, streaming: false, source: 'builtin' }));
+    }
   }
 
   function runAction(i: Insight) {
@@ -72,16 +80,18 @@ export function CopilotWorkspace({ world, userName }: { world: CopilotWorld; use
       </div>
 
       {/* Conversation */}
-      {(thinking || thread.length > 0) && (
+      {thread.length > 0 && (
         <section className="bg-surface border border-border rounded-2xl shadow-card p-4 flex flex-col gap-3">
-          {thinking && <div className="flex items-center gap-2 text-[12.5px] text-text-3"><Loader2 size={14} className="animate-spin" /> Reading across your facility signals…</div>}
-          {thread.map((m, i) => (
-            <div key={i} className="flex flex-col gap-1.5 animate-fade">
+          {thread.map((m) => (
+            <div key={m.id} className="flex flex-col gap-1.5 animate-fade">
               <div className="self-end max-w-[85%] text-[12.5px] bg-primary text-white rounded-2xl rounded-br-sm px-3 py-1.5">{m.q}</div>
               <div className="self-start max-w-[92%] text-[12.5px] bg-surface-2 rounded-2xl rounded-bl-sm px-3 py-2 leading-snug">
-                <div className="flex items-center gap-1.5 text-[10px] text-text-3 mb-1"><Sparkles size={11} /> Copilot</div>
-                {m.a}
-                {m.sources.length > 0 && <div className="flex flex-wrap gap-1 mt-1.5">{m.sources.slice(0, 4).map((s, j) => <span key={j} className="text-[9.5px] px-1.5 h-4 inline-flex items-center rounded-full bg-surface border border-border text-text-3">{s}</span>)}</div>}
+                <div className="flex items-center gap-1.5 text-[10px] text-text-3 mb-1">
+                  <Sparkles size={11} /> Copilot
+                  {!m.streaming && m.source && <span className="px-1.5 h-4 inline-flex items-center rounded-full" style={{ background: m.source === 'llm' ? 'color-mix(in srgb, var(--tone-progress) 16%, transparent)' : 'var(--surface)', color: m.source === 'llm' ? toneVar('progress') : 'var(--text-3)', border: m.source === 'llm' ? 'none' : '1px solid var(--border)' }}>{m.source === 'llm' ? 'AI' : 'grounded'}</span>}
+                </div>
+                {m.a === '' && m.streaming ? <span className="inline-flex items-center gap-2 text-text-3"><Loader2 size={13} className="animate-spin" /> Reading across your facility signals…</span> : <>{m.a}{m.streaming && <span className="inline-block w-1.5 h-3.5 ml-0.5 align-middle bg-text-3 animate-pulse rounded-sm" />}</>}
+                {!m.streaming && m.sources.length > 0 && <div className="flex flex-wrap gap-1 mt-1.5">{m.sources.slice(0, 4).map((s, j) => <span key={j} className="text-[9.5px] px-1.5 h-4 inline-flex items-center rounded-full bg-surface border border-border text-text-3">{s}</span>)}</div>}
               </div>
             </div>
           ))}
