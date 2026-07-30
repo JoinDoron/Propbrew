@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Vote, PartyPopper, Award, ThumbsUp, ThumbsDown, MinusCircle, Check, Star, Gift, CalendarDays, MapPin, Crown, Scale, X, Package, Megaphone } from 'lucide-react';
+import { Vote, PartyPopper, Award, ThumbsUp, ThumbsDown, MinusCircle, Check, Star, Gift, CalendarDays, MapPin, Crown, Scale, X, Package, Megaphone, ClipboardList, Trophy } from 'lucide-react';
 import { toneVar } from '@/lib/status-tones';
 import { motionTally, electionTally, tierFor, tierProgress, TIER_TONE, eventFillPct, isEventFull, type VoteChoice, type MotionStatus, type RewardTier, type EventCategory } from '@/domain/estate';
 import { residentVote, residentRsvp, residentRedeem, residentVoteCandidate, residentAssignProxy, residentRevokeProxy, residentSelfNominate, residentCollectParcel } from '@/server/actions/resident-community';
@@ -10,12 +10,13 @@ import { residentVote, residentRsvp, residentRedeem, residentVoteCandidate, resi
 export type MyProxy = { holderName: string; direction: VoteChoice; status: string };
 export type PMotion = { id: string; ref: string; title: string; summary: string; status: MotionStatus; forWeight: number; againstWeight: number; abstainWeight: number; eligibleWeight: number; quorumPct: number; thresholdPct: number; closesISO: string; myChoice?: VoteChoice; egm?: boolean; myProxy?: MyProxy };
 
-const PROXY_HOLDERS = ['Chair · Ngozi Okafor', 'Secretary · Ada Obi'];
+// Chair/Secretary, plus neighbours you can delegate to (who may delegate onward).
+const PROXY_HOLDERS = ['Chair · Ngozi Okafor', 'Secretary · Ada Obi', 'Yusuf Bello', 'Tobi Ade', 'Kemi Adeyinka'];
 export type PEvent = { id: string; title: string; category: EventCategory; venue: string; startISO: string; capacity: number; rsvps: number };
 export type MyRewards = { points: number; onTimeStreak: number; eventsAttended: number; pollsVoted: number; rank: number; total: number } | null;
 export type PPerk = { id: string; title: string; detail: string; cost: number; stock: number };
 export type PCandidate = { id: string; residentName: string; unitLabel: string; statement: string; votes: number };
-export type PElection = { id: string; ref: string; seatTitle: string; portfolio: string; closesISO: string; eligibleWeight: number; quorumPct: number; candidates: PCandidate[]; myCandidateId?: string; canStand: boolean } | null;
+export type PElection = { id: string; ref: string; seatTitle: string; portfolio: string; closesISO: string; eligibleWeight: number; quorumPct: number; candidates: PCandidate[]; myCandidateId?: string; canStand: boolean; myStanding?: { votes: number } } | null;
 export type PParcel = { id: string; code: string; courier: string; size: string; status: string; lockerLabel?: string; receivedISO: string; overdue: boolean };
 
 const TIER_LABEL: Record<RewardTier, string> = { bronze: 'Bronze', silver: 'Silver', gold: 'Gold', platinum: 'Platinum' };
@@ -149,6 +150,40 @@ export function CommunityHub({ firstName, motions, events, rewards, perks, elect
             </div>
             {voted && <div className="px-4 pb-2 -mt-1 text-[12px] font-medium inline-flex items-center gap-1.5" style={{ color: toneVar('success') }}><Check size={13} /> You voted for {voted.residentName}</div>}
             {election.canStand && <StandForm pending={pending} onStand={(statement) => act(() => residentSelfNominate(election.id, statement), 'You’re standing for the board 🎉')} />}
+          </section>
+        );
+      })()}
+
+      {/* My nominations & standings */}
+      {(() => {
+        const electionCandidate = election?.candidates.find((c) => c.id === election.myCandidateId);
+        return (
+          <section className="bg-surface border border-border rounded-2xl shadow-card overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-border flex items-center gap-2"><ClipboardList size={15} className="text-text-3" /><span className="text-[13px] font-semibold">My governance</span></div>
+            <div className="divide-y divide-border">
+              {election?.myStanding && (
+                <div className="px-4 py-2.5 flex items-center gap-2.5">
+                  <Trophy size={15} style={{ color: toneVar('warn') }} className="flex-none" />
+                  <div className="text-[12.5px] flex-1">You’re <span className="font-semibold">standing for {election.seatTitle}</span></div>
+                  <span className="text-[11px] font-mono text-text-3">{election.myStanding.votes} vote{election.myStanding.votes === 1 ? '' : 's'}</span>
+                </div>
+              )}
+              {electionCandidate && !election?.myStanding && (
+                <div className="px-4 py-2.5 flex items-center gap-2.5"><Crown size={15} style={{ color: toneVar('success') }} className="flex-none" /><div className="text-[12.5px] flex-1">Board election — you voted for <span className="font-semibold">{electionCandidate.residentName}</span></div></div>
+              )}
+              {openMotions.map((m) => {
+                const done = m.myChoice || m.myProxy;
+                return (
+                  <div key={m.id} className="px-4 py-2.5 flex items-center gap-2.5">
+                    <Vote size={14} className="flex-none" style={{ color: toneVar(done ? 'success' : 'muted') }} />
+                    <div className="text-[12px] flex-1 min-w-0"><span className="font-mono text-[10.5px] text-text-3">{m.ref}</span> <span className="truncate">{m.title}</span></div>
+                    <span className="text-[10.5px] font-semibold px-2 h-5 inline-flex items-center rounded-full flex-none whitespace-nowrap" style={{ background: `color-mix(in srgb, ${toneVar(m.myChoice ? 'success' : m.myProxy ? 'progress' : 'muted')} 13%, transparent)`, color: toneVar(m.myChoice ? 'success' : m.myProxy ? 'progress' : 'muted') }}>
+                      {m.myChoice ? `voted ${CHOICE_LABEL[m.myChoice]}` : m.myProxy ? (m.myProxy.status === 'exercised' ? 'proxy cast' : m.myProxy.status === 'expired' ? 'proxy lapsed' : 'proxy given') : 'not yet voted'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
           </section>
         );
       })()}

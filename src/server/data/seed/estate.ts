@@ -139,11 +139,12 @@ export const boardElections = ([
 ] as unknown as BoardElection[]);
 
 /** Proxy register for the solar EGM motion (mo-2). Four homes can't attend the
- *  05 Aug EGM and have assigned directed 'for' proxies to the Chair. The motion
- *  sits at 77/240 = 32% (one below quorum) with ~92% approval — exercising these
- *  four proxies pushes turnout to 81/240 = 34%, carrying the motion. */
+ *  05 Aug EGM. Ada delegates to Yusuf, who in turn delegates to the Chair — a
+ *  two-hop delegation chain (Ada → Yusuf → Chair); David and Kemi go direct.
+ *  The motion sits at 77/240 = 32% (one below quorum) with ~92% approval —
+ *  exercising all four proxies pushes turnout to 81/240 = 34%, carrying it. */
 export const proxyAssignments = ([
-  { tenantId: A, id: 'px-1', estateId: G, motionId: 'mo-2', grantorName: 'Ada Obi', grantorUnit: 'Block D · 01A', grantorUserId: 'u-ada', holderName: 'Chair · Ngozi Okafor', direction: 'for', status: 'held' },
+  { tenantId: A, id: 'px-1', estateId: G, motionId: 'mo-2', grantorName: 'Ada Obi', grantorUnit: 'Block D · 01A', grantorUserId: 'u-ada', holderName: 'Yusuf Bello', direction: 'for', status: 'held' },
   { tenantId: A, id: 'px-2', estateId: G, motionId: 'mo-2', grantorName: 'Yusuf Bello', grantorUnit: 'Block C · 11C', grantorUserId: 'u-yusuf', holderName: 'Chair · Ngozi Okafor', direction: 'for', status: 'held' },
   { tenantId: A, id: 'px-3', estateId: G, motionId: 'mo-2', grantorName: 'David Okon', grantorUnit: 'Block D · 07B', grantorUserId: 'u-david', holderName: 'Chair · Ngozi Okafor', direction: 'for', status: 'held' },
   { tenantId: A, id: 'px-4', estateId: G, motionId: 'mo-2', grantorName: 'Kemi Adeyinka', grantorUnit: 'Block C · 03B', grantorUserId: 'u-kemi', holderName: 'Chair · Ngozi Okafor', direction: 'against', status: 'held' },

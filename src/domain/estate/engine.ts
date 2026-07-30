@@ -267,6 +267,52 @@ export function electionWinner(e: ElectionLike): Candidate | null {
   return t.leader;
 }
 
+/* --- proxy delegation chains ---------------------------------------------- */
+
+/** The person behind a holder label — "Chair · Ngozi Okafor" → "Ngozi Okafor",
+ *  a bare resident name is returned as-is. Used to link chains by name. */
+export function proxyHolderName(holder: string): string {
+  const i = holder.lastIndexOf('· ');
+  return (i >= 0 ? holder.slice(i + 2) : holder).trim();
+}
+
+export type ProxyChain = { path: string[]; terminalHolder: string; depth: number; cycle: boolean };
+
+/** Follow a proxy's holder onward while that holder has themselves delegated,
+ *  building the delegation path to the terminal holder (cycle-safe). */
+type ProxyLink = Pick<ProxyAssignment, 'grantorName' | 'holderName' | 'status' | 'motionId'>;
+export function resolveProxyChain(start: Pick<ProxyAssignment, 'grantorName' | 'holderName' | 'motionId'>, proxies: readonly ProxyLink[]): ProxyChain {
+  const path = [start.grantorName];
+  const seen = new Set<string>([start.grantorName]);
+  let holder = start.holderName;
+  let cycle = false;
+  for (let guard = 0; guard < 32; guard++) {
+    path.push(holder);
+    const name = proxyHolderName(holder);
+    if (seen.has(name)) { cycle = true; break; }
+    seen.add(name);
+    const next = proxies.find((p) => p.status === 'held' && p.motionId === start.motionId && p.grantorName === name);
+    if (!next) break;
+    holder = next.holderName;
+  }
+  return { path, terminalHolder: holder, depth: path.length - 1, cycle };
+}
+
+/** Would assigning grantor → holder create a delegation loop back to grantor? */
+export function proxyWouldCycle(grantorName: string, holderName: string, proxies: readonly ProxyLink[], motionId: string): boolean {
+  const seen = new Set<string>([grantorName]);
+  let cur = proxyHolderName(holderName);
+  for (let guard = 0; guard < 32; guard++) {
+    if (cur === grantorName) return true;
+    if (seen.has(cur)) return false;
+    seen.add(cur);
+    const next = proxies.find((p) => p.status === 'held' && p.motionId === motionId && p.grantorName === cur);
+    if (!next) return false;
+    cur = proxyHolderName(next.holderName);
+  }
+  return false;
+}
+
 export const ELECTION_STATUS_LABEL: Record<BoardElection['status'], string> = {
   nominations: 'Nominations open', voting: 'Voting open', decided: 'Decided',
 };

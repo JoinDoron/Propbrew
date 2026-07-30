@@ -12,7 +12,7 @@ import { getActor } from '@/server/session';
 import { ForbiddenError, assertCan, type Capability } from '@/lib/authz';
 import { db } from '@/server/data/store';
 import { NOW } from '@/domain/ppm';
-import { nextDunningStage, nextTenancyStage, motionOutcome, isEventFull, tierFor, EARN_POINTS, electionWinner, type VoteChoice, type EarnReason } from '@/domain/estate';
+import { nextDunningStage, nextTenancyStage, motionOutcome, motionTally, isEventFull, tierFor, EARN_POINTS, electionWinner, type VoteChoice, type EarnReason } from '@/domain/estate';
 
 const PATHS = ['/community', '/collections', '/tenancy', '/parcels', '/governance', '/events', '/rewards', '/billing', '/people', '/dashboard'];
 const revalidate = () => PATHS.forEach((p) => revalidatePath(p));
@@ -167,8 +167,24 @@ export async function closeMotion(id: string): Promise<Res> {
   if (!m) return { ok: false, error: 'Motion not found.' };
   if (m.status !== 'open') return { ok: false, error: 'Only an open motion can be closed.' };
   m.status = motionOutcome(m);
+  announceMotionOutcome(m);
   revalidate();
-  return { ok: true, ref: m.ref };
+  revalidatePath('/portal/announcements'); revalidatePath('/announcements');
+  return { ok: true, ref: `${m.ref} ${m.status.replace('_', ' ')}` };
+}
+
+/** When a motion resolves, tell residents — an estate announcement of the AGM
+ *  result lands in their portal automatically. */
+let anSeq = 0;
+function announceMotionOutcome(m: (typeof db.motions)[number]): void {
+  const t = motionTally(m);
+  const verdict = m.status === 'passed' ? 'has PASSED' : m.status === 'rejected' ? 'was REJECTED' : 'did NOT reach quorum';
+  db.announcements.unshift({
+    tenantId: m.tenantId, id: `an-agm-${++anSeq}`,
+    title: `AGM result — ${m.title}`,
+    body: `Motion ${m.ref} ${verdict}. Final turnout ${t.turnoutPct}% (quorum ${m.quorumPct}% required) with ${t.approvalPct}% in favour. Thank you to everyone who took part.`,
+    estateId: m.estateId, scope: 'estate', audience: 'All residents', sentAt: NOW, delivered: m.eligibleWeight, read: 0, aiDrafted: false,
+  } as (typeof db.announcements)[number]);
 }
 
 /* --- events & amenities --------------------------------------------------- */
@@ -244,10 +260,10 @@ export async function recordMeetingHeld(id: string, attendees: number): Promise<
   // resolved on the weights actually recorded (lapsed proxies don't count).
   const outcomes: string[] = [];
   for (const mo of db.motions) {
-    if (mo.egmMeetingId === id && mo.status === 'open') { mo.status = motionOutcome(mo); m.resolutions += 1; outcomes.push(`${mo.ref} ${mo.status.replace('_', ' ')}`); }
+    if (mo.egmMeetingId === id && mo.status === 'open') { mo.status = motionOutcome(mo); announceMotionOutcome(mo); m.resolutions += 1; outcomes.push(`${mo.ref} ${mo.status.replace('_', ' ')}`); }
   }
   revalidate();
-  ['/board', '/governance', '/portal/community'].forEach((path) => revalidatePath(path));
+  ['/board', '/governance', '/portal/community', '/portal/announcements', '/announcements'].forEach((path) => revalidatePath(path));
   const parts = [m.title];
   if (lapsed > 0) parts.push(`${lapsed} proxies lapsed`);
   if (outcomes.length) parts.push(outcomes.join(', '));

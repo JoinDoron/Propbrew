@@ -19,7 +19,7 @@ export default async function BoardPage() {
   const egmMeeting = egmMotion?.egmMeetingId ? meetings.find((mt) => mt.id === egmMotion.egmMeetingId) : undefined;
   const egm: EgmData = egmMotion ? {
     motion: { id: egmMotion.id, ref: egmMotion.ref, title: egmMotion.title, meetingLabel: egmMeeting ? `${egmMeeting.type} · ${egmMeeting.whenISO.slice(0, 10)}` : 'EGM', forWeight: egmMotion.forWeight, againstWeight: egmMotion.againstWeight, abstainWeight: egmMotion.abstainWeight, eligibleWeight: egmMotion.eligibleWeight, quorumPct: egmMotion.quorumPct, thresholdPct: egmMotion.thresholdPct },
-    proxies: proxies.filter((p) => p.motionId === egmMotion.id).map((p) => ({ id: p.id, grantorName: p.grantorName, grantorUnit: p.grantorUnit, holderName: p.holderName, direction: p.direction, status: p.status })),
+    proxies: proxies.filter((p) => p.motionId === egmMotion.id).map((p) => ({ id: p.id, motionId: p.motionId, grantorName: p.grantorName, grantorUnit: p.grantorUnit, holderName: p.holderName, direction: p.direction, status: p.status })),
   } : null;
 
   const motionCounts = { draft: 0, open: 0, passed: 0, rejected: 0, quorum_failed: 0 } as Record<MotionStatus, number>;

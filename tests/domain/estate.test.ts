@@ -8,7 +8,7 @@ import {
   motionTally, motionOutcome, eventFillPct, isEventFull, eventState, amenityLoad,
   tierFor, tierProgress, pointsIssued, leaderboard,
   termStatus, meetingState, electionTally, electionWinner,
-  heldProxies, proxyWeights, projectedTally,
+  heldProxies, proxyWeights, projectedTally, resolveProxyChain, proxyWouldCycle, proxyHolderName,
 } from '@/domain/estate/engine';
 
 const NOW = Date.parse('2026-07-26');
@@ -169,5 +169,19 @@ describe('proxy voting (EGM)', () => {
     // Chair exercises the 3 'for' + 1 'against' proxies first, then closes → carries.
     const cast = { ...solar, forWeight: solar.forWeight + 3, againstWeight: solar.againstWeight + 1 };
     expect(motionOutcome(cast)).toBe('passed');
+  });
+  it('resolves a delegation chain to its terminal holder and blocks loops', () => {
+    // seed: Ada → Yusuf → Chair
+    const ada = seed.proxyAssignments.find((p) => p.id === 'px-1')!;
+    const chain = resolveProxyChain(ada, seed.proxyAssignments);
+    expect(chain.depth).toBe(2);
+    expect(chain.cycle).toBe(false);
+    expect(proxyHolderName(chain.terminalHolder)).toBe('Ngozi Okafor');
+    expect(chain.path.map(proxyHolderName)).toEqual(['Ada Obi', 'Yusuf Bello', 'Ngozi Okafor']);
+    // David goes direct → depth 1
+    expect(resolveProxyChain(seed.proxyAssignments.find((p) => p.id === 'px-3')!, seed.proxyAssignments).depth).toBe(1);
+    // assigning Yusuf → Ada would loop (Ada already → Yusuf)
+    expect(proxyWouldCycle('Yusuf Bello', 'Ada Obi', seed.proxyAssignments, 'mo-2')).toBe(true);
+    expect(proxyWouldCycle('David Okon', 'Chair · Ngozi Okafor', seed.proxyAssignments, 'mo-2')).toBe(false);
   });
 });

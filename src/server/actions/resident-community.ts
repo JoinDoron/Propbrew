@@ -19,7 +19,7 @@ import { repos } from '@/server/data';
 import { db } from '@/server/data/store';
 import { units } from '@/server/data/seed/fixtures';
 import { NOW } from '@/domain/ppm';
-import { isEventFull, type VoteChoice } from '@/domain/estate';
+import { isEventFull, proxyWouldCycle, type VoteChoice } from '@/domain/estate';
 
 export type Res = { ok: true; ref?: string } | { ok: false; error: string };
 
@@ -70,9 +70,13 @@ export async function residentAssignProxy(motionId: string, holderName: string, 
   if (db.residentVotes.some((v) => v.motionId === motionId && v.userId === actor.userId)) return { ok: false, error: 'You’ve already voted directly on this motion.' };
   if (db.proxyAssignments.some((p) => p.motionId === motionId && p.grantorUserId === actor.userId && (p.status === 'held' || p.status === 'exercised'))) return { ok: false, error: 'You’ve already assigned a proxy for this motion.' };
   const me = repos.residents.list(actor).items.find((r) => r.userId === actor.userId);
+  const myName = me?.name ?? 'Resident';
+  // Delegation chains are allowed (assign to a neighbour who may delegate onward),
+  // but a loop back to yourself is not.
+  if (proxyWouldCycle(myName, holderName.trim(), db.proxyAssignments, motionId)) return { ok: false, error: 'That would create a delegation loop back to you.' };
   db.proxyAssignments.push({
     tenantId: actor.tenantId, id: `px-${actor.userId}-${motionId}`, estateId: (m.estateId as string),
-    motionId, grantorName: me?.name ?? 'Resident', grantorUnit: '—', grantorUserId: actor.userId,
+    motionId, grantorName: myName, grantorUnit: '—', grantorUserId: actor.userId,
     holderName: holderName.trim(), direction, status: 'held',
   } as (typeof db.proxyAssignments)[number]);
   paths();

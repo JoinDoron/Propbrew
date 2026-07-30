@@ -4,14 +4,14 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Landmark, Users, CalendarClock, Vote, Gavel, Plus, X, Check, CalendarCheck, FileText, UserPlus, Crown, Trophy, Scale, Zap } from 'lucide-react';
 import { toneVar, type Tone } from '@/lib/status-tones';
-import { termStatus, meetingState, MOTION_STATUS_LABEL, electionTally, electionWinner, ELECTION_STATUS_LABEL, electionStatusTone, motionTally, proxyWeights, projectedTally, type BoardRole, type MeetingType, type MeetingStatus, type MotionStatus, type ElectionStatus, type ProxyStatus, type VoteChoice } from '@/domain/estate';
+import { termStatus, meetingState, MOTION_STATUS_LABEL, electionTally, electionWinner, ELECTION_STATUS_LABEL, electionStatusTone, motionTally, proxyWeights, projectedTally, resolveProxyChain, proxyHolderName, type BoardRole, type MeetingType, type MeetingStatus, type MotionStatus, type ElectionStatus, type ProxyStatus, type VoteChoice } from '@/domain/estate';
 import { createMotion, recordMeetingHeld, nominateCandidate, openElectionVoting, decideElection, exerciseProxies, type CreateMotionInput, type NominateInput } from '@/server/actions/estate';
 
 export type BoardRow = { id: string; name: string; unitLabel: string; role: BoardRole; portfolio: string; sinceISO: string; termEndISO: string };
 export type MeetingRow = { id: string; title: string; type: MeetingType; whenISO: string; venue: string; status: MeetingStatus; resolutions: number; attendees: number; quorumRequired: number };
 export type CandidateRow = { id: string; residentName: string; unitLabel: string; statement: string; votes: number };
 export type ElectionRow = { id: string; ref: string; seatTitle: string; portfolio: string; status: ElectionStatus; closesISO: string; eligibleWeight: number; quorumPct: number; candidates: CandidateRow[]; winnerCandidateId?: string };
-export type ProxyRow = { id: string; grantorName: string; grantorUnit: string; holderName: string; direction: VoteChoice; status: ProxyStatus };
+export type ProxyRow = { id: string; motionId: string; grantorName: string; grantorUnit: string; holderName: string; direction: VoteChoice; status: ProxyStatus };
 export type EgmMotion = { id: string; ref: string; title: string; meetingLabel: string; forWeight: number; againstWeight: number; abstainWeight: number; eligibleWeight: number; quorumPct: number; thresholdPct: number };
 export type EgmData = { motion: EgmMotion; proxies: ProxyRow[] } | null;
 
@@ -207,16 +207,27 @@ function EgmCard({ egm, onToast }: { egm: NonNullable<EgmData>; onToast: (m: str
         <div className="text-[10.5px] mt-1" style={{ color: toneVar(proj.addsQuorum ? 'success' : 'muted') }}>{proj.addsQuorum ? `Exercising ${held.length} held ${held.length === 1 ? 'proxy' : 'proxies'} carries quorum → ${proj.passing ? 'motion passes' : 'still below approval threshold'}.` : t.quorumMet ? 'Quorum already met.' : `${held.length} held · not enough to reach quorum yet.`}</div>
       </div>
 
-      {/* proxy register */}
-      <div className="px-4 py-2 mt-1 text-[11px] font-semibold text-text-2 flex items-center gap-1.5"><Users size={12} /> Proxy register · {w.forW} for · {w.againstW} against{exercised ? ` · ${exercised} cast` : ''}</div>
-      <div className="divide-y divide-border max-h-[200px] overflow-y-auto">
-        {proxies.map((p) => (
-          <div key={p.id} className="px-4 py-2 flex items-center gap-2">
-            <div className="min-w-0 flex-1"><div className="text-[12px] font-medium truncate">{p.grantorUnit} <span className="text-text-3 font-normal">→ {p.holderName}</span></div><div className="text-[10px] text-text-3">{p.grantorName}</div></div>
-            <span className="text-[10px] font-semibold px-1.5 h-4 inline-flex items-center rounded-full flex-none capitalize" style={{ background: `color-mix(in srgb, ${toneVar(DIR_TONE[p.direction])} 14%, transparent)`, color: toneVar(DIR_TONE[p.direction]) }}>{p.direction}</span>
-            <span className="text-[10px] font-semibold px-1.5 h-4 inline-flex items-center rounded-full flex-none capitalize" style={{ background: `color-mix(in srgb, ${toneVar(PROXY_TONE[p.status])} 14%, transparent)`, color: toneVar(PROXY_TONE[p.status]) }}>{p.status}</span>
-          </div>
-        ))}
+      {/* proxy register (with delegation chains) */}
+      {(() => { const chained = proxies.filter((p) => resolveProxyChain(p, proxies).depth > 1).length; return (
+      <div className="px-4 py-2 mt-1 text-[11px] font-semibold text-text-2 flex items-center gap-1.5"><Users size={12} /> Proxy register · {w.forW} for · {w.againstW} against{exercised ? ` · ${exercised} cast` : ''}{chained ? ` · ${chained} delegated onward` : ''}</div>
+      ); })()}
+      <div className="divide-y divide-border max-h-[220px] overflow-y-auto">
+        {proxies.map((p) => {
+          const chain = resolveProxyChain(p, proxies);
+          const isChain = chain.depth > 1 && !chain.cycle;
+          return (
+            <div key={p.id} className="px-4 py-2 flex items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="text-[12px] font-medium truncate">{p.grantorUnit} <span className="text-text-3 font-normal">→ {proxyHolderName(p.holderName)}</span></div>
+                {isChain
+                  ? <div className="text-[10px] flex items-center gap-1 flex-wrap mt-0.5" style={{ color: toneVar('info') }}><span className="opacity-70">chain:</span>{chain.path.map((n, i) => <span key={i}>{i > 0 && <span className="opacity-50">→ </span>}{proxyHolderName(n)}</span>)}</div>
+                  : <div className="text-[10px] text-text-3">{p.grantorName}</div>}
+              </div>
+              <span className="text-[10px] font-semibold px-1.5 h-4 inline-flex items-center rounded-full flex-none capitalize" style={{ background: `color-mix(in srgb, ${toneVar(DIR_TONE[p.direction])} 14%, transparent)`, color: toneVar(DIR_TONE[p.direction]) }}>{p.direction}</span>
+              <span className="text-[10px] font-semibold px-1.5 h-4 inline-flex items-center rounded-full flex-none capitalize" style={{ background: `color-mix(in srgb, ${toneVar(PROXY_TONE[p.status])} 14%, transparent)`, color: toneVar(PROXY_TONE[p.status]) }}>{p.status}</span>
+            </div>
+          );
+        })}
         {proxies.length === 0 && <div className="px-4 py-4 text-center text-[12px] text-text-3">No proxies assigned yet.</div>}
       </div>
       <div className="px-4 py-3 border-t border-border flex items-center gap-2">
