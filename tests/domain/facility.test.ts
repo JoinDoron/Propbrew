@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as seed from '@/server/data/seed/fixtures';
 import { siteHealth, alarmCounts, refuelForecast, fuelAnomaly, gridReliancePct, stockSignal, contractStatus, coverageGap, permitConflicts, visitorStats, isOverstay, accessThreats, targetProgress, esgScore, reductionScenarios, copilotInsights, askCopilot, estateIndex, portfolioTotals, type CopilotWorld, type EstateVitals } from '@/domain/facility/engine';
+import { rateAllows, pruneWindow, estCostMinorNgn, estimateTokens, copilotModel, COPILOT_MODELS, COPILOT_RATE_PER_MIN } from '@/domain/facility/copilot-config';
 import type { Generator, Part } from '@/domain/facility/types';
 
 const NOW = Date.parse('2026-07-28');
@@ -130,5 +131,27 @@ describe('executive portfolio', () => {
     expect(t.dieselSpendMinor).toBe(40_000_00);
     expect(t.arrearsMinor).toBe(500_000_00);
     expect(t.avgIndex).toBeGreaterThan(0);
+  });
+});
+
+describe('copilot metering + rate limiting', () => {
+  it('allows a burst then blocks over the per-minute limit', () => {
+    const now = 1_000_000;
+    const times: number[] = [];
+    for (let i = 0; i < COPILOT_RATE_PER_MIN; i++) { expect(rateAllows(times, now)).toBe(true); times.push(now); }
+    expect(rateAllows(times, now)).toBe(false); // limit reached
+    expect(rateAllows(times, now + 61_000)).toBe(true); // window slid past
+    expect(pruneWindow(times, now + 61_000)).toHaveLength(0);
+  });
+  it('estimates cost from tokens and scales with model tier', () => {
+    const haiku = copilotModel('claude-haiku-4-5-20251001');
+    const opus = copilotModel('claude-opus-5');
+    expect(estCostMinorNgn(1000, 500, haiku)).toBeGreaterThan(0);
+    expect(estCostMinorNgn(1000, 500, opus)).toBeGreaterThan(estCostMinorNgn(1000, 500, haiku));
+    expect(COPILOT_MODELS).toHaveLength(3);
+    expect(estimateTokens('four characters!!')).toBeGreaterThan(0);
+  });
+  it('falls back to the default model for an unknown id', () => {
+    expect(copilotModel('nope').id).toBe('claude-sonnet-5');
   });
 });

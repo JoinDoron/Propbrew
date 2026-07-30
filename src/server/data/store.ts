@@ -64,6 +64,10 @@ export const db = {
   accessEvents: clone(seed.accessEvents),
   sustainabilityTargets: clone(seed.sustainabilityTargets),
   emissionMonths: clone(seed.emissionMonths),
+  // Copilot per-tenant model choice + a running usage meter (seeded with some
+  // prior usage so the meter isn't empty on first view).
+  copilotSettings: [{ tenantId: 't-lekki', model: 'claude-sonnet-5' }] as { tenantId: string; model: string }[],
+  copilotUsage: [{ tenantId: 't-lekki', requests: 24, inputTokens: 18000, outputTokens: 5200, costMinorNgn: 21120 }] as { tenantId: string; requests: number; inputTokens: number; outputTokens: number; costMinorNgn: number }[],
 };
 
 export type HistoryEntry = {

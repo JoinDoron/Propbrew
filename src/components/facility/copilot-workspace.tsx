@@ -2,18 +2,19 @@
 
 import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Sparkles, Send, Zap, Package, ShieldAlert, FileText, AlertTriangle, ArrowRight, Fuel, CircleCheck, Loader2 } from 'lucide-react';
+import { Sparkles, Send, Zap, Package, ShieldAlert, FileText, AlertTriangle, ArrowRight, Fuel, CircleCheck, Loader2, Cpu, Coins, Activity, Gauge } from 'lucide-react';
 import { toneVar, type Tone } from '@/lib/status-tones';
-import { copilotInsights, askCopilot, type CopilotWorld, type Insight } from '@/domain/facility';
-import { dispatchWoFromAlarm, acknowledgeAlarm, receiveStock, logRefuel } from '@/server/actions/facility';
+import { copilotInsights, askCopilot, COPILOT_MODELS, COPILOT_RATE_PER_MIN, copilotModel, estimateTokens, type CopilotWorld, type Insight } from '@/domain/facility';
+import { dispatchWoFromAlarm, acknowledgeAlarm, receiveStock, logRefuel, setCopilotModel, recordCopilotUsage } from '@/server/actions/facility';
 
 const SEV_TONE: Record<Insight['severity'], Tone> = { critical: 'danger', warning: 'warn', info: 'info' };
 const CAT_ICON: Record<string, React.ReactNode> = { Alarm: <AlertTriangle size={14} />, Energy: <Zap size={14} />, Inventory: <Package size={14} />, Contracts: <FileText size={14} />, Safety: <ShieldAlert size={14} /> };
 const SUGGESTIONS = ['What needs me right now?', 'How is our diesel and fuel?', 'Which contracts are expiring?', 'Any parts below reorder?', "What's our carbon and spend?"];
 
-type Msg = { id: number; q: string; a: string; sources: string[]; streaming: boolean; source?: 'llm' | 'builtin' };
+type Msg = { id: number; q: string; a: string; sources: string[]; streaming: boolean; source?: 'llm' | 'builtin'; error?: boolean };
+type Usage = { requests: number; inputTokens: number; outputTokens: number; costMinorNgn: number };
 
-export function CopilotWorkspace({ world, userName }: { world: CopilotWorld; userName: string }) {
+export function CopilotWorkspace({ world, userName, model, usage, canConfigure }: { world: CopilotWorld; userName: string; model: string; usage: Usage; canConfigure: boolean }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [toast, setToast] = useState<string | null>(null);
@@ -38,10 +39,15 @@ export function CopilotWorkspace({ world, userName }: { world: CopilotWorld; use
     const patch = (fn: (m: Msg) => Msg) => setThread((t) => t.map((m) => (m.id === id ? fn(m) : m)));
     try {
       const res = await fetch('/api/copilot', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ question: query }) });
+      if (res.status === 429) { const msg = await res.text(); patch((m) => ({ ...m, a: msg, streaming: false, source: 'builtin', error: true })); return; }
       const source = res.headers.get('X-Copilot-Source') === 'llm' ? 'llm' : 'builtin';
+      const inTok = Number(res.headers.get('X-Copilot-In-Tokens')) || estimateTokens(query);
       const reader = res.body?.getReader();
-      if (reader) { const dec = new TextDecoder(); for (;;) { const { done, value } = await reader.read(); if (done) break; const chunk = dec.decode(value, { stream: true }); patch((m) => ({ ...m, a: m.a + chunk })); } }
+      let full = '';
+      if (reader) { const dec = new TextDecoder(); for (;;) { const { done, value } = await reader.read(); if (done) break; const chunk = dec.decode(value, { stream: true }); full += chunk; patch((m) => ({ ...m, a: m.a + chunk })); } }
       patch((m) => ({ ...m, streaming: false, source }));
+      await recordCopilotUsage(inTok, estimateTokens(full)); // meter via a shared-store action
+      router.refresh(); // reflect the updated meter
     } catch {
       patch((m) => ({ ...m, a: askCopilot(query, world).answer, streaming: false, source: 'builtin' }));
     }
@@ -64,7 +70,10 @@ export function CopilotWorkspace({ world, userName }: { world: CopilotWorld; use
       <div className="relative overflow-hidden rounded-2xl p-5 text-white shadow-card" style={{ background: 'linear-gradient(135deg,#1a1030 0%,#241b4d 55%,#2b1e63 100%)' }}>
         <div className="absolute -right-8 -top-8 w-52 h-52 rounded-full opacity-20" style={{ background: 'radial-gradient(circle,#a78bfa,transparent 70%)' }} />
         <div className="relative">
-          <div className="flex items-center gap-1.5 text-[11px] text-white/70"><Sparkles size={12} /> FACILITY COPILOT · <span className="relative flex h-2 w-2 ml-0.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#a78bfa] opacity-75" /><span className="relative inline-flex rounded-full h-2 w-2 bg-[#a78bfa]" /></span> live</div>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 text-[11px] text-white/70"><Sparkles size={12} /> FACILITY COPILOT · <span className="relative flex h-2 w-2 ml-0.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#a78bfa] opacity-75" /><span className="relative inline-flex rounded-full h-2 w-2 bg-[#a78bfa]" /></span> live</div>
+            <ModelPicker model={model} canConfigure={canConfigure} onToast={flash} />
+          </div>
           <div className="text-[20px] font-bold tracking-[-0.02em] leading-tight mt-1.5">Good day, {userName.split(' ')[0]}.</div>
           <p className="text-[13px] text-white/85 mt-1 max-w-[640px] leading-snug">{brief}</p>
           {/* Ask box */}
@@ -78,6 +87,9 @@ export function CopilotWorkspace({ world, userName }: { world: CopilotWorld; use
           </div>
         </div>
       </div>
+
+      {/* Usage meter */}
+      <UsageMeter usage={usage} model={model} />
 
       {/* Conversation */}
       {thread.length > 0 && (
@@ -124,4 +136,48 @@ export function CopilotWorkspace({ world, userName }: { world: CopilotWorld; use
       {toast && <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[90] bg-text text-surface text-[13px] font-medium px-4 py-2.5 rounded-xl shadow-float animate-fade">{toast}</div>}
     </div>
   );
+}
+
+function ModelPicker({ model, canConfigure, onToast }: { model: string; canConfigure: boolean; onToast: (m: string) => void }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const current = copilotModel(model);
+  function change(id: string) {
+    start(async () => { const r = await setCopilotModel(id); if (r.ok) { router.refresh(); onToast(`Copilot model set to ${copilotModel(id).label}`); } else onToast(r.error ?? 'Failed'); });
+  }
+  return (
+    <div className="flex items-center gap-1.5" title={canConfigure ? 'Model applies tenant-wide' : 'View only — you cannot change the model'}>
+      <Cpu size={12} className="text-white/60" />
+      {canConfigure ? (
+        <select value={model} onChange={(e) => change(e.target.value)} disabled={pending} aria-label="Copilot model"
+          className="text-[11px] bg-white/10 border border-white/15 rounded-lg h-7 px-2 text-white outline-none disabled:opacity-50 [&>option]:text-black">
+          {COPILOT_MODELS.map((m) => <option key={m.id} value={m.id}>{m.label} · {m.tier}</option>)}
+        </select>
+      ) : (
+        <span className="text-[11px] text-white/75 bg-white/10 border border-white/15 rounded-lg h-7 px-2 inline-flex items-center">{current.label}</span>
+      )}
+    </div>
+  );
+}
+
+function UsageMeter({ usage, model }: { usage: Usage; model: string }) {
+  const m = copilotModel(model);
+  const tokens = usage.inputTokens + usage.outputTokens;
+  const fmtTok = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
+  const cost = `₦${(usage.costMinorNgn / 100).toLocaleString('en-NG', { maximumFractionDigits: 0 })}`;
+  return (
+    <div className="bg-surface border border-border rounded-2xl shadow-card px-4 py-3 flex items-center gap-4 flex-wrap">
+      <div className="text-[12px] font-semibold flex items-center gap-1.5"><Gauge size={14} className="text-text-3" /> Copilot usage <span className="text-[10.5px] text-text-3 font-normal">· this tenant</span></div>
+      <MeterStat icon={<Activity size={13} />} value={String(usage.requests)} label="requests" />
+      <MeterStat icon={<Cpu size={13} />} value={fmtTok(tokens)} label="tokens" />
+      <MeterStat icon={<Coins size={13} />} value={cost} label="est. cost" />
+      <div className="ml-auto flex items-center gap-1.5 text-[10.5px] text-text-3">
+        <span className="px-2 h-6 inline-flex items-center rounded-full bg-surface-2" title={m.blurb}>{m.label}</span>
+        <span className="px-2 h-6 inline-flex items-center rounded-full bg-surface-2">rate {COPILOT_RATE_PER_MIN}/min</span>
+      </div>
+    </div>
+  );
+}
+function MeterStat({ icon, value, label }: { icon: React.ReactNode; value: string; label: string }) {
+  return <div className="flex items-center gap-1.5"><span className="text-text-3">{icon}</span><span className="text-[13.5px] font-bold tabular-nums leading-none">{value}</span><span className="text-[10.5px] text-text-3">{label}</span></div>;
 }

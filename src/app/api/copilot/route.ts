@@ -2,7 +2,8 @@ import { getActor } from '@/server/session';
 import { assertCan, ForbiddenError } from '@/lib/authz';
 import { repos } from '@/server/data';
 import { NOW_MS } from '@/domain/ppm';
-import { askCopilot, copilotInsights, type CopilotWorld } from '@/domain/facility';
+import { askCopilot, copilotInsights, estimateTokens, type CopilotWorld } from '@/domain/facility';
+import { getTenantModel, checkRate } from '@/server/copilot/metering';
 
 /**
  * Streaming facility-copilot Q&A.
@@ -13,10 +14,14 @@ import { askCopilot, copilotInsights, type CopilotWorld } from '@/domain/facilit
  * hallucinate facility state); with no key we stream the deterministic answer
  * word-by-word, so the UX — and the numbers — are identical either way.
  *
- * Response is a text/plain token stream; `X-Copilot-Source` is `llm` or `builtin`.
+ * Every call is rate-limited here (per-tenant sliding window). Metering is
+ * recorded by the client via a server action after the stream completes — that
+ * path shares the in-memory store with the pages, whereas a route handler's
+ * module singletons are duplicated under the dev bundler. Response is a
+ * text/plain token stream; input-token estimate rides `X-Copilot-In-Tokens`,
+ * and `X-Copilot-Source` is `llm` or `builtin`.
  */
 
-const MODEL = 'claude-sonnet-5';
 const encoder = new TextEncoder();
 
 function buildWorld(actor: Parameters<typeof assertCan>[0]): CopilotWorld {
@@ -50,14 +55,26 @@ export async function POST(req: Request) {
 
   const { question } = (await req.json().catch(() => ({}))) as { question?: string };
   if (!question || !question.trim()) return new Response('Ask a question.', { status: 400 });
+  const q = question.trim();
 
+  const tenantId = actor.tenantId ?? 't-lekki';
+
+  // Rate limit — per-tenant sliding window (SC-guard against runaway spend).
+  const rate = checkRate(tenantId, Date.now());
+  if (!rate.allowed) {
+    return new Response(`You've hit the copilot rate limit for this tenant. Give it about ${rate.retryAfterS}s and try again.`, { status: 429, headers: { 'Retry-After': String(rate.retryAfterS), 'X-Copilot-Source': 'builtin' } });
+  }
+
+  const model = getTenantModel(tenantId);
   const world = buildWorld(actor);
-  const ctx = grounding(world, question.trim());
+  const ctx = grounding(world, q);
+  const inTokens = estimateTokens(ctx + q); // known before streaming; client meters output
+  const meterHeaders = { 'X-Copilot-Model': model, 'X-Copilot-In-Tokens': String(inTokens) };
   const key = process.env.ANTHROPIC_API_KEY;
 
   // --- fallback: stream the deterministic answer word-by-word ---------------
   if (!key) {
-    const answer = askCopilot(question.trim(), world).answer;
+    const answer = askCopilot(q, world).answer;
     const words = answer.split(' ');
     const stream = new ReadableStream({
       async pull(controller) {
@@ -65,7 +82,7 @@ export async function POST(req: Request) {
         controller.close();
       },
     });
-    return new Response(stream, { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'X-Copilot-Source': 'builtin' } });
+    return new Response(stream, { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'X-Copilot-Source': 'builtin', ...meterHeaders } });
   }
 
   // --- real LLM: stream Claude, grounded strictly on the deterministic facts --
@@ -73,18 +90,18 @@ export async function POST(req: Request) {
     method: 'POST',
     headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
     body: JSON.stringify({
-      model: MODEL,
+      model,
       max_tokens: 400,
       stream: true,
       system: `You are Vesta's facility copilot for a Nigerian estate-management platform. Answer in 2–4 concise sentences, in a calm operational tone. Use ONLY the grounded facts below — never invent estate data. If the facts don't cover the question, say what you'd need. Money is Naira (₦).\n\n${ctx}`,
-      messages: [{ role: 'user', content: question.trim() }],
+      messages: [{ role: 'user', content: q }],
     }),
   });
 
   if (!upstream.ok || !upstream.body) {
     // Degrade gracefully to the deterministic answer rather than erroring out.
-    const answer = askCopilot(question.trim(), world).answer;
-    return new Response(answer, { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'X-Copilot-Source': 'builtin' } });
+    const answer = askCopilot(q, world).answer;
+    return new Response(answer, { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'X-Copilot-Source': 'builtin', ...meterHeaders } });
   }
 
   const stream = new ReadableStream({
@@ -115,5 +132,5 @@ export async function POST(req: Request) {
       }
     },
   });
-  return new Response(stream, { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'X-Copilot-Source': 'llm' } });
+  return new Response(stream, { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'X-Copilot-Source': 'llm', ...meterHeaders } });
 }

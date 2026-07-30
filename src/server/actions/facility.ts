@@ -13,6 +13,8 @@ import { getActor } from '@/server/session';
 import { ForbiddenError, assertCan, type Role } from '@/lib/authz';
 import { db, recordHistory } from '@/server/data/store';
 import { NOW, NOW_MS } from '@/domain/ppm';
+import { COPILOT_MODELS, type CopilotModelId } from '@/domain/facility';
+import { setTenantModel, recordUsage, getTenantModel } from '@/server/copilot/metering';
 import type { WorkOrder } from '@/domain/entities';
 
 const PATHS = ['/control-center', '/energy', '/inventory', '/contracts', '/safety', '/access', '/sustainability', '/copilot', '/work-orders', '/dashboard'];
@@ -167,6 +169,30 @@ export async function setEstateLockdown(on: boolean): Promise<Res> {
   for (const ap of db.accessPoints) { ap.mode = on ? 'lockdown' : 'secured'; if (on && ap.status !== 'offline') ap.status = 'online'; }
   logAccess(db.accessPoints[0]?.siteId ?? 's-gardens', 'All points', 'held', on ? 'Estate lockdown engaged' : 'Lockdown released', 'manual');
   revalidate();
+  return { ok: true };
+}
+
+/* --- copilot config (per-tenant model choice) ----------------------------- */
+export async function setCopilotModel(modelId: string): Promise<Res> {
+  const actor = await getActor();
+  try { assertCan(actor, 'reports_analytics', 'update'); }
+  catch (e) { if (e instanceof ForbiddenError) return { ok: false, error: 'You need analytics-config access to change the model.' }; throw e; }
+  if (!COPILOT_MODELS.some((m) => m.id === modelId)) return { ok: false, error: 'Unknown model.' };
+  setTenantModel(actor.tenantId ?? 't-lekki', modelId as CopilotModelId);
+  revalidatePath('/copilot');
+  return { ok: true };
+}
+
+/** Record one copilot call's tokens against the tenant meter. Called by the
+ *  client after the stream completes — server actions share the store with the
+ *  page, so the meter updates on refresh (the /api route's singleton does not). */
+export async function recordCopilotUsage(inputTokens: number, outputTokens: number): Promise<Res> {
+  const actor = await getActor();
+  try { assertCan(actor, 'assets_ppm', 'read'); }
+  catch (e) { if (e instanceof ForbiddenError) return { ok: false, error: 'Not authorised.' }; throw e; }
+  const tid = actor.tenantId ?? 't-lekki';
+  recordUsage(tid, Math.max(0, Math.round(inputTokens || 0)), Math.max(0, Math.round(outputTokens || 0)), getTenantModel(tid));
+  revalidatePath('/copilot');
   return { ok: true };
 }
 
