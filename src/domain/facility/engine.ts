@@ -186,6 +186,35 @@ export function reductionScenarios(litresPerMonth: number): ReductionScenario[] 
   ];
 }
 
+/* --- executive portfolio rollup ------------------------------------------- */
+
+export type EstateVitals = {
+  siteId: string; name: string; kind: string;
+  healthScore: number; openWos: number; overdueWos: number; openAlarms: number;
+  dieselSpendMinor: number; gensetPct: number; contractsAtRisk: number;
+  arrearsMinor: number | null; // null when the viewer can't see money
+};
+
+/** Composite estate index: 55% systems health, 45% an ops-load score that
+ *  penalises overdue work, open alarms and at-risk contracts. */
+export function estateIndex(v: Pick<EstateVitals, 'healthScore' | 'overdueWos' | 'openAlarms' | 'contractsAtRisk'>): { score: number; band: Tone; label: string } {
+  const penalties = v.overdueWos * 8 + v.openAlarms * 6 + v.contractsAtRisk * 5;
+  const opsScore = Math.max(0, 100 - penalties);
+  const score = Math.round(0.55 * v.healthScore + 0.45 * opsScore);
+  const band: Tone = score >= 85 ? 'success' : score >= 65 ? 'warn' : 'danger';
+  return { score, band, label: score >= 85 ? 'Healthy' : score >= 65 ? 'Watch' : 'At risk' };
+}
+
+export function portfolioTotals(estates: readonly EstateVitals[]): { avgIndex: number; openWos: number; overdueWos: number; openAlarms: number; dieselSpendMinor: number; arrearsMinor: number } {
+  if (estates.length === 0) return { avgIndex: 100, openWos: 0, overdueWos: 0, openAlarms: 0, dieselSpendMinor: 0, arrearsMinor: 0 };
+  const sum = (f: (v: EstateVitals) => number) => estates.reduce((n, v) => n + f(v), 0);
+  return {
+    avgIndex: Math.round(estates.reduce((n, v) => n + estateIndex(v).score, 0) / estates.length),
+    openWos: sum((v) => v.openWos), overdueWos: sum((v) => v.overdueWos), openAlarms: sum((v) => v.openAlarms),
+    dieselSpendMinor: sum((v) => v.dieselSpendMinor), arrearsMinor: sum((v) => v.arrearsMinor ?? 0),
+  };
+}
+
 /* --- AI facility copilot -------------------------------------------------- */
 
 export type CopilotWorld = {

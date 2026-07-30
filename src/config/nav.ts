@@ -49,6 +49,7 @@ const OPS_NAV: NavGroup[] = [
   {
     label: 'Facility',
     items: [
+      { id: 'field', label: 'My Day', href: '/field', icon: 'checks', capability: 'work_orders', roles: ['technician'], proposed: true },
       { id: 'control-center', label: 'Control Center', href: '/control-center', icon: 'gauge', capability: 'assets_ppm', proposed: true },
       { id: 'copilot', label: 'AI Copilot', href: '/copilot', icon: 'sparkles', capability: 'assets_ppm', proposed: true },
       { id: 'work-orders', label: 'Work Orders', href: '/work-orders', icon: 'wrench', capability: 'work_orders' },
@@ -80,6 +81,7 @@ const OPS_NAV: NavGroup[] = [
   {
     label: 'Insights',
     items: [
+      { id: 'portfolio', label: 'Portfolio', href: '/portfolio', icon: 'grid', capability: 'reports_analytics', proposed: true },
       { id: 'reports', label: 'Reports', href: '/reports', icon: 'trending', capability: 'reports_analytics' },
       { id: 'investors', label: 'Investors', href: '/investors', icon: 'building', capability: 'investor_projects' },
     ],
@@ -215,6 +217,8 @@ export const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   '/security': { title: 'Security & SOS', subtitle: 'Live alerts, patrols and incidents' },
   '/marketplace': { title: 'Marketplace', subtitle: 'Vendor listings and resident orders' },
   '/documents': { title: 'Documents', subtitle: 'Estate documents, shared by audience' },
+  '/portfolio': { title: 'Portfolio', subtitle: 'Every estate, ranked and compared' },
+  '/field': { title: 'My Day', subtitle: 'Your jobs for today, built for the field' },
   '/reports': { title: 'Reports', subtitle: 'Portfolio performance and KPIs' },
   '/investors': { title: 'Investors', subtitle: 'Off-plan projects, sales and returns' },
   '/settings': { title: 'Settings', subtitle: 'Estate configuration and preferences' },

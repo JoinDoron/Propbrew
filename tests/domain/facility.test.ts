@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as seed from '@/server/data/seed/fixtures';
-import { siteHealth, alarmCounts, refuelForecast, fuelAnomaly, gridReliancePct, stockSignal, contractStatus, coverageGap, permitConflicts, visitorStats, isOverstay, accessThreats, targetProgress, esgScore, reductionScenarios, copilotInsights, askCopilot, type CopilotWorld } from '@/domain/facility/engine';
+import { siteHealth, alarmCounts, refuelForecast, fuelAnomaly, gridReliancePct, stockSignal, contractStatus, coverageGap, permitConflicts, visitorStats, isOverstay, accessThreats, targetProgress, esgScore, reductionScenarios, copilotInsights, askCopilot, estateIndex, portfolioTotals, type CopilotWorld, type EstateVitals } from '@/domain/facility/engine';
 import type { Generator, Part } from '@/domain/facility/types';
 
 const NOW = Date.parse('2026-07-28');
@@ -112,5 +112,23 @@ describe('AI copilot', () => {
     const now = askCopilot('what needs me right now?', world);
     expect(now.answer.length).toBeGreaterThan(0);
     expect(now.sources.length).toBeGreaterThan(0);
+  });
+});
+
+describe('executive portfolio', () => {
+  const good: EstateVitals = { siteId: 's1', name: 'A', kind: 'estate', healthScore: 98, openWos: 2, overdueWos: 0, openAlarms: 0, dieselSpendMinor: 10_000_00, gensetPct: 20, contractsAtRisk: 0, arrearsMinor: 0 };
+  const bad: EstateVitals = { siteId: 's2', name: 'B', kind: 'estate', healthScore: 60, openWos: 6, overdueWos: 3, openAlarms: 2, dieselSpendMinor: 30_000_00, gensetPct: 55, contractsAtRisk: 2, arrearsMinor: 500_000_00 };
+  it('scores a composite estate index and penalises ops load', () => {
+    expect(estateIndex(good).score).toBeGreaterThan(estateIndex(bad).score);
+    expect(estateIndex(good).band).toBe('success');
+    expect(estateIndex(bad).band).not.toBe('success');
+  });
+  it('rolls up portfolio totals', () => {
+    const t = portfolioTotals([good, bad]);
+    expect(t.openWos).toBe(8);
+    expect(t.overdueWos).toBe(3);
+    expect(t.dieselSpendMinor).toBe(40_000_00);
+    expect(t.arrearsMinor).toBe(500_000_00);
+    expect(t.avgIndex).toBeGreaterThan(0);
   });
 });
