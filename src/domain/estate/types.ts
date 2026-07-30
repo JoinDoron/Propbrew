@@ -77,7 +77,7 @@ export type Motion = TenantScoped & {
 
 /* --- proxy voting (for an EGM motion) ------------------------------------- */
 
-export type ProxyStatus = 'held' | 'exercised' | 'revoked';
+export type ProxyStatus = 'held' | 'exercised' | 'revoked' | 'expired';
 export type ProxyAssignment = TenantScoped & {
   id: string; estateId: string; motionId: string;
   grantorName: string; grantorUnit: string; grantorUserId: string; // the home giving its proxy

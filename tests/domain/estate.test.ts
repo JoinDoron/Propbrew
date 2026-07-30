@@ -154,4 +154,12 @@ describe('proxy voting (EGM)', () => {
     expect(proj.addsQuorum).toBe(true); // this block is what carries quorum
     expect(proj.passing).toBe(true); // approval still clears 66%
   });
+  it('links the EGM motion to its meeting so proxies can expire on close', () => {
+    const solar = seed.motions.find((m) => m.id === 'mo-2')!;
+    expect(solar.egm).toBe(true);
+    expect(solar.egmMeetingId).toBe('mt-2');
+    // every seeded proxy targets that motion — so a meeting-close sweep finds them
+    expect(seed.proxyAssignments.every((p) => p.motionId === solar.id)).toBe(true);
+    expect(heldProxies(seed.proxyAssignments, solar.id).length).toBe(seed.proxyAssignments.length);
+  });
 });

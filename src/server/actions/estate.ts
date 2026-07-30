@@ -233,8 +233,16 @@ export async function recordMeetingHeld(id: string, attendees: number): Promise<
   const m = db.meetings.find((x) => x.id === id);
   if (!m) return { ok: false, error: 'Meeting not found.' };
   m.status = 'held'; m.attendees = Math.max(0, Math.round(attendees));
+  // A proxy is only good for its meeting — once the meeting is closed, any
+  // still-held proxies for that meeting's motions lapse (a real governance rule).
+  const motionIds = new Set(db.motions.filter((mo) => mo.egmMeetingId === id).map((mo) => mo.id));
+  let lapsed = 0;
+  for (const p of db.proxyAssignments) {
+    if (motionIds.has(p.motionId) && p.status === 'held') { p.status = 'expired'; lapsed += 1; }
+  }
   revalidate();
-  return { ok: true, ref: m.title };
+  ['/board', '/governance', '/portal/community'].forEach((path) => revalidatePath(path));
+  return { ok: true, ref: lapsed > 0 ? `${m.title} · ${lapsed} proxies lapsed` : m.title };
 }
 
 /* --- loyalty & rewards ---------------------------------------------------- */

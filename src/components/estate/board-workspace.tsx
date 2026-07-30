@@ -172,7 +172,7 @@ function HeldDialog({ meeting, onClose, onDone }: { meeting: MeetingRow; onClose
   );
 }
 const DIR_TONE: Record<VoteChoice, Tone> = { for: 'success', against: 'danger', abstain: 'muted' };
-const PROXY_TONE: Record<ProxyStatus, Tone> = { held: 'progress', exercised: 'success', revoked: 'muted' };
+const PROXY_TONE: Record<ProxyStatus, Tone> = { held: 'progress', exercised: 'success', revoked: 'muted', expired: 'muted' };
 
 function EgmCard({ egm, onToast }: { egm: NonNullable<EgmData>; onToast: (m: string) => void }) {
   const router = useRouter();

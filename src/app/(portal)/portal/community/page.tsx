@@ -38,6 +38,7 @@ export default async function ResidentCommunityPage() {
     closesISO: openEl.closesISO, eligibleWeight: openEl.eligibleWeight, quorumPct: openEl.quorumPct,
     candidates: openEl.candidates.map((c) => ({ id: c.id, residentName: c.residentName, unitLabel: c.unitLabel, statement: c.statement, votes: c.votes })),
     myCandidateId: myElectionVotes.get(openEl.id),
+    canStand: !!myName && !openEl.candidates.some((c) => c.residentName === myName),
   } : null;
 
   const myParcels: PParcel[] = parcels

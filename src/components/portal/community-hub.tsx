@@ -2,10 +2,10 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Vote, PartyPopper, Award, ThumbsUp, ThumbsDown, MinusCircle, Check, Star, Gift, CalendarDays, MapPin, Crown, Scale, X, Package } from 'lucide-react';
+import { Vote, PartyPopper, Award, ThumbsUp, ThumbsDown, MinusCircle, Check, Star, Gift, CalendarDays, MapPin, Crown, Scale, X, Package, Megaphone } from 'lucide-react';
 import { toneVar } from '@/lib/status-tones';
 import { motionTally, electionTally, tierFor, tierProgress, TIER_TONE, eventFillPct, isEventFull, type VoteChoice, type MotionStatus, type RewardTier, type EventCategory } from '@/domain/estate';
-import { residentVote, residentRsvp, residentRedeem, residentVoteCandidate, residentAssignProxy, residentRevokeProxy } from '@/server/actions/resident-community';
+import { residentVote, residentRsvp, residentRedeem, residentVoteCandidate, residentAssignProxy, residentRevokeProxy, residentSelfNominate, residentCollectParcel } from '@/server/actions/resident-community';
 
 export type MyProxy = { holderName: string; direction: VoteChoice; status: string };
 export type PMotion = { id: string; ref: string; title: string; summary: string; status: MotionStatus; forWeight: number; againstWeight: number; abstainWeight: number; eligibleWeight: number; quorumPct: number; thresholdPct: number; closesISO: string; myChoice?: VoteChoice; egm?: boolean; myProxy?: MyProxy };
@@ -15,7 +15,7 @@ export type PEvent = { id: string; title: string; category: EventCategory; venue
 export type MyRewards = { points: number; onTimeStreak: number; eventsAttended: number; pollsVoted: number; rank: number; total: number } | null;
 export type PPerk = { id: string; title: string; detail: string; cost: number; stock: number };
 export type PCandidate = { id: string; residentName: string; unitLabel: string; statement: string; votes: number };
-export type PElection = { id: string; ref: string; seatTitle: string; portfolio: string; closesISO: string; eligibleWeight: number; quorumPct: number; candidates: PCandidate[]; myCandidateId?: string } | null;
+export type PElection = { id: string; ref: string; seatTitle: string; portfolio: string; closesISO: string; eligibleWeight: number; quorumPct: number; candidates: PCandidate[]; myCandidateId?: string; canStand: boolean } | null;
 export type PParcel = { id: string; code: string; courier: string; size: string; status: string; lockerLabel?: string; receivedISO: string; overdue: boolean };
 
 const TIER_LABEL: Record<RewardTier, string> = { bronze: 'Bronze', silver: 'Silver', gold: 'Gold', platinum: 'Platinum' };
@@ -70,11 +70,12 @@ export function CommunityHub({ firstName, motions, events, rewards, perks, elect
                 <div className="text-right flex-none">
                   <div className="text-[10px] text-text-3 uppercase tracking-wide">Pickup code</div>
                   <div className="text-[15px] font-bold font-mono tracking-[0.02em] leading-tight" style={{ color: toneVar('progress') }}>{p.code}</div>
+                  <button disabled={pending} onClick={() => act(() => residentCollectParcel(p.id), 'Parcel collected 🎉')} className="mt-1 text-[11px] px-2.5 h-7 rounded-lg font-medium bg-primary text-white disabled:opacity-50 inline-flex items-center gap-1"><Check size={11} /> Confirm pickup</button>
                 </div>
               </div>
             ))}
           </div>
-          <div className="px-4 py-2 bg-surface-2 text-[10.5px] text-text-3">Show your pickup code at the locker or front desk to collect.</div>
+          <div className="px-4 py-2 bg-surface-2 text-[10.5px] text-text-3">Enter your code at the locker, then confirm pickup here to free it up.</div>
         </section>
       )}
 
@@ -98,7 +99,7 @@ export function CommunityHub({ firstName, motions, events, rewards, perks, elect
                   <div className="mt-2 text-[12px] font-medium inline-flex items-center gap-1.5 px-2.5 h-8 rounded-lg" style={{ background: `color-mix(in srgb, ${toneVar('success')} 12%, transparent)`, color: toneVar('success') }}><Check size={13} /> You voted {CHOICE_LABEL[m.myChoice]}</div>
                 ) : m.myProxy ? (
                   <div className="mt-2 flex items-center gap-2 flex-wrap">
-                    <span className="text-[12px] font-medium inline-flex items-center gap-1.5 px-2.5 h-8 rounded-lg" style={{ background: `color-mix(in srgb, ${toneVar('progress')} 12%, transparent)`, color: toneVar('progress') }}><Scale size={13} /> Proxy to {m.myProxy.holderName.replace(/^.*· /, '')} · {CHOICE_LABEL[m.myProxy.direction]}{m.myProxy.status === 'exercised' ? ' · cast ✓' : ''}</span>
+                    <span className="text-[12px] font-medium inline-flex items-center gap-1.5 px-2.5 h-8 rounded-lg" style={{ background: `color-mix(in srgb, ${toneVar(m.myProxy.status === 'expired' ? 'muted' : 'progress')} 12%, transparent)`, color: toneVar(m.myProxy.status === 'expired' ? 'muted' : 'progress') }}><Scale size={13} /> Proxy to {m.myProxy.holderName.replace(/^.*· /, '')} · {CHOICE_LABEL[m.myProxy.direction]}{m.myProxy.status === 'exercised' ? ' · cast ✓' : m.myProxy.status === 'expired' ? ' · lapsed (meeting closed)' : ''}</span>
                     {m.myProxy.status === 'held' && <button disabled={pending} onClick={() => act(() => residentRevokeProxy(m.id), 'Proxy revoked')} className="text-[11px] px-2.5 h-8 rounded-lg border border-border-2 disabled:opacity-50">Revoke</button>}
                   </div>
                 ) : (
@@ -146,7 +147,8 @@ export function CommunityHub({ firstName, motions, events, rewards, perks, elect
                 );
               })}
             </div>
-            {voted && <div className="px-4 pb-3 -mt-1 text-[12px] font-medium inline-flex items-center gap-1.5" style={{ color: toneVar('success') }}><Check size={13} /> You voted for {voted.residentName}</div>}
+            {voted && <div className="px-4 pb-2 -mt-1 text-[12px] font-medium inline-flex items-center gap-1.5" style={{ color: toneVar('success') }}><Check size={13} /> You voted for {voted.residentName}</div>}
+            {election.canStand && <StandForm pending={pending} onStand={(statement) => act(() => residentSelfNominate(election.id, statement), 'You’re standing for the board 🎉')} />}
           </section>
         );
       })()}
@@ -205,6 +207,24 @@ export function CommunityHub({ firstName, motions, events, rewards, perks, elect
       )}
 
       {toast && <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[90] bg-text text-surface text-[13px] font-medium px-4 py-2.5 rounded-xl shadow-float animate-fade">{toast}</div>}
+    </div>
+  );
+}
+
+function StandForm({ pending, onStand }: { pending: boolean; onStand: (statement: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [statement, setStatement] = useState('');
+  if (!open) return (
+    <div className="px-4 pb-3 pt-1 border-t border-border mt-1">
+      <button onClick={() => setOpen(true)} className="text-[11.5px] font-medium inline-flex items-center gap-1.5" style={{ color: toneVar('warn') }}><Megaphone size={13} /> Stand for this seat</button>
+    </div>
+  );
+  return (
+    <div className="mx-3 mb-3 mt-1 rounded-xl border border-border p-2.5 bg-surface-2">
+      <div className="flex items-center justify-between mb-2"><span className="text-[11.5px] font-semibold">Put yourself forward</span><button onClick={() => setOpen(false)} className="w-6 h-6 rounded grid place-items-center hover:bg-surface"><X size={14} /></button></div>
+      <label className="block text-[10.5px] text-text-3 mb-1">Your manifesto — why residents should pick you</label>
+      <textarea value={statement} onChange={(e) => setStatement(e.target.value)} className="w-full rounded-lg border border-border-2 bg-surface text-[12.5px] outline-none focus:border-primary p-2" style={{ height: 60, resize: 'none', fontFamily: 'inherit' }} placeholder="e.g. I’ll champion greener common areas and transparent welfare spending." autoFocus />
+      <button disabled={pending || !statement.trim()} onClick={() => onStand(statement)} className="w-full h-9 mt-2 rounded-lg bg-primary text-white text-[12.5px] font-medium disabled:opacity-50">{pending ? 'Submitting…' : 'Submit my nomination'}</button>
     </div>
   );
 }
