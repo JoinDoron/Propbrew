@@ -73,3 +73,41 @@ export type IncidentSeverity = 'near_miss' | 'minor' | 'major';
 export type Incident = TenantScoped & {
   id: string; siteId: string; category: string; severity: IncidentSeverity; location: string; atISO: string; status: 'open' | 'closed';
 };
+
+/* --- access & visitors ---------------------------------------------------- */
+
+export type AccessPointKind = 'gate' | 'door' | 'turnstile' | 'barrier';
+export type AccessPointMode = 'secured' | 'unlocked' | 'lockdown';
+export type AccessPointStatus = 'online' | 'offline' | 'held_open' | 'forced';
+export type AccessPoint = TenantScoped & {
+  id: string; siteId: string; name: string; kind: AccessPointKind;
+  status: AccessPointStatus; mode: AccessPointMode; batteryPct?: number; lastEventISO: string;
+};
+
+export type VisitorKind = 'guest' | 'contractor' | 'delivery' | 'ride_hail';
+export type VisitorStatus = 'expected' | 'checked_in' | 'checked_out' | 'denied';
+export type VisitorPass = TenantScoped & {
+  id: string; code: string; siteId: string; visitorName: string; kind: VisitorKind;
+  hostName: string; hostUnit: string; purpose: string; vehiclePlate?: string;
+  status: VisitorStatus; validFromISO: string; validToISO: string;
+  checkedInISO?: string; checkedOutISO?: string;
+};
+
+export type AccessEventKind = 'entry' | 'exit' | 'denied' | 'forced' | 'held';
+export type AccessCredential = 'pass' | 'fob' | 'plate' | 'manual';
+export type AccessEvent = TenantScoped & {
+  id: string; siteId: string; pointName: string; atISO: string;
+  kind: AccessEventKind; subjectName: string; credential: AccessCredential; passCode?: string;
+};
+
+/* --- sustainability & ESG ------------------------------------------------- */
+
+export type SustainabilityMetric = 'carbon' | 'genset_reliance' | 'water' | 'energy';
+export type SustainabilityTarget = TenantScoped & {
+  id: string; metric: SustainabilityMetric; label: string; unit: string;
+  baselineValue: number; currentValue: number; targetValue: number; dueISO: string;
+};
+
+export type EmissionMonth = TenantScoped & {
+  id: string; monthLabel: string; dieselLitres: number; gridKwh: number; gensetKwh: number; waterM3: number;
+};

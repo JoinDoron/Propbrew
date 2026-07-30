@@ -59,6 +59,11 @@ export const db = {
   facilityContracts: clone(seed.facilityContracts),
   facilityPermits: clone(seed.facilityPermits),
   facilityIncidents: clone(seed.facilityIncidents),
+  accessPoints: clone(seed.accessPoints),
+  visitorPasses: clone(seed.visitorPasses),
+  accessEvents: clone(seed.accessEvents),
+  sustainabilityTargets: clone(seed.sustainabilityTargets),
+  emissionMonths: clone(seed.emissionMonths),
 };
 
 export type HistoryEntry = {

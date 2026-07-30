@@ -15,7 +15,7 @@ import { db, recordHistory } from '@/server/data/store';
 import { NOW, NOW_MS } from '@/domain/ppm';
 import type { WorkOrder } from '@/domain/entities';
 
-const PATHS = ['/control-center', '/energy', '/inventory', '/contracts', '/safety', '/work-orders', '/dashboard'];
+const PATHS = ['/control-center', '/energy', '/inventory', '/contracts', '/safety', '/access', '/sustainability', '/copilot', '/work-orders', '/dashboard'];
 const revalidate = () => PATHS.forEach((p) => revalidatePath(p));
 
 export type Res = { ok: true; ref?: string } | { ok: false; error: string };
@@ -99,6 +99,84 @@ export async function advancePermit(id: string): Promise<Res> {
   const p = db.facilityPermits.find((x) => x.id === id);
   if (!p) return { ok: false, error: 'Permit not found.' };
   p.status = p.status === 'requested' ? 'active' : p.status === 'active' ? 'closed' : 'closed';
+  revalidate();
+  return { ok: true };
+}
+
+/* --- access & visitors ---------------------------------------------------- */
+let vpSeq = 0, aeSeq = 0;
+const nowIso = () => new Date(NOW_MS).toISOString();
+
+function logAccess(siteId: string, pointName: string, kind: 'entry' | 'exit' | 'denied' | 'forced' | 'held', subjectName: string, credential: 'pass' | 'fob' | 'plate' | 'manual', passCode?: string) {
+  db.accessEvents.unshift({ tenantId: db.visitorPasses[0]?.tenantId ?? 't-lekki', id: `ae-new-${++aeSeq}`, siteId, pointName, atISO: nowIso(), kind, subjectName, credential, passCode } as (typeof db.accessEvents)[number]);
+}
+
+export type PreRegisterInput = { visitorName: string; kind: 'guest' | 'contractor' | 'delivery' | 'ride_hail'; hostName: string; hostUnit: string; purpose: string; vehiclePlate?: string; validToISO?: string };
+
+/** Pre-register an expected visitor — issues a gate pass code the guard can match. */
+export async function preRegisterVisitor(input: PreRegisterInput): Promise<Res> {
+  const g = await gate('create'); if ('ok' in g) return g;
+  if (!input.visitorName?.trim()) return { ok: false, error: 'Enter the visitor name.' };
+  const code = `VP-${4830 + db.visitorPasses.length}`;
+  const today = nowIso().slice(0, 10);
+  db.visitorPasses.unshift({
+    tenantId: g.actor.tenantId ?? 't-lekki', id: `vp-new-${++vpSeq}`, code, siteId: (g.actor.estateIds[0] as string) ?? 's-gardens',
+    visitorName: input.visitorName.trim(), kind: input.kind, hostName: input.hostName.trim() || '—', hostUnit: input.hostUnit.trim() || '—',
+    purpose: input.purpose.trim() || 'Visit', vehiclePlate: input.vehiclePlate?.trim() || undefined,
+    status: 'expected', validFromISO: today, validToISO: input.validToISO || today,
+  } as (typeof db.visitorPasses)[number]);
+  revalidate();
+  return { ok: true, ref: code };
+}
+
+export async function checkInVisitor(id: string): Promise<Res> {
+  const g = await gate('update'); if ('ok' in g) return g;
+  const p = db.visitorPasses.find((x) => x.id === id);
+  if (!p) return { ok: false, error: 'Pass not found.' };
+  if (p.status === 'checked_out') return { ok: false, error: 'This pass is already closed.' };
+  p.status = 'checked_in'; p.checkedInISO = nowIso();
+  logAccess(p.siteId, 'Main Gate', 'entry', p.visitorName, 'pass', p.code);
+  revalidate();
+  return { ok: true, ref: p.code };
+}
+
+export async function checkOutVisitor(id: string): Promise<Res> {
+  const g = await gate('update'); if ('ok' in g) return g;
+  const p = db.visitorPasses.find((x) => x.id === id);
+  if (!p) return { ok: false, error: 'Pass not found.' };
+  if (p.status !== 'checked_in') return { ok: false, error: 'Only a checked-in visitor can be checked out.' };
+  p.status = 'checked_out'; p.checkedOutISO = nowIso();
+  logAccess(p.siteId, 'Main Gate', 'exit', p.visitorName, 'pass', p.code);
+  revalidate();
+  return { ok: true, ref: p.code };
+}
+
+export async function setAccessPointMode(id: string, mode: 'secured' | 'unlocked' | 'lockdown'): Promise<Res> {
+  const g = await gate('update'); if ('ok' in g) return g;
+  const ap = db.accessPoints.find((x) => x.id === id);
+  if (!ap) return { ok: false, error: 'Access point not found.' };
+  ap.mode = mode;
+  if (mode === 'lockdown') { ap.status = 'online'; logAccess(ap.siteId, ap.name, 'held', 'Lockdown engaged', 'manual'); }
+  revalidate();
+  return { ok: true };
+}
+
+/** One-tap estate lockdown / release — sets every point at once (the red button). */
+export async function setEstateLockdown(on: boolean): Promise<Res> {
+  const g = await gate('update'); if ('ok' in g) return g;
+  for (const ap of db.accessPoints) { ap.mode = on ? 'lockdown' : 'secured'; if (on && ap.status !== 'offline') ap.status = 'online'; }
+  logAccess(db.accessPoints[0]?.siteId ?? 's-gardens', 'All points', 'held', on ? 'Estate lockdown engaged' : 'Lockdown released', 'manual');
+  revalidate();
+  return { ok: true };
+}
+
+/* --- sustainability ------------------------------------------------------- */
+export async function setSustainabilityTarget(id: string, targetValue: number): Promise<Res> {
+  const g = await gate('update'); if ('ok' in g) return g;
+  const t = db.sustainabilityTargets.find((x) => x.id === id);
+  if (!t) return { ok: false, error: 'Target not found.' };
+  if (!Number.isFinite(targetValue) || targetValue < 0) return { ok: false, error: 'Enter a valid target.' };
+  t.targetValue = Math.round(targetValue);
   revalidate();
   return { ok: true };
 }

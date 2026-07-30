@@ -7,7 +7,7 @@
 
 import { SEED } from '@/server/identities';
 import { money } from '@/domain/primitives';
-import type { BuildingSystem, Sensor, Alarm, Generator, MeterReading, Part, Contract, Permit, Incident } from '@/domain/facility/types';
+import type { BuildingSystem, Sensor, Alarm, Generator, MeterReading, Part, Contract, Permit, Incident, AccessPoint, VisitorPass, AccessEvent, SustainabilityTarget, EmissionMonth } from '@/domain/facility/types';
 
 const A = SEED.tenantA;
 const G = SEED.estateGardens; // s-gardens
@@ -82,3 +82,54 @@ export const facilityIncidents: Incident[] = [
   { tenantId: A, id: 'in-1', siteId: G, category: 'Slip / trip', severity: 'minor', location: 'Block C · Lobby', atISO: '2026-07-22', status: 'closed' },
   { tenantId: A, id: 'in-2', siteId: G, category: 'Electrical near-miss', severity: 'near_miss', location: 'Block C · Plant room', atISO: '2026-07-26', status: 'open' },
 ] as unknown as Incident[];
+
+/* --- access & visitors ---------------------------------------------------- */
+
+export const accessPoints: AccessPoint[] = [
+  { tenantId: A, id: 'ap-1', siteId: G, name: 'Main Gate', kind: 'gate', status: 'online', mode: 'secured', batteryPct: 100, lastEventISO: '2026-07-25T21:40:00Z' },
+  { tenantId: A, id: 'ap-2', siteId: G, name: 'Block C Lobby', kind: 'door', status: 'online', mode: 'secured', batteryPct: 92, lastEventISO: '2026-07-25T21:12:00Z' },
+  { tenantId: A, id: 'ap-3', siteId: G, name: 'Block D Lobby', kind: 'door', status: 'held_open', mode: 'secured', batteryPct: 88, lastEventISO: '2026-07-25T20:05:00Z' },
+  { tenantId: A, id: 'ap-4', siteId: G, name: 'Car Park Barrier', kind: 'barrier', status: 'online', mode: 'secured', batteryPct: 74, lastEventISO: '2026-07-25T21:33:00Z' },
+  { tenantId: A, id: 'ap-5', siteId: G, name: 'Service Gate', kind: 'gate', status: 'offline', mode: 'secured', batteryPct: 12, lastEventISO: '2026-07-25T14:20:00Z' },
+  { tenantId: A, id: 'ap-6', siteId: V, name: 'Victoria Tower Turnstile', kind: 'turnstile', status: 'online', mode: 'secured', batteryPct: 96, lastEventISO: '2026-07-25T19:50:00Z' },
+] as unknown as AccessPoint[];
+
+export const visitorPasses: VisitorPass[] = [
+  { tenantId: A, id: 'vp-1', code: 'VP-4821', siteId: G, visitorName: 'Ade Balogun', kind: 'guest', hostName: 'Folake Bello', hostUnit: 'Block C · 12B', purpose: 'Family visit', vehiclePlate: 'LAG-221-KJA', status: 'expected', validFromISO: '2026-07-26', validToISO: '2026-07-26' },
+  { tenantId: A, id: 'vp-2', code: 'VP-4818', siteId: G, visitorName: 'CoolAir technician', kind: 'contractor', hostName: 'Bola Adeyemi', hostUnit: 'Estate · Facilities', purpose: 'Chiller service', vehiclePlate: 'LAG-904-CAS', status: 'checked_in', validFromISO: '2026-07-25', validToISO: '2026-07-26', checkedInISO: '2026-07-25T18:30:00Z' },
+  { tenantId: A, id: 'vp-3', code: 'VP-4805', siteId: G, visitorName: 'Chuka Eze', kind: 'guest', hostName: 'Tobi Ade', hostUnit: 'Block C · 09A', purpose: 'Overnight guest', status: 'checked_in', validFromISO: '2026-07-24', validToISO: '2026-07-25', checkedInISO: '2026-07-24T19:10:00Z' },
+  { tenantId: A, id: 'vp-4', code: 'VP-4823', siteId: G, visitorName: 'Jumia delivery', kind: 'delivery', hostName: 'Kemi Adeyinka', hostUnit: 'Block C · 03B', purpose: 'Parcel drop-off', status: 'expected', validFromISO: '2026-07-26', validToISO: '2026-07-26' },
+  { tenantId: A, id: 'vp-5', code: 'VP-4799', siteId: G, visitorName: 'Grace Umeh', kind: 'guest', hostName: 'David Okon', hostUnit: 'Block D · 07B', purpose: 'Day visit', status: 'checked_out', validFromISO: '2026-07-24', validToISO: '2026-07-24', checkedInISO: '2026-07-24T11:00:00Z', checkedOutISO: '2026-07-24T17:20:00Z' },
+  { tenantId: A, id: 'vp-6', code: 'VP-4820', siteId: G, visitorName: 'Unknown caller', kind: 'guest', hostName: '—', hostUnit: 'No match', purpose: 'No host confirmation', status: 'denied', validFromISO: '2026-07-26', validToISO: '2026-07-26' },
+  { tenantId: A, id: 'vp-7', code: 'VP-4824', siteId: G, visitorName: 'Bolt ride (Musa K.)', kind: 'ride_hail', hostName: 'Yusuf Bello', hostUnit: 'Block C · 11C', purpose: 'Pickup', vehiclePlate: 'LAG-771-BLT', status: 'expected', validFromISO: '2026-07-26', validToISO: '2026-07-26' },
+] as unknown as VisitorPass[];
+
+export const accessEvents: AccessEvent[] = [
+  { tenantId: A, id: 'ae-1', siteId: G, pointName: 'Main Gate', atISO: '2026-07-25T21:40:00Z', kind: 'entry', subjectName: 'CoolAir technician', credential: 'pass', passCode: 'VP-4818' },
+  { tenantId: A, id: 'ae-2', siteId: G, pointName: 'Main Gate', atISO: '2026-07-25T21:33:00Z', kind: 'denied', subjectName: 'Unknown caller', credential: 'manual', passCode: 'VP-4820' },
+  { tenantId: A, id: 'ae-3', siteId: G, pointName: 'Block C Lobby', atISO: '2026-07-25T21:12:00Z', kind: 'entry', subjectName: 'Folake Bello', credential: 'fob' },
+  { tenantId: A, id: 'ae-4', siteId: G, pointName: 'Block D Lobby', atISO: '2026-07-25T20:05:00Z', kind: 'held', subjectName: 'Door sensor', credential: 'manual' },
+  { tenantId: A, id: 'ae-5', siteId: G, pointName: 'Car Park Barrier', atISO: '2026-07-25T19:58:00Z', kind: 'entry', subjectName: 'LAG-904-CAS', credential: 'plate' },
+  { tenantId: A, id: 'ae-6', siteId: V, pointName: 'Victoria Tower Turnstile', atISO: '2026-07-25T19:50:00Z', kind: 'exit', subjectName: 'Chidi Okonkwo', credential: 'fob' },
+  { tenantId: A, id: 'ae-7', siteId: G, pointName: 'Service Gate', atISO: '2026-07-25T14:20:00Z', kind: 'forced', subjectName: 'Tamper alert', credential: 'manual' },
+] as unknown as AccessEvent[];
+
+/* --- sustainability & ESG ------------------------------------------------- */
+
+export const sustainabilityTargets: SustainabilityTarget[] = [
+  { tenantId: A, id: 'st-carbon', metric: 'carbon', label: 'Cut diesel carbon', unit: 'kg CO₂/mo', baselineValue: 12000, currentValue: 9800, targetValue: 7000, dueISO: '2026-12-31' },
+  { tenantId: A, id: 'st-genset', metric: 'genset_reliance', label: 'Reduce genset reliance', unit: '%', baselineValue: 45, currentValue: 30, targetValue: 20, dueISO: '2026-12-31' },
+  { tenantId: A, id: 'st-water', metric: 'water', label: 'Lower water draw', unit: 'm³/mo', baselineValue: 260, currentValue: 230, targetValue: 200, dueISO: '2026-10-31' },
+] as unknown as SustainabilityTarget[];
+
+// Diesel litres/month track the live generator burn (~22,340 L in Jul from the
+// generator run-hours), trending down ~16% over 6 months. gensetKwh = litres ×
+// 3.5 (genset yield); gridKwh sized so the energy mix ≈ the 78% grid share.
+export const emissionMonths: EmissionMonth[] = [
+  { tenantId: A, id: 'em-1', monthLabel: 'Feb', dieselLitres: 26800, gridKwh: 332600, gensetKwh: 93800, waterM3: 258 },
+  { tenantId: A, id: 'em-2', monthLabel: 'Mar', dieselLitres: 25900, gridKwh: 321400, gensetKwh: 90650, waterM3: 251 },
+  { tenantId: A, id: 'em-3', monthLabel: 'Apr', dieselLitres: 24800, gridKwh: 307800, gensetKwh: 86800, waterM3: 244 },
+  { tenantId: A, id: 'em-4', monthLabel: 'May', dieselLitres: 24100, gridKwh: 299100, gensetKwh: 84350, waterM3: 239 },
+  { tenantId: A, id: 'em-5', monthLabel: 'Jun', dieselLitres: 23200, gridKwh: 287900, gensetKwh: 81200, waterM3: 234 },
+  { tenantId: A, id: 'em-6', monthLabel: 'Jul', dieselLitres: 22340, gridKwh: 277200, gensetKwh: 78190, waterM3: 230 },
+] as unknown as EmissionMonth[];

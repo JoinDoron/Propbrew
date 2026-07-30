@@ -173,6 +173,11 @@ export const repos = {
   facilityContracts: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', db.facilityContracts, o ?? { limit: 100 }) },
   facilityPermits: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', db.facilityPermits, o ?? { limit: 100 }) },
   facilityIncidents: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', db.facilityIncidents, o ?? { limit: 100 }) },
+  accessPoints: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', db.accessPoints, o ?? { limit: 100 }) },
+  visitorPasses: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', db.visitorPasses, o ?? { limit: 200 }) },
+  accessEvents: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', db.accessEvents, o ?? { limit: 200 }) },
+  sustainabilityTargets: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', db.sustainabilityTargets, o ?? { limit: 100 }) },
+  emissionMonths: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', db.emissionMonths, o ?? { limit: 100 }) },
 };
 
 /**
