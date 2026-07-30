@@ -384,3 +384,6 @@ export const bookings: Booking[] = [
 
 /* --- Short-Let PMS (new module) ------------------------------------------- */
 export * from './shortlet';
+
+/* --- Facility Intelligence (new FM surfaces) ------------------------------ */
+export * from './facility';

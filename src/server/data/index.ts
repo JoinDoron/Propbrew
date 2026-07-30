@@ -162,6 +162,17 @@ export const repos = {
   shortletReviews: {
     list: (a: Actor, o?: ListOpts) => scopedList(a, 'bookings_amenities', db.shortletReviews, o ?? { limit: 200 }),
   },
+
+  /* --- Facility Intelligence (gated by assets_ppm — facility manager M). --- */
+  buildingSystems: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', db.buildingSystems, o ?? { limit: 100 }) },
+  facilitySensors: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', db.facilitySensors, o ?? { limit: 100 }) },
+  facilityAlarms: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', db.facilityAlarms, o ?? { limit: 100 }) },
+  facilityGenerators: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', db.facilityGenerators, o ?? { limit: 100 }) },
+  facilityMeters: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', db.facilityMeters, o ?? { limit: 100 }) },
+  facilityParts: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', db.facilityParts, o ?? { limit: 200 }) },
+  facilityContracts: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', db.facilityContracts, o ?? { limit: 100 }) },
+  facilityPermits: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', db.facilityPermits, o ?? { limit: 100 }) },
+  facilityIncidents: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', db.facilityIncidents, o ?? { limit: 100 }) },
 };
 
 /**

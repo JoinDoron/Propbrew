@@ -50,6 +50,15 @@ export const db = {
   shortletAgents: clone(seed.shortletAgents),
   shortletReviews: clone(seed.shortletReviews),
   shortletBookingPage: { ...seed.shortletBookingPage, promoCodes: seed.shortletBookingPage.promoCodes.map((p) => ({ ...p })) },
+  buildingSystems: clone(seed.buildingSystems),
+  facilitySensors: clone(seed.facilitySensors),
+  facilityAlarms: clone(seed.facilityAlarms),
+  facilityGenerators: clone(seed.facilityGenerators),
+  facilityMeters: clone(seed.facilityMeters),
+  facilityParts: clone(seed.facilityParts),
+  facilityContracts: clone(seed.facilityContracts),
+  facilityPermits: clone(seed.facilityPermits),
+  facilityIncidents: clone(seed.facilityIncidents),
 };
 
 export type HistoryEntry = {
