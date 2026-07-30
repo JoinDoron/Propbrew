@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Landmark, Users, CalendarClock, Vote, Gavel, Plus, X, Check, CalendarCheck, FileText, UserPlus, Crown, Trophy, Scale, Zap } from 'lucide-react';
 import { toneVar, type Tone } from '@/lib/status-tones';
 import { termStatus, meetingState, MOTION_STATUS_LABEL, electionTally, electionWinner, ELECTION_STATUS_LABEL, electionStatusTone, motionTally, proxyWeights, projectedTally, resolveProxyChain, proxyHolderName, type BoardRole, type MeetingType, type MeetingStatus, type MotionStatus, type ElectionStatus, type ProxyStatus, type VoteChoice } from '@/domain/estate';
-import { createMotion, recordMeetingHeld, nominateCandidate, openElectionVoting, decideElection, exerciseProxies, type CreateMotionInput, type NominateInput } from '@/server/actions/estate';
+import { createMotion, recordMeetingHeld, nominateCandidate, openElectionVoting, decideElection, exerciseProxies, revokeProxyLink, type CreateMotionInput, type NominateInput } from '@/server/actions/estate';
 
 export type BoardRow = { id: string; name: string; unitLabel: string; role: BoardRole; portfolio: string; sinceISO: string; termEndISO: string };
 export type MeetingRow = { id: string; title: string; type: MeetingType; whenISO: string; venue: string; status: MeetingStatus; resolutions: number; attendees: number; quorumRequired: number };
@@ -184,6 +184,7 @@ function EgmCard({ egm, onToast }: { egm: NonNullable<EgmData>; onToast: (m: str
   const proj = projectedTally(m, held);
   const exercised = proxies.filter((p) => p.status === 'exercised').length;
   const act = () => start(async () => { const r = await exerciseProxies(m.id); if (r.ok) { router.refresh(); onToast(`Proxies cast · ${r.ref}`); } else onToast(r.error ?? 'Failed'); });
+  const revoke = (id: string) => start(async () => { const r = await revokeProxyLink(id); if (r.ok) { router.refresh(); onToast(`Revoked · ${r.ref}`); } else onToast(r.error ?? 'Failed'); });
 
   return (
     <section className="bg-surface border rounded-2xl shadow-card overflow-hidden" style={{ borderColor: 'color-mix(in srgb, var(--tone-progress) 40%, transparent)' }}>
@@ -225,6 +226,7 @@ function EgmCard({ egm, onToast }: { egm: NonNullable<EgmData>; onToast: (m: str
               </div>
               <span className="text-[10px] font-semibold px-1.5 h-4 inline-flex items-center rounded-full flex-none capitalize" style={{ background: `color-mix(in srgb, ${toneVar(DIR_TONE[p.direction])} 14%, transparent)`, color: toneVar(DIR_TONE[p.direction]) }}>{p.direction}</span>
               <span className="text-[10px] font-semibold px-1.5 h-4 inline-flex items-center rounded-full flex-none capitalize" style={{ background: `color-mix(in srgb, ${toneVar(PROXY_TONE[p.status])} 14%, transparent)`, color: toneVar(PROXY_TONE[p.status]) }}>{p.status}</span>
+              {p.status === 'held' && <button disabled={pending} onClick={() => revoke(p.id)} className="w-5 h-5 rounded grid place-items-center flex-none text-text-3 hover:text-negative disabled:opacity-40" title="Revoke this proxy (cascades to anyone routed through them)"><X size={13} /></button>}
             </div>
           );
         })}

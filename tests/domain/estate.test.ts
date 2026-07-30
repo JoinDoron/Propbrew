@@ -8,7 +8,7 @@ import {
   motionTally, motionOutcome, eventFillPct, isEventFull, eventState, amenityLoad,
   tierFor, tierProgress, pointsIssued, leaderboard,
   termStatus, meetingState, electionTally, electionWinner,
-  heldProxies, proxyWeights, projectedTally, resolveProxyChain, proxyWouldCycle, proxyHolderName,
+  heldProxies, proxyWeights, projectedTally, resolveProxyChain, proxyWouldCycle, proxyHolderName, cascadeRevokeUpstream,
 } from '@/domain/estate/engine';
 
 const NOW = Date.parse('2026-07-26');
@@ -183,5 +183,14 @@ describe('proxy voting (EGM)', () => {
     // assigning Yusuf → Ada would loop (Ada already → Yusuf)
     expect(proxyWouldCycle('Yusuf Bello', 'Ada Obi', seed.proxyAssignments, 'mo-2')).toBe(true);
     expect(proxyWouldCycle('David Okon', 'Chair · Ngozi Okafor', seed.proxyAssignments, 'mo-2')).toBe(false);
+  });
+  it('cascades a mid-chain revocation to everyone routed through that link', () => {
+    // Ada → Yusuf → Chair. Yusuf pulling out returns Ada's proxy (she routed through him).
+    const upstream = cascadeRevokeUpstream('Yusuf Bello', seed.proxyAssignments, 'mo-2');
+    expect(upstream.map((p) => p.id)).toEqual(['px-1']); // Ada
+    // David went direct to the Chair — untouched by Yusuf withdrawing.
+    expect(cascadeRevokeUpstream('Yusuf Bello', seed.proxyAssignments, 'mo-2').some((p) => p.id === 'px-3')).toBe(false);
+    // A terminal holder withdrawing (David) has nobody upstream.
+    expect(cascadeRevokeUpstream('David Okon', seed.proxyAssignments, 'mo-2')).toHaveLength(0);
   });
 });

@@ -298,6 +298,15 @@ export function resolveProxyChain(start: Pick<ProxyAssignment, 'grantorName' | '
   return { path, terminalHolder: holder, depth: path.length - 1, cycle };
 }
 
+/** Held proxies that route (directly or transitively) THROUGH `revokerName` — the
+ *  ones that must cascade-revoke when that person pulls out of the chain, since
+ *  their delegation only ever reached the terminal holder via them. */
+export function cascadeRevokeUpstream<T extends ProxyLink & { id: string }>(revokerName: string, proxies: readonly T[], motionId: string): T[] {
+  return proxies.filter((p) =>
+    p.status === 'held' && p.motionId === motionId && p.grantorName !== revokerName &&
+    resolveProxyChain(p, proxies).path.slice(1).some((h) => proxyHolderName(h) === revokerName));
+}
+
 /** Would assigning grantor → holder create a delegation loop back to grantor? */
 export function proxyWouldCycle(grantorName: string, holderName: string, proxies: readonly ProxyLink[], motionId: string): boolean {
   const seen = new Set<string>([grantorName]);

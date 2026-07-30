@@ -19,7 +19,7 @@ import { repos } from '@/server/data';
 import { db } from '@/server/data/store';
 import { units } from '@/server/data/seed/fixtures';
 import { NOW } from '@/domain/ppm';
-import { isEventFull, proxyWouldCycle, type VoteChoice } from '@/domain/estate';
+import { isEventFull, proxyWouldCycle, cascadeRevokeUpstream, type VoteChoice } from '@/domain/estate';
 
 export type Res = { ok: true; ref?: string } | { ok: false; error: string };
 
@@ -88,9 +88,12 @@ export async function residentRevokeProxy(motionId: string): Promise<Res> {
   const notRes = requireResident(actor); if (notRes) return notRes;
   const px = db.proxyAssignments.find((p) => p.motionId === motionId && p.grantorUserId === actor.userId && p.status === 'held');
   if (!px) return { ok: false, error: 'No proxy to revoke (it may already be exercised).' };
+  // Cascade: anyone who delegated THROUGH you loses their route — return their proxy.
+  const cascaded = cascadeRevokeUpstream(px.grantorName, db.proxyAssignments, motionId);
   px.status = 'revoked';
+  for (const c of cascaded) c.status = 'revoked';
   paths();
-  return { ok: true };
+  return { ok: true, ref: cascaded.length ? `${cascaded.length} delegated ${cascaded.length === 1 ? 'proxy' : 'proxies'} returned` : undefined };
 }
 
 /** Cast a resident's single unit-weighted ballot for a candidate in the board

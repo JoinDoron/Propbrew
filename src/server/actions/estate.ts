@@ -12,7 +12,7 @@ import { getActor } from '@/server/session';
 import { ForbiddenError, assertCan, type Capability } from '@/lib/authz';
 import { db } from '@/server/data/store';
 import { NOW } from '@/domain/ppm';
-import { nextDunningStage, nextTenancyStage, motionOutcome, motionTally, isEventFull, tierFor, EARN_POINTS, electionWinner, type VoteChoice, type EarnReason } from '@/domain/estate';
+import { nextDunningStage, nextTenancyStage, motionOutcome, motionTally, isEventFull, tierFor, EARN_POINTS, electionWinner, cascadeRevokeUpstream, type VoteChoice, type EarnReason } from '@/domain/estate';
 
 const PATHS = ['/community', '/collections', '/tenancy', '/parcels', '/governance', '/events', '/rewards', '/billing', '/people', '/dashboard'];
 const revalidate = () => PATHS.forEach((p) => revalidatePath(p));
@@ -364,4 +364,18 @@ export async function exerciseProxies(motionId: string): Promise<Res> {
   }
   ['/governance', '/board', '/portal/community'].forEach((path) => revalidatePath(path));
   return { ok: true, ref: `${held.length} proxies` };
+}
+
+/** Revoke a single proxy in the register — and cascade to anyone who delegated
+ *  through that grantor, returning their vote to them. */
+export async function revokeProxyLink(proxyId: string): Promise<Res> {
+  const g = await gate('announcements'); if (!g.ok) return g;
+  const px = db.proxyAssignments.find((p) => p.id === proxyId);
+  if (!px) return { ok: false, error: 'Proxy not found.' };
+  if (px.status !== 'held') return { ok: false, error: 'Only a held proxy can be revoked.' };
+  const cascaded = cascadeRevokeUpstream(px.grantorName, db.proxyAssignments, px.motionId);
+  px.status = 'revoked';
+  for (const c of cascaded) c.status = 'revoked';
+  ['/board', '/governance', '/portal/community'].forEach((path) => revalidatePath(path));
+  return { ok: true, ref: `${px.grantorName} withdrawn${cascaded.length ? ` · ${cascaded.length} cascaded` : ''}` };
 }
