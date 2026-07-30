@@ -387,3 +387,6 @@ export * from './shortlet';
 
 /* --- Facility Intelligence (new FM surfaces) ------------------------------ */
 export * from './facility';
+
+/* --- Estate Experience (new resident/estate surfaces) --------------------- */
+export * from './estate';

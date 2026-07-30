@@ -1,0 +1,61 @@
+/**
+ * Estate Experience — domain types for the new resident-facing estate surfaces:
+ * a community-pulse command centre (sentiment, engagement, churn risk), an
+ * arrears-recovery war room (collections), the tenancy lifecycle (move-in →
+ * move-out + deposits), and a smart parcel-locker room. No framework imports.
+ */
+
+import type { TenantScoped } from '@/domain/tenancy';
+
+/* --- community pulse ------------------------------------------------------- */
+
+export type Sentiment = 'positive' | 'neutral' | 'negative';
+export type FeedbackChannel = 'app' | 'whatsapp' | 'survey' | 'front_desk';
+export type ResidentFeedback = TenantScoped & {
+  id: string; estateId: string; residentName: string; unitLabel: string;
+  channel: FeedbackChannel; sentiment: Sentiment; topic: string; text: string; atISO: string; acknowledged: boolean;
+};
+
+export type EngagementSnapshot = TenantScoped & {
+  id: string; estateId: string;
+  totalResidents: number; activeResidents: number;
+  appAdoptionPct: number; eventAttendancePct: number; pollParticipationPct: number; announcementReadPct: number;
+};
+
+export type ComplaintStatus = 'open' | 'resolved';
+export type Complaint = TenantScoped & {
+  id: string; estateId: string; building: string; category: string; severity: 'low' | 'medium' | 'high'; status: ComplaintStatus; atISO: string;
+};
+
+/* --- collections (arrears recovery) --------------------------------------- */
+
+export type DunningStage = 'reminder' | 'notice' | 'plan' | 'escalated';
+export type PromiseStatus = 'pending' | 'kept' | 'broken';
+export type CollectionCase = TenantScoped & {
+  id: string; estateId: string; invoiceRef: string; residentName: string; unitLabel: string;
+  amountMinor: number; agingDays: number; stage: DunningStage; remindersSent: number;
+  promiseAmountMinor?: number; promiseDueISO?: string; promiseStatus?: PromiseStatus; lastActionISO?: string;
+};
+
+/* --- tenancy lifecycle ---------------------------------------------------- */
+
+export type TenancyStage = 'applied' | 'screening' | 'approved' | 'moving_in' | 'active' | 'notice' | 'moving_out' | 'closed';
+export type DepositStatus = 'pending' | 'held' | 'partially_refunded' | 'refunded' | 'withheld';
+export type Tenancy = TenantScoped & {
+  id: string; estateId: string; residentName: string; unitLabel: string;
+  stage: TenancyStage; applicationISO: string; moveInISO?: string; leaseEndISO?: string; moveOutISO?: string;
+  rentMinor: number; depositMinor: number; depositStatus: DepositStatus;
+};
+
+/* --- parcels & lockers ---------------------------------------------------- */
+
+export type LockerSize = 'S' | 'M' | 'L';
+export type Locker = TenantScoped & {
+  id: string; estateId: string; bank: string; label: string; size: LockerSize; parcelId?: string;
+};
+
+export type ParcelStatus = 'received' | 'stored' | 'collected' | 'overdue';
+export type Parcel = TenantScoped & {
+  id: string; estateId: string; code: string; residentName: string; unitLabel: string; courier: string;
+  lockerLabel?: string; size: LockerSize; status: ParcelStatus; receivedISO: string; collectedISO?: string;
+};

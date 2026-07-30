@@ -178,6 +178,15 @@ export const repos = {
   accessEvents: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', db.accessEvents, o ?? { limit: 200 }) },
   sustainabilityTargets: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', db.sustainabilityTargets, o ?? { limit: 100 }) },
   emissionMonths: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', db.emissionMonths, o ?? { limit: 100 }) },
+
+  /* --- Estate Experience (community/collections/tenancy/parcels) ----------- */
+  residentFeedback: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'announcements', db.residentFeedback, o ?? { limit: 100 }) },
+  engagementSnapshot: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'announcements', db.engagementSnapshot, o ?? { limit: 10 }) },
+  complaints: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'announcements', db.complaints, o ?? { limit: 100 }) },
+  collectionCases: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'charges_invoicing', db.collectionCases, o ?? { limit: 100 }) },
+  tenancies: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'users_roles', db.tenancies, o ?? { limit: 100 }) },
+  lockers: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'security_sos', db.lockers, o ?? { limit: 100 }) },
+  parcels: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'security_sos', db.parcels, o ?? { limit: 100 }) },
 };
 
 /**

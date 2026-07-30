@@ -68,6 +68,13 @@ export const db = {
   // prior usage so the meter isn't empty on first view).
   copilotSettings: [{ tenantId: 't-lekki', model: 'claude-sonnet-5' }] as { tenantId: string; model: string }[],
   copilotUsage: [{ tenantId: 't-lekki', requests: 24, inputTokens: 18000, outputTokens: 5200, costMinorNgn: 21120 }] as { tenantId: string; requests: number; inputTokens: number; outputTokens: number; costMinorNgn: number }[],
+  residentFeedback: clone(seed.residentFeedback),
+  engagementSnapshot: clone(seed.engagementSnapshot),
+  complaints: clone(seed.complaints),
+  collectionCases: clone(seed.collectionCases),
+  tenancies: clone(seed.tenancies),
+  lockers: clone(seed.lockers),
+  parcels: clone(seed.parcels),
 };
 
 export type HistoryEntry = {
