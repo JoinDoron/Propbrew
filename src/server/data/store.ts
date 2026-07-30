@@ -14,6 +14,7 @@ import 'server-only';
  */
 
 import * as seed from './seed/fixtures';
+import { pushNotification } from './inbox';
 import { findTransition, workOrderMachine, type MachineKey } from '@/domain/workflows';
 import { money } from '@/domain/primitives';
 import type { Role } from '@/domain/enums';
@@ -119,10 +120,17 @@ export function getHistory(machine: MachineKey, id: string): HistoryEntry[] {
   return history.get(key(machine, id)) ?? [];
 }
 
-/** Notify a resident their proxy was returned (userId-keyed; newest first). */
+/** Notify a resident their proxy was returned — writes the portal-hub banner
+ *  ledger AND mirrors it into the global 🔔 bell (SC-09). */
 let prnSeq = 0;
 export function recordProxyReturnNotice(userId: string, m: { id: string; ref: string; title: string } | undefined, reason: string): void {
   db.proxyReturnNotices.unshift({ id: `prn-${++prnSeq}`, userId, motionId: m?.id ?? '', motionRef: m?.ref ?? '', motionTitle: m?.title ?? '', reason, atISO: '2026-07-26T09:00:00Z', seen: false });
+  pushNotification(userId, ['resident'], {
+    title: 'Proxy returned',
+    body: `${reason} Your vote${m ? ` on ${m.ref}` : ''} is yours again.`,
+    kind: 'warn',
+    href: '/portal/community',
+  });
 }
 
 /* --- wallet auto-deduct (resident-home PRD, open question #1) -------------- */

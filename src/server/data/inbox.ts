@@ -161,6 +161,16 @@ export function markAllNotificationsRead(userId: string, roles: readonly Role[])
   (notifications.get(userId) ?? []).forEach((n) => (n.read = true));
 }
 
+let pushSeq = 0;
+/** Push a live notification into a user's bell (SC-09). Used when an event needs
+ *  to reach someone directly — e.g. a returned proxy. Seeds their inbox first so
+ *  role templates aren't suppressed. */
+export function pushNotification(userId: string, roles: readonly Role[], n: { title: string; body: string; kind: NotifKind; href?: string }): void {
+  ensureSeeded(userId, primaryRole(roles));
+  const list = notifications.get(userId)!;
+  list.unshift({ id: `n-${userId}-push-${++pushSeq}`, title: n.title, body: n.body, kind: n.kind, href: n.href, at: new Date(BASE).toISOString(), read: false });
+}
+
 export function getThreads(userId: string, roles: readonly Role[]): Thread[] {
   ensureSeeded(userId, primaryRole(roles));
   return threads.get(userId) ?? [];
