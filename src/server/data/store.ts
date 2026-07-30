@@ -90,6 +90,34 @@ export const db = {
   electionVotes: [] as { electionId: string; userId: string; candidateId: string }[],
   // Notices to residents whose proxy was returned (e.g. a mid-chain link revoked).
   proxyReturnNotices: [] as { id: string; userId: string; motionId: string; motionRef: string; motionTitle: string; reason: string; atISO: string; seen: boolean }[],
+
+  /* --- Construction (ConstructionOS delivery module) --------------------- */
+  constructionProjects: clone(seed.constructionProjects),
+  constructionPhases: clone(seed.constructionPhases),
+  constructionTasks: seed.constructionTasks.map((t) => ({ ...t, dependsOn: [...t.dependsOn] })),
+  constructionMilestones: clone(seed.constructionMilestones),
+  constructionIssues: clone(seed.constructionIssues),
+  // Reports hold several string[] fields — deep-clone so composing never aliases the seed.
+  constructionReports: seed.constructionReports.map((r) => ({ ...r, completed: [...r.completed], ongoing: [...r.ongoing], delayed: [...r.delayed], plannedNext: [...r.plannedNext], deliveries: [...r.deliveries], incidents: [...r.incidents], constraints: [...r.constraints] })),
+  constructionVendors: clone(seed.constructionVendors),
+  constructionRequests: clone(seed.constructionRequests),
+  // RFQ.quotes[] is nested — deep-clone (awarding mutates the RFQ, quotes stay intact).
+  constructionRfqs: seed.constructionRfqs.map((r) => ({ ...r, quotes: r.quotes.map((q) => ({ ...q })) })),
+  constructionOrders: clone(seed.constructionOrders),
+  constructionMaterials: clone(seed.constructionMaterials),
+  constructionWarehouses: clone(seed.constructionWarehouses),
+  constructionStock: clone(seed.constructionStock),
+  constructionMovements: clone(seed.constructionMovements),
+  constructionCostCodes: clone(seed.constructionCostCodes),
+  constructionVariations: clone(seed.constructionVariations),
+  constructionWorkers: clone(seed.constructionWorkers),
+  constructionAttendance: clone(seed.constructionAttendance),
+  constructionDocs: clone(seed.constructionDocs),
+  constructionRfis: clone(seed.constructionRfis),
+  // Advisory risk-signal lifecycle (ack/snooze/escalate/dismiss), keyed by deterministic signal id.
+  constructionSignalStates: [] as { signalId: string; state: 'ack' | 'snoozed' | 'escalated' | 'dismissed'; atISO: string }[],
+  // Copilot threads for the construction assistant (per-actor).
+  constructionCopilotUsage: [{ tenantId: 't-lekki', requests: 11, inputTokens: 9200, outputTokens: 3100, costMinorNgn: 9840 }] as { tenantId: string; requests: number; inputTokens: number; outputTokens: number; costMinorNgn: number }[],
 };
 
 export type HistoryEntry = {

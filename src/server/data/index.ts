@@ -194,6 +194,28 @@ export const repos = {
   boardMembers: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'announcements', db.boardMembers, o ?? { limit: 50 }) },
   meetings: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'announcements', db.meetings, o ?? { limit: 50 }) },
   boardElections: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'announcements', db.boardElections, o ?? { limit: 20 }) },
+
+  /* --- Construction (ConstructionOS) — all reports_analytics-gated ---------- */
+  constructionProjects: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionProjects, o ?? { limit: 50 }) },
+  constructionPhases: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionPhases, o ?? { limit: 200 }) },
+  constructionTasks: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionTasks, o ?? { limit: 500 }) },
+  constructionMilestones: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionMilestones, o ?? { limit: 200 }) },
+  constructionIssues: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionIssues, o ?? { limit: 200 }) },
+  constructionReports: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionReports, o ?? { limit: 200 }) },
+  constructionVendors: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionVendors, o ?? { limit: 100 }) },
+  constructionRequests: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionRequests, o ?? { limit: 200 }) },
+  constructionRfqs: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionRfqs, o ?? { limit: 100 }) },
+  constructionOrders: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionOrders, o ?? { limit: 200 }) },
+  constructionMaterials: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionMaterials, o ?? { limit: 200 }) },
+  constructionWarehouses: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionWarehouses, o ?? { limit: 50 }) },
+  constructionStock: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionStock, o ?? { limit: 500 }) },
+  constructionMovements: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionMovements, o ?? { limit: 500 }) },
+  constructionCostCodes: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionCostCodes, o ?? { limit: 200 }) },
+  constructionVariations: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionVariations, o ?? { limit: 100 }) },
+  constructionWorkers: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionWorkers, o ?? { limit: 300 }) },
+  constructionAttendance: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionAttendance, o ?? { limit: 500 }) },
+  constructionDocs: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionDocs, o ?? { limit: 200 }) },
+  constructionRfis: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionRfis, o ?? { limit: 200 }) },
   proxyAssignments: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'announcements', db.proxyAssignments, o ?? { limit: 200 }) },
 };
 

@@ -390,3 +390,6 @@ export * from './facility';
 
 /* --- Estate Experience (new resident/estate surfaces) --------------------- */
 export * from './estate';
+
+/* --- Construction (ConstructionOS delivery module) ------------------------ */
+export * from './construction';
