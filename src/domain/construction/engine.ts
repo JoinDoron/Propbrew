@@ -9,7 +9,7 @@
 
 import type { Tone } from '@/lib/status-tones';
 import type {
-  Project, Task, CostCode, Quote, PurchaseOrder, PurchaseRequest, Material, StockItem,
+  Project, Phase, Task, CostCode, Quote, PurchaseOrder, PurchaseRequest, Material, StockItem,
   StockMovement, Milestone, Issue, DailyReport, RFI, Worker, Vendor, Attendance,
 } from './types';
 
@@ -273,7 +273,7 @@ export function reportBand(status: DailyReport['status']): Tone {
 /* --- the world (for cross-entity scans) ----------------------------------- */
 
 export type ConWorld = {
-  projects: readonly Project[]; tasks: readonly Task[]; costCodes: readonly CostCode[];
+  projects: readonly Project[]; phases: readonly Phase[]; tasks: readonly Task[]; costCodes: readonly CostCode[];
   pos: readonly PurchaseOrder[]; requests: readonly PurchaseRequest[]; reports: readonly DailyReport[];
   materials: readonly Material[]; stock: readonly StockItem[]; movements: readonly StockMovement[];
   rfis: readonly RFI[]; workers: readonly Worker[]; issues: readonly Issue[];

@@ -9,7 +9,7 @@ import {
 const NOW = Date.parse('2026-07-26');
 
 const world = (): ConWorld => ({
-  projects: seed.constructionProjects, tasks: seed.constructionTasks, costCodes: seed.constructionCostCodes,
+  projects: seed.constructionProjects, phases: seed.constructionPhases, tasks: seed.constructionTasks, costCodes: seed.constructionCostCodes,
   pos: seed.constructionOrders, requests: seed.constructionRequests, reports: seed.constructionReports,
   materials: seed.constructionMaterials, stock: seed.constructionStock, movements: seed.constructionMovements,
   rfis: seed.constructionRfis, workers: seed.constructionWorkers, issues: seed.constructionIssues,
