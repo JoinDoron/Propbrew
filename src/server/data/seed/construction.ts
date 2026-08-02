@@ -15,7 +15,7 @@ import { money } from '@/domain/primitives';
 import type {
   Project, Phase, Task, Milestone, Issue, DailyReport, Vendor, PurchaseRequest, RFQ,
   PurchaseOrder, Material, Warehouse, StockItem, StockMovement, CostCode, Variation,
-  Worker, Attendance, ConstructionDoc, RFI, Zone, Subcontractor, SafetyPermit, SafetyEvent, ToolboxTalk, Timesheet, Transmittal,
+  Worker, Attendance, ConstructionDoc, RFI, Zone, Subcontractor, SafetyPermit, SafetyEvent, ToolboxTalk, Timesheet, Transmittal, ReasonCode, ReasonEvent, ApprovalRule, ApprovalRequest, AuditEntry,
 } from '@/domain/construction/types';
 
 const A = SEED.tenantA;
@@ -267,3 +267,110 @@ export const constructionTransmittals = ([
   { tenantId: A, id: 'tr-3', docId: 'doc-m2', docNumber: 'MAR-ST-104', revision: 'B', toParty: 'BuildRight Subs', sentISO: '2026-04-02', purpose: 'for_construction', acknowledgedISO: '2026-04-03' },
   { tenantId: A, id: 'tr-4', docId: 'doc-m3', docNumber: 'MAR-ME-210', revision: 'A', toParty: 'MEP Pro Services', sentISO: '2026-07-20', purpose: 'for_review' },
 ] as unknown) as Transmittal[];
+
+/* --- reason codes (the controlled vocabulary) ----------------------------- */
+
+export const constructionReasonCodes = ([
+  // rejections
+  { tenantId: A, id: 'rc-r1', domain: 'rejection', code: 'REJ-BUDGET', label: 'Exceeds remaining budget', category: 'Commercial', requiresNote: false, active: true },
+  { tenantId: A, id: 'rc-r2', domain: 'rejection', code: 'REJ-SPEC', label: 'Does not meet specification', category: 'Technical', requiresNote: true, active: true },
+  { tenantId: A, id: 'rc-r3', domain: 'rejection', code: 'REJ-OT', label: 'Overtime not pre-authorised', category: 'Labour', requiresNote: false, active: true },
+  { tenantId: A, id: 'rc-r4', domain: 'rejection', code: 'REJ-DOC', label: 'Supporting document missing', category: 'Governance', requiresNote: false, active: true },
+  // delays
+  { tenantId: A, id: 'rc-d1', domain: 'delay', code: 'DLY-MAT', label: 'Material not on site', category: 'Supply', requiresNote: false, active: true },
+  { tenantId: A, id: 'rc-d2', domain: 'delay', code: 'DLY-RAIN', label: 'Weather — rain stopped work', category: 'Weather', requiresNote: false, active: true },
+  { tenantId: A, id: 'rc-d3', domain: 'delay', code: 'DLY-RFI', label: 'Awaiting design answer (RFI)', category: 'Design', requiresNote: false, active: true },
+  { tenantId: A, id: 'rc-d4', domain: 'delay', code: 'DLY-LAB', label: 'Crew shortfall', category: 'Labour', requiresNote: false, active: true },
+  { tenantId: A, id: 'rc-d5', domain: 'delay', code: 'DLY-PWR', label: 'Power / diesel outage', category: 'Utilities', requiresNote: false, active: true },
+  // variance
+  { tenantId: A, id: 'rc-v1', domain: 'variance', code: 'VAR-PRICE', label: 'Market price movement', category: 'Commercial', requiresNote: false, active: true },
+  { tenantId: A, id: 'rc-v2', domain: 'variance', code: 'VAR-SCOPE', label: 'Client scope change', category: 'Scope', requiresNote: true, active: true },
+  { tenantId: A, id: 'rc-v3', domain: 'variance', code: 'VAR-REWORK', label: 'Rework / defect rectification', category: 'Quality', requiresNote: true, active: true },
+  // stock
+  { tenantId: A, id: 'rc-s1', domain: 'stock_adjust', code: 'ADJ-DAMAGE', label: 'Damaged in storage', category: 'Loss', requiresNote: false, active: true },
+  { tenantId: A, id: 'rc-s2', domain: 'stock_adjust', code: 'ADJ-COUNT', label: 'Count correction', category: 'Records', requiresNote: false, active: true },
+  { tenantId: A, id: 'rc-s3', domain: 'stock_adjust', code: 'ADJ-THEFT', label: 'Unaccounted loss — suspected theft', category: 'Loss', requiresNote: true, active: true },
+  { tenantId: A, id: 'rc-s4', domain: 'stock_return', code: 'RET-SURPLUS', label: 'Surplus returned from site', category: 'Surplus', requiresNote: false, active: true },
+  { tenantId: A, id: 'rc-s5', domain: 'stock_return', code: 'RET-WRONG', label: 'Wrong item issued', category: 'Error', requiresNote: false, active: true },
+] as unknown) as ReasonCode[];
+
+/** Real usage, weighted so the Pareto has a clear vital few: material-on-site
+ *  and RFI waits dominate delays — the story the data should tell. */
+export const constructionReasonEvents = ([
+  { tenantId: A, id: 're-1', domain: 'delay', codeId: 'rc-d1', subjectKind: 'task', subjectRef: 'tk-m4', projectId: 'cp-marina', atISO: '2026-07-24', by: 'Emeka Nwosu', impactDays: 4 },
+  { tenantId: A, id: 're-2', domain: 'delay', codeId: 'rc-d1', subjectKind: 'task', subjectRef: 'tk-m3', projectId: 'cp-marina', atISO: '2026-07-20', by: 'Emeka Nwosu', impactDays: 3 },
+  { tenantId: A, id: 're-3', domain: 'delay', codeId: 'rc-d1', subjectKind: 'report', subjectRef: '2026-07-18', projectId: 'cp-marina', atISO: '2026-07-18', by: 'Chike Obi', impactDays: 2 },
+  { tenantId: A, id: 're-4', domain: 'delay', codeId: 'rc-d3', subjectKind: 'task', subjectRef: 'tk-m4', projectId: 'cp-marina', atISO: '2026-07-22', by: 'Ngozi Okafor', impactDays: 5 },
+  { tenantId: A, id: 're-5', domain: 'delay', codeId: 'rc-d3', subjectKind: 'task', subjectRef: 'tk-m6', projectId: 'cp-marina', atISO: '2026-07-16', by: 'Ngozi Okafor', impactDays: 2 },
+  { tenantId: A, id: 're-6', domain: 'delay', codeId: 'rc-d2', subjectKind: 'report', subjectRef: '2026-07-15', projectId: 'cp-marina', atISO: '2026-07-15', by: 'Chike Obi', impactDays: 1 },
+  { tenantId: A, id: 're-7', domain: 'delay', codeId: 'rc-d5', subjectKind: 'report', subjectRef: '2026-07-11', projectId: 'cp-marina', atISO: '2026-07-11', by: 'Emeka Nwosu', impactDays: 1 },
+  { tenantId: A, id: 're-8', domain: 'rejection', codeId: 'rc-r1', subjectKind: 'purchase_request', subjectRef: 'PR-4025', projectId: 'cp-marina', atISO: '2026-07-23', by: 'Ngozi Okafor', impactMinor: 12_000_000_000 },
+  { tenantId: A, id: 're-9', domain: 'rejection', codeId: 'rc-r3', subjectKind: 'timesheet', subjectRef: 'TS-0309', projectId: 'cp-marina', atISO: '2026-07-08', by: 'Ngozi Okafor', impactMinor: 18_000_000 },
+  { tenantId: A, id: 're-10', domain: 'rejection', codeId: 'rc-r1', subjectKind: 'purchase_request', subjectRef: 'PR-4019', projectId: 'cp-marina', atISO: '2026-06-28', by: 'Ngozi Okafor', impactMinor: 4_500_000_000 },
+  { tenantId: A, id: 're-11', domain: 'variance', codeId: 'rc-v1', subjectKind: 'cost_code', subjectRef: 'MAR-SUP', projectId: 'cp-marina', atISO: '2026-07-01', by: 'Ngozi Okafor', impactMinor: 68_000_000_000, note: 'Cement and rebar both moved after the FX shift' },
+  { tenantId: A, id: 're-12', domain: 'variance', codeId: 'rc-v3', subjectKind: 'cost_code', subjectRef: 'MAR-SUB', projectId: 'cp-marina', atISO: '2026-05-30', by: 'Ngozi Okafor', impactMinor: 30_000_000_000, note: 'Pile cap rework after failed cube test' },
+  { tenantId: A, id: 're-13', domain: 'stock_adjust', codeId: 'rc-s1', subjectKind: 'material', subjectRef: 'mat-cement', projectId: 'cp-marina', atISO: '2026-07-19', by: 'Chike Obi', impactMinor: 480_000_00 },
+] as unknown) as ReasonEvent[];
+
+/* --- approval workflow ----------------------------------------------------- */
+
+/** Three routes for purchase requests, escalating with value — the classic
+ *  delegated-authority ladder. The top route runs QS and Finance in PARALLEL. */
+export const constructionApprovalRules = ([
+  { tenantId: A, id: 'ar-pr-base', name: 'Purchase request — standard', subject: 'purchase_request', thresholdMinor: 0, active: true, steps: [
+    { order: 1, role: 'facility_manager', label: 'Project manager', slaHours: 24 },
+  ] },
+  { tenantId: A, id: 'ar-pr-mid', name: 'Purchase request — above ₦10m', subject: 'purchase_request', thresholdMinor: 1_000_000_000, active: true, steps: [
+    { order: 1, role: 'facility_manager', label: 'Project manager', slaHours: 24 },
+    { order: 2, role: 'estate_manager', label: 'Quantity surveyor', slaHours: 48 },
+  ] },
+  { tenantId: A, id: 'ar-pr-high', name: 'Purchase request — above ₦50m', subject: 'purchase_request', thresholdMinor: 5_000_000_000, active: true, steps: [
+    { order: 1, role: 'facility_manager', label: 'Project manager', slaHours: 24 },
+    { order: 2, role: 'estate_manager', label: 'Quantity surveyor', slaHours: 48 },
+    { order: 2, role: 'executive', label: 'Finance', slaHours: 48 },
+    { order: 3, role: 'executive', label: 'Executive sign-off', slaHours: 72 },
+  ] },
+  { tenantId: A, id: 'ar-var', name: 'Variation — any value', subject: 'variation', thresholdMinor: 0, active: true, steps: [
+    { order: 1, role: 'estate_manager', label: 'Quantity surveyor', slaHours: 48 },
+    { order: 2, role: 'executive', label: 'Client approval', slaHours: 120 },
+  ] },
+  { tenantId: A, id: 'ar-adj', name: 'Stock adjustment', subject: 'stock_adjust', thresholdMinor: 0, active: true, steps: [
+    { order: 1, role: 'estate_manager', label: 'Store manager review', slaHours: 24 },
+  ] },
+  { tenantId: A, id: 'ar-ovr', name: 'Budget override', subject: 'budget_override', thresholdMinor: 0, active: true, steps: [
+    { order: 1, role: 'estate_manager', label: 'Quantity surveyor', slaHours: 24 },
+    { order: 2, role: 'executive', label: 'Executive sign-off', slaHours: 48 },
+  ] },
+] as unknown) as ApprovalRule[];
+
+/** One request mid-flight at a parallel step (QS in, Finance still out) and one
+ *  sitting past its SLA — so the inbox and the escalation both have something real. */
+export const constructionApprovals = ([
+  { tenantId: A, id: 'apr-1', ref: 'APR-1041', subject: 'purchase_request', subjectRef: 'PR-4025', title: 'Tower crane extended hire (2 mo)', projectId: 'cp-marina', amountMinor: 12_000_000_000, raisedBy: 'Ngozi Okafor', raisedISO: '2026-07-22T09:00:00Z', ruleId: 'ar-pr-high', status: 'in_flight', steps: [
+    { order: 1, role: 'facility_manager', label: 'Project manager', slaHours: 24, status: 'approved', actedBy: 'Bola Adeyemi', actedISO: '2026-07-22', comment: 'Crane needed to keep the L5 pour sequence' },
+    { order: 2, role: 'estate_manager', label: 'Quantity surveyor', slaHours: 48, status: 'approved', actedBy: 'Ngozi Okafor', actedISO: '2026-07-23' },
+    { order: 2, role: 'executive', label: 'Finance', slaHours: 48, status: 'pending' },
+    { order: 3, role: 'executive', label: 'Executive sign-off', slaHours: 72, status: 'pending' },
+  ] },
+  { tenantId: A, id: 'apr-2', ref: 'APR-1044', subject: 'variation', subjectRef: 'VAR-018', title: 'Upgrade lobby finishes to client selection', projectId: 'cp-marina', amountMinor: 4_200_000_000, raisedBy: 'Emeka Nwosu', raisedISO: '2026-07-20T08:00:00Z', ruleId: 'ar-var', status: 'in_flight', reasonCodeId: 'rc-v2', note: 'Client selected a higher-grade stone at the L1 lobby', steps: [
+    { order: 1, role: 'estate_manager', label: 'Quantity surveyor', slaHours: 48, status: 'pending' },
+    { order: 2, role: 'executive', label: 'Client approval', slaHours: 120, status: 'pending' },
+  ] },
+  { tenantId: A, id: 'apr-3', ref: 'APR-1038', subject: 'purchase_request', subjectRef: 'PR-4021', title: 'Y16 reinforcement bar — 40 tonne', projectId: 'cp-marina', amountMinor: 5_200_000_000, raisedBy: 'Emeka Nwosu', raisedISO: '2026-07-14T10:00:00Z', ruleId: 'ar-pr-high', status: 'approved', steps: [
+    { order: 1, role: 'facility_manager', label: 'Project manager', slaHours: 24, status: 'approved', actedBy: 'Bola Adeyemi', actedISO: '2026-07-14' },
+    { order: 2, role: 'estate_manager', label: 'Quantity surveyor', slaHours: 48, status: 'approved', actedBy: 'Ngozi Okafor', actedISO: '2026-07-15' },
+    { order: 2, role: 'executive', label: 'Finance', slaHours: 48, status: 'approved', actedBy: 'Chidi Okonkwo', actedISO: '2026-07-15' },
+    { order: 3, role: 'executive', label: 'Executive sign-off', slaHours: 72, status: 'approved', actedBy: 'Chidi Okonkwo', actedISO: '2026-07-16' },
+  ] },
+] as unknown) as ApprovalRequest[];
+
+/* --- audit trail (seeded history) ------------------------------------------ */
+
+export const constructionAudit = ([
+  { tenantId: A, id: 'au-1', seq: 1, atISO: '2026-07-16T11:20:00Z', actorId: 'user-executive', actorName: 'Chidi Okonkwo', actorRole: 'executive', action: 'approve', entity: 'approval', entityRef: 'APR-1038', projectId: 'cp-marina', summary: 'Executive sign-off on Y16 reinforcement bar', amountMinor: 5_200_000_000 },
+  { tenantId: A, id: 'au-2', seq: 2, atISO: '2026-07-16T14:05:00Z', actorId: 'user-estate_manager', actorName: 'Ngozi Okafor', actorRole: 'estate_manager', action: 'issue', entity: 'purchase_order', entityRef: 'PO-3012', projectId: 'cp-marina', summary: 'PO issued to SteelForce Nigeria after award', amountMinor: 5_200_000_000 },
+  { tenantId: A, id: 'au-3', seq: 3, atISO: '2026-07-19T09:40:00Z', actorId: 'user-estate_manager', actorName: 'Ngozi Okafor', actorRole: 'estate_manager', action: 'stock_move', entity: 'material', entityRef: 'mat-cement', projectId: 'cp-marina', summary: 'Adjustment −12 bags, damaged in storage', amountMinor: 480_000_00, reasonCodeId: 'rc-s1' },
+  { tenantId: A, id: 'au-4', seq: 4, atISO: '2026-07-21T16:00:00Z', actorId: 'user-estate_manager', actorName: 'Ngozi Okafor', actorRole: 'estate_manager', action: 'post_cost', entity: 'timesheet', entityRef: 'TS-0318', projectId: 'cp-marina', summary: 'Labour posted to MAR-SUP', amountMinor: 1_181_250, before: '₦4,485,000', after: '₦4,486,181' },
+  { tenantId: A, id: 'au-5', seq: 5, atISO: '2026-07-23T10:15:00Z', actorId: 'user-estate_manager', actorName: 'Ngozi Okafor', actorRole: 'estate_manager', action: 'reject', entity: 'purchase_request', entityRef: 'PR-4025', projectId: 'cp-marina', summary: 'Crane hire exceeds the remaining MAR-PRE budget', amountMinor: 12_000_000_000, reasonCodeId: 'rc-r1' },
+  { tenantId: A, id: 'au-6', seq: 6, atISO: '2026-07-24T08:30:00Z', actorId: 'user-facility_manager', actorName: 'Bola Adeyemi', actorRole: 'facility_manager', action: 'override', entity: 'budget', entityRef: 'MAR-SUP', projectId: 'cp-marina', summary: 'Budget override authorised to keep the L4 pour on programme', amountMinor: 8_000_000_000, note: 'Executive verbal, confirmed in writing 24 Jul' },
+] as unknown) as AuditEntry[];

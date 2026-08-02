@@ -15,11 +15,14 @@ import { ForbiddenError, assertCan, type Actor } from '@/lib/authz';
 import { db } from '@/server/data/store';
 import { money, type Money } from '@/domain/primitives';
 import { NOW } from '@/domain/ppm';
-import { nextRevision, timesheetCostMinor } from '@/domain/construction';
+import {
+  nextRevision, timesheetCostMinor, movementAllowed, routeFor, stepsFromRule,
+  canApprove, applyDecision, pendingSteps,
+} from '@/domain/construction';
 
 export type Res = { ok: true; ref?: string } | { ok: false; error: string };
 
-const PATHS = ['/construction', '/construction/evm', '/construction/schedule', '/construction/materials', '/construction/risk', '/construction/procurement', '/construction/site', '/construction/cost', '/construction/projects', '/construction/workforce', '/construction/digest', '/construction/documents', '/construction/boq', '/construction/timesheets'];
+const PATHS = ['/construction', '/construction/evm', '/construction/schedule', '/construction/materials', '/construction/risk', '/construction/procurement', '/construction/site', '/construction/cost', '/construction/projects', '/construction/workforce', '/construction/digest', '/construction/documents', '/construction/boq', '/construction/timesheets', '/construction/stock', '/construction/approvals', '/construction/audit'];
 const revalidate = () => PATHS.forEach((p) => revalidatePath(p));
 
 async function gate(action: 'update' | 'create'): Promise<{ ok: true; actor: Actor } | { ok: false; error: string }> {
@@ -379,4 +382,205 @@ export async function rejectTimesheet(id: string, reason: string): Promise<Res> 
   ts.status = 'rejected';
   revalidate();
   return { ok: true, ref: ts.ref };
+}
+
+/* --- audit trail ----------------------------------------------------------- */
+
+/** Append an immutable audit entry. Called by every sensitive action; nothing in
+ *  the app ever updates or deletes one (PRD §18.3 / SC-10). */
+function audit(actor: Actor, entry: {
+  action: 'approve' | 'reject' | 'issue' | 'supersede' | 'post_cost' | 'import' | 'stock_move' | 'stock_count' | 'override' | 'delegate' | 'cancel';
+  entity: string; entityRef: string; summary: string;
+  projectId?: string; amountMinor?: number; before?: string; after?: string; reasonCodeId?: string; note?: string;
+}): void {
+  const seq = db.constructionAudit.length + 1;
+  db.constructionAudit.push({
+    tenantId: actor.tenantId, id: `au-${seq}-${Date.now().toString(36)}`, seq,
+    atISO: new Date(Date.parse(NOW)).toISOString(),
+    actorId: actor.userId, actorName: nameOf(actor), actorRole: actor.roles[0] ?? 'unknown',
+    ...entry,
+  } as unknown as (typeof db.constructionAudit)[number]);
+}
+
+/** Record a coded reason alongside whatever it explains. */
+function recordReason(actor: Actor, e: {
+  domain: 'rejection' | 'delay' | 'variance' | 'stock_adjust' | 'stock_return';
+  codeId: string; subjectKind: string; subjectRef: string;
+  projectId?: string; note?: string; impactMinor?: number; impactDays?: number;
+}): void {
+  db.constructionReasonEvents.push({
+    tenantId: actor.tenantId, id: `re-${db.constructionReasonEvents.length + 1}-${Date.now().toString(36)}`,
+    atISO: NOW.slice(0, 10), by: nameOf(actor), ...e,
+  } as unknown as (typeof db.constructionReasonEvents)[number]);
+}
+
+/* --- stock movements (the full set) ---------------------------------------- */
+
+const onHandOf = (materialId: string, warehouseId?: string) =>
+  db.constructionStock
+    .filter((s) => s.materialId === materialId && (!warehouseId || s.warehouseId === warehouseId))
+    .reduce((n, s) => n + s.onHand, 0);
+
+let mvSeq = 0;
+function writeMovement(actor: Actor, kind: 'receipt' | 'issue' | 'transfer' | 'return' | 'adjust', materialId: string, qty: number, extra: { projectId?: string; costCode?: string; ref?: string } = {}): void {
+  db.constructionMovements.unshift({
+    tenantId: actor.tenantId, id: `mv-${kind}-${++mvSeq}`, materialId, kind, qty,
+    atISO: new Date(Date.parse(NOW)).toISOString(), by: nameOf(actor), ...extra,
+  } as unknown as (typeof db.constructionMovements)[number]);
+}
+
+/** Move stock between stores. Never allowed to drive the source negative. */
+export async function transferStock(materialId: string, fromWarehouseId: string, toWarehouseId: string, qty: number): Promise<Res> {
+  const g = await gate('update'); if (!g.ok) return g;
+  if (fromWarehouseId === toWarehouseId) return { ok: false, error: 'Pick two different stores.' };
+  const from = db.constructionStock.find((s) => s.materialId === materialId && s.warehouseId === fromWarehouseId);
+  const mat = db.constructionMaterials.find((m) => m.id === materialId);
+  if (!from || !mat) return { ok: false, error: 'Stock line not found.' };
+  const check = movementAllowed('transfer', from.onHand, qty);
+  if (!check.allowed) return { ok: false, error: check.reason! };
+
+  from.onHand -= qty;
+  const to = db.constructionStock.find((s) => s.materialId === materialId && s.warehouseId === toWarehouseId);
+  if (to) to.onHand += qty;
+  else db.constructionStock.push({ tenantId: g.actor.tenantId, id: `st-tr-${++mvSeq}`, materialId, warehouseId: toWarehouseId, onHand: qty, reserved: 0, inTransit: 0 } as unknown as (typeof db.constructionStock)[number]);
+
+  writeMovement(g.actor, 'transfer', materialId, qty, { ref: `${fromWarehouseId}→${toWarehouseId}` });
+  audit(g.actor, { action: 'stock_move', entity: 'material', entityRef: mat.name, summary: `Transferred ${qty} ${mat.unit} between stores`, amountMinor: qty * mat.unitCost.minor });
+  revalidate();
+  return { ok: true, ref: `${qty} ${mat.unit} moved` };
+}
+
+/** Surplus coming back from site — needs a coded reason so returns are analysable. */
+export async function returnStock(materialId: string, warehouseId: string, qty: number, reasonCodeId: string, note?: string): Promise<Res> {
+  const g = await gate('update'); if (!g.ok) return g;
+  const mat = db.constructionMaterials.find((m) => m.id === materialId);
+  if (!mat) return { ok: false, error: 'Material not found.' };
+  if (!(qty > 0)) return { ok: false, error: 'Quantity must be greater than zero.' };
+  const code = db.constructionReasonCodes.find((c) => c.id === reasonCodeId);
+  if (!code) return { ok: false, error: 'Choose a reason.' };
+  if (code.requiresNote && !note?.trim()) return { ok: false, error: `“${code.label}” needs a note.` };
+
+  const line = db.constructionStock.find((s) => s.materialId === materialId && s.warehouseId === warehouseId);
+  if (line) line.onHand += qty;
+  else db.constructionStock.push({ tenantId: g.actor.tenantId, id: `st-rt-${++mvSeq}`, materialId, warehouseId, onHand: qty, reserved: 0, inTransit: 0 } as unknown as (typeof db.constructionStock)[number]);
+
+  writeMovement(g.actor, 'return', materialId, qty, { ref: code.code });
+  recordReason(g.actor, { domain: 'stock_return', codeId: reasonCodeId, subjectKind: 'material', subjectRef: materialId, note, impactMinor: qty * mat.unitCost.minor });
+  audit(g.actor, { action: 'stock_move', entity: 'material', entityRef: mat.name, summary: `${qty} ${mat.unit} returned to store — ${code.label}`, amountMinor: qty * mat.unitCost.minor, reasonCodeId, note });
+  revalidate();
+  return { ok: true, ref: `${qty} ${mat.unit} returned` };
+}
+
+let scSeq = 0;
+/** Record a physical count. The variance is NOT written to stock until it is
+ *  reconciled with a reason — counting and adjusting are deliberately separate. */
+export async function recordStockCount(materialId: string, warehouseId: string, countedQty: number): Promise<Res> {
+  const g = await gate('create'); if (!g.ok) return g;
+  const mat = db.constructionMaterials.find((m) => m.id === materialId);
+  if (!mat) return { ok: false, error: 'Material not found.' };
+  if (countedQty < 0) return { ok: false, error: 'A count cannot be negative.' };
+  const systemQty = onHandOf(materialId, warehouseId);
+  const ref = `SC-${2040 + db.constructionStockCounts.length + (++scSeq)}`;
+  db.constructionStockCounts.unshift({
+    tenantId: g.actor.tenantId, id: `sc-${scSeq}`, ref, warehouseId, materialId,
+    systemQty, countedQty, countedBy: nameOf(g.actor), countedISO: NOW.slice(0, 10), status: 'open',
+  });
+  audit(g.actor, { action: 'stock_count', entity: 'material', entityRef: mat.name, summary: `Counted ${countedQty} vs ${systemQty} on system`, before: String(systemQty), after: String(countedQty) });
+  revalidate();
+  return { ok: true, ref };
+}
+
+/** Apply a count's variance to stock, with a mandatory coded reason. This is the
+ *  only path by which a count can change the books. */
+export async function reconcileStockCount(countId: string, reasonCodeId: string, note?: string): Promise<Res> {
+  const g = await gate('update'); if (!g.ok) return g;
+  const count = db.constructionStockCounts.find((c) => c.id === countId);
+  if (!count) return { ok: false, error: 'Count not found.' };
+  if (count.status === 'reconciled') return { ok: false, error: 'Already reconciled.' };
+  const code = db.constructionReasonCodes.find((c) => c.id === reasonCodeId);
+  if (!code) return { ok: false, error: 'A reason is required to move stock.' };
+  if (code.requiresNote && !note?.trim()) return { ok: false, error: `“${code.label}” needs a note.` };
+
+  const mat = db.constructionMaterials.find((m) => m.id === count.materialId);
+  const delta = count.countedQty - count.systemQty;
+  const line = db.constructionStock.find((s) => s.materialId === count.materialId && s.warehouseId === count.warehouseId);
+  if (line) line.onHand = count.countedQty;
+  else if (count.countedQty > 0) db.constructionStock.push({ tenantId: g.actor.tenantId, id: `st-sc-${++mvSeq}`, materialId: count.materialId, warehouseId: count.warehouseId, onHand: count.countedQty, reserved: 0, inTransit: 0 } as unknown as (typeof db.constructionStock)[number]);
+
+  if (delta !== 0) writeMovement(g.actor, 'adjust', count.materialId, Math.abs(delta), { ref: `${count.ref} · ${code.code}` });
+  count.status = 'reconciled'; count.reasonCodeId = reasonCodeId; count.note = note; count.approvedBy = nameOf(g.actor);
+
+  recordReason(g.actor, { domain: 'stock_adjust', codeId: reasonCodeId, subjectKind: 'material', subjectRef: count.materialId, note, impactMinor: Math.abs(delta) * (mat?.unitCost.minor ?? 0) });
+  audit(g.actor, { action: 'stock_count', entity: 'material', entityRef: mat?.name ?? count.materialId, summary: `${count.ref} reconciled: ${delta >= 0 ? '+' : ''}${delta} ${mat?.unit ?? ''} — ${code.label}`, amountMinor: Math.abs(delta) * (mat?.unitCost.minor ?? 0), before: String(count.systemQty), after: String(count.countedQty), reasonCodeId, note });
+  revalidate();
+  return { ok: true, ref: `${count.ref} · ${delta >= 0 ? '+' : ''}${delta}` };
+}
+
+/* --- approval workflow ------------------------------------------------------ */
+
+let aprSeq = 0;
+/** Raise a request onto the route its value and category select. */
+export async function raiseApproval(subject: 'purchase_request' | 'variation' | 'timesheet' | 'stock_adjust' | 'budget_override', subjectRef: string, title: string, projectId: string, amountMinor: number, category?: string): Promise<Res> {
+  const g = await gate('create'); if (!g.ok) return g;
+  const rule = routeFor(db.constructionApprovalRules, subject, amountMinor, category);
+  if (!rule) return { ok: false, error: 'No approval route is configured for this.' };
+  const ref = `APR-${1050 + db.constructionApprovals.length + (++aprSeq)}`;
+  db.constructionApprovals.unshift({
+    tenantId: g.actor.tenantId, id: `apr-new-${aprSeq}`, ref, subject, subjectRef, title, projectId,
+    amountMinor, raisedBy: nameOf(g.actor), raisedISO: new Date(Date.parse(NOW)).toISOString(),
+    ruleId: rule.id, steps: stepsFromRule(rule), status: 'in_flight',
+  } as unknown as (typeof db.constructionApprovals)[number]);
+  audit(g.actor, { action: 'issue', entity: 'approval', entityRef: ref, projectId, summary: `Raised for approval on “${rule.name}”`, amountMinor });
+  revalidate();
+  return { ok: true, ref };
+}
+
+/** Approve or reject the step this actor actually owns. Segregation of duties and
+ *  the parallel-step rule are enforced in the engine, not the UI. */
+export async function decideApproval(requestId: string, decision: 'approved' | 'rejected', comment?: string, reasonCodeId?: string): Promise<Res> {
+  const g = await gate('update'); if (!g.ok) return g;
+  const idx = db.constructionApprovals.findIndex((a) => a.id === requestId);
+  if (idx < 0) return { ok: false, error: 'Request not found.' };
+  const req = db.constructionApprovals[idx];
+  const check = canApprove(req, g.actor.roles as string[], nameOf(g.actor));
+  if (!check.allowed || !check.step) return { ok: false, error: check.reason ?? 'You cannot act on this step.' };
+  if (decision === 'rejected') {
+    const code = reasonCodeId ? db.constructionReasonCodes.find((c) => c.id === reasonCodeId) : null;
+    if (!code) return { ok: false, error: 'A rejection needs a coded reason.' };
+    if (code.requiresNote && !comment?.trim()) return { ok: false, error: `“${code.label}” needs a note.` };
+  }
+
+  const next = applyDecision(req, check.step.order, check.step.role, decision, nameOf(g.actor), NOW.slice(0, 10), comment);
+  db.constructionApprovals[idx] = next as (typeof db.constructionApprovals)[number];
+
+  if (decision === 'rejected' && reasonCodeId) {
+    recordReason(g.actor, { domain: 'rejection', codeId: reasonCodeId, subjectKind: req.subject, subjectRef: req.subjectRef, projectId: req.projectId, note: comment, impactMinor: req.amountMinor });
+  }
+  audit(g.actor, {
+    action: decision === 'approved' ? 'approve' : 'reject',
+    entity: 'approval', entityRef: req.ref, projectId: req.projectId,
+    summary: `${check.step.label} ${decision} — ${req.title}`,
+    amountMinor: req.amountMinor, reasonCodeId, note: comment,
+    before: 'in_flight', after: next.status,
+  });
+  revalidate();
+  return { ok: true, ref: `${req.ref} · ${next.status === 'in_flight' ? 'advanced' : next.status}` };
+}
+
+/** Hand a live step to a named person (PRD §15.3 delegation). */
+export async function delegateApproval(requestId: string, toName: string): Promise<Res> {
+  const g = await gate('update'); if (!g.ok) return g;
+  const req = db.constructionApprovals.find((a) => a.id === requestId);
+  if (!req) return { ok: false, error: 'Request not found.' };
+  if (req.status !== 'in_flight') return { ok: false, error: 'This request is already resolved.' };
+  if (!toName.trim()) return { ok: false, error: 'Name the delegate.' };
+  const live = pendingSteps(req);
+  if (live.length === 0) return { ok: false, error: 'Nothing pending to delegate.' };
+  const mine = live.find((s) => (g.actor.roles as string[]).includes(s.role));
+  if (!mine) return { ok: false, error: 'You can only delegate a step you hold.' };
+  const step = req.steps.find((s) => s.order === mine.order && s.role === mine.role && s.status === 'pending');
+  if (step) step.delegatedTo = toName.trim();
+  audit(g.actor, { action: 'delegate', entity: 'approval', entityRef: req.ref, projectId: req.projectId, summary: `${mine.label} delegated to ${toName.trim()}`, amountMinor: req.amountMinor });
+  revalidate();
+  return { ok: true, ref: `${req.ref} → ${toName.trim()}` };
 }

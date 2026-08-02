@@ -22,6 +22,7 @@ export function constructionWorld(actor: Actor): ConWorld {
     requests: repos.constructionRequests.list(actor).items,
     reports: repos.constructionReports.list(actor).items,
     materials: repos.constructionMaterials.list(actor).items,
+    warehouses: repos.constructionWarehouses.list(actor).items,
     stock: repos.constructionStock.list(actor).items,
     movements: repos.constructionMovements.list(actor).items,
     docs: repos.constructionDocs.list(actor).items,
@@ -32,12 +33,23 @@ export function constructionWorld(actor: Actor): ConWorld {
     attendance: repos.constructionAttendance.list(actor).items,
     zones: repos.constructionZones.list(actor).items,
     timesheets: repos.constructionTimesheets.list(actor).items,
+    reasonCodes: repos.constructionReasonCodes.list(actor).items,
+    reasonEvents: repos.constructionReasonEvents.list(actor).items,
+    approvalRules: repos.constructionApprovalRules.list(actor).items,
+    approvals: repos.constructionApprovals.list(actor).items,
+    audit: repos.constructionAudit.list(actor).items,
     transmittals: repos.constructionTransmittals.list(actor).items,
     subcontractors: repos.constructionSubcontractors.list(actor).items,
     safetyEvents: repos.constructionSafetyEvents.list(actor).items,
     safetyPermits: repos.constructionSafetyPermits.list(actor).items,
     toolboxTalks: repos.constructionToolboxTalks.list(actor).items,
   };
+}
+
+/** The acting user's display name. Segregation-of-duties and delegation both
+ *  compare against it, so it must come from the same place everywhere. */
+export function actorName(actor: Actor): string {
+  return db.users.find((u) => u.id === actor.userId)?.name ?? 'Unknown';
 }
 
 /** Advisory risk-signal lifecycle states, keyed by the deterministic signal id. */

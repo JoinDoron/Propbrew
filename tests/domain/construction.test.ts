@@ -7,6 +7,9 @@ import {
   scoreSubcontractors, safetyStats, permitClashes, askConstruction, suggestedQuestions,
   revisionChain, currentRevision, nextRevision, canSupersede, docRegister, rfiAgeing,
   parseBoq, boqReconciliation, timesheetCostMinor, costTimesheets, labourPosture, labourByCostCode,
+  reasonPareto, reasonsFor, movementAllowed, countVariance, stockLedger,
+  routeFor, currentStepOrder, pendingSteps, applyDecision, canApprove, overdueSteps, approvalProgress,
+  auditSummary, sensitiveEntries,
   type ConWorld,
 } from '@/domain/construction/engine';
 
@@ -15,11 +18,13 @@ const NOW = Date.parse('2026-07-26');
 const world = (): ConWorld => ({
   projects: seed.constructionProjects, phases: seed.constructionPhases, tasks: seed.constructionTasks, costCodes: seed.constructionCostCodes,
   pos: seed.constructionOrders, requests: seed.constructionRequests, reports: seed.constructionReports,
-  materials: seed.constructionMaterials, stock: seed.constructionStock, movements: seed.constructionMovements,
+  materials: seed.constructionMaterials, warehouses: seed.constructionWarehouses, stock: seed.constructionStock, movements: seed.constructionMovements,
   docs: seed.constructionDocs, rfis: seed.constructionRfis, workers: seed.constructionWorkers, issues: seed.constructionIssues,
   milestones: seed.constructionMilestones, attendance: seed.constructionAttendance,
   zones: seed.constructionZones, subcontractors: seed.constructionSubcontractors,
   timesheets: seed.constructionTimesheets, transmittals: seed.constructionTransmittals,
+  reasonCodes: seed.constructionReasonCodes, reasonEvents: seed.constructionReasonEvents,
+  approvalRules: seed.constructionApprovalRules, approvals: seed.constructionApprovals, audit: seed.constructionAudit,
   safetyEvents: seed.constructionSafetyEvents, safetyPermits: seed.constructionSafetyPermits, toolboxTalks: seed.constructionToolboxTalks,
 });
 const marina = () => seed.constructionProjects.find((p) => p.id === 'cp-marina')!;
@@ -270,5 +275,97 @@ describe('timesheets → earned value', () => {
     const byCode = labourByCostCode(views);
     expect(byCode[0].code).toBe('MAR-SUP');
     expect(byCode.some((r) => r.code === 'MAR-MEP')).toBe(true);
+  });
+});
+
+describe('reason codes', () => {
+  it('builds a Pareto and marks the vital few', () => {
+    const p = reasonPareto(seed.constructionReasonEvents, seed.constructionReasonCodes, 'delay');
+    expect(p[0].code.code).toBe('DLY-MAT'); // 3 of 7 delays
+    expect(p[0].count).toBe(3);
+    expect(p[0].vital).toBe(true);
+    // cumulative share is monotonic and lands at 100
+    expect(p[p.length - 1].cumulativePct).toBeGreaterThanOrEqual(99.9);
+    // the long tail is not "vital"
+    expect(p[p.length - 1].vital).toBe(false);
+    // impact is summed, so a weighted view is possible
+    expect(p[0].impactDays).toBe(9); // 4 + 3 + 2
+  });
+  it('offers only active codes for a domain', () => {
+    const rejections = reasonsFor(seed.constructionReasonCodes, 'rejection');
+    expect(rejections.every((c) => c.domain === 'rejection' && c.active)).toBe(true);
+    expect(rejections.some((c) => c.code === 'REJ-OT')).toBe(true);
+  });
+});
+
+describe('stock movements', () => {
+  it('never lets stock go negative', () => {
+    expect(movementAllowed('issue', 10, 12).allowed).toBe(false);
+    expect(movementAllowed('transfer', 10, 12).allowed).toBe(false);
+    expect(movementAllowed('issue', 10, 10).allowed).toBe(true);
+    expect(movementAllowed('receipt', 0, 50).allowed).toBe(true); // receipts always fine
+    expect(movementAllowed('issue', 10, 0).allowed).toBe(false); // zero is not a movement
+  });
+  it('bands a count variance by direction and severity', () => {
+    expect(countVariance(100, 100)).toMatchObject({ deltaQty: 0, direction: 'exact', band: 'success' });
+    expect(countVariance(100, 88)).toMatchObject({ deltaQty: -12, pct: 12, direction: 'short', band: 'danger' });
+    expect(countVariance(100, 96)).toMatchObject({ direction: 'short', band: 'warn' });
+    expect(countVariance(100, 101)).toMatchObject({ direction: 'over', band: 'info' });
+  });
+  it('replays movements into a running balance', () => {
+    const ledger = stockLedger(seed.constructionMovements, 'mat-rebar');
+    expect(ledger.length).toBeGreaterThan(0);
+    // receipts add, issues subtract — the last running figure is the book balance
+    expect(ledger[ledger.length - 1].runningQty).toBe(12); // 60 received − 48 issued
+  });
+});
+
+describe('approval workflow', () => {
+  it('routes by value, most-specific first', () => {
+    const rules = seed.constructionApprovalRules;
+    expect(routeFor(rules, 'purchase_request', 500_000_00)!.id).toBe('ar-pr-base');
+    expect(routeFor(rules, 'purchase_request', 2_000_000_000)!.id).toBe('ar-pr-mid');
+    expect(routeFor(rules, 'purchase_request', 12_000_000_000)!.id).toBe('ar-pr-high');
+    expect(routeFor(rules, 'timesheet', 1_000)).toBeNull(); // no route configured
+  });
+  it('holds at a parallel step until every approver is in', () => {
+    const req = seed.constructionApprovals.find((a) => a.id === 'apr-1')!; // QS in, Finance out
+    expect(currentStepOrder(req)).toBe(2);
+    expect(pendingSteps(req).map((s) => s.label)).toEqual(['Finance']);
+    // executive approving Finance advances to order 3, not to done
+    const after = applyDecision(req, 2, 'executive', 'approved', 'Chidi Okonkwo', '2026-07-26');
+    expect(after.status).toBe('in_flight');
+    expect(currentStepOrder(after)).toBe(3);
+  });
+  it('enforces segregation of duties and role ownership', () => {
+    const req = seed.constructionApprovals.find((a) => a.id === 'apr-2')!; // raised by Emeka
+    expect(canApprove(req, ['estate_manager'], 'Emeka Nwosu').allowed).toBe(false); // own request
+    expect(canApprove(req, ['facility_manager'], 'Bola Adeyemi').allowed).toBe(false); // wrong role
+    expect(canApprove(req, ['estate_manager'], 'Ngozi Okafor').allowed).toBe(true);
+    const done = seed.constructionApprovals.find((a) => a.id === 'apr-3')!;
+    expect(canApprove(done, ['executive'], 'Chidi Okonkwo').allowed).toBe(false); // already resolved
+  });
+  it('a rejection stops the whole request', () => {
+    const req = seed.constructionApprovals.find((a) => a.id === 'apr-2')!;
+    const rejected = applyDecision(req, 1, 'estate_manager', 'rejected', 'Ngozi Okafor', '2026-07-26', 'no');
+    expect(rejected.status).toBe('rejected');
+    expect(rejected.steps.every((s) => s.status !== 'pending')).toBe(true); // downstream skipped
+  });
+  it('flags steps past their SLA', () => {
+    const req = seed.constructionApprovals.find((a) => a.id === 'apr-2')!; // raised 07-20, 48h SLA
+    expect(overdueSteps(req, NOW).length).toBe(1);
+    expect(overdueSteps(seed.constructionApprovals.find((a) => a.id === 'apr-3')!, NOW)).toHaveLength(0);
+    expect(approvalProgress(req).pct).toBe(0);
+  });
+});
+
+describe('audit trail', () => {
+  it('summarises what an auditor looks at first', () => {
+    const s = auditSummary(seed.constructionAudit);
+    expect(s.total).toBe(6);
+    expect(s.overrides).toBe(1);
+    expect(s.actors).toBe(3);
+    expect(sensitiveEntries(seed.constructionAudit).some((e) => e.action === 'override')).toBe(true);
+    expect(s.valueMovedMinor).toBeGreaterThan(0);
   });
 });

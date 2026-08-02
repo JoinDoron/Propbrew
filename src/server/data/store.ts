@@ -121,6 +121,14 @@ export const db = {
   constructionToolboxTalks: clone(seed.constructionToolboxTalks),
   constructionTimesheets: clone(seed.constructionTimesheets),
   constructionTransmittals: clone(seed.constructionTransmittals),
+  constructionReasonCodes: clone(seed.constructionReasonCodes),
+  constructionReasonEvents: clone(seed.constructionReasonEvents),
+  constructionApprovalRules: seed.constructionApprovalRules.map((r) => ({ ...r, steps: r.steps.map((x) => ({ ...x })) })),
+  constructionApprovals: seed.constructionApprovals.map((a) => ({ ...a, steps: a.steps.map((x) => ({ ...x })) })),
+  /** Append-only. Nothing in the app ever edits or deletes an audit entry. */
+  constructionAudit: clone(seed.constructionAudit),
+  /** Physical stock counts awaiting reconciliation. */
+  constructionStockCounts: [] as { tenantId: unknown; id: string; ref: string; warehouseId: string; materialId: string; systemQty: number; countedQty: number; countedBy: string; countedISO: string; status: 'open' | 'reconciled'; reasonCodeId?: string; note?: string; approvedBy?: string }[],
   // Advisory risk-signal lifecycle (ack/snooze/escalate/dismiss), keyed by deterministic signal id.
   constructionSignalStates: [] as { signalId: string; state: 'ack' | 'snoozed' | 'escalated' | 'dismissed'; atISO: string }[],
   /** Idempotency ledger for offline-captured mutations. The client's op id is

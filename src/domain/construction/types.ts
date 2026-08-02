@@ -237,3 +237,88 @@ export type SafetyEvent = TenantScoped & {
 export type ToolboxTalk = TenantScoped & {
   id: string; projectId: string; topic: string; atISO: string; attendees: number; deliveredBy: string;
 };
+
+/* --- structured reason codes ---------------------------------------------- */
+
+/**
+ * A controlled vocabulary for WHY something was rejected, delayed, varied or
+ * adjusted (PRD §20: "Capture structured reasons … to support future
+ * intelligence"). Free text can't be counted; a code can — which is what turns a
+ * pile of rejections into a Pareto of what actually goes wrong on site.
+ */
+export type ReasonDomain = 'rejection' | 'delay' | 'variance' | 'stock_adjust' | 'stock_return';
+export type ReasonCode = TenantScoped & {
+  id: string; domain: ReasonDomain; code: string; label: string; category: string;
+  /** true when the code alone isn't enough and a note must be typed. */
+  requiresNote: boolean;
+  /** false retires a code without breaking historic records that cite it. */
+  active: boolean;
+};
+
+/** One use of a reason code, kept so the analytics are real rather than guessed. */
+export type ReasonEvent = TenantScoped & {
+  id: string; domain: ReasonDomain; codeId: string; subjectKind: string; subjectRef: string;
+  projectId?: string; note?: string; atISO: string; by: string;
+  /** money or days at stake, when the domain has one — powers a weighted Pareto. */
+  impactMinor?: number; impactDays?: number;
+};
+
+/* --- stock counts (physical reconciliation) -------------------------------- */
+
+export type StockCountStatus = 'open' | 'reconciled';
+export type StockCount = TenantScoped & {
+  id: string; ref: string; warehouseId: string; materialId: string;
+  systemQty: number; countedQty: number; countedBy: string; countedISO: string;
+  status: StockCountStatus; reasonCodeId?: string; note?: string; approvedBy?: string;
+};
+
+/* --- approval workflow engine ---------------------------------------------- */
+
+/** A configurable route: which subject, above what value, through which steps.
+ *  Rules are evaluated most-specific-first (highest threshold wins). */
+export type ApprovalSubject = 'purchase_request' | 'variation' | 'timesheet' | 'stock_adjust' | 'budget_override';
+export type ApprovalStepDef = {
+  order: number; role: string; label: string;
+  /** steps sharing an order run in PARALLEL — all must approve to advance. */
+  slaHours: number;
+};
+export type ApprovalRule = TenantScoped & {
+  id: string; name: string; subject: ApprovalSubject;
+  /** inclusive lower bound in minor units; 0 = the base route. */
+  thresholdMinor: number;
+  category?: string;
+  steps: ApprovalStepDef[];
+  active: boolean;
+};
+
+export type StepStatus = 'pending' | 'approved' | 'rejected' | 'skipped';
+export type ApprovalStepState = {
+  order: number; role: string; label: string; slaHours: number;
+  status: StepStatus; actedBy?: string; actedISO?: string; comment?: string;
+  /** who this step is currently delegated to, if anyone. */
+  delegatedTo?: string;
+};
+export type ApprovalStatus = 'in_flight' | 'approved' | 'rejected' | 'cancelled';
+export type ApprovalRequest = TenantScoped & {
+  id: string; ref: string; subject: ApprovalSubject; subjectRef: string; title: string;
+  projectId: string; amountMinor: number; raisedBy: string; raisedISO: string;
+  ruleId: string; steps: ApprovalStepState[]; status: ApprovalStatus;
+  reasonCodeId?: string; note?: string;
+};
+
+/* --- audit trail ----------------------------------------------------------- */
+
+/** An append-only record of a sensitive action (PRD §18.3 "Immutable audit logs
+ *  for sensitive actions", SC-10). Written by the actions, never edited. */
+export type AuditAction =
+  | 'approve' | 'reject' | 'issue' | 'supersede' | 'post_cost' | 'import'
+  | 'stock_move' | 'stock_count' | 'override' | 'delegate' | 'cancel';
+export type AuditEntry = TenantScoped & {
+  id: string; seq: number; atISO: string;
+  actorId: string; actorName: string; actorRole: string;
+  action: AuditAction; entity: string; entityRef: string; projectId?: string;
+  summary: string;
+  /** the money the action moved, where it moved any. */
+  amountMinor?: number;
+  before?: string; after?: string; reasonCodeId?: string; note?: string;
+};

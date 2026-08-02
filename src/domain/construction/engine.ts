@@ -10,9 +10,11 @@
 import type { Tone } from '@/lib/status-tones';
 import type {
   Project, Phase, Task, CostCode, Quote, PurchaseOrder, PurchaseRequest, Material, StockItem,
-  StockMovement, Milestone, Issue, DailyReport, RFI, Worker, Vendor, Attendance,
+  StockMovement, Warehouse, Milestone, Issue, DailyReport, RFI, Worker, Vendor, Attendance,
   Zone, Subcontractor, SafetyEvent, SafetyPermit, SafetyPermitType, SafetyEventKind, ToolboxTalk,
   DocStatus, ConstructionDoc, Timesheet, Transmittal,
+  ReasonCode, ReasonDomain, ReasonEvent, ApprovalRule, ApprovalSubject, ApprovalStepState,
+  ApprovalRequest, ApprovalStatus, StepStatus, AuditEntry, AuditAction, StockKind,
 } from './types';
 
 const DAY = 24 * 3600 * 1000;
@@ -277,10 +279,12 @@ export function reportBand(status: DailyReport['status']): Tone {
 export type ConWorld = {
   projects: readonly Project[]; phases: readonly Phase[]; tasks: readonly Task[]; costCodes: readonly CostCode[];
   pos: readonly PurchaseOrder[]; requests: readonly PurchaseRequest[]; reports: readonly DailyReport[];
-  materials: readonly Material[]; stock: readonly StockItem[]; movements: readonly StockMovement[];
+  materials: readonly Material[]; warehouses: readonly Warehouse[]; stock: readonly StockItem[]; movements: readonly StockMovement[];
   docs: readonly ConstructionDoc[]; rfis: readonly RFI[]; workers: readonly Worker[]; issues: readonly Issue[];
   milestones: readonly Milestone[]; attendance: readonly Attendance[];
   zones: readonly Zone[]; subcontractors: readonly Subcontractor[]; timesheets: readonly Timesheet[]; transmittals: readonly Transmittal[];
+  reasonCodes: readonly ReasonCode[]; reasonEvents: readonly ReasonEvent[];
+  approvalRules: readonly ApprovalRule[]; approvals: readonly ApprovalRequest[]; audit: readonly AuditEntry[];
   safetyEvents: readonly SafetyEvent[]; safetyPermits: readonly SafetyPermit[]; toolboxTalks: readonly ToolboxTalk[];
 };
 
@@ -478,6 +482,194 @@ export function reportCompleteness(r: Pick<DailyReport, 'completed' | 'ongoing' 
   ];
   const done = checks.filter(([ok]) => ok).length;
   return { pct: Math.round((done / checks.length) * 100), missing: checks.filter(([ok]) => !ok).map(([, l]) => l) };
+}
+
+/* --- structured reason codes ---------------------------------------------- */
+
+export const REASON_DOMAIN_LABEL: Record<ReasonDomain, string> = {
+  rejection: 'Rejections', delay: 'Delays', variance: 'Cost variance',
+  stock_adjust: 'Stock adjustments', stock_return: 'Stock returns',
+};
+
+export function reasonsFor(codes: readonly ReasonCode[], domain: ReasonDomain): ReasonCode[] {
+  return codes.filter((c) => c.domain === domain && c.active).sort((a, b) => a.label.localeCompare(b.label));
+}
+
+export type ReasonStat = { code: ReasonCode; count: number; sharePct: number; cumulativePct: number; impactMinor: number; impactDays: number; vital: boolean };
+
+/**
+ * A Pareto over reason codes: which few causes account for most of the pain.
+ * `vital` marks the codes inside the first 80% of occurrences — the ones worth
+ * fixing. This is the whole point of coding reasons rather than typing prose.
+ */
+export function reasonPareto(events: readonly ReasonEvent[], codes: readonly ReasonCode[], domain?: ReasonDomain): ReasonStat[] {
+  const scoped = domain ? events.filter((e) => e.domain === domain) : events;
+  const total = scoped.length;
+  if (total === 0) return [];
+  const byCode = new Map<string, ReasonEvent[]>();
+  for (const e of scoped) byCode.set(e.codeId, [...(byCode.get(e.codeId) ?? []), e]);
+
+  let running = 0;
+  return [...byCode.entries()]
+    .map(([codeId, evs]) => ({ codeId, evs }))
+    .sort((a, b) => b.evs.length - a.evs.length)
+    .map(({ codeId, evs }) => {
+      const code = codes.find((c) => c.id === codeId);
+      const sharePct = Math.round((evs.length / total) * 1000) / 10;
+      running += sharePct;
+      return {
+        code: code ?? ({ id: codeId, code: codeId, label: codeId, category: '—', domain: 'rejection', requiresNote: false, active: false } as ReasonCode),
+        count: evs.length, sharePct,
+        cumulativePct: Math.round(running * 10) / 10,
+        impactMinor: evs.reduce((n, e) => n + (e.impactMinor ?? 0), 0),
+        impactDays: evs.reduce((n, e) => n + (e.impactDays ?? 0), 0),
+        vital: false,
+      };
+    })
+    .map((r, i, all) => ({ ...r, vital: i === 0 || (all[i - 1]?.cumulativePct ?? 0) < 80 }));
+}
+
+/* --- stock movements & physical count -------------------------------------- */
+
+export const STOCK_KIND_LABEL: Record<StockKind, string> = {
+  receipt: 'Receipt', issue: 'Issue', transfer: 'Transfer', return: 'Return', adjust: 'Adjustment',
+};
+
+/** System-vs-counted variance for one stock line. A shortfall is the number that
+ *  needs a reason before anyone touches the books. */
+export function countVariance(systemQty: number, countedQty: number): { deltaQty: number; pct: number; band: Tone; direction: 'short' | 'over' | 'exact' } {
+  const deltaQty = countedQty - systemQty;
+  const pct = systemQty > 0 ? Math.round(Math.abs(deltaQty / systemQty) * 1000) / 10 : deltaQty === 0 ? 0 : 100;
+  const band: Tone = deltaQty === 0 ? 'success' : pct >= 10 ? 'danger' : pct >= 3 ? 'warn' : 'info';
+  return { deltaQty, pct, band, direction: deltaQty < 0 ? 'short' : deltaQty > 0 ? 'over' : 'exact' };
+}
+
+/** Would this movement drive stock negative? Blocking that is the single most
+ *  important inventory invariant — a negative bin means the records are fiction. */
+export function movementAllowed(kind: StockKind, onHand: number, qty: number): { allowed: boolean; reason?: string } {
+  if (qty <= 0) return { allowed: false, reason: 'Quantity must be greater than zero.' };
+  const reduces = kind === 'issue' || kind === 'transfer';
+  if (reduces && qty > onHand) return { allowed: false, reason: `Only ${onHand} on hand — stock can never go negative.` };
+  return { allowed: true };
+}
+
+export type StockLedgerRow = { movement: StockMovement; runningQty: number };
+/** Replay movements oldest-first into a running balance — the perpetual ledger
+ *  that must reconcile to the counted figure. */
+export function stockLedger(movements: readonly StockMovement[], materialId: string): StockLedgerRow[] {
+  const sign = (k: StockKind) => (k === 'receipt' || k === 'return' ? 1 : k === 'adjust' ? 1 : -1);
+  let running = 0;
+  return movements
+    .filter((m) => m.materialId === materialId)
+    .sort((a, b) => Date.parse(a.atISO) - Date.parse(b.atISO))
+    .map((movement) => { running += sign(movement.kind) * movement.qty; return { movement, runningQty: running }; });
+}
+
+/* --- approval workflow engine ---------------------------------------------- */
+
+/** Pick the route: the highest-threshold active rule the amount clears, matching
+ *  the category when the rule names one. Most-specific-first. */
+export function routeFor(rules: readonly ApprovalRule[], subject: ApprovalSubject, amountMinor: number, category?: string): ApprovalRule | null {
+  return rules
+    .filter((r) => r.active && r.subject === subject && amountMinor >= r.thresholdMinor)
+    .filter((r) => !r.category || r.category === category)
+    .sort((a, b) => b.thresholdMinor - a.thresholdMinor || (b.category ? 1 : 0) - (a.category ? 1 : 0))[0] ?? null;
+}
+
+export function stepsFromRule(rule: ApprovalRule): ApprovalStepState[] {
+  return [...rule.steps]
+    .sort((a, b) => a.order - b.order)
+    .map((s) => ({ order: s.order, role: s.role, label: s.label, slaHours: s.slaHours, status: 'pending' as StepStatus }));
+}
+
+/** The order currently in play: the lowest order with anything still pending.
+ *  Steps sharing an order are parallel and must ALL approve to advance. */
+export function currentStepOrder(req: Pick<ApprovalRequest, 'steps'>): number | null {
+  const pending = req.steps.filter((s) => s.status === 'pending').map((s) => s.order);
+  return pending.length ? Math.min(...pending) : null;
+}
+
+export function pendingSteps(req: Pick<ApprovalRequest, 'steps'>): ApprovalStepState[] {
+  const order = currentStepOrder(req);
+  return order === null ? [] : req.steps.filter((s) => s.order === order && s.status === 'pending');
+}
+
+/**
+ * May this actor act on this request now? Enforces the live step, the role, any
+ * delegation, and segregation of duties — the requester can never be the
+ * approver of their own transaction (PRD §15.2).
+ */
+export function canApprove(req: Pick<ApprovalRequest, 'steps' | 'raisedBy' | 'status'>, actorRoles: readonly string[], actorName: string): { allowed: boolean; step?: ApprovalStepState; reason?: string } {
+  if (req.status !== 'in_flight') return { allowed: false, reason: 'This request is already resolved.' };
+  if (req.raisedBy.toLowerCase() === actorName.toLowerCase()) return { allowed: false, reason: 'You raised this — segregation of duties requires a different approver.' };
+  const live = pendingSteps(req);
+  const step = live.find((s) => (s.delegatedTo ? s.delegatedTo.toLowerCase() === actorName.toLowerCase() : actorRoles.includes(s.role)));
+  if (!step) return { allowed: false, reason: live.length ? `Waiting on ${live.map((s) => s.label).join(' and ')}.` : 'Nothing pending.' };
+  return { allowed: true, step };
+}
+
+/** Fold an approval/rejection in. A rejection stops the whole request; an
+ *  approval only advances once every parallel step at that order is in. */
+export function applyDecision(req: ApprovalRequest, order: number, role: string, decision: 'approved' | 'rejected', by: string, atISO: string, comment?: string): ApprovalRequest {
+  const steps = req.steps.map((s) =>
+    s.order === order && s.role === role && s.status === 'pending'
+      ? { ...s, status: decision, actedBy: by, actedISO: atISO, comment }
+      : s);
+  if (decision === 'rejected') {
+    return { ...req, steps: steps.map((s) => (s.status === 'pending' ? { ...s, status: 'skipped' as StepStatus } : s)), status: 'rejected' };
+  }
+  const done = steps.every((s) => s.status !== 'pending');
+  return { ...req, steps, status: done ? 'approved' : 'in_flight' };
+}
+
+/** Steps past their SLA — what an escalation would act on. */
+export function overdueSteps(req: Pick<ApprovalRequest, 'steps' | 'raisedISO' | 'status'>, nowMs: number): ApprovalStepState[] {
+  if (req.status !== 'in_flight') return [];
+  const elapsedH = (nowMs - Date.parse(req.raisedISO)) / 3_600_000;
+  return pendingSteps(req).filter((s) => elapsedH > s.slaHours);
+}
+
+export function approvalProgress(req: Pick<ApprovalRequest, 'steps'>): { done: number; total: number; pct: number } {
+  const total = req.steps.length;
+  const done = req.steps.filter((s) => s.status === 'approved').length;
+  return { done, total, pct: total ? Math.round((done / total) * 100) : 0 };
+}
+
+export const APPROVAL_SUBJECT_LABEL: Record<ApprovalSubject, string> = {
+  purchase_request: 'Purchase request', variation: 'Variation', timesheet: 'Timesheet',
+  stock_adjust: 'Stock adjustment', budget_override: 'Budget override',
+};
+export const APPROVAL_TONE: Record<ApprovalStatus, Tone> = {
+  in_flight: 'progress', approved: 'success', rejected: 'danger', cancelled: 'muted',
+};
+
+/* --- audit trail ----------------------------------------------------------- */
+
+export const AUDIT_ACTION_LABEL: Record<AuditAction, string> = {
+  approve: 'Approved', reject: 'Rejected', issue: 'Issued', supersede: 'Superseded',
+  post_cost: 'Posted cost', import: 'Imported', stock_move: 'Stock movement',
+  stock_count: 'Stock count', override: 'Override', delegate: 'Delegated', cancel: 'Cancelled',
+};
+export const AUDIT_TONE: Record<AuditAction, Tone> = {
+  approve: 'success', reject: 'danger', issue: 'info', supersede: 'warn',
+  post_cost: 'progress', import: 'info', stock_move: 'progress',
+  stock_count: 'warn', override: 'danger', delegate: 'info', cancel: 'muted',
+};
+
+/** Money-moving actions an auditor looks at first. */
+export function sensitiveEntries(entries: readonly AuditEntry[]): AuditEntry[] {
+  return entries.filter((e) => e.action === 'override' || e.action === 'post_cost' || (e.amountMinor ?? 0) > 0);
+}
+
+export type AuditSummary = { total: number; sensitive: number; overrides: number; valueMovedMinor: number; actors: number };
+export function auditSummary(entries: readonly AuditEntry[]): AuditSummary {
+  return {
+    total: entries.length,
+    sensitive: sensitiveEntries(entries).length,
+    overrides: entries.filter((e) => e.action === 'override').length,
+    valueMovedMinor: entries.reduce((n, e) => n + (e.amountMinor ?? 0), 0),
+    actors: new Set(entries.map((e) => e.actorId)).size,
+  };
 }
 
 /* --- document revision control -------------------------------------------- */
