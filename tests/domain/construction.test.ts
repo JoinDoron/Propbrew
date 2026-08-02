@@ -4,7 +4,10 @@ import {
   projectEVM, costCodesEVM, projectActualMinor, criticalPath, taskDurationDays,
   scoreQuotes, budgetException, materialLeakage, scanRisks, portfolioConfidence,
   weeklyDigest, slipPropagation, moneySCurve, projectEVMOf, recoveryPlan, zoneProgress, activeLevel,
-  scoreSubcontractors, safetyStats, permitClashes, askConstruction, suggestedQuestions, type ConWorld,
+  scoreSubcontractors, safetyStats, permitClashes, askConstruction, suggestedQuestions,
+  revisionChain, currentRevision, nextRevision, canSupersede, docRegister, rfiAgeing,
+  parseBoq, boqReconciliation, timesheetCostMinor, costTimesheets, labourPosture, labourByCostCode,
+  type ConWorld,
 } from '@/domain/construction/engine';
 
 const NOW = Date.parse('2026-07-26');
@@ -13,9 +16,10 @@ const world = (): ConWorld => ({
   projects: seed.constructionProjects, phases: seed.constructionPhases, tasks: seed.constructionTasks, costCodes: seed.constructionCostCodes,
   pos: seed.constructionOrders, requests: seed.constructionRequests, reports: seed.constructionReports,
   materials: seed.constructionMaterials, stock: seed.constructionStock, movements: seed.constructionMovements,
-  rfis: seed.constructionRfis, workers: seed.constructionWorkers, issues: seed.constructionIssues,
+  docs: seed.constructionDocs, rfis: seed.constructionRfis, workers: seed.constructionWorkers, issues: seed.constructionIssues,
   milestones: seed.constructionMilestones, attendance: seed.constructionAttendance,
   zones: seed.constructionZones, subcontractors: seed.constructionSubcontractors,
+  timesheets: seed.constructionTimesheets, transmittals: seed.constructionTransmittals,
   safetyEvents: seed.constructionSafetyEvents, safetyPermits: seed.constructionSafetyPermits, toolboxTalks: seed.constructionToolboxTalks,
 });
 const marina = () => seed.constructionProjects.find((p) => p.id === 'cp-marina')!;
@@ -168,5 +172,103 @@ describe('construction copilot', () => {
     const nonsense = askConstruction('what is the capital of France?', world(), NOW);
     expect(nonsense.grounded).toBe(false);
     expect(suggestedQuestions(world(), NOW).length).toBeGreaterThan(0);
+  });
+});
+
+describe('document revision control', () => {
+  it('exposes the chain and only ever one current (approved) issue', () => {
+    const chain = revisionChain(seed.constructionDocs, 'MAR-ST-104');
+    expect(chain.map((d) => d.revision)).toEqual(['C', 'B']); // newest first
+    expect(currentRevision(seed.constructionDocs, 'MAR-ST-104')!.revision).toBe('C');
+    // a drawing still in review is explicitly NOT the current issue
+    expect(currentRevision(seed.constructionDocs, 'MAR-ME-210')).toBeNull();
+  });
+  it('sequences revision letters and demands a note over an approved issue', () => {
+    expect(nextRevision('C')).toBe('D');
+    expect(nextRevision('Z')).toBe('AA');
+    const approved = seed.constructionDocs.find((d) => d.id === 'doc-m1')!;
+    expect(canSupersede(approved)).toEqual({ allowed: true, requiresNote: true });
+    const superseded = seed.constructionDocs.find((d) => d.id === 'doc-m2')!;
+    expect(canSupersede(superseded).allowed).toBe(false);
+  });
+  it('keeps the approved issue current while a draft revision is in progress', () => {
+    // A site must always have something to build to: starting rev D must NOT
+    // retire rev C — only APPROVING D does that.
+    const withDraft = [
+      ...seed.constructionDocs,
+      { ...seed.constructionDocs[0], id: 'doc-m1-d', revision: 'D', status: 'draft' as const },
+    ];
+    expect(currentRevision(withDraft, 'MAR-ST-104')!.revision).toBe('C');
+    const row = docRegister(withDraft).find((r) => r.number === 'MAR-ST-104')!;
+    expect(row.revisions).toHaveLength(3);
+    expect(row.inReview).toBe(1);
+    expect(row.current!.revision).toBe('C'); // still buildable
+  });
+  it('builds a register keyed by document number', () => {
+    const reg = docRegister(seed.constructionDocs);
+    const st = reg.find((r) => r.number === 'MAR-ST-104')!;
+    expect(st.revisions).toHaveLength(2);
+    expect(st.current!.revision).toBe('C');
+    expect(reg.find((r) => r.number === 'MAR-ME-210')!.inReview).toBe(1);
+  });
+  it('ages an unanswered RFI past its due date', () => {
+    const overdue = seed.constructionRfis.find((r) => r.id === 'rfi-m1')!; // due 07-18, still open
+    expect(rfiAgeing(overdue, NOW).overdueDays).toBe(8);
+    expect(rfiAgeing(overdue, NOW).band).toBe('danger');
+    const answered = seed.constructionRfis.find((r) => r.id === 'rfi-m2')!;
+    expect(rfiAgeing(answered, NOW).overdueDays).toBe(0); // answered stops the clock
+  });
+});
+
+describe('BOQ import', () => {
+  it('parses a clean paste and totals it', () => {
+    const p = parseBoq('Code\tName\tCategory\tAmount\nMAR-EXT\tExternal works\tExternal\t120,000,000\nMAR-LFT\tLifts\tServices\t₦85000000');
+    expect(p.rows).toHaveLength(2); // header skipped
+    expect(p.rows[0].budgetMinor).toBe(12_000_000_000); // ₦120m in kobo
+    expect(p.rows[1].budgetMinor).toBe(8_500_000_000); // ₦ and separators stripped
+    expect(p.totalMinor).toBe(20_500_000_000);
+    expect(p.issues.filter((i) => i.severity === 'error')).toHaveLength(0);
+  });
+  it('reports bad lines instead of guessing, and never imports them', () => {
+    const p = parseBoq([
+      'GOOD\tFine line\tStructure\t1000',
+      'SHORT\tonly three',
+      'BAD\tNot a number\tStructure\tabc',
+      '\tNo code\tStructure\t500',
+      'NEG\tNegative\tStructure\t-5',
+      'GOOD\tDuplicate code\tStructure\t99',
+    ].join('\n'));
+    expect(p.rows.map((r) => r.code)).toEqual(['GOOD']); // only the clean line survives
+    const errs = p.issues.filter((i) => i.severity === 'error');
+    expect(errs).toHaveLength(5);
+    expect(errs.some((e) => /Duplicate cost code/.test(e.message))).toBe(true);
+    expect(errs.some((e) => /not a number/.test(e.message))).toBe(true);
+  });
+  it('warns (not errors) when a code already exists, and reconciles to budget', () => {
+    const p = parseBoq('MAR-SUP\tSuperstructure\tStructure\t100', ['MAR-SUP']);
+    expect(p.rows).toHaveLength(1); // still imported — it's an update
+    expect(p.issues[0].severity).toBe('warning');
+    expect(boqReconciliation(10_000, 10_000).band).toBe('success');
+    expect(boqReconciliation(12_000, 10_000).pct).toBe(20);
+    expect(boqReconciliation(12_000, 10_000).band).toBe('danger');
+  });
+});
+
+describe('timesheets → earned value', () => {
+  it('costs hours off the day rate with overtime at 1.5x', () => {
+    // ₦45,000/day → ₦5,625/hour. 48 normal + 6 OT = 270,000 + 50,625 = ₦320,625
+    expect(timesheetCostMinor({ normalHours: 48, overtimeHours: 6 }, 4_500_000)).toBe(32_062_500); // ₦320,625
+    expect(timesheetCostMinor({ normalHours: 8, overtimeHours: 0 }, 4_500_000)).toBe(4_500_000); // one 8h day == the day rate
+  });
+  it('separates posted labour from cost the EVM cannot yet see', () => {
+    const views = costTimesheets(seed.constructionTimesheets, seed.constructionWorkers);
+    const p = labourPosture(views);
+    expect(p.pendingSheets).toBe(4); // 3 submitted + 1 draft
+    expect(p.pendingMinor).toBeGreaterThan(0);
+    expect(p.postedMinor).toBeGreaterThan(0);
+    // grouping lands on the right cost codes
+    const byCode = labourByCostCode(views);
+    expect(byCode[0].code).toBe('MAR-SUP');
+    expect(byCode.some((r) => r.code === 'MAR-MEP')).toBe(true);
   });
 });

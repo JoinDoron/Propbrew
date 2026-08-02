@@ -15,10 +15,11 @@ import { ForbiddenError, assertCan, type Actor } from '@/lib/authz';
 import { db } from '@/server/data/store';
 import { money, type Money } from '@/domain/primitives';
 import { NOW } from '@/domain/ppm';
+import { nextRevision, timesheetCostMinor } from '@/domain/construction';
 
 export type Res = { ok: true; ref?: string } | { ok: false; error: string };
 
-const PATHS = ['/construction', '/construction/evm', '/construction/schedule', '/construction/materials', '/construction/risk', '/construction/procurement', '/construction/site', '/construction/cost', '/construction/projects', '/construction/workforce', '/construction/digest'];
+const PATHS = ['/construction', '/construction/evm', '/construction/schedule', '/construction/materials', '/construction/risk', '/construction/procurement', '/construction/site', '/construction/cost', '/construction/projects', '/construction/workforce', '/construction/digest', '/construction/documents', '/construction/boq', '/construction/timesheets'];
 const revalidate = () => PATHS.forEach((p) => revalidatePath(p));
 
 async function gate(action: 'update' | 'create'): Promise<{ ok: true; actor: Actor } | { ok: false; error: string }> {
@@ -209,4 +210,173 @@ export async function publishDigest(projectId: string): Promise<Res> {
   const g = await gate('update'); if (!g.ok) return g;
   const p = db.constructionProjects.find((x) => x.id === projectId); if (!p) return { ok: false, error: 'Project not found.' };
   revalidate(); return { ok: true, ref: p.name };
+}
+
+/* --- document revision control -------------------------------------------- */
+
+let revSeq = 0;
+/** Issue a new revision over an existing one. The prior revision is marked
+ *  superseded rather than edited — an approved issue is immutable, which is the
+ *  whole point of a controlled register (PRD §12 "Prevent approved revisions
+ *  from being overwritten"). */
+export async function issueRevision(docId: string, changeNote: string): Promise<Res> {
+  const g = await gate('create'); if (!g.ok) return g;
+  const prior = db.constructionDocs.find((d) => d.id === docId);
+  if (!prior) return { ok: false, error: 'Document not found.' };
+  if (prior.status === 'superseded') return { ok: false, error: 'That revision is already superseded — issue from the current one.' };
+  if (prior.status === 'approved' && !changeNote.trim()) return { ok: false, error: 'A change note is required when superseding an approved revision.' };
+
+  const revision = nextRevision(prior.revision);
+  const id = `doc-rev-${++revSeq}`;
+  db.constructionDocs.unshift({
+    ...prior, id, revision, status: 'draft',
+    effectiveISO: NOW.slice(0, 10), changeNote: changeNote.trim() || undefined,
+    uploadedBy: nameOf(g.actor), approvedBy: undefined, approvedISO: undefined,
+    supersedesId: prior.id, supersededById: undefined,
+  } as (typeof db.constructionDocs)[number]);
+  // The prior revision is NOT retired yet. A drawing under revision must keep
+  // its approved issue current — the site has to have something to build to
+  // until the replacement is itself approved. `approveRevision` does the swap.
+  revalidate();
+  return { ok: true, ref: `${prior.number} rev ${revision}` };
+}
+
+export async function approveRevision(docId: string): Promise<Res> {
+  const g = await gate('update'); if (!g.ok) return g;
+  const doc = db.constructionDocs.find((d) => d.id === docId);
+  if (!doc) return { ok: false, error: 'Document not found.' };
+  if (doc.status === 'approved') return { ok: false, error: 'Already approved.' };
+  if (doc.status === 'superseded') return { ok: false, error: 'A superseded revision cannot be approved.' };
+  // Exactly one approved revision per document number.
+  for (const other of db.constructionDocs) {
+    if (other.number === doc.number && other.id !== doc.id && other.status === 'approved') {
+      other.status = 'superseded';
+      other.supersededById = doc.id;
+    }
+  }
+  doc.status = 'approved'; doc.approvedBy = nameOf(g.actor); doc.approvedISO = NOW.slice(0, 10);
+  revalidate();
+  return { ok: true, ref: `${doc.number} rev ${doc.revision}` };
+}
+
+let trSeq = 0;
+/** Formally issue a revision to a party — the distribution record an audit asks for. */
+export async function sendTransmittal(docId: string, toParty: string, purpose: 'for_construction' | 'for_review' | 'for_information'): Promise<Res> {
+  const g = await gate('create'); if (!g.ok) return g;
+  const doc = db.constructionDocs.find((d) => d.id === docId);
+  if (!doc) return { ok: false, error: 'Document not found.' };
+  if (!toParty.trim()) return { ok: false, error: 'Name the party being issued to.' };
+  if (doc.status !== 'approved' && purpose === 'for_construction') {
+    return { ok: false, error: 'Only an approved revision can be issued for construction.' };
+  }
+  db.constructionTransmittals.unshift({
+    tenantId: g.actor.tenantId, id: `tr-new-${++trSeq}`, docId, docNumber: doc.number,
+    revision: doc.revision, toParty: toParty.trim(), sentISO: NOW.slice(0, 10), purpose,
+  } as unknown as (typeof db.constructionTransmittals)[number]);
+  revalidate();
+  return { ok: true, ref: `${doc.number} rev ${doc.revision} → ${toParty.trim()}` };
+}
+
+export async function answerRfi(rfiId: string, answer: string): Promise<Res> {
+  const g = await gate('update'); if (!g.ok) return g;
+  const r = db.constructionRfis.find((x) => x.id === rfiId);
+  if (!r) return { ok: false, error: 'RFI not found.' };
+  if (!answer.trim()) return { ok: false, error: 'An answer is required.' };
+  r.answer = answer.trim(); r.answeredISO = NOW.slice(0, 10); r.status = 'answered';
+  revalidate();
+  return { ok: true, ref: r.ref };
+}
+
+export async function closeRfi(rfiId: string): Promise<Res> {
+  const g = await gate('update'); if (!g.ok) return g;
+  const r = db.constructionRfis.find((x) => x.id === rfiId);
+  if (!r) return { ok: false, error: 'RFI not found.' };
+  if (r.status === 'open') return { ok: false, error: 'Answer the RFI before closing it.' };
+  r.status = 'closed';
+  revalidate();
+  return { ok: true, ref: r.ref };
+}
+
+/* --- BOQ import ------------------------------------------------------------ */
+
+let ccSeq = 0;
+export type BoqImportRow = { code: string; name: string; category: string; budgetMinor: number };
+
+/** Commit a parsed BOQ. Existing codes have their BUDGET updated (committed and
+ *  actual are untouched — those are transaction history, not a spreadsheet's to
+ *  overwrite); new codes are created. */
+export async function importBoq(projectId: string, rows: BoqImportRow[]): Promise<Res> {
+  const g = await gate('create'); if (!g.ok) return g;
+  if (!db.constructionProjects.some((p) => p.id === projectId)) return { ok: false, error: 'Project not found.' };
+  if (rows.length === 0) return { ok: false, error: 'Nothing to import.' };
+
+  let created = 0, updated = 0;
+  for (const r of rows) {
+    const existing = db.constructionCostCodes.find((c) => c.projectId === projectId && c.code === r.code);
+    if (existing) {
+      existing.budget = money(r.budgetMinor);
+      existing.name = r.name;
+      existing.category = r.category;
+      updated += 1;
+    } else {
+      db.constructionCostCodes.push({
+        tenantId: g.actor.tenantId, id: `cc-boq-${++ccSeq}`, projectId,
+        code: r.code, name: r.name, category: r.category,
+        budget: money(r.budgetMinor), committed: money(0), actual: money(0),
+        plannedPercent: 0, earnedPercent: 0,
+      } as unknown as (typeof db.constructionCostCodes)[number]);
+      created += 1;
+    }
+  }
+  revalidate();
+  return { ok: true, ref: `${created} created, ${updated} updated` };
+}
+
+/* --- timesheets → earned value -------------------------------------------- */
+
+export async function submitTimesheet(id: string): Promise<Res> {
+  const g = await gate('update'); if (!g.ok) return g;
+  const ts = db.constructionTimesheets.find((x) => x.id === id);
+  if (!ts) return { ok: false, error: 'Timesheet not found.' };
+  if (ts.status !== 'draft' && ts.status !== 'rejected') return { ok: false, error: 'Only a draft can be submitted.' };
+  ts.status = 'submitted';
+  revalidate();
+  return { ok: true, ref: ts.ref };
+}
+
+/**
+ * Approve a timesheet and POST its labour cost to the cost code's actual — the
+ * step that makes labour visible in earned value. `postedMinor` records what was
+ * posted so a re-approval can never double-count.
+ */
+export async function approveTimesheet(id: string): Promise<Res> {
+  const g = await gate('update'); if (!g.ok) return g;
+  const ts = db.constructionTimesheets.find((x) => x.id === id);
+  if (!ts) return { ok: false, error: 'Timesheet not found.' };
+  if (ts.status === 'approved') return { ok: false, error: 'Already approved and posted.' };
+  if (ts.status !== 'submitted') return { ok: false, error: 'Only a submitted timesheet can be approved.' };
+  // Segregation of duties: you cannot approve the hours you booked yourself.
+  if (ts.submittedBy.toLowerCase() === nameOf(g.actor).toLowerCase()) {
+    return { ok: false, error: 'You submitted these hours — a different approver is required.' };
+  }
+  const worker = db.constructionWorkers.find((w) => w.id === ts.workerId);
+  const costMinor = timesheetCostMinor(ts, worker ? worker.dayRate.minor : 0);
+  const code = db.constructionCostCodes.find((c) => c.projectId === ts.projectId && c.code === ts.costCode);
+  if (!code) return { ok: false, error: `Cost code ${ts.costCode} does not exist on this project.` };
+
+  code.actual = addMinor(code.actual, costMinor);
+  ts.status = 'approved'; ts.approvedBy = nameOf(g.actor); ts.approvedISO = NOW.slice(0, 10); ts.postedMinor = costMinor;
+  revalidate();
+  return { ok: true, ref: `${ts.ref} · ₦${Math.round(costMinor / 100).toLocaleString('en-NG')} posted to ${ts.costCode}` };
+}
+
+export async function rejectTimesheet(id: string, reason: string): Promise<Res> {
+  const g = await gate('update'); if (!g.ok) return g;
+  const ts = db.constructionTimesheets.find((x) => x.id === id);
+  if (!ts) return { ok: false, error: 'Timesheet not found.' };
+  if (ts.status === 'approved') return { ok: false, error: 'An approved timesheet is already posted — raise an adjustment instead.' };
+  if (!reason.trim()) return { ok: false, error: 'A rejection reason is required.' };
+  ts.status = 'rejected';
+  revalidate();
+  return { ok: true, ref: ts.ref };
 }

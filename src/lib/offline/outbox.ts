@@ -16,10 +16,15 @@
 import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
 import { applyOutcome, dueOps, enqueue, prunable, type OutboxOp, type OpKind, type SyncOutcome } from '@/domain/sync';
 import { syncOperation, abandonOperation } from '@/server/actions/sync';
+import { idbAvailable, idbGetOps, idbPutOps, idbPutBlob, idbDeleteBlobsFor, idbBlobsFor } from './idb';
 
 const KEY = 'vesta.outbox.v1';
 
-/* --- persistence ---------------------------------------------------------- */
+/* --- persistence ----------------------------------------------------------
+ * IndexedDB is the source of truth (it holds the photo Blobs); the localStorage
+ * copy is a metadata mirror so the very first paint has something to render
+ * before IDB opens, and a fallback where IDB is unavailable (private mode).
+ * ------------------------------------------------------------------------- */
 
 function read(): OutboxOp[] {
   if (typeof window === 'undefined') return [];
@@ -40,8 +45,30 @@ function snapshot(): OutboxOp[] {
 }
 function commit(next: OutboxOp[]): void {
   cache = next;
-  try { window.localStorage.setItem(KEY, JSON.stringify(next)); } catch { /* quota — keep it in memory */ }
+  // Mirror synchronously so a crash between now and the IDB write still leaves
+  // the metadata recoverable; then persist for real.
+  try { window.localStorage.setItem(KEY, JSON.stringify(next)); } catch { /* quota — IDB still has it */ }
+  if (idbAvailable()) void idbPutOps(next).catch(() => { /* mirror already written */ });
   listeners.forEach((l) => l());
+}
+
+/** Reconcile from IndexedDB once on mount — it, not the mirror, is canonical. */
+let hydrated = false;
+export async function hydrateFromIdb(): Promise<void> {
+  if (hydrated || !idbAvailable()) return;
+  hydrated = true;
+  try {
+    const stored = await idbGetOps<OutboxOp>();
+    if (stored.length === 0) return;
+    // Union by id, preferring whichever copy is further along.
+    const rank = (s: OutboxOp['status']) => (s === 'synced' ? 3 : s === 'conflict' ? 2 : s === 'failed' ? 1 : 0);
+    const merged = new Map(snapshot().map((o) => [o.id, o]));
+    for (const op of stored) {
+      const mine = merged.get(op.id);
+      if (!mine || rank(op.status) > rank(mine.status)) merged.set(op.id, op);
+    }
+    commit([...merged.values()]);
+  } catch { /* fall back to the mirror */ }
 }
 function subscribe(l: () => void): () => void {
   listeners.add(l);
@@ -89,21 +116,35 @@ export function useOutbox(): OutboxOp[] {
 
 /** Capture a mutation locally. Returns once it is durably on the device — the
  *  UI can confirm to the user immediately, with or without a connection. */
-export function capture(kind: OpKind, label: string, payload: Record<string, unknown>, attachments = 0): OutboxOp {
+export function capture(kind: OpKind, label: string, payload: Record<string, unknown>, attachments: number | readonly File[] = 0): OutboxOp {
+  const files = Array.isArray(attachments) ? attachments : [];
   const op: OutboxOp = {
     id: newId(),
     kind, label, payload,
     capturedISO: new Date().toISOString(),
-    attachments,
+    attachments: typeof attachments === 'number' ? attachments : files.length,
     status: 'queued',
     attempts: 0,
   };
   commit(enqueue(snapshot(), op));
+  // Photos go to IndexedDB as real Blobs — never base64 into the metadata.
+  if (files.length && idbAvailable()) {
+    files.forEach((f, i) => {
+      void idbPutBlob({ id: `${op.id}-${i}`, opId: op.id, name: f.name, type: f.type, size: f.size, blob: f })
+        .catch(() => { /* the op still syncs; the photo is what's lost */ });
+    });
+  }
   return op;
+}
+
+/** The photos still held on this device for an op. */
+export async function attachmentsFor(opId: string) {
+  return idbAvailable() ? idbBlobsFor(opId) : [];
 }
 
 export function removeOp(id: string): void {
   commit(snapshot().filter((o) => o.id !== id));
+  if (idbAvailable()) void idbDeleteBlobsFor(id).catch(() => { /* orphan blob, harmless */ });
 }
 
 export function clearSynced(): void {
@@ -163,6 +204,8 @@ export function useOutboxSync(): void {
         }
         const nowISO = new Date().toISOString();
         commit(snapshot().map((o) => (o.id === op.id ? applyOutcome(o, outcome, nowISO) : o)));
+        // Once the server has it, the device copy of the photos is dead weight.
+        if (outcome.ok && idbAvailable()) void idbDeleteBlobsFor(op.id).catch(() => { /* ignore */ });
       }
       // Housekeeping: drop long-since-synced receipts.
       const stale = prunable(snapshot(), Date.now());
@@ -172,8 +215,9 @@ export function useOutboxSync(): void {
     }
   }, []);
 
-  // Drain on mount, whenever connectivity returns, when new work is queued,
-  // and on a slow heartbeat to honour backoff windows.
+  // Reconcile from IndexedDB first, then drain on mount, whenever connectivity
+  // returns, when new work is queued, and on a slow heartbeat for backoff.
+  useEffect(() => { void hydrateFromIdb().then(() => drain()); }, [drain]);
   useEffect(() => { void drain(); }, [drain, online, ops.length]);
   useEffect(() => {
     const t = setInterval(() => { void drain(); }, 10_000);

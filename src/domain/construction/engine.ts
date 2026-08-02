@@ -12,6 +12,7 @@ import type {
   Project, Phase, Task, CostCode, Quote, PurchaseOrder, PurchaseRequest, Material, StockItem,
   StockMovement, Milestone, Issue, DailyReport, RFI, Worker, Vendor, Attendance,
   Zone, Subcontractor, SafetyEvent, SafetyPermit, SafetyPermitType, SafetyEventKind, ToolboxTalk,
+  DocStatus, ConstructionDoc, Timesheet, Transmittal,
 } from './types';
 
 const DAY = 24 * 3600 * 1000;
@@ -277,9 +278,9 @@ export type ConWorld = {
   projects: readonly Project[]; phases: readonly Phase[]; tasks: readonly Task[]; costCodes: readonly CostCode[];
   pos: readonly PurchaseOrder[]; requests: readonly PurchaseRequest[]; reports: readonly DailyReport[];
   materials: readonly Material[]; stock: readonly StockItem[]; movements: readonly StockMovement[];
-  rfis: readonly RFI[]; workers: readonly Worker[]; issues: readonly Issue[];
+  docs: readonly ConstructionDoc[]; rfis: readonly RFI[]; workers: readonly Worker[]; issues: readonly Issue[];
   milestones: readonly Milestone[]; attendance: readonly Attendance[];
-  zones: readonly Zone[]; subcontractors: readonly Subcontractor[];
+  zones: readonly Zone[]; subcontractors: readonly Subcontractor[]; timesheets: readonly Timesheet[]; transmittals: readonly Transmittal[];
   safetyEvents: readonly SafetyEvent[]; safetyPermits: readonly SafetyPermit[]; toolboxTalks: readonly ToolboxTalk[];
 };
 
@@ -477,6 +478,164 @@ export function reportCompleteness(r: Pick<DailyReport, 'completed' | 'ongoing' 
   ];
   const done = checks.filter(([ok]) => ok).length;
   return { pct: Math.round((done / checks.length) * 100), missing: checks.filter(([ok]) => !ok).map(([, l]) => l) };
+}
+
+/* --- document revision control -------------------------------------------- */
+
+/** Every revision of one document number, newest issue first. */
+export function revisionChain(docs: readonly ConstructionDoc[], number: string): ConstructionDoc[] {
+  return docs.filter((d) => d.number === number).sort((a, b) => b.revision.localeCompare(a.revision));
+}
+
+/** The revision people must actually build from. Only an `approved` row counts —
+ *  a drawing in review is explicitly NOT the current issue. */
+export function currentRevision(docs: readonly ConstructionDoc[], number: string): ConstructionDoc | null {
+  return docs.find((d) => d.number === number && d.status === 'approved') ?? null;
+}
+
+/** Next letter in the revision sequence (C → D). Wraps past Z to AA. */
+export function nextRevision(current: string): string {
+  const up = current.toUpperCase();
+  if (up.length === 1 && up < 'Z') return String.fromCharCode(up.charCodeAt(0) + 1);
+  if (up === 'Z') return 'AA';
+  return up + 'A';
+}
+
+/** Can this revision be superseded, and does doing so need a change note? */
+export function canSupersede(doc: Pick<ConstructionDoc, 'status'>): { allowed: boolean; requiresNote: boolean; reason?: string } {
+  if (doc.status === 'superseded') return { allowed: false, requiresNote: false, reason: 'This revision is already superseded.' };
+  if (doc.status === 'approved') return { allowed: true, requiresNote: true };
+  return { allowed: true, requiresNote: false };
+}
+
+export const DOC_STATUS_TONE: Record<DocStatus, Tone> = {
+  draft: 'muted', review: 'warn', approved: 'success', superseded: 'neutral', rejected: 'danger',
+};
+
+/** Documents grouped by number, with the current issue and how deep the chain is. */
+export type DocRegisterRow = { number: string; title: string; discipline: string; folder: string; current: ConstructionDoc | null; revisions: ConstructionDoc[]; inReview: number };
+export function docRegister(docs: readonly ConstructionDoc[]): DocRegisterRow[] {
+  const numbers = [...new Set(docs.map((d) => d.number))];
+  return numbers.map((number) => {
+    const revisions = revisionChain(docs, number);
+    const head = revisions[0];
+    return {
+      number, title: head?.title ?? number, discipline: head?.discipline ?? '', folder: head?.folder ?? '',
+      current: currentRevision(docs, number), revisions,
+      inReview: revisions.filter((r) => r.status === 'review' || r.status === 'draft').length,
+    };
+  }).sort((a, b) => a.number.localeCompare(b.number));
+}
+
+/** RFI ageing — an unanswered RFI past its due date is blocking someone. */
+export function rfiAgeing(r: Pick<RFI, 'status' | 'dueISO' | 'raisedISO'>, nowMs: number): { daysOpen: number; overdueDays: number; band: Tone } {
+  const daysOpen = Math.max(0, Math.round((nowMs - Date.parse(r.raisedISO)) / DAY));
+  const overdueDays = r.status === 'closed' || r.status === 'answered' ? 0 : Math.max(0, Math.round((nowMs - Date.parse(r.dueISO)) / DAY));
+  const band: Tone = overdueDays > 7 ? 'danger' : overdueDays > 0 ? 'warn' : r.status === 'open' ? 'progress' : 'success';
+  return { daysOpen, overdueDays, band };
+}
+
+/* --- BOQ import ----------------------------------------------------------- */
+
+export type BoqRow = { code: string; name: string; category: string; budgetMinor: number; line: number };
+export type BoqIssue = { line: number; message: string; severity: 'error' | 'warning' };
+export type BoqParse = { rows: BoqRow[]; issues: BoqIssue[]; totalMinor: number };
+
+/**
+ * Parse a pasted BOQ (tab- or comma-separated: code, name, category, amount).
+ * Validation is the point — a silently-mangled import corrupts every cost report
+ * downstream, so bad lines are REPORTED and excluded, never guessed at.
+ */
+export function parseBoq(text: string, existingCodes: readonly string[] = []): BoqParse {
+  const rows: BoqRow[] = [];
+  const issues: BoqIssue[] = [];
+  const seen = new Set<string>();
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+
+  lines.forEach((raw, i) => {
+    const line = i + 1;
+    // Skip an obvious header row.
+    if (i === 0 && /^(code|item)\b/i.test(raw)) return;
+    // Delimiter is per-line: a tab-separated paste must NOT also split on the
+    // commas inside "120,000,000", or the amount silently becomes 120.
+    const cells = (raw.includes('\t')
+      ? raw.split('\t')
+      : raw.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/)
+    ).map((c) => c.trim().replace(/^"|"$/g, ''));
+    if (cells.length < 4) { issues.push({ line, message: `Expected 4 columns (code, name, category, amount) — found ${cells.length}.`, severity: 'error' }); return; }
+    const [code, name, category, amountRaw] = cells;
+    if (!code) { issues.push({ line, message: 'Missing cost code.', severity: 'error' }); return; }
+    if (!name) { issues.push({ line, message: `“${code}” has no description.`, severity: 'error' }); return; }
+    // Money: strip ₦ and thousands separators, reject anything left over.
+    const cleaned = amountRaw.replace(/[₦\s,]/g, '');
+    const amount = Number(cleaned);
+    if (!cleaned || Number.isNaN(amount)) { issues.push({ line, message: `“${amountRaw}” is not a number.`, severity: 'error' }); return; }
+    if (amount < 0) { issues.push({ line, message: `“${code}” has a negative amount.`, severity: 'error' }); return; }
+    if (seen.has(code)) { issues.push({ line, message: `Duplicate cost code “${code}” in this paste — the later line was dropped.`, severity: 'error' }); return; }
+    if (existingCodes.includes(code)) issues.push({ line, message: `“${code}” already exists on this project — importing will UPDATE its budget.`, severity: 'warning' });
+    if (amount === 0) issues.push({ line, message: `“${code}” has a zero budget.`, severity: 'warning' });
+    seen.add(code);
+    rows.push({ code, name, category: category || 'Uncategorised', budgetMinor: Math.round(amount * 100), line });
+  });
+
+  return { rows, issues, totalMinor: rows.reduce((n, r) => n + r.budgetMinor, 0) };
+}
+
+/** Does the parsed BOQ reconcile with the approved budget? */
+export function boqReconciliation(totalMinor: number, approvedBudgetMinor: number): { deltaMinor: number; pct: number; band: Tone; label: string } {
+  const deltaMinor = totalMinor - approvedBudgetMinor;
+  const pct = approvedBudgetMinor > 0 ? Math.round((deltaMinor / approvedBudgetMinor) * 1000) / 10 : 0;
+  const band: Tone = Math.abs(pct) <= 0.5 ? 'success' : Math.abs(pct) <= 5 ? 'warn' : 'danger';
+  return { deltaMinor, pct, band, label: deltaMinor === 0 ? 'Reconciles exactly' : deltaMinor > 0 ? 'Over the approved budget' : 'Under the approved budget' };
+}
+
+/* --- timesheets → labour cost → earned value ------------------------------ */
+
+/** Hours are costed off the worker's day rate (8-hour day), overtime at 1.5×.
+ *  This is the number that gets posted to a cost code's actual on approval. */
+export const OVERTIME_MULTIPLIER = 1.5;
+export const HOURS_PER_DAY = 8;
+
+export function timesheetCostMinor(ts: Pick<Timesheet, 'normalHours' | 'overtimeHours'>, dayRateMinor: number): number {
+  const hourly = dayRateMinor / HOURS_PER_DAY;
+  return Math.round(ts.normalHours * hourly + ts.overtimeHours * hourly * OVERTIME_MULTIPLIER);
+}
+
+export type TimesheetView = { ts: Timesheet; costMinor: number; hours: number; band: Tone };
+
+export function costTimesheets(sheets: readonly Timesheet[], workers: readonly Worker[]): TimesheetView[] {
+  return sheets.map((ts) => {
+    const w = workers.find((x) => x.id === ts.workerId);
+    const costMinor = timesheetCostMinor(ts, w ? minor(w.dayRate) : 0);
+    const band: Tone = ts.status === 'approved' ? 'success' : ts.status === 'submitted' ? 'warn' : ts.status === 'rejected' ? 'danger' : 'muted';
+    return { ts, costMinor, hours: ts.normalHours + ts.overtimeHours, band };
+  });
+}
+
+/** Labour already posted into actuals, and what is still awaiting approval —
+ *  the second number is cost the EVM does NOT yet see. */
+export function labourPosture(views: readonly TimesheetView[]): { postedMinor: number; pendingMinor: number; pendingSheets: number; overtimeHours: number } {
+  const posted = views.filter((v) => v.ts.status === 'approved');
+  const pending = views.filter((v) => v.ts.status === 'submitted' || v.ts.status === 'draft');
+  return {
+    postedMinor: posted.reduce((n, v) => n + v.costMinor, 0),
+    pendingMinor: pending.reduce((n, v) => n + v.costMinor, 0),
+    pendingSheets: pending.length,
+    overtimeHours: views.reduce((n, v) => n + v.ts.overtimeHours, 0),
+  };
+}
+
+/** Labour cost grouped by cost code — how the payroll lands on the budget. */
+export function labourByCostCode(views: readonly TimesheetView[]): { code: string; postedMinor: number; pendingMinor: number; hours: number }[] {
+  const map = new Map<string, { code: string; postedMinor: number; pendingMinor: number; hours: number }>();
+  for (const v of views) {
+    const row = map.get(v.ts.costCode) ?? { code: v.ts.costCode, postedMinor: 0, pendingMinor: 0, hours: 0 };
+    if (v.ts.status === 'approved') row.postedMinor += v.costMinor;
+    else if (v.ts.status !== 'rejected') row.pendingMinor += v.costMinor;
+    row.hours += v.hours;
+    map.set(v.ts.costCode, row);
+  }
+  return [...map.values()].sort((a, b) => b.postedMinor + b.pendingMinor - (a.postedMinor + a.pendingMinor));
 }
 
 /* --- what-if simulator: recovery / crash optimizer ------------------------ */

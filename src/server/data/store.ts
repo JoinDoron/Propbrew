@@ -119,6 +119,8 @@ export const db = {
   constructionSafetyPermits: seed.constructionSafetyPermits.map((x) => ({ ...x, controls: [...x.controls] })),
   constructionSafetyEvents: clone(seed.constructionSafetyEvents),
   constructionToolboxTalks: clone(seed.constructionToolboxTalks),
+  constructionTimesheets: clone(seed.constructionTimesheets),
+  constructionTransmittals: clone(seed.constructionTransmittals),
   // Advisory risk-signal lifecycle (ack/snooze/escalate/dismiss), keyed by deterministic signal id.
   constructionSignalStates: [] as { signalId: string; state: 'ack' | 'snoozed' | 'escalated' | 'dismissed'; atISO: string }[],
   /** Idempotency ledger for offline-captured mutations. The client's op id is

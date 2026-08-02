@@ -145,6 +145,18 @@ export type Worker = TenantScoped & {
   dayRate: Money; certName?: string; certExpiryISO?: string;
 };
 
+/** A week of labour booked against a cost code. Approving it POSTS the cost to
+ *  that code's actual, which is what makes labour show up in earned value. */
+export type TimesheetStatus = 'draft' | 'submitted' | 'approved' | 'rejected';
+export type Timesheet = TenantScoped & {
+  id: string; ref: string; projectId: string; workerId: string; workerName: string;
+  weekEndingISO: string; costCode: string; taskId?: string;
+  normalHours: number; overtimeHours: number;
+  status: TimesheetStatus; submittedBy: string; approvedBy?: string; approvedISO?: string;
+  /** set when approval posted the cost — prevents double-posting. */
+  postedMinor?: number;
+};
+
 export type AttendanceMethod = 'gps' | 'qr' | 'manual' | 'offline';
 export type Attendance = TenantScoped & {
   id: string; workerId: string; projectId: string; dateISO: string; clockIn?: string; clockOut?: string;
@@ -154,9 +166,26 @@ export type Attendance = TenantScoped & {
 /* --- documents & RFIs ----------------------------------------------------- */
 
 export type DocStatus = 'draft' | 'review' | 'approved' | 'superseded' | 'rejected';
+/** One REVISION of a controlled document. The `number` is the document's stable
+ *  identity; rows sharing a number form its revision chain, and at most one is
+ *  `approved` (the current issue). An approved revision is never edited — it is
+ *  superseded by a new one, which is what makes the register auditable. */
 export type ConstructionDoc = TenantScoped & {
   id: string; projectId: string; number: string; title: string; discipline: string; revision: string;
   status: DocStatus; effectiveISO: string; folder: string;
+  /** why this revision exists — required when issuing over an approved one. */
+  changeNote?: string;
+  uploadedBy?: string; approvedBy?: string; approvedISO?: string;
+  /** the revision this one replaced, and the one that replaced it. */
+  supersedesId?: string; supersededById?: string;
+  fileSizeKb?: number;
+};
+
+/** Controlled distribution: who was formally issued which revision, and when. */
+export type Transmittal = TenantScoped & {
+  id: string; docId: string; docNumber: string; revision: string;
+  toParty: string; sentISO: string; purpose: 'for_construction' | 'for_review' | 'for_information';
+  acknowledgedISO?: string;
 };
 
 export type RFIStatus = 'open' | 'answered' | 'closed';

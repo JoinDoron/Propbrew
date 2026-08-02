@@ -103,15 +103,15 @@ function ReportForm({ projects, todayISO, onCaptured, online }: { projects: Fiel
   const [completed, setCompleted] = useState<string[]>([]);
   const [ongoing, setOngoing] = useState<string[]>([]);
   const [constraints, setConstraints] = useState<string[]>([]);
-  const [photos, setPhotos] = useState(0);
+  const [photos, setPhotos] = useState<File[]>([]);
 
   const submit = () => {
     const name = projects.find((p) => p.id === projectId)?.name ?? 'Site';
     capture('daily_report', `Daily report · ${name} · ${dateISO}`, {
       projectId, dateISO, weather, shift: 'day', workforceCount: Number(crew) || 0,
-      completed, ongoing, delayed: [], plannedNext: [], deliveries: [], incidents: [], constraints, photos,
+      completed, ongoing, delayed: [], plannedNext: [], deliveries: [], incidents: [], constraints, photos: photos.length,
     }, photos);
-    setCompleted([]); setOngoing([]); setConstraints([]); setPhotos(0);
+    setCompleted([]); setOngoing([]); setConstraints([]); setPhotos([]);
     onCaptured(online ? 'Report captured — sending now' : 'Report saved on this device — it will send itself when signal returns');
   };
 
@@ -129,11 +129,14 @@ function ReportForm({ projects, todayISO, onCaptured, online }: { projects: Fiel
       <ListField label="Constraints" items={constraints} setItems={setConstraints} placeholder="e.g. Rebar delivery still outstanding" tone="warn" />
 
       <div className="flex items-center gap-2 flex-wrap">
-        <button onClick={() => setPhotos((p) => p + 1)} className="text-[11.5px] px-2.5 h-8 rounded-lg border border-border-2 inline-flex items-center gap-1"><Camera size={12} /> Attach photo</button>
-        {photos > 0 && <span className="text-[11.5px] text-text-3">{photos} photo{photos === 1 ? '' : 's'} held with this report</span>}
+        <label className="text-[11.5px] px-2.5 h-8 rounded-lg border border-border-2 inline-flex items-center gap-1 cursor-pointer">
+          <Camera size={12} /> Attach photo
+          <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => { setPhotos((p) => [...p, ...Array.from(e.target.files ?? [])]); e.target.value = ''; }} />
+        </label>
+        {photos.length > 0 && <span className="text-[11.5px] text-text-3">{photos.length} photo{photos.length === 1 ? '' : 's'} · {Math.round(photos.reduce((n, f) => n + f.size, 0) / 1024)} KB held on this device</span>}
         <button onClick={submit} className="ml-auto text-[12.5px] px-4 h-10 rounded-xl bg-primary text-white font-medium inline-flex items-center gap-1.5"><Check size={14} /> Submit report</button>
       </div>
-      <p className="text-[10.5px] text-text-3">Submitting saves to this device first. Photos ride along and are never dropped — the queue counts them separately so nothing looks lost.</p>
+      <p className="text-[10.5px] text-text-3">Submitting saves to this device first. Photos are stored as real files in IndexedDB (not base64 in the queue), so a full set of site pictures neither blows the quota nor janks the form.</p>
       <style>{`.inpf{width:100%;height:36px;padding:0 10px;border-radius:8px;border:1px solid var(--border-2);background:var(--surface);font-size:13px;outline:none}.inpf:focus{border-color:var(--primary)}`}</style>
     </section>
   );

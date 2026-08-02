@@ -15,7 +15,7 @@ import { money } from '@/domain/primitives';
 import type {
   Project, Phase, Task, Milestone, Issue, DailyReport, Vendor, PurchaseRequest, RFQ,
   PurchaseOrder, Material, Warehouse, StockItem, StockMovement, CostCode, Variation,
-  Worker, Attendance, ConstructionDoc, RFI, Zone, Subcontractor, SafetyPermit, SafetyEvent, ToolboxTalk,
+  Worker, Attendance, ConstructionDoc, RFI, Zone, Subcontractor, SafetyPermit, SafetyEvent, ToolboxTalk, Timesheet, Transmittal,
 } from '@/domain/construction/types';
 
 const A = SEED.tenantA;
@@ -243,3 +243,27 @@ export const constructionToolboxTalks = ([
   { tenantId: A, id: 'tb-2', projectId: 'cp-marina', topic: 'Hot work & fire watch discipline', atISO: '2026-07-17', attendees: 61, deliveredBy: 'Emeka Nwosu' },
   { tenantId: A, id: 'tb-3', projectId: 'cp-cedar', topic: 'Manual handling — tile boxes', atISO: '2026-07-21', attendees: 24, deliveredBy: 'Grace Umeh' },
 ] as unknown) as ToolboxTalk[];
+
+/* --- timesheets (labour → cost codes → earned value) ---------------------- */
+
+/** Two weeks approved and already posted into MAR-SUP's actual, plus a live
+ *  week awaiting approval — so the Timesheets page can show cost the EVM does
+ *  NOT yet see, and approving it visibly moves CPI. */
+export const constructionTimesheets = ([
+  { tenantId: A, id: 'ts-1', ref: 'TS-0311', projectId: 'cp-marina', workerId: 'w-m1', workerName: 'Emeka Nwosu', weekEndingISO: '2026-07-12', costCode: 'MAR-SUP', normalHours: 48, overtimeHours: 6, status: 'approved', submittedBy: 'Emeka Nwosu', approvedBy: 'Ngozi Okafor', approvedISO: '2026-07-14', postedMinor: 1_012_500 },
+  { tenantId: A, id: 'ts-2', ref: 'TS-0312', projectId: 'cp-marina', workerId: 'w-m2', workerName: 'Tunde Bakare', weekEndingISO: '2026-07-12', costCode: 'MAR-SUP', normalHours: 48, overtimeHours: 4, status: 'approved', submittedBy: 'Tunde Bakare', approvedBy: 'Ngozi Okafor', approvedISO: '2026-07-14', postedMinor: 1_012_500 },
+  { tenantId: A, id: 'ts-3', ref: 'TS-0318', projectId: 'cp-marina', workerId: 'w-m1', workerName: 'Emeka Nwosu', weekEndingISO: '2026-07-19', costCode: 'MAR-SUP', normalHours: 48, overtimeHours: 10, status: 'approved', submittedBy: 'Emeka Nwosu', approvedBy: 'Ngozi Okafor', approvedISO: '2026-07-21', postedMinor: 1_181_250 },
+  { tenantId: A, id: 'ts-4', ref: 'TS-0324', projectId: 'cp-marina', workerId: 'w-m1', workerName: 'Emeka Nwosu', weekEndingISO: '2026-07-26', costCode: 'MAR-SUP', normalHours: 48, overtimeHours: 12, status: 'submitted', submittedBy: 'Emeka Nwosu' },
+  { tenantId: A, id: 'ts-5', ref: 'TS-0325', projectId: 'cp-marina', workerId: 'w-m2', workerName: 'Tunde Bakare', weekEndingISO: '2026-07-26', costCode: 'MAR-SUP', normalHours: 44, overtimeHours: 8, status: 'submitted', submittedBy: 'Tunde Bakare' },
+  { tenantId: A, id: 'ts-6', ref: 'TS-0326', projectId: 'cp-marina', workerId: 'w-m3', workerName: 'Chike Obi', weekEndingISO: '2026-07-26', costCode: 'MAR-SUP', normalHours: 40, overtimeHours: 0, status: 'submitted', submittedBy: 'Chike Obi' },
+  { tenantId: A, id: 'ts-7', ref: 'TS-0327', projectId: 'cp-marina', workerId: 'w-m4', workerName: 'Sola Adeniyi', weekEndingISO: '2026-07-26', costCode: 'MAR-MEP', normalHours: 40, overtimeHours: 2, status: 'draft', submittedBy: 'Sola Adeniyi' },
+] as unknown) as Timesheet[];
+
+/* --- transmittals (controlled distribution history) ----------------------- */
+
+export const constructionTransmittals = ([
+  { tenantId: A, id: 'tr-1', docId: 'doc-m1', docNumber: 'MAR-ST-104', revision: 'C', toParty: 'BuildRight Subs', sentISO: '2026-06-10', purpose: 'for_construction', acknowledgedISO: '2026-06-11' },
+  { tenantId: A, id: 'tr-2', docId: 'doc-m1', docNumber: 'MAR-ST-104', revision: 'C', toParty: 'Site office', sentISO: '2026-06-10', purpose: 'for_construction', acknowledgedISO: '2026-06-10' },
+  { tenantId: A, id: 'tr-3', docId: 'doc-m2', docNumber: 'MAR-ST-104', revision: 'B', toParty: 'BuildRight Subs', sentISO: '2026-04-02', purpose: 'for_construction', acknowledgedISO: '2026-04-03' },
+  { tenantId: A, id: 'tr-4', docId: 'doc-m3', docNumber: 'MAR-ME-210', revision: 'A', toParty: 'MEP Pro Services', sentISO: '2026-07-20', purpose: 'for_review' },
+] as unknown) as Transmittal[];
