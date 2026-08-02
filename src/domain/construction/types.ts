@@ -145,7 +145,7 @@ export type Worker = TenantScoped & {
   dayRate: Money; certName?: string; certExpiryISO?: string;
 };
 
-export type AttendanceMethod = 'gps' | 'qr' | 'manual';
+export type AttendanceMethod = 'gps' | 'qr' | 'manual' | 'offline';
 export type Attendance = TenantScoped & {
   id: string; workerId: string; projectId: string; dateISO: string; clockIn?: string; clockOut?: string;
   hours: number; overtime: number; method: AttendanceMethod; withinGeofence: boolean; status: 'present' | 'absent' | 'pending';

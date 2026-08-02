@@ -20,6 +20,7 @@ import { Icon } from '@/components/icon';
 import { Avatar, IconButton } from '@/components/ui';
 import { NotificationsMenu } from '@/components/inbox/notifications-menu';
 import { MessagesMenu } from '@/components/inbox/messages-menu';
+import { SyncIndicator } from '@/components/sync/sync-indicator';
 import { ProfileMenu } from '@/components/inbox/profile-menu';
 import { signOut } from '@/server/actions/auth';
 import type { Notification, Thread } from '@/server/data/inbox';
@@ -219,6 +220,8 @@ export function AppShell({
             placeholder="Search…"
             className="hidden lg:block w-56 h-[38px] px-3 rounded-[10px] border border-border bg-surface-2 text-[13px] outline-none focus:border-primary transition-colors"
           />
+
+          <SyncIndicator />
 
           <IconButton onClick={toggleTheme} title="Toggle theme" aria-label="Toggle theme">
             {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}

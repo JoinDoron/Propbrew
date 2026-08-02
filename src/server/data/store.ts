@@ -121,6 +121,10 @@ export const db = {
   constructionToolboxTalks: clone(seed.constructionToolboxTalks),
   // Advisory risk-signal lifecycle (ack/snooze/escalate/dismiss), keyed by deterministic signal id.
   constructionSignalStates: [] as { signalId: string; state: 'ack' | 'snoozed' | 'escalated' | 'dismissed'; atISO: string }[],
+  /** Idempotency ledger for offline-captured mutations. The client's op id is
+   *  the key: replaying it returns the ORIGINAL result instead of applying
+   *  twice, which is what makes a retry after an ambiguous failure safe. */
+  syncLedger: [] as { opId: string; actorId: string; kind: string; appliedISO: string; ref?: string }[],
   // Copilot threads for the construction assistant (per-actor).
   constructionCopilotUsage: [{ tenantId: 't-lekki', requests: 11, inputTokens: 9200, outputTokens: 3100, costMinorNgn: 9840 }] as { tenantId: string; requests: number; inputTokens: number; outputTokens: number; costMinorNgn: number }[],
 };
