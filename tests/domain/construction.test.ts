@@ -10,8 +10,11 @@ import {
   reasonPareto, reasonsFor, movementAllowed, countVariance, stockLedger,
   routeFor, currentStepOrder, pendingSteps, applyDecision, canApprove, overdueSteps, approvalProgress,
   auditSummary, sensitiveEntries,
+  fxExposure, fxPositions, fxUnrealizedMinor, fxSensitivity,
   type ConWorld,
 } from '@/domain/construction/engine';
+import { fxTable, rateOf, convertMinor, toReporting, fxMovementPct, type FxRate } from '@/domain/fx';
+import { money } from '@/domain/primitives';
 
 const NOW = Date.parse('2026-07-26');
 
@@ -25,6 +28,7 @@ const world = (): ConWorld => ({
   timesheets: seed.constructionTimesheets, transmittals: seed.constructionTransmittals,
   reasonCodes: seed.constructionReasonCodes, reasonEvents: seed.constructionReasonEvents,
   approvalRules: seed.constructionApprovalRules, approvals: seed.constructionApprovals, audit: seed.constructionAudit,
+  fxRates: seed.constructionFxRates,
   safetyEvents: seed.constructionSafetyEvents, safetyPermits: seed.constructionSafetyPermits, toolboxTalks: seed.constructionToolboxTalks,
 });
 const marina = () => seed.constructionProjects.find((p) => p.id === 'cp-marina')!;
@@ -367,5 +371,69 @@ describe('audit trail', () => {
     expect(s.actors).toBe(3);
     expect(sensitiveEntries(seed.constructionAudit).some((e) => e.action === 'override')).toBe(true);
     expect(s.valueMovedMinor).toBeGreaterThan(0);
+  });
+});
+
+describe('multi-currency — conversion', () => {
+  const table = fxTable(seed.constructionFxRates as unknown as FxRate[]);
+  it('prices foreign minor units through the reporting currency', () => {
+    expect(rateOf('NGN', table)).toBe(1);
+    expect(rateOf('USD', table)).toBe(1600);
+    expect(convertMinor(100, 'USD', 'NGN', table)).toBe(160_000); // $1 → ₦1,600
+    expect(convertMinor(100, 'USD', 'GHS', table)).toBe(Math.round((100 * 1600) / 102)); // cross rate
+    expect(convertMinor(500, 'NGN', 'NGN', table)).toBe(500); // identity, no rounding
+  });
+  it('leaves NGN Money untouched and converts foreign Money', () => {
+    const ngn = money(250_000, 'NGN');
+    expect(toReporting(ngn, table)).toBe(ngn); // same reference — no work done
+    expect(toReporting(money(100, 'USD'), table)).toEqual({ minor: 160_000, currency: 'NGN' });
+  });
+  it('reports rate movement against the prior rate', () => {
+    const usd = (seed.constructionFxRates as unknown as FxRate[]).find((r) => r.currency === 'USD')!;
+    expect(fxMovementPct(usd)).toBe(5.3); // (1600-1520)/1520
+    expect(fxMovementPct({ currency: 'USD', rate: 1600, asOfISO: '2026-07-26' })).toBeNull(); // no prior
+  });
+  it('refuses to price an unrated currency rather than assume 1:1', () => {
+    expect(() => rateOf('USD', fxTable([]))).toThrow();
+  });
+});
+
+describe('multi-currency — exposure & revaluation', () => {
+  const table = fxTable(seed.constructionFxRates as unknown as FxRate[]);
+  const rows = fxExposure(seed.constructionOrders, table);
+
+  it('revalues only foreign, unsettled commitments on their outstanding portion', () => {
+    expect(rows).toHaveLength(3); // the NGN POs carry no fx tag
+    const lifts = rows.find((r) => r.ref === 'PO-3021')!; // USD, 0 delivered → fully outstanding
+    expect(lifts.outstandingForeignMinor).toBe(18_000_000);
+    expect(lifts.bookedMinor).toBe(27_000_000_000); // @1500
+    expect(lifts.spotMinor).toBe(28_800_000_000);   // @1600
+    expect(lifts.unrealizedMinor).toBe(1_800_000_000); // ₦18.0m loss
+    expect(lifts.tone).toBe('danger');
+
+    const facade = rows.find((r) => r.ref === 'PO-3022')!; // GHS, 40/100 delivered
+    expect(facade.outstandingForeignMinor).toBe(72_000_000); // 60% of 120m
+    expect(facade.unrealizedMinor).toBe(288_000_000); // @(102-98)
+    expect(facade.tone).toBe('warn'); // < 5% swing
+  });
+
+  it('treats a delivered order as settled — no exposure', () => {
+    const settled = fxExposure([{ ...seed.constructionOrders.find((p) => p.ref === 'PO-3021')!, status: 'delivered' }], table);
+    expect(settled[0].outstandingFraction).toBe(0);
+    expect(settled[0].unrealizedMinor).toBe(0);
+  });
+
+  it('nets exposure by currency, worst first', () => {
+    const positions = fxPositions(rows);
+    expect(positions[0].currency).toBe('USD'); // biggest swing
+    expect(positions.find((p) => p.currency === 'USD')!.count).toBe(2);
+    expect(fxUnrealizedMinor(rows)).toBe(3_421_333_360); // ₦34.2m total loss
+  });
+
+  it('scales linearly with a further naira move', () => {
+    const totalSpot = rows.reduce((n, r) => n + r.spotMinor, 0);
+    expect(fxSensitivity(rows, 10)).toBe(Math.round(totalSpot * 0.1));
+    expect(fxSensitivity(rows, -10)).toBe(-fxSensitivity(rows, 10));
+    expect(fxSensitivity(rows, 0)).toBe(0);
   });
 });

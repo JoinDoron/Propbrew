@@ -8,11 +8,13 @@
  */
 
 import type { Tone } from '@/lib/status-tones';
+import type { CurrencyCode } from '@/domain/primitives';
+import { type FxTable, rateOf } from '@/domain/fx';
 import type {
   Project, Phase, Task, CostCode, Quote, PurchaseOrder, PurchaseRequest, Material, StockItem,
   StockMovement, Warehouse, Milestone, Issue, DailyReport, RFI, Worker, Vendor, Attendance,
   Zone, Subcontractor, SafetyEvent, SafetyPermit, SafetyPermitType, SafetyEventKind, ToolboxTalk,
-  DocStatus, ConstructionDoc, Timesheet, Transmittal,
+  DocStatus, ConstructionDoc, Timesheet, Transmittal, FxRateRow,
   ReasonCode, ReasonDomain, ReasonEvent, ApprovalRule, ApprovalSubject, ApprovalStepState,
   ApprovalRequest, ApprovalStatus, StepStatus, AuditEntry, AuditAction, StockKind,
 } from './types';
@@ -286,6 +288,7 @@ export type ConWorld = {
   reasonCodes: readonly ReasonCode[]; reasonEvents: readonly ReasonEvent[];
   approvalRules: readonly ApprovalRule[]; approvals: readonly ApprovalRequest[]; audit: readonly AuditEntry[];
   safetyEvents: readonly SafetyEvent[]; safetyPermits: readonly SafetyPermit[]; toolboxTalks: readonly ToolboxTalk[];
+  fxRates: readonly FxRateRow[];
 };
 
 /** Actual cost booked against a project (its cost codes' actuals). */
@@ -649,11 +652,13 @@ export const AUDIT_ACTION_LABEL: Record<AuditAction, string> = {
   approve: 'Approved', reject: 'Rejected', issue: 'Issued', supersede: 'Superseded',
   post_cost: 'Posted cost', import: 'Imported', stock_move: 'Stock movement',
   stock_count: 'Stock count', override: 'Override', delegate: 'Delegated', cancel: 'Cancelled',
+  fx_revalue: 'FX revalue',
 };
 export const AUDIT_TONE: Record<AuditAction, Tone> = {
   approve: 'success', reject: 'danger', issue: 'info', supersede: 'warn',
   post_cost: 'progress', import: 'info', stock_move: 'progress',
   stock_count: 'warn', override: 'danger', delegate: 'info', cancel: 'muted',
+  fx_revalue: 'warn',
 };
 
 /** Money-moving actions an auditor looks at first. */
@@ -670,6 +675,88 @@ export function auditSummary(entries: readonly AuditEntry[]): AuditSummary {
     valueMovedMinor: entries.reduce((n, e) => n + (e.amountMinor ?? 0), 0),
     actors: new Set(entries.map((e) => e.actorId)).size,
   };
+}
+
+/* --- foreign-exchange exposure -------------------------------------------- */
+
+/**
+ * A foreign-denominated commitment carries FX exposure: the NGN cost was fixed
+ * at the booking rate, but the UNDELIVERED portion still floats with the spot
+ * rate until it is received and paid. Delivered work is treated as settled, so
+ * only the outstanding fraction is revalued — the same fraction the open-PO
+ * commitment figure already uses.
+ */
+export type FxExposureRow = {
+  id: string; ref: string; vendorName: string; item: string; projectId: string;
+  currency: CurrencyCode; foreignMinor: number; bookedRate: number; spotRate: number;
+  /** fraction not yet delivered (1 = nothing received). */
+  outstandingFraction: number;
+  outstandingForeignMinor: number;
+  /** NGN locked at award on the outstanding portion. */
+  bookedMinor: number;
+  /** NGN it would cost to settle the outstanding portion at today's rate. */
+  spotMinor: number;
+  /** spot − booked on the outstanding portion. Positive = extra NGN cost = loss. */
+  unrealizedMinor: number;
+  tone: Tone;
+};
+
+/** Per-PO FX exposure on foreign-denominated, not-yet-settled commitments. */
+export function fxExposure(pos: readonly PurchaseOrder[], table: FxTable): FxExposureRow[] {
+  const SETTLED: PurchaseOrder['status'][] = ['delivered', 'closed', 'cancelled'];
+  return pos
+    .filter((p): p is PurchaseOrder & { fx: NonNullable<PurchaseOrder['fx']> } => !!p.fx)
+    .map((p) => {
+      const spotRate = rateOf(p.fx.currency, table);
+      const delivered = SETTLED.includes(p.status) ? 1 : Math.min(1, p.deliveredQty / Math.max(1, p.qty));
+      const outstandingFraction = Math.max(0, 1 - delivered);
+      const outstandingForeignMinor = Math.round(p.fx.foreignMinor * outstandingFraction);
+      const bookedMinor = Math.round(outstandingForeignMinor * p.fx.bookedRate);
+      const spotMinor = Math.round(outstandingForeignMinor * spotRate);
+      const unrealizedMinor = spotMinor - bookedMinor;
+      const swingPct = bookedMinor > 0 ? Math.abs(unrealizedMinor / bookedMinor) : 0;
+      const tone: Tone = unrealizedMinor <= 0 ? 'success' : swingPct >= 0.05 ? 'danger' : 'warn';
+      return {
+        id: p.id, ref: p.ref, vendorName: p.vendorName, item: p.item, projectId: p.projectId,
+        currency: p.fx.currency, foreignMinor: p.fx.foreignMinor, bookedRate: p.fx.bookedRate, spotRate,
+        outstandingFraction, outstandingForeignMinor, bookedMinor, spotMinor, unrealizedMinor, tone,
+      };
+    });
+}
+
+export type FxPosition = {
+  currency: CurrencyCode; count: number;
+  outstandingForeignMinor: number; bookedMinor: number; spotMinor: number; unrealizedMinor: number;
+};
+
+/** Exposure aggregated by currency — the net position a treasurer would hedge. */
+export function fxPositions(rows: readonly FxExposureRow[]): FxPosition[] {
+  const by = new Map<CurrencyCode, FxPosition>();
+  for (const r of rows) {
+    const p = by.get(r.currency) ?? { currency: r.currency, count: 0, outstandingForeignMinor: 0, bookedMinor: 0, spotMinor: 0, unrealizedMinor: 0 };
+    p.count += 1;
+    p.outstandingForeignMinor += r.outstandingForeignMinor;
+    p.bookedMinor += r.bookedMinor;
+    p.spotMinor += r.spotMinor;
+    p.unrealizedMinor += r.unrealizedMinor;
+    by.set(r.currency, p);
+  }
+  return [...by.values()].sort((a, b) => Math.abs(b.unrealizedMinor) - Math.abs(a.unrealizedMinor));
+}
+
+/** Net unrealized FX gain/loss across all exposure, in NGN minor units. */
+export function fxUnrealizedMinor(rows: readonly FxExposureRow[]): number {
+  return rows.reduce((n, r) => n + r.unrealizedMinor, 0);
+}
+
+/**
+ * What a further move in the naira does to the NGN cost of the OUTSTANDING
+ * foreign book. `shockPct` of +10 means the naira weakens another 10% (every
+ * spot rate ×1.1); the delta is the extra NGN required to settle. Linear in the
+ * shock because the outstanding foreign amount is fixed.
+ */
+export function fxSensitivity(rows: readonly FxExposureRow[], shockPct: number): number {
+  return Math.round(rows.reduce((n, r) => n + r.spotMinor, 0) * (shockPct / 100));
 }
 
 /* --- document revision control -------------------------------------------- */

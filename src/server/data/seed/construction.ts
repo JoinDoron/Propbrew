@@ -15,7 +15,7 @@ import { money } from '@/domain/primitives';
 import type {
   Project, Phase, Task, Milestone, Issue, DailyReport, Vendor, PurchaseRequest, RFQ,
   PurchaseOrder, Material, Warehouse, StockItem, StockMovement, CostCode, Variation,
-  Worker, Attendance, ConstructionDoc, RFI, Zone, Subcontractor, SafetyPermit, SafetyEvent, ToolboxTalk, Timesheet, Transmittal, ReasonCode, ReasonEvent, ApprovalRule, ApprovalRequest, AuditEntry,
+  Worker, Attendance, ConstructionDoc, RFI, Zone, Subcontractor, SafetyPermit, SafetyEvent, ToolboxTalk, Timesheet, Transmittal, ReasonCode, ReasonEvent, ApprovalRule, ApprovalRequest, AuditEntry, FxRateRow,
 } from '@/domain/construction/types';
 
 const A = SEED.tenantA;
@@ -106,6 +106,12 @@ export const constructionOrders = ([
   { tenantId: A, id: 'po-m1', ref: 'PO-3012', projectId: 'cp-marina', vendorId: 'v-steelforce', vendorName: 'SteelForce Nigeria', item: 'Y16 reinforcement bar', qty: 40, unit: 'tonne', costCode: 'MAR-SUP', value: ngn(52_000_000), status: 'issued', issuedISO: '2026-07-15', expectedISO: '2026-07-22', deliveredQty: 0 },
   { tenantId: A, id: 'po-m2', ref: 'PO-3008', projectId: 'cp-marina', vendorId: 'v-dangote', vendorName: 'Dangote Cement Depot', item: 'Cement 42.5R', qty: 1200, unit: 'bag', costCode: 'MAR-SUP', value: ngn(24_000_000), status: 'part_delivered', issuedISO: '2026-07-10', expectedISO: '2026-07-24', deliveredQty: 800 },
   { tenantId: A, id: 'po-c1', ref: 'PO-3014', projectId: 'cp-cedar', vendorId: 'v-blockmasters', vendorName: 'BlockMasters Ltd', item: 'Porcelain floor tiles', qty: 900, unit: 'box', costCode: 'CED-FIN', value: ngn(18_000_000), status: 'delivered', issuedISO: '2026-07-12', expectedISO: '2026-07-22', deliveredQty: 900 },
+  // Foreign-denominated commitments — the NGN `value` is what was POSTED at the
+  // booking rate; `fx` carries the foreign side so the outstanding balance can be
+  // revalued. USD equipment imports dominate the exposure; the façade is GHS.
+  { tenantId: A, id: 'po-m3', ref: 'PO-3020', projectId: 'cp-marina', vendorId: 'v-liebherr', vendorName: 'Liebherr Plant Hire', item: 'Tower crane — 6-month hire', qty: 6, unit: 'month', costCode: 'MAR-PRE', value: ngn(380_000_000), status: 'issued', issuedISO: '2026-06-01', expectedISO: '2026-12-01', deliveredQty: 2, fx: { currency: 'USD', foreignMinor: 25_000_000, bookedRate: 1520 } },
+  { tenantId: A, id: 'po-m4', ref: 'PO-3021', projectId: 'cp-marina', vendorId: 'v-kone', vendorName: 'KONE Gulf FZE', item: 'Passenger lifts (3 no.)', qty: 3, unit: 'unit', costCode: 'MAR-MEP', value: ngn(270_000_000), status: 'acknowledged', issuedISO: '2026-07-18', expectedISO: '2026-10-30', deliveredQty: 0, fx: { currency: 'USD', foreignMinor: 18_000_000, bookedRate: 1500 } },
+  { tenantId: A, id: 'po-m5', ref: 'PO-3022', projectId: 'cp-marina', vendorId: 'v-accraclad', vendorName: 'AccraClad Aluminium', item: 'Aluminium façade sections', qty: 100, unit: 'panel', costCode: 'MAR-SUP', value: ngn(117_600_000), status: 'part_delivered', issuedISO: '2026-07-05', expectedISO: '2026-08-20', deliveredQty: 40, fx: { currency: 'GHS', foreignMinor: 120_000_000, bookedRate: 98 } },
 ] as unknown) as PurchaseOrder[];
 
 /* --- inventory & materials ------------------------------------------------ */
@@ -374,3 +380,14 @@ export const constructionAudit = ([
   { tenantId: A, id: 'au-5', seq: 5, atISO: '2026-07-23T10:15:00Z', actorId: 'user-estate_manager', actorName: 'Ngozi Okafor', actorRole: 'estate_manager', action: 'reject', entity: 'purchase_request', entityRef: 'PR-4025', projectId: 'cp-marina', summary: 'Crane hire exceeds the remaining MAR-PRE budget', amountMinor: 12_000_000_000, reasonCodeId: 'rc-r1' },
   { tenantId: A, id: 'au-6', seq: 6, atISO: '2026-07-24T08:30:00Z', actorId: 'user-facility_manager', actorName: 'Bola Adeyemi', actorRole: 'facility_manager', action: 'override', entity: 'budget', entityRef: 'MAR-SUP', projectId: 'cp-marina', summary: 'Budget override authorised to keep the L4 pour on programme', amountMinor: 8_000_000_000, note: 'Executive verbal, confirmed in writing 24 Jul' },
 ] as unknown) as AuditEntry[];
+
+/* --- FX rates (NGN per 1 foreign unit; NOW = 2026-07-26) ------------------- */
+
+/** The naira weakened this cycle: every foreign payable now costs more NGN to
+ *  settle. Prior rates are kept so the movement is visible. KES carries no live
+ *  exposure but sits in the table as a supported reporting currency. */
+export const constructionFxRates = ([
+  { tenantId: A, currency: 'USD', rate: 1600, priorRate: 1520, asOfISO: '2026-07-26' },
+  { tenantId: A, currency: 'GHS', rate: 102, priorRate: 98, asOfISO: '2026-07-26' },
+  { tenantId: A, currency: 'KES', rate: 12.1, priorRate: 11.9, asOfISO: '2026-07-26' },
+] as unknown) as FxRateRow[];

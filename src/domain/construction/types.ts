@@ -11,7 +11,8 @@
  * scope column) so an investor client view auto-narrows to their own build.
  */
 
-import type { Money } from '@/domain/primitives';
+import type { CurrencyCode, Money } from '@/domain/primitives';
+import type { FxRate } from '@/domain/fx';
 import type { TenantScoped } from '@/domain/tenancy';
 
 /* --- projects, phases, tasks --------------------------------------------- */
@@ -97,11 +98,25 @@ export type RFQ = TenantScoped & {
 };
 
 export type POStatus = 'draft' | 'approved' | 'issued' | 'acknowledged' | 'part_delivered' | 'delivered' | 'closed' | 'cancelled';
+
+/**
+ * FX tag on a foreign-denominated commitment. The PO's `value` remains the NGN
+ * amount POSTED to the books at `bookedRate` (so every base-currency rollup is
+ * unaffected); this records the foreign side so the outstanding balance can be
+ * revalued as the rate moves. `bookedRate` is NGN per 1 foreign unit at award.
+ */
+export type FxTag = { currency: CurrencyCode; foreignMinor: number; bookedRate: number };
+
 export type PurchaseOrder = TenantScoped & {
   id: string; ref: string; projectId: string; vendorId: string; vendorName: string; item: string;
   qty: number; unit: string; costCode: string; value: Money; status: POStatus;
   issuedISO: string; expectedISO: string; deliveredQty: number;
+  /** present only when the order was placed in a currency other than NGN. */
+  fx?: FxTag;
 };
+
+/** A stored, tenant-scoped exchange rate row (the pure {@link FxRate} plus scope). */
+export type FxRateRow = TenantScoped & FxRate;
 
 /* --- inventory & materials ------------------------------------------------ */
 
@@ -312,7 +327,7 @@ export type ApprovalRequest = TenantScoped & {
  *  for sensitive actions", SC-10). Written by the actions, never edited. */
 export type AuditAction =
   | 'approve' | 'reject' | 'issue' | 'supersede' | 'post_cost' | 'import'
-  | 'stock_move' | 'stock_count' | 'override' | 'delegate' | 'cancel';
+  | 'stock_move' | 'stock_count' | 'override' | 'delegate' | 'cancel' | 'fx_revalue';
 export type AuditEntry = TenantScoped & {
   id: string; seq: number; atISO: string;
   actorId: string; actorName: string; actorRole: string;

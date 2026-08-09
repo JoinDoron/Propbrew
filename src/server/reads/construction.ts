@@ -38,6 +38,7 @@ export function constructionWorld(actor: Actor): ConWorld {
     approvalRules: repos.constructionApprovalRules.list(actor).items,
     approvals: repos.constructionApprovals.list(actor).items,
     audit: repos.constructionAudit.list(actor).items,
+    fxRates: repos.constructionFxRates.list(actor).items,
     transmittals: repos.constructionTransmittals.list(actor).items,
     subcontractors: repos.constructionSubcontractors.list(actor).items,
     safetyEvents: repos.constructionSafetyEvents.list(actor).items,

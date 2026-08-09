@@ -127,6 +127,7 @@ export const db = {
   constructionApprovals: seed.constructionApprovals.map((a) => ({ ...a, steps: a.steps.map((x) => ({ ...x })) })),
   /** Append-only. Nothing in the app ever edits or deletes an audit entry. */
   constructionAudit: clone(seed.constructionAudit),
+  constructionFxRates: clone(seed.constructionFxRates),
   /** Physical stock counts awaiting reconciliation. */
   constructionStockCounts: [] as { tenantId: unknown; id: string; ref: string; warehouseId: string; materialId: string; systemQty: number; countedQty: number; countedBy: string; countedISO: string; status: 'open' | 'reconciled'; reasonCodeId?: string; note?: string; approvedBy?: string }[],
   // Advisory risk-signal lifecycle (ack/snooze/escalate/dismiss), keyed by deterministic signal id.

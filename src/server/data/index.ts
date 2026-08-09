@@ -220,6 +220,7 @@ export const repos = {
   constructionApprovalRules: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionApprovalRules, o ?? { limit: 50 }) },
   constructionApprovals: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionApprovals, o ?? { limit: 200 }) },
   constructionAudit: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionAudit, o ?? { limit: 500 }) },
+  constructionFxRates: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionFxRates, o ?? { limit: 50 }) },
   constructionTimesheets: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionTimesheets, o ?? { limit: 200 }) },
   constructionTransmittals: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionTransmittals, o ?? { limit: 200 }) },
   constructionZones: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionZones, o ?? { limit: 200 }) },

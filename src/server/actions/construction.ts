@@ -17,12 +17,13 @@ import { money, type Money } from '@/domain/primitives';
 import { NOW } from '@/domain/ppm';
 import {
   nextRevision, timesheetCostMinor, movementAllowed, routeFor, stepsFromRule,
-  canApprove, applyDecision, pendingSteps,
+  canApprove, applyDecision, pendingSteps, fxExposure, fxTable,
 } from '@/domain/construction';
+import type { CurrencyCode } from '@/domain/primitives';
 
 export type Res = { ok: true; ref?: string } | { ok: false; error: string };
 
-const PATHS = ['/construction', '/construction/evm', '/construction/schedule', '/construction/materials', '/construction/risk', '/construction/procurement', '/construction/site', '/construction/cost', '/construction/projects', '/construction/workforce', '/construction/digest', '/construction/documents', '/construction/boq', '/construction/timesheets', '/construction/stock', '/construction/approvals', '/construction/audit'];
+const PATHS = ['/construction', '/construction/evm', '/construction/schedule', '/construction/materials', '/construction/risk', '/construction/procurement', '/construction/site', '/construction/cost', '/construction/projects', '/construction/workforce', '/construction/digest', '/construction/documents', '/construction/boq', '/construction/timesheets', '/construction/stock', '/construction/approvals', '/construction/audit', '/construction/fx'];
 const revalidate = () => PATHS.forEach((p) => revalidatePath(p));
 
 async function gate(action: 'update' | 'create'): Promise<{ ok: true; actor: Actor } | { ok: false; error: string }> {
@@ -389,7 +390,7 @@ export async function rejectTimesheet(id: string, reason: string): Promise<Res> 
 /** Append an immutable audit entry. Called by every sensitive action; nothing in
  *  the app ever updates or deletes one (PRD §18.3 / SC-10). */
 function audit(actor: Actor, entry: {
-  action: 'approve' | 'reject' | 'issue' | 'supersede' | 'post_cost' | 'import' | 'stock_move' | 'stock_count' | 'override' | 'delegate' | 'cancel';
+  action: 'approve' | 'reject' | 'issue' | 'supersede' | 'post_cost' | 'import' | 'stock_move' | 'stock_count' | 'override' | 'delegate' | 'cancel' | 'fx_revalue';
   entity: string; entityRef: string; summary: string;
   projectId?: string; amountMinor?: number; before?: string; after?: string; reasonCodeId?: string; note?: string;
 }): void {
@@ -583,4 +584,48 @@ export async function delegateApproval(requestId: string, toName: string): Promi
   audit(g.actor, { action: 'delegate', entity: 'approval', entityRef: req.ref, projectId: req.projectId, summary: `${mine.label} delegated to ${toName.trim()}`, amountMinor: req.amountMinor });
   revalidate();
   return { ok: true, ref: `${req.ref} → ${toName.trim()}` };
+}
+
+/* --- FX revaluation -------------------------------------------------------- */
+
+/**
+ * Update the spot rate for a foreign currency. The change is a sensitive action:
+ * it revalues every outstanding foreign commitment, so it writes an immutable
+ * audit entry AND records a market-price variance event (VAR-PRICE) carrying the
+ * NGN swing — which is why that cause shows up, weighted, in the reason Pareto.
+ * The reporting currency (NGN) cannot be repriced against itself.
+ */
+export async function updateFxRate(currency: CurrencyCode, newRate: number): Promise<Res> {
+  const g = await gate('update'); if (!g.ok) return g;
+  if (currency === 'NGN') return { ok: false, error: 'NGN is the reporting currency — it cannot be repriced.' };
+  if (!(newRate > 0)) return { ok: false, error: 'Rate must be greater than zero.' };
+  const row = db.constructionFxRates.find((r) => r.currency === currency);
+  if (!row) return { ok: false, error: `No ${currency} rate on file.` };
+  const oldRate = row.rate;
+  if (newRate === oldRate) return { ok: false, error: 'That is already the current rate.' };
+
+  // Revaluation swing = the outstanding foreign book × the rate move (NGN).
+  const rows = fxExposure(db.constructionOrders, fxTable(db.constructionFxRates)).filter((r) => r.currency === currency);
+  const outstandingForeignMinor = rows.reduce((n, r) => n + r.outstandingForeignMinor, 0);
+  const swingMinor = Math.round(outstandingForeignMinor * (newRate - oldRate));
+
+  row.priorRate = oldRate;
+  row.rate = newRate;
+  row.asOfISO = NOW.slice(0, 10);
+
+  const dir = newRate > oldRate ? 'weakened' : 'strengthened';
+  audit(g.actor, {
+    action: 'fx_revalue', entity: 'fx_rate', entityRef: currency,
+    summary: `${currency} repriced ${oldRate} → ${newRate} — naira ${dir}; outstanding book revalued`,
+    amountMinor: Math.abs(swingMinor), before: `₦${oldRate}/${currency}`, after: `₦${newRate}/${currency}`,
+  });
+  if (swingMinor !== 0) {
+    const code = db.constructionReasonCodes.find((c) => c.code === 'VAR-PRICE');
+    if (code) recordReason(g.actor, {
+      domain: 'variance', codeId: code.id, subjectKind: 'fx_rate', subjectRef: currency,
+      note: `${currency} ${dir} ${oldRate}→${newRate}`, impactMinor: Math.abs(swingMinor),
+    });
+  }
+  revalidate();
+  return { ok: true, ref: `${currency} → ₦${newRate}` };
 }
