@@ -118,15 +118,15 @@ const THREADS: Partial<Record<Role, ThreadSeed[]>> = {
 };
 
 const GENERIC_THREAD: ThreadSeed = {
-  id: 't-support', withName: 'Vesta Support', subject: 'Welcome to Vesta', unread: 1,
-  msgs: [[false, 'Vesta Support', 'Welcome! Reply here if you need a hand getting started.', 60]],
+  id: 't-support', withName: 'Reeve Support', subject: 'Welcome to Reeve', unread: 1,
+  msgs: [[false, 'Reeve Support', 'Welcome! Reply here if you need a hand getting started.', 60]],
 };
 
 /* --- seeding + accessors --------------------------------------------------- */
 
 function ensureSeeded(userId: string, role: Role): void {
   if (!notifications.has(userId)) {
-    const seeds = NOTIFS[role] ?? [[120, 'Welcome to Vesta', 'You’re all set. Notifications will appear here.', 'info']];
+    const seeds = NOTIFS[role] ?? [[120, 'Welcome to Reeve', 'You’re all set. Notifications will appear here.', 'info']];
     notifications.set(
       userId,
       seeds.map(([mins, title, body, kind, href], i) => ({ id: `n-${userId}-${i}`, title, body, kind, href, at: at(mins), read: i >= 3 })),

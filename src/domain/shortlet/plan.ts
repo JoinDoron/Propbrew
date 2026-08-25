@@ -4,7 +4,7 @@
  * §8 packaging: five naira tiers gated by apartment count + two premium
  * capabilities (WhatsApp @ Starter, iCal @ Growth). FR-TM team RBAC: in-app team
  * roles (owner / manager / housekeeper / accountant) with a permission matrix —
- * these are MODULE roles (data), not Vesta §7 auth roles.
+ * these are MODULE roles (data), not Reeve §7 auth roles.
  */
 
 import type { TenantScoped } from '@/domain/tenancy';

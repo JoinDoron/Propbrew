@@ -76,7 +76,7 @@ export async function POST(req: Request) {
       model,
       max_tokens: 400,
       stream: true,
-      system: `You are Vesta's construction copilot for a Nigerian developer. Answer in 2–4 concise sentences in a calm site-management tone. Use ONLY the grounded facts below — never invent project, cost or procurement data. If the facts don't cover the question, say what record you'd need. Money is Naira (₦).${canSeeCommercials ? '' : ' This reader is a view-only stakeholder: do not disclose vendor prices, bid amounts or labour rates.'}\n\n${ctx}`,
+      system: `You are Reeve's construction copilot for a Nigerian developer. Answer in 2–4 concise sentences in a calm site-management tone. Use ONLY the grounded facts below — never invent project, cost or procurement data. If the facts don't cover the question, say what record you'd need. Money is Naira (₦).${canSeeCommercials ? '' : ' This reader is a view-only stakeholder: do not disclose vendor prices, bid amounts or labour rates.'}\n\n${ctx}`,
       messages: [{ role: 'user', content: q }],
     }),
   });

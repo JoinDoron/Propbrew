@@ -1,6 +1,6 @@
 /**
  * Short-Let PMS — operations engine (deterministic, no LLM). Feature ideas from
- * a comparable product's flow, built on Vesta's design system:
+ * a comparable product's flow, built on Reeve's design system:
  *   · Dynamic pricing — operator-set seasonal rate rules per apartment.
  *   · Maintenance     — a per-apartment issue tracker.
  *   · Agents          — booking-agent directory + performance + commission.

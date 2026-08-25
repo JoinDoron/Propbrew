@@ -160,7 +160,7 @@ function PreviewModal({ apts, businessName, url, onClose }: { apts: PreviewApt[]
               </div>
             ))}
           </div>
-          <div className="text-center text-[10px] text-text-3 mt-4 inline-flex items-center gap-1 w-full justify-center"><Check size={10} className="text-positive" /> Secure · powered by Vesta Short-Let</div>
+          <div className="text-center text-[10px] text-text-3 mt-4 inline-flex items-center gap-1 w-full justify-center"><Check size={10} className="text-positive" /> Secure · powered by Reeve Short-Let</div>
         </div>
       </div>
     </div>

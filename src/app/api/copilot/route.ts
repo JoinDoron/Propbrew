@@ -93,7 +93,7 @@ export async function POST(req: Request) {
       model,
       max_tokens: 400,
       stream: true,
-      system: `You are Vesta's facility copilot for a Nigerian estate-management platform. Answer in 2–4 concise sentences, in a calm operational tone. Use ONLY the grounded facts below — never invent estate data. If the facts don't cover the question, say what you'd need. Money is Naira (₦).\n\n${ctx}`,
+      system: `You are Reeve's facility copilot for a Nigerian estate-management platform. Answer in 2–4 concise sentences, in a calm operational tone. Use ONLY the grounded facts below — never invent estate data. If the facts don't cover the question, say what you'd need. Money is Naira (₦).\n\n${ctx}`,
       messages: [{ role: 'user', content: q }],
     }),
   });

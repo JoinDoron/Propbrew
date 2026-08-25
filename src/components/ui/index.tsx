@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Vesta UI primitives.
+ * Reeve UI primitives.
  *
  * The repeating patterns of the design system:
  * cards, KPI tiles, status pills, filter chips, buttons, tabs and tables.

@@ -30,7 +30,7 @@ export function CalendarWorkspace({ apartments, bookings, nowMs }: { apartments:
 
   function exportIcs() {
     const dstamp = (iso: string) => iso.replace(/-/g, '');
-    const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Vesta Short-Let//EN', 'CALSCALE:GREGORIAN'];
+    const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Reeve Short-Let//EN', 'CALSCALE:GREGORIAN'];
     const aptName = new Map(apartments.map((a) => [a.id, a.name]));
     for (const b of bookings) {
       if (b.status === 'cancelled') continue;

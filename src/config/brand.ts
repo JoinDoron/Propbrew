@@ -1,14 +1,14 @@
 /**
  * Brand configuration — the single source of truth for white-labelling.
  *
- * Vesta is a multi-tenant platform, so these are the *platform* defaults.
+ * Reeve is a multi-tenant platform, so these are the *platform* defaults.
  * Per-tenant branding (PRD §8.2, "Per-tenant configuration") overrides them at
  * runtime once tenant configuration lands.
  */
 
 export const brand = {
   /** Product name shown in the sidebar, auth screen and document title. */
-  name: 'Vesta',
+  name: 'Reeve',
   /** Small caps label under the wordmark in the sidebar. */
   tagline: 'FACILITY & ESTATE',
   /** Primary brand colour. Drives --primary and every accent in the UI. */
