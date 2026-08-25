@@ -51,17 +51,17 @@ const LIFECYCLE = [
 
 const TIERS = [
   { size: 'One estate', name: 'Single site', body: 'A facility manager running one estate gets the whole operations stack — work orders, PPM, inspections, residents and collections — without a separate tool for each.', points: ['Work orders & planned maintenance', 'Resident portal & collections', 'Vendors, SLAs and safety'] },
-  { size: 'Multi-estate', name: 'Portfolio operator', body: 'Managing several estates adds a portfolio lens, cross-site reporting and short-let, with capability-scoped access so each manager sees only their own scope.', points: ['Portfolio & cross-site reporting', 'Short-let PMS with channels', 'Role-scoped access per estate'], featured: true },
+  { size: 'Multi-estate', name: 'Portfolio operator', body: 'Managing several estates adds a portfolio lens, cross-site reporting and short-let, with capability-scoped access so each manager sees only their own scope.', points: ['Portfolio & cross-site reporting', 'Short-let PMS with dynamic pricing', 'Role-scoped access per estate'], featured: true },
   { size: 'Developer', name: 'Develop & invest', body: 'A developer gets construction delivery joined to the investor portal — the same project appears as a build programme to the PM and as a return to the investor.', points: ['Earned value, CPM and risk radar', 'Investor projects, returns, updates', 'Board, governance and audit'] },
 ];
 
 const MODULE_GROUPS = [
   { icon: <HardHat size={16} />, title: 'Construction delivery', items: ['Earned value: CPI, SPI, EAC, VAC, TCPI', 'Critical path with float and slip propagation', 'Procurement: requests → RFQ → PO → delivery', 'BOQ import, timesheets, stock and FX exposure'] },
-  { icon: <Wrench size={16} />, title: 'Facilities', items: ['Work orders with vendor assignment and SLAs', 'Planned maintenance and inspections', 'Asset register with energy and sustainability', 'Safety permits, access control and visitors'] },
+  { icon: <Wrench size={16} />, title: 'Facilities', items: ['Work orders with vendor assignment and SLAs', 'Planned maintenance and inspections', 'Asset register with energy and sustainability', 'Safety permits, visitor passes and access logs'] },
   { icon: <Users size={16} />, title: 'Estate & community', items: ['Residents, tenancy and announcements', 'Billing, collections and arrears', 'Governance, board and committee motions', 'Amenity bookings, parcels and security SOS'] },
-  { icon: <BedDouble size={16} />, title: 'Short-let', items: ['Calendar, bookings and a public booking page', 'Dynamic pricing and channel management', 'Guests, reviews and WhatsApp messaging', 'Turnover inspections, expenses and analytics'] },
+  { icon: <BedDouble size={16} />, title: 'Short-let', items: ['Calendar, bookings and a public booking page', 'Dynamic pricing rules you can read', 'Guests, reviews and WhatsApp-ready templates', 'Turnover inspections, expenses and analytics'] },
   { icon: <TrendingUp size={16} />, title: 'Investor & portfolio', items: ['Investor projects, returns and updates', 'Portfolio performance across estates', 'Build Watch — a client mirror of delivery', 'Reports drawn from approved site records'] },
-  { icon: <ShieldCheck size={16} />, title: 'Platform & governance', items: ['Capability-based RBAC across every role', 'Immutable audit log of sensitive actions', 'Multi-tenant with per-tenant branding', 'Vendor and resident portals, admin console'] },
+  { icon: <ShieldCheck size={16} />, title: 'Platform & governance', items: ['Capability-based RBAC across every role', 'Immutable audit log of sensitive actions', 'Tenant isolation, asserted every release', 'Vendor and resident portals, admin console'] },
 ];
 
 const ENGINES = [
@@ -77,7 +77,7 @@ const ENGINES = [
 
 const PILLARS = [
   { icon: <ScrollText size={18} />, title: 'Every number traces to a record', body: 'Advisory output carries its evidence and links back to the row it came from. The copilot refuses to answer past its data rather than filling the gap, and view-only stakeholders never see commercials.' },
-  { icon: <WifiOff size={18} />, title: 'Works when the signal does not', body: 'Field capture writes to the device before it acknowledges you — reports, photos and clock-ins survive a reload and send themselves when signal returns. Replays are idempotent, so nothing double-posts.' },
+  { icon: <WifiOff size={18} />, title: 'Works when the signal does not', body: 'Field capture writes to the device before it acknowledges you. Reports and clock-ins survive a reload and send themselves when signal returns — photos are held on the device in IndexedDB. Replays are idempotent, so nothing double-posts, and conflicts wait for a human rather than clobbering the server.' },
   { icon: <ShieldCheck size={18} />, title: 'Permission is enforced server-side', body: 'A capability matrix governs every role. Each read is scope-filtered and each mutation re-checks server-side, so a view-only executive simply has no path to a write.' },
   { icon: <ClipboardList size={18} />, title: 'Sensitive actions are on the record', body: 'Approvals, overrides, cost postings and stock adjustments append to an immutable audit log with before and after values, coded reasons and contiguous sequence numbers.' },
 ];
@@ -229,12 +229,13 @@ export default function LandingPage() {
               Designed for how property actually runs in Nigeria
             </h2>
             <p className="text-[15px] text-white/75 leading-relaxed mt-4">
-              Naira-native accounting in integer minor units so money never drifts. FX revaluation for
-              the imported half of every build. Offline-first capture for sites without signal. WhatsApp
-              as a first-class channel, because that is where residents and guests already are.
+              Naira-native accounting in integer minor units, so money never drifts. FX revaluation for
+              the imported half of every build. Offline-first capture for sites without signal. Guest and
+              resident messaging drafted as WhatsApp-ready templates, because that is where the
+              conversation already happens.
             </p>
             <div className="flex gap-2.5 flex-wrap mt-7">
-              {['Naira-native', 'FX exposure', 'Offline-first', 'WhatsApp', 'Multi-tenant', 'Role-scoped'].map((t) => (
+              {['Naira-native', 'FX exposure', 'Offline-first', 'Audit trail', 'Multi-tenant', 'Role-scoped'].map((t) => (
                 <span key={t} className="h-8 px-3.5 rounded-full inline-flex items-center text-[12.5px] font-medium" style={{ background: 'rgba(255,255,255,.12)' }}>{t}</span>
               ))}
             </div>
