@@ -10,7 +10,7 @@ export const brand = {
   /** Product name shown in the sidebar, auth screen and document title. */
   name: 'Reeve',
   /** Small caps label under the wordmark in the sidebar. */
-  tagline: 'FACILITY & ESTATE',
+  tagline: 'REAL ESTATE OPERATING SYSTEM',
   /** Primary brand colour. Drives --primary and every accent in the UI. */
   primaryColor: '#2563eb',
   /** The organisation this deployment is built for. */
