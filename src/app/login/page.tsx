@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { Truck } from 'lucide-react';
+import { Building2 } from 'lucide-react';
 import { getSession, DEV_IDENTITIES } from '@/server/session';
 import { homeRouteFor } from '@/config/shells';
 import { brand } from '@/config/brand';
@@ -23,7 +23,7 @@ export default async function LoginPage() {
       <div className="w-full max-w-[420px]">
         <div className="flex items-center gap-2.5 mb-6 justify-center">
           <span className="w-10 h-10 rounded-xl flex items-center justify-center text-white bg-primary" style={{ boxShadow: '0 6px 16px var(--primary-weak-2)' }}>
-            <Truck size={20} />
+            <Building2 size={20} />
           </span>
           <div className="leading-none">
             <div className="font-bold text-[18px] tracking-[-0.02em]">{brand.name}</div>

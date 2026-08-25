@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useState, useTransition, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ChevronLeft, LogOut, Menu, Moon, Search, Sun, Truck } from 'lucide-react';
+import { ChevronLeft, LogOut, Menu, Moon, Search, Sun, Building2 } from 'lucide-react';
 import { brand } from '@/config/brand';
 import { PAGE_META, type NavGroup } from '@/config/nav';
 import { useTheme } from '@/components/theme-provider';
@@ -98,7 +98,7 @@ export function AppShell({
             className="w-[34px] h-[34px] rounded-[10px] flex items-center justify-center flex-none text-white bg-primary"
             style={{ boxShadow: '0 4px 12px var(--primary-weak-2)' }}
           >
-            <Truck size={18} />
+            <Building2 size={18} />
           </span>
           {showLabels && (
             <div className="flex flex-col leading-none min-w-0">
