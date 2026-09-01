@@ -294,3 +294,20 @@ function seedWorkOrderHistory() {
   }
 }
 seedWorkOrderHistory();
+
+
+/**
+ * Allocate the next work-order reference.
+ *
+ * Two creation sites previously minted refs from separate bases
+ * (`WO-${24810 + n}` and `WO-${24850 + n}`), so the series collided after 40
+ * rows — and `repos.workOrders.getByRef` routes on ref, so a collision resolves
+ * the wrong record. One allocator, seeded above the highest existing ref.
+ */
+export function nextWorkOrderRef(): string {
+  const highest = db.workOrders.reduce((max, w) => {
+    const n = Number.parseInt(String(w.ref).replace(/^WO-/, ''), 10);
+    return Number.isFinite(n) && n > max ? n : max;
+  }, 24800);
+  return `WO-${highest + 1}`;
+}

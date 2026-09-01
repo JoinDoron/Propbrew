@@ -46,7 +46,30 @@ function clauseToWhere(c: OwnershipClause): Record<string, unknown> {
 export function toWhere(scope: ScopeFilter): Record<string, unknown> {
   const where: Record<string, unknown> = {};
   if (scope.tenantId !== '*') where.tenantId = scope.tenantId;
-  if (scope.estateIds !== 'all') where.estateId = { in: scope.estateIds };
+
+  if (scope.estateIds !== 'all') {
+    // MUST mirror `matchesScope` exactly, including its NULL rule: a row's
+    // estate is `estateId ?? siteId`, and a row with NO estate dimension is not
+    // estate-scoped, so it passes.
+    //
+    // A bare `estateId: { in: [...] }` does NOT express that — SQL/Prisma `IN`
+    // excludes NULL — so every estate-less row would vanish the day this filter
+    // starts hitting a real database. Construction and Short-Let rows are
+    // exactly that case by design (they span the portfolio), so the two largest
+    // modules would silently return nothing.
+    const inEstates = { in: scope.estateIds };
+    where.AND = [
+      ...((where.AND as unknown[]) ?? []),
+      {
+        OR: [
+          { estateId: inEstates },
+          { AND: [{ estateId: null }, { siteId: inEstates }] },
+          { AND: [{ estateId: null }, { siteId: null }] },
+        ],
+      },
+    ];
+  }
+
   if (scope.ownership) {
     if (scope.ownership.length === 0) {
       throw new Error('empty ownership clause — refusing to build a match-everything filter');

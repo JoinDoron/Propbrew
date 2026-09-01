@@ -74,6 +74,9 @@ export default async function WorkOrderDetail({ params }: { params: Promise<{ re
               <SlaBadge dueAt={wo.respondDueAt} breached={breached} />
             </div>
             <h1 className="text-[19px] font-semibold tracking-[-0.02em] mt-2">{wo.title}</h1>
+            {wo.description && (
+              <p className="text-[13.5px] text-text-2 leading-relaxed mt-2 max-w-[68ch]">{wo.description}</p>
+            )}
             <p className="text-[12.5px] text-text-3 mt-1">
               {wo.origin.replace(/_/g, ' ')} · raised by {wo.requesterName}
             </p>

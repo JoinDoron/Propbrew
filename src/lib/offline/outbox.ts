@@ -204,8 +204,11 @@ export function useOutboxSync(): void {
         }
         const nowISO = new Date().toISOString();
         commit(snapshot().map((o) => (o.id === op.id ? applyOutcome(o, outcome, nowISO) : o)));
-        // Once the server has it, the device copy of the photos is dead weight.
-        if (outcome.ok && idbAvailable()) void idbDeleteBlobsFor(op.id).catch(() => { /* ignore */ });
+        // NOTE: the photos are deliberately NOT deleted here. `syncOperation`
+        // only records a photo COUNT — the image bytes never leave this device,
+        // because no upload endpoint or blob storage exists yet. Deleting on
+        // acknowledgement destroyed the only copy of a site engineer's evidence.
+        // Re-enable this once the sync endpoint actually accepts the files.
       }
       // Housekeeping: drop long-since-synced receipts.
       const stale = prunable(snapshot(), Date.now());

@@ -13,10 +13,11 @@ import { ForbiddenError, assertCan } from '@/lib/authz';
 import { repos } from '@/server/data';
 import { db, recordHistory } from '@/server/data/store';
 import { money } from '@/domain/primitives';
+import { nowISO } from '@/server/clock';
 
 const UNPAID = ['issued', 'partially_paid', 'overdue', 'in_arrears', 'escalated'];
 
-export type PayAllResult = { ok: true; count: number; totalMinor: number } | { ok: false; error: string };
+export type PayAllResult = { ok: true; count: number; totalMinor: number; skipped?: number } | { ok: false; error: string };
 
 export async function payAllOutstanding(): Promise<PayAllResult> {
   const actor = await getActor();
@@ -32,6 +33,7 @@ export async function payAllOutstanding(): Promise<PayAllResult> {
 
   let count = 0;
   let totalMinor = 0;
+  let skipped = 0;
   for (const inv of mine) {
     const live = db.invoices.find((i) => i.id === inv.id);
     if (!live) continue;
@@ -40,8 +42,10 @@ export async function payAllOutstanding(): Promise<PayAllResult> {
     const wallet = db.wallets.find((w) => w.unitId === live.unitId && w.ownerUserId === actor.userId);
     if (!wallet) continue;
 
-    const shortfall = Math.max(0, owed - wallet.available.minor);
-    wallet.available = money(wallet.available.minor + shortfall, wallet.available.currency);
+    // Skip anything the wallet genuinely cannot cover rather than inventing the
+    // shortfall. `skipped` is reported so the UI can tell the resident why a
+    // charge is still outstanding.
+    if (wallet.available.minor < owed) { skipped += 1; continue; }
     const from = live.status;
     live.paid = money(live.paid.minor + owed, live.amount.currency);
     live.status = 'paid';
@@ -49,7 +53,7 @@ export async function payAllOutstanding(): Promise<PayAllResult> {
     wallet.available = money(wallet.available.minor - owed, wallet.available.currency);
 
     recordHistory('service-charge', live.id, {
-      at: new Date().toISOString(), event: 'PAYMENT_CONFIRMED', from, to: 'paid',
+      at: nowISO(), event: 'PAYMENT_CONFIRMED', from, to: 'paid',
       actorId: actor.userId, actorName: 'Wallet payment · pay all (SC-02)', actorRole: 'system_webhook',
     });
     count += 1;
@@ -57,5 +61,11 @@ export async function payAllOutstanding(): Promise<PayAllResult> {
   }
 
   ['/portal/bills', '/portal', '/billing', '/dashboard'].forEach((p) => revalidatePath(p));
-  return count > 0 ? { ok: true, count, totalMinor } : { ok: false, error: 'Nothing to pay.' };
+  if (count > 0) return { ok: true, count, totalMinor, skipped };
+  return {
+    ok: false,
+    error: skipped > 0
+      ? `Not enough in your wallet to cover ${skipped === 1 ? 'that charge' : `those ${skipped} charges`}. Top up and try again.`
+      : 'Nothing to pay.',
+  };
 }

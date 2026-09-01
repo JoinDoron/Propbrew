@@ -4,7 +4,7 @@ import { toneVar, type Tone } from '@/lib/status-tones';
 
 export type TenantRow = { id: string; label: string; plan: string; mrrMinor: number; units: number; users: number; score: number; band: Tone; healthLabel: string };
 export type EventRow = { machine: string; event: string; actorName: string; at: string; recordId: string; security: boolean; financial: boolean };
-export type SystemRow = { name: string; status: 'operational' | 'degraded' | 'down' };
+export type SystemRow = { name: string; status: 'operational' | 'degraded' | 'down' | 'not_configured' };
 
 function naira(minor: number): string {
   const n = minor / 100;
@@ -67,9 +67,9 @@ export function PlatformOverview({ totals, tenants, events, ai, systems }: {
             <div className="flex flex-col gap-2">
               {systems.map((s) => (
                 <div key={s.name} className="flex items-center gap-2 text-[12.5px]">
-                  <span className="w-2 h-2 rounded-full flex-none" style={{ background: toneVar(s.status === 'operational' ? 'success' : s.status === 'degraded' ? 'warn' : 'danger') }} />
+                  <span className="w-2 h-2 rounded-full flex-none" style={{ background: toneVar(s.status === 'operational' ? 'success' : s.status === 'degraded' ? 'warn' : s.status === 'not_configured' ? 'muted' : 'danger') }} />
                   <span className="flex-1">{s.name}</span>
-                  <span className="text-[11px] capitalize" style={{ color: toneVar(s.status === 'operational' ? 'success' : s.status === 'degraded' ? 'warn' : 'danger') }}>{s.status}</span>
+                  <span className="text-[11px] capitalize" style={{ color: toneVar(s.status === 'operational' ? 'success' : s.status === 'degraded' ? 'warn' : s.status === 'not_configured' ? 'muted' : 'danger') }}>{s.status === 'not_configured' ? 'not configured' : s.status}</span>
                 </div>
               ))}
             </div>

@@ -13,9 +13,11 @@ import { ForbiddenError, assertCan } from '@/lib/authz';
 import { getActiveUnitId } from '@/server/active-unit';
 import { repos } from '@/server/data';
 import { db, recordHistory } from '@/server/data/store';
+import { nextWorkOrderRef } from '@/server/data/store';
 import { NOW, NOW_MS } from '@/domain/ppm';
 import { triageRequest } from '@/domain/resident-portal';
 import type { WorkOrder } from '@/domain/entities';
+import { nowISO } from '@/server/clock';
 
 export type RaiseResult = { ok: true; ref: string } | { ok: false; error: string };
 
@@ -38,7 +40,7 @@ export async function raiseRequest(input: { title: string; description?: string 
   const triage = triageRequest(`${title} ${input.description ?? ''}`);
   const estateId = actor.estateIds[0] ?? 's-gardens';
   const me = repos.residents.list(actor).items.find((r) => r.userId === actor.userId);
-  const ref = `WO-${24810 + db.workOrders.length}`;
+  const ref = nextWorkOrderRef();
   const hrs = (n: number) => new Date(NOW_MS + n * 3600 * 1000).toISOString();
 
   const wo = {
@@ -47,6 +49,9 @@ export async function raiseRequest(input: { title: string; description?: string 
     id: `wo-res-${++counter}`,
     ref,
     title,
+    // The typed detail reached triage and was then dropped, so the technician
+    // only ever saw a title. It now travels with the job.
+    description: input.description?.trim() || undefined,
     siteId: estateId,
     estateId,
     unitId,
@@ -63,7 +68,7 @@ export async function raiseRequest(input: { title: string; description?: string 
 
   db.workOrders.unshift(wo);
   recordHistory('work-order', wo.id, {
-    at: NOW, event: 'CREATE', from: null, to: 'new',
+    at: nowISO(), event: 'CREATE', from: null, to: 'new',
     actorId: actor.userId, actorName: me?.name ?? 'Resident', actorRole: 'resident',
     note: `${triage.category.label}${triage.escalated ? ' · flagged urgent' : ''}`,
   });

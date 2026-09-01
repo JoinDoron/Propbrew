@@ -166,6 +166,9 @@ export type WorkOrder = TenantScoped &
     id: WorkOrderId;
     ref: string; // human ticket id, e.g. "WO-24817"
     title: string;
+    /** The requester's own words. Resident-raised jobs carry the typed detail
+     *  through to the technician instead of arriving as a title only. */
+    description?: string;
     siteId: SiteId;
     estateId: SiteId; // scope column mirror of siteId
     unitId?: UnitId;

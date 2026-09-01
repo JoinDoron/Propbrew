@@ -15,6 +15,7 @@ import { repos } from '@/server/data';
 import { db, recordHistory } from '@/server/data/store';
 import { NOW, addDays } from '@/domain/ppm';
 import type { Role } from '@/domain/enums';
+import { nowISO } from '@/server/clock';
 
 export type PpmResult = { ok: true; ref?: string } | { ok: false; error: string };
 
@@ -211,7 +212,7 @@ function revalidate() {
   REVALIDATE.forEach((p) => revalidatePath(p));
 }
 function hist(event: string, from: string, to: string, actor: Actor, note: string) {
-  return { at: new Date().toISOString(), event, from, to, actorId: actor.userId, actorName: actorName(actor), actorRole: (actor.roles as Role[])[0], note };
+  return { at: nowISO(), event, from, to, actorId: actor.userId, actorName: actorName(actor), actorRole: (actor.roles as Role[])[0], note };
 }
 function intervalDays(freq: string): number {
   return { weekly: 7, monthly: 30, quarterly: 91, biannual: 182, annual: 365 }[freq] ?? 30;

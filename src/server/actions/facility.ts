@@ -12,10 +12,12 @@ import { revalidatePath } from 'next/cache';
 import { getActor } from '@/server/session';
 import { ForbiddenError, assertCan, type Role } from '@/lib/authz';
 import { db, recordHistory } from '@/server/data/store';
+import { nextWorkOrderRef } from '@/server/data/store';
 import { NOW, NOW_MS } from '@/domain/ppm';
 import { COPILOT_MODELS, type CopilotModelId } from '@/domain/facility';
 import { setTenantModel, recordUsage, getTenantModel } from '@/server/copilot/metering';
 import type { WorkOrder } from '@/domain/entities';
+import { nowISO } from '@/server/clock';
 
 const PATHS = ['/control-center', '/energy', '/inventory', '/contracts', '/safety', '/access', '/sustainability', '/copilot', '/work-orders', '/dashboard'];
 const revalidate = () => PATHS.forEach((p) => revalidatePath(p));
@@ -47,7 +49,7 @@ export async function dispatchWoFromAlarm(id: string): Promise<Res> {
   if (!al) return { ok: false, error: 'Alarm not found.' };
   if (al.woRef) return { ok: false, error: `Already dispatched as ${al.woRef}.` };
 
-  const ref = `WO-${24850 + db.workOrders.length}`;
+  const ref = nextWorkOrderRef();
   const priority = al.severity === 'critical' ? 'emergency' : al.severity === 'warning' ? 'high' : 'routine';
   const hrs = (n: number) => new Date(NOW_MS + n * 3600 * 1000).toISOString();
   db.workOrders.unshift({
@@ -57,7 +59,7 @@ export async function dispatchWoFromAlarm(id: string): Promise<Res> {
     respondDueAt: hrs(priority === 'emergency' ? 1 : 4), resolveDueAt: hrs(priority === 'emergency' ? 8 : 48), cost: null,
   } as unknown as WorkOrder);
   al.acknowledged = true; al.woRef = ref;
-  recordHistory('work-order', `wo-alarm-${woSeq}`, { at: NOW, event: 'CREATE', from: null, to: 'new', actorId: g.actor.userId, actorName: 'Control Center', actorRole: (g.actor.roles[0] as Role) ?? 'facility_manager', note: `Auto-dispatched from ${al.severity} alarm` });
+  recordHistory('work-order', `wo-alarm-${woSeq}`, { at: nowISO(), event: 'CREATE', from: null, to: 'new', actorId: g.actor.userId, actorName: 'Control Center', actorRole: (g.actor.roles[0] as Role) ?? 'facility_manager', note: `Auto-dispatched from ${al.severity} alarm` });
   revalidate();
   return { ok: true, ref };
 }

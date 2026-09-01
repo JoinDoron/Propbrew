@@ -19,6 +19,7 @@ import { shortletBookingMachine } from '@/domain/workflows';
 import type { SlBooking, SlInspection, InspectionItem, ExpenseCategory, BookingSource, Channel } from '@/domain/shortlet/types';
 import type { PlanKey, TeamRole, TeamMember } from '@/domain/shortlet/plan';
 import { suggestPriority, ISSUE_NEXT, type RuleType, type IssuePriority, type PricingRule, type MaintenanceIssue, type Agent } from '@/domain/shortlet/operations';
+import { nowISO } from '@/server/clock';
 
 const PATHS = ['/shortlet', '/shortlet/bookings', '/shortlet/calendar', '/shortlet/inspections', '/shortlet/expenses', '/shortlet/analytics', '/shortlet/guests', '/shortlet/whatsapp', '/shortlet/channels', '/shortlet/plan', '/shortlet/team', '/shortlet/pricing', '/shortlet/maintenance', '/shortlet/agents', '/shortlet/reviews'];
 const revalidate = () => PATHS.forEach((p) => revalidatePath(p));
@@ -55,7 +56,7 @@ export async function createBooking(input: { apartmentId: string; guestName: str
   } as unknown as SlBooking;
 
   db.shortletBookings.unshift(booking);
-  recordHistory('shortlet-booking', booking.id, { at: NOW, event: 'CREATE', from: null, to: status, actorId: g.actor.userId, actorName: 'Operator', actorRole: (g.actor.roles[0] as Role) ?? 'estate_manager', note: `${apt.name} · ${nights} nights` });
+  recordHistory('shortlet-booking', booking.id, { at: nowISO(), event: 'CREATE', from: null, to: status, actorId: g.actor.userId, actorName: 'Operator', actorRole: (g.actor.roles[0] as Role) ?? 'estate_manager', note: `${apt.name} · ${nights} nights` });
   revalidate();
   return { ok: true, ref };
 }
@@ -72,7 +73,7 @@ export async function advanceBooking(id: string, event: string): Promise<Res> {
   const from = live.status;
   live.status = t.to;
   if (t.to === 'cancelled' && live.cautionStatus === 'held') live.cautionStatus = 'refunded';
-  recordHistory('shortlet-booking', live.id, { at: NOW, event, from, to: t.to, actorId: g.actor.userId, actorName: 'Operator', actorRole: roles[0] ?? 'estate_manager' });
+  recordHistory('shortlet-booking', live.id, { at: nowISO(), event, from, to: t.to, actorId: g.actor.userId, actorName: 'Operator', actorRole: roles[0] ?? 'estate_manager' });
   revalidate();
   return { ok: true, ref: live.ref };
 }
@@ -85,7 +86,7 @@ export async function recordPayment(id: string, amountNaira: number): Promise<Re
   if (!(amountNaira > 0)) return { ok: false, error: 'Enter an amount greater than zero.' };
   const add = Math.round(amountNaira * 100);
   live.paid = money(Math.min(live.total.minor, live.paid.minor + add), 'NGN');
-  recordHistory('shortlet-booking', live.id, { at: NOW, event: 'PAYMENT_RECORDED', from: live.status, to: live.status, actorId: g.actor.userId, actorName: 'Operator', actorRole: (g.actor.roles[0] as Role) ?? 'estate_manager', note: `₦${amountNaira.toLocaleString()} recorded` });
+  recordHistory('shortlet-booking', live.id, { at: nowISO(), event: 'PAYMENT_RECORDED', from: live.status, to: live.status, actorId: g.actor.userId, actorName: 'Operator', actorRole: (g.actor.roles[0] as Role) ?? 'estate_manager', note: `₦${amountNaira.toLocaleString()} recorded` });
   revalidate();
   return { ok: true };
 }
@@ -98,7 +99,7 @@ export async function saveInspection(bookingId: string, items: InspectionItem[],
 
   const damageTotal = items.reduce((n, it) => n + (it.condition !== 'ok' ? it.chargeMinor ?? 0 : 0), 0);
   const outcome: SlInspection['outcome'] = damageTotal > 0 ? 'deductions' : 'clear';
-  const insp = { tenantId: g.actor.tenantId, id: `si-${bookingId}`, bookingId, apartmentId: live.apartmentId, inspectorName: inspectorName || 'Operator', at: NOW, items, outcome, damageTotal: money(damageTotal, 'NGN') } as unknown as SlInspection;
+  const insp = { tenantId: g.actor.tenantId, id: `si-${bookingId}`, bookingId, apartmentId: live.apartmentId, inspectorName: inspectorName || 'Operator', at: nowISO(), items, outcome, damageTotal: money(damageTotal, 'NGN') } as unknown as SlInspection;
   const existing = db.shortletInspections.findIndex((i) => i.bookingId === bookingId);
   if (existing >= 0) db.shortletInspections[existing] = insp; else db.shortletInspections.unshift(insp);
 
@@ -107,7 +108,7 @@ export async function saveInspection(bookingId: string, items: InspectionItem[],
   live.cautionStatus = damageTotal <= 0 ? 'refunded' : damageTotal >= live.cautionFee.minor ? 'forfeited' : 'partly_deducted';
   const from = live.status;
   if (live.status === 'checked_out') live.status = 'closed';
-  recordHistory('shortlet-booking', live.id, { at: NOW, event: 'CLOSE', from, to: live.status, actorId: g.actor.userId, actorName: 'Operator', actorRole: (g.actor.roles[0] as Role) ?? 'estate_manager', note: outcome === 'clear' ? 'Caution refunded in full' : `₦${(damageTotal / 100).toLocaleString()} deducted` });
+  recordHistory('shortlet-booking', live.id, { at: nowISO(), event: 'CLOSE', from, to: live.status, actorId: g.actor.userId, actorName: 'Operator', actorRole: (g.actor.roles[0] as Role) ?? 'estate_manager', note: outcome === 'clear' ? 'Caution refunded in full' : `₦${(damageTotal / 100).toLocaleString()} deducted` });
   revalidate();
   return { ok: true };
 }

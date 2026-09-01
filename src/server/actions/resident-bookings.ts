@@ -13,9 +13,9 @@ import { ForbiddenError, assertCan } from '@/lib/authz';
 import { repos } from '@/server/data';
 import { db, recordHistory } from '@/server/data/store';
 import { money } from '@/domain/primitives';
-import { NOW } from '@/domain/ppm';
 import { amenityOf, wouldAutoApprove } from '@/domain/bookings';
 import type { Booking } from '@/domain/entities';
+import { nowISO } from '@/server/clock';
 
 export type BookResult = { ok: true; status: string; auto: boolean } | { ok: false; error: string };
 
@@ -52,7 +52,7 @@ export async function createBooking(amenity: string, slotISO: string): Promise<B
 
   db.bookings.unshift(booking);
   recordHistory('booking', booking.id, {
-    at: NOW, event: rule.auto ? 'AUTO_APPROVE' : 'REQUEST', from: null, to: status,
+    at: nowISO(), event: rule.auto ? 'AUTO_APPROVE' : 'REQUEST', from: null, to: status,
     actorId: actor.userId, actorName: me?.name ?? 'Resident', actorRole: 'resident',
     note: rule.reason,
   });

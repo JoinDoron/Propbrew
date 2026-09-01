@@ -17,7 +17,9 @@ export async function switchIdentity(key: string): Promise<void> {
   const identity = identityByKey(key);
   const store = await cookies();
   store.set(DEV_IDENTITY_COOKIE, identity.key, {
-    httpOnly: false,
+    // httpOnly so an XSS cannot read or forge the identity cookie.
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     path: '/',
     maxAge: 60 * 60 * 24 * 30,

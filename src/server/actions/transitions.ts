@@ -25,6 +25,7 @@ import {
   type Machine,
 } from '@/domain/workflows';
 import type { Role } from '@/domain/enums';
+import { nowISO } from '@/server/clock';
 
 export type TxResult = { ok: true; to: string } | { ok: false; error: string };
 
@@ -83,7 +84,7 @@ export async function transition(machineKey: 'booking' | 'sos-event' | 'marketpl
   }
 
   recordHistory(machineKey, id, {
-    at: new Date().toISOString(),
+    at: nowISO(),
     event,
     from,
     to: t.to,
@@ -181,5 +182,5 @@ function firing(actorRoles: Role[], allowed: Role[]): Role {
   return actorRoles.find((r) => allowed.includes(r)) ?? actorRoles[0];
 }
 function hist(event: string, from: string, to: string, userId: string, role: Role) {
-  return { at: new Date().toISOString(), event, from, to, actorId: userId, actorName: displayName(userId, role), actorRole: role };
+  return { at: nowISO(), event, from, to, actorId: userId, actorName: displayName(userId, role), actorRole: role };
 }

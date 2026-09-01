@@ -18,10 +18,12 @@ import { revalidatePath } from 'next/cache';
 import { getActor } from '@/server/session';
 import { ForbiddenError, assertCan } from '@/lib/authz';
 import { repos } from '@/server/data';
-import { recordHistory } from '@/server/data/store';
+import { db, recordHistory } from '@/server/data/store';
+import * as seed from '@/server/data/seed/fixtures';
 import { workOrderMachine } from '@/domain/workflows';
 import { ROLE_LABELS } from '@/lib/authz';
 import type { Role } from '@/domain/enums';
+import { nowISO } from '@/server/clock';
 
 export type TransitionResult = { ok: true; to: string } | { ok: false; error: string };
 
@@ -57,12 +59,26 @@ export async function fireWoTransition(
   const from = wo.status;
   wo.status = transition.to;
   if ((event === 'ASSIGN' || event === 'REASSIGN') && opts?.assignee) {
-    wo.assigneeName = opts.assignee;
+    // Resolve the picked name to the ID COLUMNS the scope filter actually reads
+    // (`assigned_to_me` -> assigneeUserId, `my_vendor_org` -> vendorOrgId).
+    // Writing only the display string meant assignment routed nothing: the job
+    // never appeared in the technician's list or the vendor's portal.
+    const name = opts.assignee.trim();
+    const user = db.users.find((u) => u.name === name && u.tenantId === wo.tenantId);
+    const vendor = seed.vendors.find((v) => v.name === name && v.tenantId === wo.tenantId);
+
+    wo.assigneeName = name;
+    wo.assigneeUserId = user?.id;
+    wo.vendorOrgId = vendor?.id;
+
+    if (!user && !vendor) {
+      return { ok: false, error: `“${name}” is not a known technician or vendor.` };
+    }
   }
 
   const firingRole = (actor.roles as Role[]).find((r) => (transition.actors as string[]).includes(r)) ?? actor.roles[0];
   recordHistory('work-order', wo.id, {
-    at: new Date().toISOString(),
+    at: nowISO(),
     event,
     from,
     to: transition.to,

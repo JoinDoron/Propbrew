@@ -11,7 +11,7 @@
 
 import { useCallback, useEffect, useState, useTransition, type ReactNode } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { ChevronLeft, LogOut, Menu, Moon, Search, Sun, Building2 } from 'lucide-react';
 import { brand } from '@/config/brand';
 import { PAGE_META, type NavGroup } from '@/config/nav';
@@ -57,6 +57,18 @@ export function AppShell({
   const { theme, toggleTheme } = useTheme();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
+  // Page search. The header input used to be a decorative control with no value
+  // and no handler on every page in the product; it now searches the nav the
+  // actor can actually see and jumps to the page.
+  const router = useRouter();
+  const [query, setQuery] = useState('');
+  const matches = query.trim()
+    ? groups
+        .flatMap((g) => g.items.map((i) => ({ ...i, group: g.label })))
+        .filter((i) => `${i.label} ${i.group}`.toLowerCase().includes(query.trim().toLowerCase()))
+        .slice(0, 7)
+    : [];
+  const goTo = (href: string) => { setQuery(''); router.push(href); };
   const [signingOut, startSignOut] = useTransition();
 
   const meta = PAGE_META[pathname] ?? { title: brand.name, subtitle: '' };
@@ -77,6 +89,7 @@ export function AppShell({
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-app text-text">
+      <a href="#main-content" className="skip-link">Skip to content</a>
       {mobileNav && (
         <div
           onClick={() => setMobileNav(false)}
@@ -215,11 +228,41 @@ export function AppShell({
           <label htmlFor="global-search" className="sr-only">
             Search
           </label>
-          <input
-            id="global-search"
-            placeholder="Search…"
-            className="hidden lg:block w-56 h-[38px] px-3 rounded-[10px] border border-border bg-surface-2 text-[13px] outline-none focus:border-primary transition-colors"
-          />
+          <div className="hidden lg:block relative">
+            <input
+              id="global-search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && matches[0]) goTo(matches[0].href);
+                if (e.key === 'Escape') setQuery('');
+              }}
+              placeholder="Search pages…"
+              autoComplete="off"
+              role="combobox"
+              aria-expanded={matches.length > 0}
+              aria-controls="global-search-results"
+              className="w-56 h-[38px] px-3 rounded-[10px] border border-border bg-surface-2 text-[13px] outline-none focus:border-primary transition-colors"
+            />
+            {matches.length > 0 && (
+              <ul
+                id="global-search-results"
+                className="absolute right-0 top-[42px] w-72 bg-surface border border-border rounded-[10px] shadow-float overflow-hidden z-50 py-1"
+              >
+                {matches.map((m) => (
+                  <li key={m.id}>
+                    <button
+                      onClick={() => goTo(m.href)}
+                      className="w-full text-left px-3 py-2 hover:bg-surface-2 transition-colors"
+                    >
+                      <span className="text-[13px] font-medium block truncate">{m.label}</span>
+                      <span className="text-[11px] text-text-3">{m.group}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
 
           <SyncIndicator />
 
@@ -233,7 +276,7 @@ export function AppShell({
           <ProfileMenu name={identity.name} roleSummary={identity.roleSummary} tenantLabel={identity.tenantLabel} />
         </header>
 
-        <main className="flex-1 overflow-y-auto overflow-x-hidden px-4 sm:px-6 pt-[22px] pb-10">{children}</main>
+        <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto overflow-x-hidden px-4 sm:px-6 pt-[22px] pb-10">{children}</main>
       </div>
     </div>
   );

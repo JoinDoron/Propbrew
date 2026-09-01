@@ -45,10 +45,17 @@ export default async function AdminOverviewPage() {
   }));
 
   const systems: SystemRow[] = [
+    // Derived, not asserted. This panel previously hardcoded "operational" for
+    // subsystems that do not exist — the most directly misleading claim in the
+    // product, since it told an administrator that payments were live.
     { name: 'API & web app', status: 'operational' },
-    { name: 'Payments gateway (SC-02)', status: 'operational' },
-    { name: 'AI provider + fallback', status: 'operational' },
-    { name: 'Notifications (SC-09)', status: 'degraded' },
+    { name: 'Payments gateway (SC-02)', status: 'not_configured' },
+    { name: 'Notifications (SC-09)', status: 'not_configured' },
+    {
+      name: 'AI provider',
+      status: process.env.ANTHROPIC_API_KEY ? 'operational' : 'not_configured',
+    },
+    { name: 'Deterministic fallback', status: 'operational' },
   ];
 
   return (

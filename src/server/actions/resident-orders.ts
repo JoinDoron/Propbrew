@@ -14,6 +14,7 @@ import { repos } from '@/server/data';
 import { db, recordHistory } from '@/server/data/store';
 import { NOW } from '@/domain/ppm';
 import type { MarketplaceOrder } from '@/domain/entities';
+import { nowISO } from '@/server/clock';
 
 export type OrderResult = { ok: true; ref: string } | { ok: false; error: string };
 
@@ -51,7 +52,7 @@ export async function placeOrder(listingId: string): Promise<OrderResult> {
 
   db.marketplaceOrders.unshift(order);
   recordHistory('marketplace-order', order.id, {
-    at: NOW, event: 'PLACE', from: null, to: 'placed',
+    at: nowISO(), event: 'PLACE', from: null, to: 'placed',
     actorId: actor.userId, actorName: me?.name ?? 'Resident', actorRole: 'resident',
     note: listing.title,
   });

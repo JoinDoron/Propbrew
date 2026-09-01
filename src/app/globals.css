@@ -134,6 +134,40 @@
     -webkit-font-smoothing: antialiased;
   }
 
+  /* ------------------------------------------------------------------
+     Keyboard focus (WCAG 2.1 AA, 2.4.7).
+
+     The app uses `outline-none` in 69 places to suppress the default ring on
+     inputs and buttons, and defined NO replacement — so a keyboard or screen-
+     reader user had no visible focus indicator anywhere in the product. This
+     restores one globally, using :focus-visible so it appears for keyboard
+     navigation without putting a ring on every mouse click.
+     ------------------------------------------------------------------ */
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* Skip straight past the sidebar to the page content. */
+  .skip-link {
+    position: absolute;
+    left: -9999px;
+    top: 0;
+    z-index: 100;
+    padding: 10px 16px;
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border-2);
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .skip-link:focus {
+    left: 12px;
+    top: 12px;
+  }
+
   /* Slim, token-aware scrollbars — lifted from the template. */
   ::-webkit-scrollbar {
     width: 10px;

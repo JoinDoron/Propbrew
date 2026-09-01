@@ -17,6 +17,7 @@ import { repos } from '@/server/data';
 import { db, recordHistory, settleUnitFromWallet } from '@/server/data/store';
 import { addMoney, money } from '@/domain/primitives';
 import { ACTIVE_UNIT_COOKIE } from '@/server/active-unit';
+import { nowISO } from '@/server/clock';
 
 export async function setActiveUnit(unitId: string): Promise<void> {
   const actor = await getActor();
@@ -77,11 +78,15 @@ export async function payChargeFromWallet(ref: string): Promise<TopUpResult> {
   const wallet = db.wallets.find((w) => w.unitId === live.unitId && w.ownerUserId === actor.userId);
   if (!wallet) return { ok: false, error: 'No wallet is linked to this unit.' };
 
-  // Top the wallet up to cover the charge (usually the whole amount — a unit
-  // with a pending charge has a drained wallet by the auto-deduct invariant),
-  // then clear this specific invoice from it.
-  const shortfall = Math.max(0, owed - wallet.available.minor);
-  wallet.available = addMoney(wallet.available, money(shortfall, wallet.available.currency));
+  // A payment must be able to FAIL. This previously topped the wallet up by the
+  // shortfall before deducting it, so any resident could clear any balance for
+  // free and no code path downstream had ever seen a declined payment.
+  if (wallet.available.minor < owed) {
+    return {
+      ok: false,
+      error: `Wallet balance is short by ${'\u20a6'}${((owed - wallet.available.minor) / 100).toLocaleString('en-NG')}. Top up and try again.`,
+    };
+  }
 
   const from = live.status;
   live.paid = money(live.paid.minor + owed, live.amount.currency);
@@ -90,7 +95,7 @@ export async function payChargeFromWallet(ref: string): Promise<TopUpResult> {
   wallet.available = money(wallet.available.minor - owed, wallet.available.currency);
 
   recordHistory('service-charge', live.id, {
-    at: new Date().toISOString(),
+    at: nowISO(),
     event: 'PAYMENT_CONFIRMED',
     from,
     to: 'paid',

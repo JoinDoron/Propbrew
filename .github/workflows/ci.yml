@@ -1,0 +1,41 @@
+name: CI
+
+# The PRD names two release-blocking gates — no cross-tenant read, and no
+# cross-tenant AI retrieval — and until now they were enforced only when a
+# human remembered to run `npm test`. CI must exist BEFORE the persistence
+# rewrite, so the isolation suite guards that change rather than validating it
+# after the fact.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npx eslint src tests --max-warnings 0
+
+      - name: Tests
+        run: npx vitest run
+
+      # Release-blocking: tenant isolation must never regress.
+      - name: Tenant isolation (release gate)
+        run: npx vitest run tests/data/isolation.test.ts tests/authz
+
+      - name: Build
+        run: npx next build
