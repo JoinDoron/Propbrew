@@ -21,3 +21,15 @@ Before promoting the staged production build, verify the homepage, images/fonts,
 ## Future platform activation
 
 Do not explicitly disable website-only mode until managed authentication, tenant isolation, durable storage and financial/security controls have been separately verified and approved. Platform activation is outside the website release.
+
+## Release record · 12 October 2026
+
+- Repository: https://github.com/JoinDoron/Propbrew (`main`).
+- Live website: https://propbrew-web-production.up.railway.app.
+- Railway project: `Propbrew` in `joindoron's Projects`; service `propbrew-web`, production environment. It is separate from Databrew.
+- GitHub main is connected for automatic website deployments. No database or operational provider secrets were added to the website service.
+- Next.js and its ESLint configuration were upgraded to 16.4.0. Compatible transitive runtime fixes were applied without forced major upgrades. The committed production dependency audit reported zero advisories on the release date; this is not a guarantee about future advisories or complete container security.
+- An isolated export of the committed source passed TypeScript, unit tests and the production build. Live HTTP checks verified the homepage, original/optimized images, styles, scripts, self-hosted fonts, metadata origin, robots/sitemap, read-only request policy and operational-route redirects.
+- Browser interaction was paused at the user's request because another task was using Comet; no new live-browser visual or keyboard audit is claimed.
+- Build logs still reported advisories in development/build dependencies. Review these separately before extending the site into an operational platform; do not apply unreviewed forced dependency upgrades.
+- An earlier `unrealabs/propbrew` Vercel project was created during setup but not deployed. Its reserved Vercel address is not the published website and no operational credentials were configured there.
