@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title description">
+  <title id="title">Propbrew — Great places. Better run.</title>
+  <desc id="description">Propbrew's architectural P in citron on cobalt, with a confident headline on warm ivory.</desc>
+  <defs>
+    <pattern id="plots" width="84" height="84" patternUnits="userSpaceOnUse">
+      <path d="M0 0h42v42H0zM42 42h42v42H42z" fill="none" stroke="#F7F8F2" stroke-width="1"/>
+    </pattern>
+    <clipPath id="panel"><path d="M820 62h220a98 98 0 0 1 98 98v350a28 28 0 0 1-28 28H820a28 28 0 0 1-28-28V90a28 28 0 0 1 28-28Z"/></clipPath>
+  </defs>
+  <rect width="1200" height="630" fill="#F7F8F2"/>
+  <g transform="translate(64 48) scale(.9)">
+    <path fill="#2346F0" fill-rule="evenodd" d="M8 6h32l16 16v16L40 54H24v8H8V6Zm16 16v16h10l6-6v-4l-6-6H24Z"/>
+    <path fill="#2346F0" d="M46 6h10v10L46 6Z"/>
+    <text x="76" y="45" font-family="Arial, Helvetica, sans-serif" font-size="42" font-weight="700" letter-spacing="-2" fill="#14251C">propbrew</text>
+  </g>
+  <text x="72" y="189" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" letter-spacing="2.1" fill="#2346F0">THE PROPERTY OPERATING SYSTEM</text>
+  <g font-family="Arial, Helvetica, sans-serif" font-size="88" font-weight="600" letter-spacing="-5.5">
+    <text x="66" y="302" fill="#14251C">Great places.</text>
+    <text x="66" y="407" fill="#2346F0">Better run.</text>
+  </g>
+  <g font-family="Arial, Helvetica, sans-serif" font-size="25" fill="#5E6C62">
+    <text x="72" y="473">Your buildings, teams and communities.</text>
+    <text x="72" y="511">One connected workspace.</text>
+  </g>
+  <g clip-path="url(#panel)">
+    <rect x="792" y="62" width="346" height="476" fill="#2346F0"/>
+    <rect x="772" y="42" width="400" height="520" fill="url(#plots)" opacity=".15" transform="rotate(-8 965 300)"/>
+    <g transform="translate(816 145) scale(4.6)" fill="#D8F36A">
+      <path fill-rule="evenodd" d="M8 6h32l16 16v16L40 54H24v8H8V6Zm16 16v16h10l6-6v-4l-6-6H24Z"/>
+      <path d="M46 6h10v10L46 6Z"/>
+    </g>
+    <text x="965" y="505" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" letter-spacing="1.3" fill="#F7F8F2">MORE CONNECTED. MORE POSSIBLE.</text>
+  </g>
+  <path d="M72 572h28" stroke="#2346F0" stroke-width="3"/>
+  <text x="112" y="577" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#5E6C62">Built for Nigeria. Ready to think bigger.</text>
+  <rect y="615" width="1200" height="15" fill="#D8F36A"/>
+</svg>

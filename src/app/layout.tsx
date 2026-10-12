@@ -21,7 +21,7 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: `${brand.name} — ${brand.tagline}`,
-  description: 'Facility & Estate Management Platform.',
+  description: 'Propbrew connects property operations, construction and communities in one intelligent workspace. Built for Nigeria and a brighter property future.',
 };
 
 export default function RootLayout({

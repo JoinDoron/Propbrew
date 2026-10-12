@@ -1,100 +1,127 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Building2, Menu, X, ArrowRight } from 'lucide-react';
+import { ArrowUpRight, Menu, X } from 'lucide-react';
+import { PropbrewLogo } from '@/components/brand/propbrew-logo';
 import { brand } from '@/config/brand';
-
-/** Public marketing header. Deliberately carries NO session call — the whole
- *  (marketing) group must stay statically renderable, so "Sign in" is a plain
- *  link to /login, which already forwards an existing session to its home. */
 
 const LINKS = [
   { href: '#platform', label: 'Platform' },
-  { href: '#modules', label: 'Modules' },
   { href: '#intelligence', label: 'Intelligence' },
-  { href: '#why', label: 'Why Reeve' },
+  { href: '#why', label: 'Why Propbrew' },
+  { href: '#faq', label: 'FAQ' },
 ];
 
-export function SiteHeader() {
+/** Public navigation stays independent of authentication and tenant state. */
+export function SiteHeader({ websiteOnly = false }: { websiteOnly?: boolean }) {
   const [open, setOpen] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 8);
-    onScroll();
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
+    if (!open) return;
 
-  // Lock the page behind the mobile sheet.
-  useEffect(() => {
-    document.body.style.overflow = open ? 'hidden' : '';
-    return () => { document.body.style.overflow = ''; };
+    const previousOverflow = document.body.style.overflow;
+    const previousFocus = document.activeElement;
+    const trigger = triggerRef.current;
+    document.body.style.overflow = 'hidden';
+    closeRef.current?.focus();
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setOpen(false);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+
+      const items = menuRef.current?.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), [tabindex="0"]',
+      );
+      if (!items?.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    const desktop = window.matchMedia('(min-width: 1024px)');
+    const onResize = () => { if (desktop.matches) setOpen(false); };
+    document.addEventListener('keydown', onKeyDown);
+    desktop.addEventListener('change', onResize);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener('keydown', onKeyDown);
+      desktop.removeEventListener('change', onResize);
+      if (previousFocus instanceof HTMLElement) previousFocus.focus();
+      else trigger?.focus();
+    };
   }, [open]);
 
   return (
-    <header
-      className="sticky top-0 z-50 transition-colors"
-      style={{
-        background: scrolled ? 'color-mix(in srgb, var(--app) 82%, transparent)' : 'transparent',
-        backdropFilter: scrolled ? 'saturate(180%) blur(12px)' : undefined,
-        borderBottom: `1px solid ${scrolled ? 'var(--border)' : 'transparent'}`,
-      }}
-    >
-      <div className="max-w-[1180px] mx-auto px-5 h-[72px] flex items-center gap-8">
-        <Link href="/" className="flex items-center gap-2.5 flex-none" aria-label={`${brand.name} home`}>
-          <span className="w-9 h-9 rounded-xl grid place-items-center text-on-primary flex-none" style={{ background: 'var(--primary)' }}>
-            <Building2 size={18} />
-          </span>
-          <span className="flex flex-col leading-none">
-            <span className="text-[17px] font-semibold tracking-[-0.02em]">{brand.name}</span>
-            <span className="text-[8.5px] text-text-3 font-medium tracking-[0.11em] mt-[3px]">{brand.tagline}</span>
-          </span>
+    <header className="pb-header">
+      <div className="pb-header-inner">
+        <Link href="/" className="pb-home-link" aria-label={`${brand.name} home`}>
+          <PropbrewLogo />
         </Link>
 
-        <nav className="hidden lg:flex items-center gap-7 flex-1">
-          {LINKS.map((l) => (
-            <a key={l.href} href={l.href} className="text-[14px] text-text-2 hover:text-text transition-colors">{l.label}</a>
-          ))}
+        <nav className="pb-nav" aria-label="Primary navigation">
+          {LINKS.map((link) => <a key={link.href} href={link.href}>{link.label}</a>)}
         </nav>
 
-        <div className="hidden lg:flex items-center gap-3 flex-none">
-          <Link href="/login" className="text-[14px] text-text-2 hover:text-text transition-colors">Sign in</Link>
-          <Link
-            href="/dashboard"
-            className="h-10 px-5 rounded-full inline-flex items-center gap-1.5 text-[14px] font-medium text-on-primary transition-transform hover:-translate-y-px"
-            style={{ background: 'var(--primary)' }}
-          >
-            Open the demo <ArrowRight size={14} />
+        <div className="pb-header-actions">
+          {!websiteOnly && <Link href="/login" className="pb-sign-in">Sign in</Link>}
+          <Link href={websiteOnly ? '/#platform' : '/dashboard'} className="pb-button pb-button-primary">
+            {websiteOnly ? 'Explore the preview' : 'Explore the demo'} <ArrowUpRight size={16} aria-hidden="true" />
           </Link>
         </div>
 
         <button
-          onClick={() => setOpen((v) => !v)}
-          className="lg:hidden ml-auto w-10 h-10 rounded-xl grid place-items-center border border-border-2 flex-none"
-          aria-label={open ? 'Close menu' : 'Open menu'}
+          ref={triggerRef}
+          type="button"
+          className="pb-menu-button"
+          onClick={() => setOpen(true)}
+          aria-label="Open navigation menu"
+          aria-haspopup="dialog"
           aria-expanded={open}
+          aria-controls="propbrew-mobile-menu"
         >
-          {open ? <X size={18} /> : <Menu size={18} />}
+          <Menu size={23} aria-hidden="true" />
         </button>
       </div>
 
       {open && (
-        <div className="lg:hidden border-t border-border bg-app animate-fade">
-          <div className="px-5 py-4 flex flex-col gap-1">
-            {LINKS.map((l) => (
-              <a key={l.href} href={l.href} onClick={() => setOpen(false)} className="text-[15px] py-2.5 text-text-2">{l.label}</a>
-            ))}
-            <div className="h-px bg-border my-2" />
-            <Link href="/login" onClick={() => setOpen(false)} className="text-[15px] py-2.5 text-text-2">Sign in</Link>
-            <Link
-              href="/dashboard"
-              onClick={() => setOpen(false)}
-              className="mt-1 h-11 rounded-full inline-flex items-center justify-center gap-1.5 text-[14px] font-medium text-on-primary"
-              style={{ background: 'var(--primary)' }}
-            >
-              Open the demo <ArrowRight size={14} />
+        <div
+          ref={menuRef}
+          id="propbrew-mobile-menu"
+          className="pb-mobile-menu"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Navigation menu"
+        >
+          <div className="pb-mobile-menu-top">
+            <Link href="/" onClick={() => setOpen(false)} aria-label={`${brand.name} home`}>
+              <PropbrewLogo />
+            </Link>
+            <button ref={closeRef} type="button" className="pb-menu-button" onClick={() => setOpen(false)} aria-label="Close navigation menu">
+              <X size={23} aria-hidden="true" />
+            </button>
+          </div>
+          <nav className="pb-mobile-nav" aria-label="Mobile navigation">
+            {LINKS.map((link) => <a key={link.href} href={link.href} onClick={() => setOpen(false)}>{link.label}</a>)}
+          </nav>
+          <div className="pb-mobile-actions">
+            {!websiteOnly && <Link href="/login" className="pb-sign-in" onClick={() => setOpen(false)}>Sign in</Link>}
+            <Link href={websiteOnly ? '/#platform' : '/dashboard'} className="pb-button pb-button-primary" onClick={() => setOpen(false)}>
+              {websiteOnly ? 'Explore the preview' : 'Explore the demo'} <ArrowUpRight size={18} aria-hidden="true" />
             </Link>
           </div>
         </div>

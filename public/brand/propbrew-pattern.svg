@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 720" fill="none" role="img" aria-labelledby="title">
+  <title id="title">Propbrew connected plots pattern</title>
+  <defs>
+    <pattern id="plots" width="180" height="180" patternUnits="userSpaceOnUse">
+      <path d="M0 0h180v180H0V0Zm0 90h90V0m0 90h90M90 90v90" stroke="#2346F0" stroke-width="1" opacity=".17"/>
+      <path d="M20 20h48v48H20V20Zm90 90h48v48h-48v-48Z" stroke="#2346F0" stroke-width="1" opacity=".17"/>
+      <path d="M108 18h42l12 12v30l-12 12h-18V48h-24V18Z" fill="#2346F0" opacity=".08"/>
+      <path d="M22 110h28l18 18v28H22v-46Z" fill="#D8F36A" opacity=".65"/>
+      <circle cx="90" cy="90" r="3" fill="#2346F0" opacity=".36"/>
+    </pattern>
+  </defs>
+  <path fill="url(#plots)" d="M0 0h720v720H0z"/>
+</svg>
