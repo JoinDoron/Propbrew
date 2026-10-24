@@ -8,6 +8,7 @@ const nonOperational = new Set([
   'auth.ts:signOut', 'auth.ts:signInAs', 'dev-identity.ts:switchIdentity',
   'owner-onboarding.ts:saveOwnerSetupAction', 'owner-onboarding.ts:completeOwnerSetupAction',
   'company-auth.ts:registerAccount', 'company-auth.ts:loginAccount', 'company-auth.ts:verifySecondFactor',
+  'demo-auth.ts:enterDemoAccount',
   'companies.ts:createCompany', 'companies.ts:selectCompany', 'companies.ts:createCompanyInvite',
   'companies.ts:updateCompanyMember', 'companies.ts:removeCompanyMember', 'companies.ts:acceptCompanyInvite',
 ]);

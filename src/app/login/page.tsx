@@ -12,6 +12,7 @@ import { nativeAuthEnabled } from '@/server/auth/mode';
 import { getNativeIdentity } from '@/server/auth/company';
 import { AccountForm } from '@/components/auth/account-form';
 import { loginAccount } from '@/server/actions/company-auth';
+import { demoAccountsEnabled } from '@/server/auth/demo-config';
 
 /** The signed-out landing (SC-01 sign-in). Public — not gated. In dev it offers
  *  the identity presets as accounts; production swaps in the real credential UI. */
@@ -19,7 +20,7 @@ export default async function LoginPage({searchParams}:{searchParams:Promise<{in
   if (nativeAuthEnabled()) {
     const raw=(await searchParams)?.invite;const invite=typeof raw==='string'&&/^[A-Za-z0-9_-]{43}$/.test(raw)?raw:undefined;
     if (await getNativeIdentity()) redirect(invite?`/invite/${invite}`:'/companies');
-    return <AccountForm mode="login" action={loginAccount} invitationToken={invite} />;
+    return <AccountForm mode="login" action={loginAccount} invitationToken={invite} demoEnabled={demoAccountsEnabled()} />;
   }
   if (reviewModeEnabled()) redirect('/review/login');
   const session = await getSession();

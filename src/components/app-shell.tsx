@@ -50,6 +50,7 @@ export type ShellIdentity = {
   outboxOwner?: string;
   companyAccount?: boolean;
   canManageTeam?: boolean;
+  demoAccount?: boolean;
 };
 
 export function AppShell({
@@ -239,9 +240,9 @@ export function AppShell({
             {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
           </IconButton>
           <div className={styles.messages}>
-            <MessagesMenu threads={threads} unread={unreadMessages} />
+            <MessagesMenu threads={threads} unread={unreadMessages} readOnly={identity.demoAccount} />
           </div>
-          <NotificationsMenu notifications={notifications} unread={unreadNotifications} />
+          <NotificationsMenu notifications={notifications} unread={unreadNotifications} readOnly={identity.demoAccount} />
           <span className={styles.headerDivider} aria-hidden="true" />
           <ProfileMenu name={identity.name} roleSummary={identity.roleSummary} tenantLabel={identity.tenantLabel}
             companyAccount={identity.companyAccount} canManageTeam={identity.canManageTeam}

@@ -55,3 +55,31 @@ Before changing the live auth mode, back up the current database and verify an i
 Rollback must use a compatible database-backed application version and preserve the new auth tables. Do not switch real company records to a development memory adapter. A rollback to review mode must not expose or reassign native company records.
 
 Before adding account email in a later release, require verified mailbox ownership before company creation or recipient-bound invitation acceptance. Verification must not create a full session that bypasses an enrolled authenticator; require the normal password/MFA sign-in afterward or explicitly enforce the second factor. Include existing unverified sessions in that migration plan. Keep delivery receipts free of addresses, credentials, message bodies and tokens, and distinguish provider acceptance from inbox delivery.
+# Temporary public demo access
+
+The native sign-up and login screens can show four one-click demo accounts:
+Estate, Facility, Shortlet and Construction. Each uses a real Better Auth
+session, restricted to the reserved demo company, with view access to all four
+modules. They never inherit a customer's company or the private review records.
+The sample data comes only from repository fixtures. A persistent notice labels
+the workspace as sample data and offers an **Exit demo** action.
+
+Demo sessions last at most one hour. Company creation, invitation acceptance,
+record mutations (including read markers), password/MFA changes and access to
+other demo visitors' sessions are blocked on the server. Real account login and
+company permissions are unchanged. Demo AI calls use the existing provider and
+global budget controls, plus a shared cap of ₦500 per feature per UTC day.
+
+Enable only after provisioning: set server-only `PROPBREW_DEMO_ACCOUNTS=1` and
+`PROPBREW_DEMO_PASSWORD` to a generated random secret of 32–128 characters. Keep
+the legacy development identity bypasses disabled. The password never appears
+in the browser. Setting `PROPBREW_DEMO_ACCOUNTS=0` closes demo entry and access
+through existing demo sessions; real company accounts remain available.
+
+Generate the sample workspace with
+`node scripts/provision-demo-accounts.mjs --write-state <private-state.json>`.
+Then run the same script with `--confirm-demo-seed --state-file <private-state.json>`
+and either `--database-env <ADMIN_URL_ENV_NAME>` or `--write-sql <private-seed.sql>`
+for execution inside the database service. The guarded transaction checks the
+reserved identities, creates four accounts and view-only memberships, and
+preserves an existing demo workspace. Never commit generated secrets or SQL.

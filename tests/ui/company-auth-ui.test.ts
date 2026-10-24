@@ -5,6 +5,7 @@ import { AccountForm } from '@/components/auth/account-form';
 import { CompanyChooser } from '@/components/auth/company-chooser';
 import { CompanyTeam, type CompanyMember } from '@/components/auth/company-team';
 import { TwoFactorForm } from '@/components/auth/two-factor-form';
+import { DemoAccess } from '@/components/auth/demo-access';
 
 const hooks = vi.hoisted(() => ({ active: false, cursor: 0, slots: [] as unknown[], pending: false }));
 vi.mock('react', async (original) => {
@@ -30,6 +31,7 @@ vi.mock('react', async (original) => {
   };
 });
 vi.mock('@/server/actions/auth', () => ({ signOut: vi.fn() }));
+vi.mock('@/server/actions/demo-auth', () => ({ enterDemoAccount: vi.fn(async () => ({})) }));
 const action = vi.fn(async () => ({}));
 const companyAction = vi.fn<(form: FormData) => Promise<Record<string, never>>>(async () => ({}));
 const selectCompany = vi.fn<(id: string) => Promise<Record<string, never>>>(async () => ({}));
@@ -64,6 +66,33 @@ describe('company account and access presentation', () => {
     expect([...html.matchAll(/<input[^>]*name="([^"]+)"/g)].map((match) => match[1]).sort()).toEqual(['email', 'password']);
     expect(html).toContain('autoComplete="current-password"'); expect(html).not.toContain('minLength="12"');
     expect(html).toContain('href="/sign-up"'); expect(html).not.toContain('Forgot password');
+  });
+
+  it('offers four clearly labelled demo workspaces without exposing or prefilling credentials', () => {
+    for (const mode of ['signup', 'login'] as const) {
+      const html = renderToStaticMarkup(createElement(AccountForm, { mode, action, demoEnabled: true }));
+      expect(html).toContain('Explore a demo'); expect(html).toContain('View only');
+      expect(html).toContain('sample data'); expect(html).toContain('No sign-up required');
+      for (const workspace of ['Estate', 'Facility', 'Shortlet', 'Construction']) expect(html).toContain(`aria-label="Explore ${workspace} demo"`);
+      expect([...html.matchAll(/<button[^>]+>/g)].map(([tag]) => tag).filter((tag) => tag.includes('name="module"')).map((tag) => /value="([^"]+)"/.exec(tag)?.[1])).toEqual(['estate', 'facility', 'shortlet', 'construction']);
+      expect(html).not.toContain('@example.invalid'); expect(html).not.toContain('value="demo');
+    }
+    expect(renderToStaticMarkup(createElement(AccountForm, { mode: 'login', action }))).not.toContain('Explore a demo');
+    expect(renderToStaticMarkup(createElement(AccountForm, { mode: 'signup', action, demoEnabled: true, invitationToken: 'a'.repeat(43) }))).not.toContain('Explore a demo');
+  });
+
+  it('disables demo choices while authentication is pending and announces errors', () => {
+    const blocked = tree(() => DemoAccess({ disabled: true }));
+    expect(elements(blocked).find((element) => element.type === 'fieldset')?.props.disabled).toBe(true);
+    hooks.slots = []; hooks.pending = true;
+    const pending = tree(() => DemoAccess({}));
+    expect(elements(pending).find((element) => element.type === 'fieldset')?.props.disabled).toBe(true);
+    hooks.slots = []; hooks.pending = false;
+    tree(() => DemoAccess({}));
+    hooks.slots[1] = { error: 'Demo access is temporarily unavailable.' };
+    const failed = tree(() => DemoAccess({}));
+    const html = renderToStaticMarkup(createElement('div', null, failed));
+    expect(html).toContain('role="alert"'); expect(html).toContain('Demo access is temporarily unavailable.');
   });
 
   it('toggles password visibility through a labelled button and disables form controls during submission', () => {

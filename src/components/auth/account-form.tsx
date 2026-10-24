@@ -4,12 +4,13 @@ import Link from 'next/link';
 import { useActionState, useEffect, useId, useRef, useState } from 'react';
 import { ArrowRight, Eye, EyeOff, LoaderCircle } from 'lucide-react';
 import { AuthFrame } from './auth-frame';
+import { DemoAccess } from './demo-access';
 import styles from './auth.module.css';
 
 export type AccountFormState = { error?: string; fieldErrors?: Record<string, string[] | undefined> };
 export type AccountFormAction = (state: AccountFormState, data: FormData) => Promise<AccountFormState>;
 
-export function AccountForm({ mode, action, minPasswordLength = 12, invitationToken }: { mode: 'signup' | 'login'; action: AccountFormAction; minPasswordLength?: number; invitationToken?: string }) {
+export function AccountForm({ mode, action, minPasswordLength = 12, invitationToken, demoEnabled = false }: { mode: 'signup' | 'login'; action: AccountFormAction; minPasswordLength?: number; invitationToken?: string; demoEnabled?: boolean }) {
   const signup = mode === 'signup';
   const invited = typeof invitationToken === 'string' && /^[A-Za-z0-9_-]{43}$/.test(invitationToken);
   const suffix = invited ? `?invite=${encodeURIComponent(invitationToken)}` : '';
@@ -26,6 +27,7 @@ export function AccountForm({ mode, action, minPasswordLength = 12, invitationTo
     return <div className={styles.field}><label htmlFor={`${prefix}-${name}`}>{label}</label><input id={`${prefix}-${name}`} name={name} type={name === 'email' ? 'email' : 'text'} autoComplete={autoComplete} required maxLength={name === 'email' ? 254 : 120} value={values[name]} onChange={(event) => setValues((current) => ({ ...current, [name]: event.target.value }))} placeholder={placeholder} aria-invalid={Boolean(problem)} aria-describedby={problem ? `${prefix}-${name}-error` : undefined} />{problem && <p id={`${prefix}-${name}-error`} className={styles.fieldError}>{problem}</p>}</div>;
   };
   return <AuthFrame title={title} description={invited ? signup ? 'Create your account with the email address your company invited. Your workspace access follows the invitation.' : 'Sign in with the invited email address to continue to your company invitation.' : signup ? 'Create your account and a company for your team. Start with a clean portfolio, then add the workspaces you need.' : 'Sign in to your account to continue with your company and its workspaces.'} footer={signup ? <>Already have an account? <Link href={`/login${suffix}`}>Sign in</Link></> : <>New to Propbrew? <Link href={`/sign-up${suffix}`}>{invited ? 'Create your account' : 'Create your company'}</Link></>}>
+    {demoEnabled && !invited && <DemoAccess disabled={pending} />}
     <form action={formAction} className={styles.form} aria-busy={pending}>
       {invited && <input type="hidden" name="invitationToken" value={invitationToken} />}
       {(state.error || Object.keys(state.fieldErrors ?? {}).length > 0) && <div ref={feedback} role="alert" tabIndex={-1} className={styles.error}>{state.error || 'Please review the highlighted fields.'}</div>}

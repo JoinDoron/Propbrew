@@ -10,6 +10,7 @@ import { getCompanyPrincipal, recheckCompanyMembership, type CompanyPrincipal } 
 import { canUseCompanyModule } from '@/lib/auth/company-policy';
 import type { WorkspaceId } from '@/config/workspaces';
 import type { Action } from '@/lib/authz';
+import { assertNotDemoAccount } from '@/server/auth/demo-config';
 
 /** Authenticate the signed identity BEFORE loading records or reconstructing creator grants. */
 async function verifiedStorageIdentity() {
@@ -33,6 +34,7 @@ function initialize(identity: { domainTenantId: string; principal?: CompanyPrinc
 }
 function checkModule(principal: CompanyPrincipal | undefined, workspace: WorkspaceId | readonly WorkspaceId[] | undefined, action: Action) {
   if (!principal) return;
+  assertNotDemoAccount(principal.user.id);
   const modules = typeof workspace === 'string' ? [workspace] : workspace;
   if (!modules?.length || !modules.some((module) => canUseCompanyModule(principal.actor, module, action))) throw new Error('Your account cannot perform this action in this workspace.');
 }

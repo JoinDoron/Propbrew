@@ -2,10 +2,11 @@ import 'server-only';
 import { betterAuth } from 'better-auth';
 import { nextCookies } from 'better-auth/next-js';
 import { twoFactor } from 'better-auth/plugins/two-factor';
-import { createAuthMiddleware,APIError } from 'better-auth/api';
+import { createAuthMiddleware,APIError,getSessionFromCtx } from 'better-auth/api';
 import { consumeAuthAttempt } from './rate-limit';
 import { authDatabasePool, withAuthTransaction } from './database';
 import { nativeAuthEnabled } from './mode';
+import { DEMO_ACCOUNTS, demoAccountsEnabled, isDemoAccount } from './demo-config';
 
 export function assertNativeAuthReadiness(): void {
   if (!nativeAuthEnabled()) throw new Error('Company accounts are not enabled.');
@@ -40,19 +41,35 @@ function configuredAuth() {
     advanced: { database: { generateId: 'uuid' }, cookiePrefix: 'propbrew',
       defaultCookieAttributes: { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax' } },
     hooks: { before: createAuthMiddleware(async (context) => {
+      const submittedEmail = typeof context.body?.email === 'string' ? context.body.email.toLowerCase() : '';
+      const demoEmail = DEMO_ACCOUNTS.some((account) => account.email === submittedEmail);
+      if (context.path === '/sign-up/email' && demoEmail) throw new APIError('FORBIDDEN', { message: 'This address is reserved for demonstration access.' });
+      // Shared sample identities cannot alter credentials, inspect other demo
+      // visitors' sessions, enroll MFA or revoke another visitor's access.
+      const demoSafePath = context.path === '/get-session' || context.path === '/sign-out' || context.path === '/ok'
+        || context.path === '/sign-in/email';
+      if (!demoSafePath) {
+        const session = await getSessionFromCtx(context);
+        if (session && isDemoAccount(session.user.id)) throw new APIError('FORBIDDEN', { message: 'Demo accounts are view-only. Sign out to use your own account.' });
+      }
+      if (context.path === '/sign-in/email' && demoEmail && !demoAccountsEnabled()) throw new APIError('FORBIDDEN', { message: 'Demo access is unavailable.' });
       try {
         const email=typeof context.body?.email==='string'?context.body.email.toLowerCase().slice(0,254):'invalid';
         if(context.path==='/sign-up/email') {
           await consumeAuthAttempt('signup-global','all',100,24*3600);
           await consumeAuthAttempt('signup-email',email,5,3600);
         }
-        if(context.path==='/sign-in/email') await consumeAuthAttempt('login-email',email,12,900);
+        if(context.path==='/sign-in/email') await consumeAuthAttempt(demoEmail?'demo-login-email':'login-email',email,demoEmail?60:12,900);
       } catch { throw new APIError('TOO_MANY_REQUESTS',{message:'Too many attempts. Please try again later.'}); }
     }) },
     databaseHooks: {
       user: { create: { after: async (user) => { await withAuthTransaction(user.id, (client) => client.query('insert into auth_security_events(user_id,event) values($1::uuid,$2)', [user.id, 'account.created'])); } } },
       session: {
-        create: { after: async (session) => { await withAuthTransaction(session.userId, (client) => client.query('insert into auth_security_events(user_id,event) values($1::uuid,$2)', [session.userId, 'session.created'])); } },
+        create: { before: async (session) => {
+          if (!isDemoAccount(session.userId)) return;
+          if (!demoAccountsEnabled()) throw new APIError('FORBIDDEN', { message: 'Demo access is unavailable.' });
+          return { data: { ...session, expiresAt: new Date(Date.now() + 3600_000) } };
+        }, after: async (session) => { await withAuthTransaction(session.userId, (client) => client.query('insert into auth_security_events(user_id,event) values($1::uuid,$2)', [session.userId, 'session.created'])); } },
         delete: { after: async (session) => { await withAuthTransaction(session.userId, (client) => client.query('insert into auth_security_events(user_id,event) values($1::uuid,$2)', [session.userId, 'session.revoked'])); } },
       },
     },

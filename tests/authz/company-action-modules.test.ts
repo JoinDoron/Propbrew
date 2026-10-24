@@ -33,7 +33,7 @@ function run<T>(modules: CompanyModuleGrants, fn: () => T) {
     companyRole: 'member', modules, estateIds: [], allEstates: true, status: 'active', companyStatus: 'active',
   }, 'company-operator')!;
   boundary.getActor.mockResolvedValue(actor);
-  const companyPrincipal = { actor } as CompanyPrincipal;
+  const companyPrincipal = { actor, user: { id: actor.userId } } as CompanyPrincipal;
   return runWithRecordContext({ state, domainTenantId: 't-lekki', mode: 'write', companyPrincipal }, fn);
 }
 

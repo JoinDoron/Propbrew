@@ -24,7 +24,7 @@ const actor = actorForCompanyMember({
 const currentISO = '2026-10-24T23:30:00.000Z';
 const rows = () => state.collections as unknown as typeof db;
 const run = <T>(fn: () => T) => runWithRecordContext({
-  state, domainTenantId: 't-lekki', mode: 'write', companyPrincipal: { actor } as CompanyPrincipal,
+  state, domainTenantId: 't-lekki', mode: 'write', companyPrincipal: { actor, user: { id: actor.userId } } as CompanyPrincipal,
 }, fn);
 
 beforeEach(() => {

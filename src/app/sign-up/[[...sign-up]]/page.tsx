@@ -11,6 +11,7 @@ import { nativeAuthEnabled } from '@/server/auth/mode';
 import { getNativeIdentity } from '@/server/auth/company';
 import { AccountForm } from '@/components/auth/account-form';
 import { registerAccount } from '@/server/actions/company-auth';
+import { demoAccountsEnabled } from '@/server/auth/demo-config';
 
 export const metadata: Metadata = { title: 'Create your owner account · Propbrew', robots: { index: false, follow: false } };
 export const dynamic = 'force-dynamic';
@@ -19,7 +20,7 @@ export default async function OwnerSignUpPage({searchParams}:{searchParams:Promi
   if (nativeAuthEnabled()) {
     const raw=(await searchParams)?.invite;const invite=typeof raw==='string'&&/^[A-Za-z0-9_-]{43}$/.test(raw)?raw:undefined;
     if (await getNativeIdentity()) redirect(invite?`/invite/${invite}`:'/companies');
-    return <AccountForm mode="signup" action={registerAccount} invitationToken={invite} />;
+    return <AccountForm mode="signup" action={registerAccount} invitationToken={invite} demoEnabled={demoAccountsEnabled()} />;
   }
   const configured = clerkConfigured();
   const identity = configured ? await getOwnerIdentity() : null;

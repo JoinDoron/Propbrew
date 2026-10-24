@@ -9,6 +9,8 @@ import { requireOperatorSession } from '@/server/workspaces';
 import { devIdentityEnabled } from '@/server/session';
 import styles from '@/components/workspaces/workspace-chooser.module.css';
 import { withDurableRead } from '@/server/data/durable-records';
+import { isDemoAccount } from '@/server/auth/demo-config';
+import { DemoNotice } from '@/components/auth/demo-notice';
 
 export const metadata: Metadata = { title: 'Choose your workspace · Propbrew', robots: { index: false, follow: false } };
 export const dynamic = 'force-dynamic';
@@ -26,6 +28,7 @@ export default async function WorkspacesPage({ searchParams }: { searchParams: P
   return (
     <main className={styles.page}>
       <div className={styles.container}>
+        {isDemoAccount(actor.userId) && <DemoNotice />}
         <header className={styles.header}>
           <Link href="/workspaces" className={styles.brand} aria-label="Propbrew workspaces"><PropbrewMark />propbrew</Link>
           <div className={styles.identity}><strong>{name} · {session.roleSummary}</strong><span>{session.tenantLabel}</span></div>

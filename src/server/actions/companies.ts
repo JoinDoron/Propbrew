@@ -6,6 +6,7 @@ import type { CompanyModuleGrants } from '@/lib/auth/company-policy';
 import { nativeAuthEnabled } from '@/server/auth/mode';
 import { getNativeIdentity,getCompanyPrincipal,activateCompany,provisionCompany,withCompanyManagement,companyAudit,newInvitationToken,invitationHash,consumeAuthAttempt } from '@/server/auth/company';
 import { withAuthTransaction } from '@/server/auth/database';
+import { isDemoAccount } from '@/server/auth/demo-config';
 
 type Result = { error?: string; message?: string; inviteUrl?: string };
 const uuid = z.uuid();
@@ -73,7 +74,9 @@ export async function removeCompanyMember(form:FormData):Promise<Result> {
   }catch{return {error:'This membership could not be removed. Owners and your own account are protected.'};}
 }
 export async function acceptCompanyInvite(form:FormData):Promise<Result|void> {
-  const user=await identity();const token=String(form.get('token')??'');if(!/^[A-Za-z0-9_-]{43}$/.test(token))return {error:'This invitation is unavailable.'};
+  const user=await identity();
+  if(isDemoAccount(user.user.id))return {error:'Demo accounts cannot join companies. Sign out and use your own account to accept an invitation.'};
+  const token=String(form.get('token')??'');if(!/^[A-Za-z0-9_-]{43}$/.test(token))return {error:'This invitation is unavailable.'};
   try {
     await consumeAuthAttempt('accept-invite',user.user.id,10,3600);
     const companyId=await withAuthTransaction(user.user.id,async(client)=> (await client.query('select accept_company_invitation($1) id',[invitationHash(token)])).rows[0].id);

@@ -8,7 +8,7 @@ import { Popover } from './popover';
 import { readThread, sendMessage } from '@/server/actions/inbox';
 import type { Thread } from '@/server/data/inbox';
 
-export function MessagesMenu({ threads, unread }: { threads: Thread[]; unread: number }) {
+export function MessagesMenu({ threads, unread, readOnly = false }: { threads: Thread[]; unread: number; readOnly?: boolean }) {
   const router = useRouter();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
@@ -19,12 +19,12 @@ export function MessagesMenu({ threads, unread }: { threads: Thread[]; unread: n
 
   const open = (id: string) => {
     setActiveId(id);
-    start(async () => { await readThread(id); router.refresh(); });
+    if (!readOnly) start(async () => { await readThread(id); router.refresh(); });
   };
 
   const send = () => {
     const text = draft.trim();
-    if (!text || !active) return;
+    if (readOnly || !text || !active) return;
     setDraft('');
     start(async () => { await sendMessage(active.id, text); router.refresh(); });
   };
@@ -88,7 +88,7 @@ export function MessagesMenu({ threads, unread }: { threads: Thread[]; unread: n
                 </div>
               ))}
             </div>
-            <div className="flex items-center gap-2 p-2.5 border-t border-border flex-none">
+            {readOnly ? <p className="border-t border-border p-3 text-xs text-text-3">Demo conversations are view-only.</p> : <div className="flex items-center gap-2 p-2.5 border-t border-border flex-none">
               <input
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
@@ -100,7 +100,7 @@ export function MessagesMenu({ threads, unread }: { threads: Thread[]; unread: n
               <IconButton onClick={send} title="Send" aria-label="Send">
                 <Send size={16} />
               </IconButton>
-            </div>
+            </div>}
           </div>
         )
       }

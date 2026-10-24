@@ -16,11 +16,11 @@ const DOT: Record<string, string> = {
   danger: 'var(--tone-danger)',
 };
 
-export function NotificationsMenu({ notifications, unread }: { notifications: Notification[]; unread: number }) {
+export function NotificationsMenu({ notifications, unread, readOnly = false }: { notifications: Notification[]; unread: number; readOnly?: boolean }) {
   const router = useRouter();
   const [, start] = useTransition();
 
-  const markRead = () => start(async () => { await markNotificationsRead(); router.refresh(); });
+  const markRead = () => { if (!readOnly) start(async () => { await markNotificationsRead(); router.refresh(); }); };
 
   return (
     <Popover
@@ -44,9 +44,9 @@ export function NotificationsMenu({ notifications, unread }: { notifications: No
         <div>
           <div className="flex items-center justify-between px-4 h-12 border-b border-border">
             <span className="text-[13.5px] font-semibold">Notifications</span>
-            <button onClick={markRead} className="text-[12px] text-primary hover:underline flex items-center gap-1">
+            {!readOnly && <button onClick={markRead} className="text-[12px] text-primary hover:underline flex items-center gap-1">
               <Check size={13} /> Mark all read
-            </button>
+            </button>}
           </div>
           <div className="max-h-[380px] overflow-y-auto">
             {notifications.length === 0 && <div className="p-6 text-center text-[13px] text-text-3">You’re all caught up.</div>}

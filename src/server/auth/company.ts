@@ -7,6 +7,7 @@ import { getNativeAuth } from './auth';
 import { withAuthTransaction } from './database';
 import { nativeAuthEnabled } from './mode';
 import { blankCompanyWorkspaceState } from '@/server/data/store';
+import { assertDemoCompany, assertNotDemoAccount, demoAccountsEnabled, DEMO_TENANT_ID, isDemoAccount } from './demo-config';
 export { consumeAuthAttempt } from './rate-limit';
 
 export type NativeUser = { id: string; name: string; email: string; twoFactorEnabled?: boolean | null };
@@ -19,16 +20,22 @@ const membershipSql = 'select m.*,m.version::text version,t.name,t.status compan
 export async function getNativeIdentity(): Promise<NativeIdentity | null> {
   if (!nativeAuthEnabled()) return null;
   const requestHeaders = await headers();
-  return await getNativeAuth().api.getSession({ headers: requestHeaders }) as NativeIdentity | null;
+  const identity = await getNativeAuth().api.getSession({ headers: requestHeaders }) as NativeIdentity | null;
+  return identity && isDemoAccount(identity.user.id) && !demoAccountsEnabled() ? null : identity;
 }
 
 export async function companyPrincipalFor(identity: NativeIdentity) {
+  if (isDemoAccount(identity.user.id) && !demoAccountsEnabled()) return null;
   return withAuthTransaction(identity.user.id, async (client) => {
     const selected = identity.session.activeCompanyId;
     if (selected && !/^[0-9a-f-]{36}$/i.test(selected)) return null;
     const result = await client.query<MembershipRow>(membershipSql + " where m.user_id=$1::uuid and m.status='active' and t.status='active'" + (selected ? ' and m.tenant_id=$2::uuid' : ' order by m.created_at limit 2'), selected ? [identity.user.id, selected] : [identity.user.id]);
     if (result.rows.length !== 1) return null;
-    const row = result.rows[0], actor = actorForCompanyMember(membershipDto(row), identity.user.id);
+    const row = result.rows[0];
+    if (row.tenant_id === DEMO_TENANT_ID && !isDemoAccount(identity.user.id)) return null;
+    if (isDemoAccount(identity.user.id) && (row.tenant_id !== DEMO_TENANT_ID || row.company_role !== 'member'
+      || Object.keys(row.modules).length !== 4 || Object.values(row.modules).some((access) => access !== 'view'))) return null;
+    const actor = actorForCompanyMember(membershipDto(row), identity.user.id);
     if (!actor) return null;
     return { ...identity, actor, company: { id: row.tenant_id, name: row.name }, membership: { ...membershipDto(row), version: row.version } };
   });
@@ -51,6 +58,7 @@ export async function listCompanies(identity: NativeIdentity) {
   return withAuthTransaction(identity.user.id, async (client) => (await client.query<MembershipRow>(membershipSql + " where m.user_id=$1::uuid and m.status='active' and t.status='active' order by t.name", [identity.user.id])).rows.map((row) => ({ id: row.tenant_id, name: row.name, role: row.company_role, modules: Object.keys(row.modules) })));
 }
 export async function activateCompany(identity: NativeIdentity, companyId: string): Promise<void> {
+  assertDemoCompany(identity.user.id, companyId);
   await withAuthTransaction(identity.user.id, async (client) => {
     const result = await client.query(membershipSql + " where m.user_id=$1::uuid and m.tenant_id=$2::uuid and m.status='active' and t.status='active'", [identity.user.id, companyId]);
     if (result.rowCount !== 1) throw new Error('That company is unavailable.');
@@ -60,6 +68,7 @@ export async function activateCompany(identity: NativeIdentity, companyId: strin
 }
 
 export async function provisionCompany(identity: NativeIdentity, name: string): Promise<string> {
+  assertNotDemoAccount(identity.user.id);
   return withAuthTransaction(identity.user.id, async (client) => {
     await client.query('select pg_advisory_xact_lock(hashtextextended($1,906381))', [identity.user.id]);
     const count = await client.query("select count(*)::int n from company_memberships where user_id=$1::uuid and company_role='owner' and status='active'", [identity.user.id]);

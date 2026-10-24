@@ -1,4 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { createServer } from 'node:net';
 import { closeSync, constants, existsSync, openSync } from 'node:fs';
 import { cp, mkdtemp, readFile, rm, symlink } from 'node:fs/promises';
@@ -47,6 +48,7 @@ try {
   await run(program('pg_ctl'), ['-D', data, '-l', join(directory, 'postgres.log'), '-o', `-h 127.0.0.1 -p ${pgPort} -k ${directory}`, '-w', 'start']);
   started = true;
   const adminUrl = `postgresql://propbrew_company_browser_admin@127.0.0.1:${pgPort}/postgres`;
+  const demoPassword = randomBytes(32).toString('base64url');
   const admin = new Client({ connectionString: adminUrl });
   await admin.connect();
   try {
@@ -54,6 +56,11 @@ try {
     await admin.query('grant usage on schema public to propbrew_review_app');
     await runMigrations({ url: adminUrl });
   } finally { await admin.end(); }
+  const demoState = join(directory, 'source-demo-state.json');
+  await run(process.execPath, ['scripts/provision-demo-accounts.mjs', '--write-state', demoState], { cwd: root });
+  await run(process.execPath, ['scripts/provision-demo-accounts.mjs', '--confirm-demo-seed', '--state-file', demoState, '--database-env', 'PROPBREW_TEST_DEMO_ADMIN_URL'], {
+    cwd: root, env: { ...safeEnv, PROPBREW_TEST_DEMO_ADMIN_URL: adminUrl, PROPBREW_DEMO_ACCOUNTS: '1', PROPBREW_DEMO_PASSWORD: demoPassword, PROPBREW_DATABASE_REGION: 'Disposable loopback browser tests' },
+  });
   for (const name of ['src', 'public']) await cp(join(root, name), join(app, name), { recursive: true, mode: constants.COPYFILE_FICLONE });
   // Next generates next-env.d.ts itself; it is absent in a clean Git checkout.
   for (const name of ['package.json', 'package-lock.json', 'next.config.ts', 'tsconfig.json', 'postcss.config.mjs']) await cp(join(root, name), join(app, name));
@@ -63,6 +70,7 @@ try {
     ...safeEnv, NODE_ENV: 'development', NEXT_TELEMETRY_DISABLED: '1',
     DATABASE_URL: `postgresql://propbrew_review_app@127.0.0.1:${pgPort}/postgres`,
     DATA_SOURCE: 'postgres', PROPBREW_AUTH_MODE: 'company', PROPBREW_REVIEW_MODE: '0', PROPBREW_WEBSITE_ONLY: '0',
+    PROPBREW_DEMO_ACCOUNTS: '1', PROPBREW_DEMO_PASSWORD: demoPassword,
     BETTER_AUTH_URL: origin, NEXT_PUBLIC_SITE_URL: origin, BETTER_AUTH_SECRET: 'disposable-browser-company-account-secret-never-production',
     REEVE_ALLOW_DEMO_IDENTITIES: '0', REEVE_ALLOW_IN_MEMORY_DATA: '0', NEXT_PUBLIC_DEV_IDENTITY: '0',
     CLERK_SECRET_KEY: '', NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: '',

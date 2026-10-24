@@ -10,6 +10,8 @@ import {
   type CompanyPrincipal, type NativeIdentity,
 } from '@/server/auth/company';
 import { canUseCompanyModule } from '@/lib/auth/company-policy';
+import { hashPassword } from 'better-auth/crypto';
+import { DEMO_ACCOUNTS, DEMO_TENANT_ID } from '@/server/auth/demo-config';
 
 const request = vi.hoisted(() => ({ headers: new Headers() }));
 vi.mock('next/headers', () => ({ headers: async () => request.headers }));
@@ -33,6 +35,8 @@ let outsider: Browser;
 let companyA: string;
 let companyB: string;
 let ownerPrincipal: CompanyPrincipal;
+let demoVisitor: Browser;
+const demoPassword = 'Disposable-native-demo-password-123456789!';
 
 function cookieHeader(browser: Pick<Browser, 'cookies'>): string {
   return [...browser.cookies].map(([name, value]) => `${name}=${value}`).join('; ');
@@ -104,6 +108,27 @@ async function invite(email: string, modules: Record<string, string> = { estate:
     [companyA, email, token.hash, JSON.stringify(modules), ownerA.identity.user.id],
   ));
   return { ...token, id: result.rows[0].id as string };
+}
+
+/** Explicit synthetic fixture in this suite's disposable loopback database.
+ * Public demo provisioning never borrows an existing company or review record. */
+async function createDemoVisitor(): Promise<Browser> {
+  vi.stubEnv('PROPBREW_DEMO_ACCOUNTS', '1');
+  vi.stubEnv('PROPBREW_DEMO_PASSWORD', demoPassword);
+  const account = DEMO_ACCOUNTS[0];
+  await admin.query('insert into auth_users(id,name,email,"createdAt","updatedAt") values($1::uuid,$2,$3,now(),now())', [account.userId, account.name, account.email]);
+  await admin.query('insert into auth_accounts("accountId","providerId","userId",password,"createdAt","updatedAt") values($1::text,$2,$1::uuid,$3,now(),now())', [account.userId, 'credential', await hashPassword(demoPassword)]);
+  await admin.query('insert into tenants(id,name,country_code,data_residency,created_by_auth_user) values($1::uuid,$2,$3,$4,$5::uuid)', [DEMO_TENANT_ID, 'Disposable public demo', 'NG', 'Disposable loopback', account.userId]);
+  await admin.query("insert into company_memberships(tenant_id,user_id,company_role,modules) values($1::uuid,$2::uuid,'member',$3::jsonb)", [DEMO_TENANT_ID, account.userId, JSON.stringify({ estate: 'view', facility: 'view', shortlet: 'view', construction: 'view' })]);
+  const { blankCompanyWorkspaceState } = await import('@/server/data/store');
+  await admin.query('insert into workspace_records(tenant_id,domain_tenant_id,payload) values($1::uuid,$1::text,$2::jsonb)', [DEMO_TENANT_ID, JSON.stringify(blankCompanyWorkspaceState())]);
+  const browser = { cookies: new Map<string, string>() };
+  const signedIn = await http(browser, '/sign-in/email', { email: account.email, password: demoPassword, rememberMe: false });
+  expect(signedIn.response.status).toBe(200);
+  const session = await http(browser, '/get-session');
+  const result = { ...browser, identity: session.data as NativeIdentity, email: account.email };
+  await selectedPrincipal(result, DEMO_TENANT_ID);
+  return result;
 }
 
 describe.skipIf(!testUrl)('native company accounts with real restricted PostgreSQL and Better Auth', () => {
@@ -438,6 +463,83 @@ describe.skipIf(!testUrl)('native company accounts with real restricted PostgreS
     expect((await http(ownerB, '/get-session')).data).toBeNull();
     expect((await http(ownerB, '/two-factor/verify-totp', { code: totpCode(secret) })).response.status).toBe(200);
     expect((await http(ownerB, '/get-session')).data.user.id).toBe(ownerB.identity.user.id);
+  });
+
+  it('uses real, short-lived demo sessions while withholding credential, MFA and other visitors’ session controls', async () => {
+    demoVisitor = await createDemoVisitor();
+    const session = (await http(demoVisitor, '/get-session')).data;
+    expect(session.user.id).toBe(DEMO_ACCOUNTS[0].userId);
+    expect(Date.parse(session.session.expiresAt) - Date.now()).toBeLessThanOrEqual(3600_000);
+    expect(Date.parse(session.session.expiresAt) - Date.now()).toBeGreaterThan(3500_000);
+    const sessionCount = (await admin.query('select count(*)::int n from auth_sessions where "userId"=$1::uuid', [demoVisitor.identity.user.id])).rows[0].n;
+    const accountBefore = (await admin.query('select password from auth_accounts where "userId"=$1::uuid', [demoVisitor.identity.user.id])).rows[0].password;
+    const blocked: [string, Record<string, unknown> | undefined][] = [
+      ['/change-password', { currentPassword: demoPassword, newPassword: 'Attempted-replacement-password-123', revokeOtherSessions: true }],
+      ['/two-factor/enable', { password: demoPassword, method: 'totp' }],
+      ['/two-factor/disable', { password: demoPassword }],
+      ['/two-factor/get-totp-uri', { password: demoPassword }],
+      ['/two-factor/generate-backup-codes', { password: demoPassword }],
+      ['/two-factor/verify-totp', { code: '000000' }],
+      ['/two-factor/verify-backup-code', { code: 'not-a-real-code' }],
+      ['/list-sessions', undefined],
+      ['/revoke-session', { token: session.session.token }],
+      ['/revoke-other-sessions', {}],
+      ['/sign-up/email', { email: `forbidden-demo-signup-${runId}@example.test`, name: 'Forbidden demo signup', password }],
+    ];
+    for (const [path, body] of blocked) {
+      const response = await http(demoVisitor, path, body);
+      expect(response.response.status, `demo path ${path}`).toBe(403);
+    }
+    const headers = new Headers({ origin, cookie: cookieHeader(demoVisitor) });
+    await expect(getNativeAuth().api.changePassword({ headers, body: { currentPassword: demoPassword, newPassword: 'Attempted-server-api-password-123' } })).rejects.toThrow(/view.only/i);
+    await expect(getNativeAuth().api.enableTwoFactor({ headers, body: { password: demoPassword, method: 'totp' } })).rejects.toThrow(/view.only/i);
+    expect((await admin.query('select password from auth_accounts where "userId"=$1::uuid', [demoVisitor.identity.user.id])).rows[0].password).toBe(accountBefore);
+    expect((await admin.query('select "twoFactorEnabled" from auth_users where id=$1::uuid', [demoVisitor.identity.user.id])).rows[0].twoFactorEnabled).toBe(false);
+    expect((await admin.query('select id from auth_two_factor where "userId"=$1::uuid', [demoVisitor.identity.user.id])).rows).toEqual([]);
+    expect((await admin.query('select count(*)::int n from auth_sessions where "userId"=$1::uuid', [demoVisitor.identity.user.id])).rows[0].n).toBe(sessionCount);
+  });
+
+  it('rejects company creation, external selection, invitations and even read-marker writes from a demo session', async () => {
+    const actions = await import('@/server/actions/companies');
+    const create = await import('@/app/api/companies/route');
+    const { withDurableMutation } = await import('@/server/data/durable-records');
+    request.headers = new Headers({ origin, cookie: cookieHeader(demoVisitor) });
+    const invitation = await invite(demoVisitor.email, { estate: 'manage' });
+    const companyCount = (await admin.query('select count(*)::int n from tenants')).rows[0].n;
+    const before = (await admin.query('select version,payload from workspace_records where tenant_id=$1::uuid', [DEMO_TENANT_ID])).rows[0];
+    await expect(provisionCompany(demoVisitor.identity, 'Forbidden demo company')).rejects.toThrow(/view.only/i);
+    await expect(activateCompany(demoVisitor.identity, companyA)).rejects.toThrow(/unavailable/i);
+    const form = new FormData(); form.set('token', invitation.token);
+    expect(await actions.acceptCompanyInvite(form)).toHaveProperty('error');
+    expect((await admin.query('select id from company_memberships where tenant_id=$1::uuid and user_id=$2::uuid', [companyA, demoVisitor.identity.user.id])).rows).toEqual([]);
+    expect((await admin.query('select accepted_at from company_invitations where id=$1::uuid', [invitation.id])).rows[0].accepted_at).toBeNull();
+    const response = await create.POST(new Request(`${origin}/api/companies`, { method: 'POST', headers: { origin, 'content-type': 'application/json' }, body: JSON.stringify({ companyName: 'Forbidden API demo company' }) }));
+    expect(response.status).toBeGreaterThanOrEqual(400);
+    expect((await admin.query('select count(*)::int n from tenants')).rows[0].n).toBe(companyCount);
+    const mutation = vi.fn(async () => 'must not execute');
+    await expect(withDurableMutation(mutation, ['estate', 'facility', 'shortlet', 'construction'], 'read')).rejects.toThrow(/view.only/i);
+    expect(mutation).not.toHaveBeenCalled();
+    expect((await admin.query('select version,payload from workspace_records where tenant_id=$1::uuid', [DEMO_TENANT_ID])).rows[0]).toEqual(before);
+    request.headers = new Headers();
+  });
+
+  it('keeps the demo tenant separate from real accounts and closes old demo sessions when access is disabled', async () => {
+    expect(await listCompanies(ownerA.identity)).not.toEqual(expect.arrayContaining([expect.objectContaining({ id: DEMO_TENANT_ID })]));
+    await expect(activateCompany(ownerA.identity, DEMO_TENANT_ID)).rejects.toThrow(/unavailable/i);
+    const principal = await companyPrincipalFor(demoVisitor.identity);
+    expect(principal?.company.id).toBe(DEMO_TENANT_ID);
+    for (const workspace of ['estate', 'facility', 'shortlet', 'construction'] as const) {
+      expect(canUseCompanyModule(principal!.actor, workspace, 'read')).toBe(true);
+      expect(canUseCompanyModule(principal!.actor, workspace, 'update')).toBe(false);
+    }
+    vi.stubEnv('PROPBREW_DEMO_ACCOUNTS', '0');
+    try {
+      expect(await companyPrincipalFor(demoVisitor.identity)).toBeNull();
+      const anonymous = { cookies: new Map<string, string>() };
+      expect((await http(anonymous, '/sign-in/email', { email: demoVisitor.email, password: demoPassword })).response.status).toBe(403);
+    } finally { vi.stubEnv('PROPBREW_DEMO_ACCOUNTS', '1'); }
+    expect((await http(demoVisitor, '/sign-out', {})).response.status).toBe(200);
+    expect((await http(demoVisitor, '/get-session')).data).toBeNull();
   });
 
   it('revokes the actual database session on sign-out and rejects its previously valid cookie', async () => {
