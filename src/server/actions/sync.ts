@@ -66,7 +66,7 @@ export async function syncOperation(raw: SyncInput): Promise<SyncOutcome> {
     }
     case 'site_issue': {
       const p = input.payload;
-      db.constructionIssues.unshift({ tenantId: project.tenantId, id: rowId, projectId: p.projectId, category: p.category, title: p.title, severity: p.severity, owner: nameOf(actor), raisedISO: input.capturedISO.slice(0, 10), dueISO: NOW.slice(0, 10), status: 'open', correctiveAction: p.correctiveAction || 'To be agreed' });
+      db.constructionIssues.unshift({ tenantId: project.tenantId, id: rowId, projectId: p.projectId, category: p.category, title: p.title, severity: p.severity, owner: nameOf(actor), raisedISO: input.capturedISO.slice(0, 10), dueISO: '', status: 'open', correctiveAction: p.correctiveAction || 'To be agreed' });
       ref = p.title; break;
     }
     case 'attendance': {

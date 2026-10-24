@@ -22,6 +22,14 @@ beforeEach(() => { vi.clearAllMocks(); Object.assign(db, structuredClone(initial
 afterEach(() => Object.assign(db, structuredClone(initial)));
 
 describe('offline ownership and exact retry receipts', () => {
+  it('preserves the capture date without inventing a due date for an offline issue', async () => {
+    const op = { ...input(), capturedISO: '2026-10-24T12:30:00Z' };
+    expect(await syncOperation(op)).toMatchObject({ ok: true, duplicate: false });
+    expect(db.constructionIssues[0]).toMatchObject({ raisedISO: '2026-10-24', dueISO: '', title: 'Offline issue' });
+    expect(await syncOperation(op)).toMatchObject({ ok: true, duplicate: true });
+    expect(db.constructionIssues[0].dueISO).toBe('');
+  });
+
   it('applies once, accepts reordered exact retries, and refuses changed payload/kind under the same key', async () => {
     const op = input(), count = db.constructionIssues.length;
     expect(await syncOperation(op)).toMatchObject({ ok: true, duplicate: false });

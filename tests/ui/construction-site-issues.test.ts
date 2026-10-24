@@ -13,6 +13,15 @@ beforeEach(() => { db.constructionIssues = structuredClone(baseline); guard.mock
 afterEach(() => { db.constructionIssues = structuredClone(baseline); });
 
 describe('Construction site capture discovery', () => {
+  it.each(['', 'not-a-date', '2026-02-30'])('shows an unrecorded deadline instead of inventing or formatting an invalid due date: %s', async (dueISO) => {
+    db.constructionIssues.unshift({ ...structuredClone(db.constructionIssues[0]), id: 'is-without-due-date', title: 'Captured without an agreed deadline', raisedISO: '2026-10-24', dueISO });
+    const html = renderToStaticMarkup(await ConstructionSitePage());
+    expect(html).toContain('Captured without an agreed deadline');
+    expect(html).toMatch(/<dt>Due · WAT<\/dt><dd>Not recorded<\/dd>/);
+    expect(html).not.toContain('Invalid Date');
+    expect(html).toContain('25 Jul 2026'); // Existing seeded deadlines stay recorded.
+  });
+
   it('renders synced issue details from scoped records alongside the separate approved diary', async () => {
     const own = { ...structuredClone(db.constructionIssues[0]), id: 'is-synced-field-test', title: 'Captured on site: exposed cable in lower stairwell', owner: 'Adeola site supervisor', severity: 'high' as const, status: 'open' as const, raisedISO: '2026-10-24', dueISO: '2026-10-25', correctiveAction: 'Isolate the circuit and arrange a qualified electrician.' };
     db.constructionIssues.unshift(own, { ...own, id: 'is-foreign-field-test', tenantId: SEED.tenantB as TenantId, title: 'FOREIGN_ISSUE_MUST_NOT_RENDER' });
