@@ -55,7 +55,8 @@ try {
     await runMigrations({ url: adminUrl });
   } finally { await admin.end(); }
   for (const name of ['src', 'public']) await cp(join(root, name), join(app, name), { recursive: true, mode: constants.COPYFILE_FICLONE });
-  for (const name of ['package.json', 'package-lock.json', 'next.config.ts', 'tsconfig.json', 'next-env.d.ts', 'postcss.config.mjs']) await cp(join(root, name), join(app, name));
+  // Next generates next-env.d.ts itself; it is absent in a clean Git checkout.
+  for (const name of ['package.json', 'package-lock.json', 'next.config.ts', 'tsconfig.json', 'postcss.config.mjs']) await cp(join(root, name), join(app, name));
   await symlink(resolve(root, 'node_modules'), join(app, 'node_modules'), 'dir');
   const origin = `http://127.0.0.1:${appPort}`;
   const env = {
