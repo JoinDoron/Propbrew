@@ -11,6 +11,7 @@ import { devIdentityEnabled } from '@/server/session';
 import { requireOperatorSession } from '@/server/workspaces';
 import { isReviewActor, reviewModeEnabled } from '@/server/review-auth';
 import { withDurableRead } from '@/server/data/durable-records';
+import { nativeEstateCreationReady } from '@/server/data/company-estate-access';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,6 +37,7 @@ export default async function EstatePropertiesPage() {
   const review = session.key === 'private-review' && reviewModeEnabled() && isReviewActor(actor);
   const demo = review || session.key !== 'clerk' && devIdentityEnabled();
   const persistent = durableRecordsEnabled();
+  const native = nativeEstateCreationReady(actor);
   const localDemo = review || demo && process.env.NODE_ENV !== 'production' && (!process.env.DATA_SOURCE || process.env.DATA_SOURCE === 'memory');
   const now = demo ? new Date(`${NOW}T09:00:00Z`) : new Date();
   const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Lagos', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now);
@@ -46,7 +48,7 @@ export default async function EstatePropertiesPage() {
     properties={properties}
     demo={demo}
     persistent={persistent}
-    actions={<EstateCreateActions canAddProperty={canRegisterEstateRecords(actor)} canAddTenant={false} units={[]} persistent={persistent} demo={localDemo} asOfDate={asOfDate} />}
+    actions={<EstateCreateActions canAddProperty={canRegisterEstateRecords(actor) && (!actor.companyAccess || native)} canAddTenant={false} units={[]} persistent={persistent} demo={localDemo} native={native} asOfDate={asOfDate} />}
   />;
   });
 }

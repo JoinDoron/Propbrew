@@ -1,8 +1,9 @@
+import { operatingClock } from '@/server/operating-clock';
 import { can } from '@/lib/authz';
 import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
-import { NOW_MS } from '@/domain/ppm';
+
 import { gridReliancePct, dieselCost, costPerKwhMinor, co2Kg } from '@/domain/facility';
 import { EnergyWorkspace, type GenRow, type MeterRow } from '@/components/facility/energy-workspace';
 import { withDurableRead } from '@/server/data/durable-records';
@@ -13,6 +14,7 @@ import { withDurableRead } from '@/server/data/durable-records';
 export default async function EnergyPage() {
   return withDurableRead(async () => {
   const { actor } = await requireCapability('assets_ppm', 'read', 'facility');
+  const clock = operatingClock();
   const sites = new Map<string, string>(repos.sites.all(actor).map((s) => [s.id, s.name]));
   const generators = repos.facilityGenerators.list(actor).items;
   const meters = repos.facilityMeters.list(actor).items;
@@ -30,7 +32,7 @@ export default async function EnergyPage() {
         meters={meterRows}
         kpis={{ dieselSpendMinor: dieselCost(litresMonth), litresMonth, costPerKwhMinor: costPerKwhMinor(), co2Kg: co2Kg(litresMonth) }}
         reliance={gridReliancePct(generators)}
-        nowMs={NOW_MS}
+        nowMs={clock.nowMs}
       />
     </div>
   );

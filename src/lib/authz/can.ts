@@ -8,6 +8,7 @@
  */
 
 import { CAPABILITIES, ROLES, levelFor, type Capability, type Level, type Role } from './matrix';
+import { companyCapabilityAccess, type CompanyAccess } from '@/lib/auth/company-policy';
 import {
   actionsFor,
   ESTATE_SCOPED_ROLES,
@@ -31,6 +32,8 @@ export type Actor = {
   unitIds: readonly string[];
   vendorOrgId: string | null;
   investorProjectIds: readonly string[];
+  /** Verified server-side company membership; narrows legacy matrix grants. */
+  companyAccess?: CompanyAccess;
 };
 
 export type OwnershipClause =
@@ -127,6 +130,9 @@ const LEVEL_DISPLAY_RANK: Record<Level, number> = { F: 4, M: 3, V: 2, O: 1, none
  */
 export function can(actor: Actor, capability: Capability, action: Action): Decision {
   if (!(CAPABILITIES as readonly string[]).includes(capability)) return deny('unknown_capability');
+  const companyAccess = companyCapabilityAccess(actor, capability);
+  if (companyAccess === 'none' || companyAccess !== null && (action === 'configure'
+    || companyAccess === 'view' && action !== 'read' && action !== 'export')) return deny('no_grant');
 
   let result: Decision = deny('no_grant');
 
@@ -148,6 +154,15 @@ export function can(actor: Actor, capability: Capability, action: Action): Decis
 
   if (!result.allowed && !actor.tenantId && !actor.roles.includes('platform_admin')) {
     return deny('no_tenant_context');
+  }
+  if (result.allowed && companyAccess !== null) {
+    // Executive is the legacy viewer role, but company viewers must retain
+    // their explicit assignments instead of executive's tenant-wide scope.
+    const estateIds = actor.allEstates ? result.scope.estateIds
+      : result.scope.estateIds === 'all' ? actor.estateIds
+        : result.scope.estateIds.filter((id) => actor.estateIds.includes(id));
+    return { ...result, level: companyAccess === 'view' ? 'V' : result.level === 'F' ? 'M' : result.level,
+      scope: { ...result.scope, estateIds } };
   }
   return result;
 }
@@ -174,12 +189,16 @@ export function assertCan(actor: Actor, capability: Capability, action: Action):
 
 /** Highest level held on a capability — for UI affordance shaping ONLY. */
 export function effectiveLevel(actor: Actor, capability: Capability): Level {
+  const companyAccess = companyCapabilityAccess(actor, capability);
+  if (companyAccess === 'none') return 'none';
   let best: Level = 'none';
   for (const role of actor.roles) {
     if (!(ROLES as readonly string[]).includes(role)) continue;
     const level = levelFor(role, capability);
     if (LEVEL_DISPLAY_RANK[level] > LEVEL_DISPLAY_RANK[best]) best = level;
   }
+  if (companyAccess === 'view' && best !== 'none') return 'V';
+  if (companyAccess !== null && best === 'F') return 'M';
   return best;
 }
 

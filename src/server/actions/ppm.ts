@@ -17,7 +17,8 @@ import { getActor } from '@/server/session';
 import { ForbiddenError, assertCan, ROLE_LABELS, type Actor } from '@/lib/authz';
 import { repos, scopedMutableGet } from '@/server/data';
 import { db, recordHistory } from '@/server/data/store';
-import { NOW, addDays } from '@/domain/ppm';
+import { addDays } from '@/domain/ppm';
+import { operatingDateISO, operatingNowISO } from '@/server/operating-clock';
 import type { Role } from '@/domain/enums';
 import { nowISO } from '@/server/clock';
 import { facilityAssignees, isFacilityDate } from '@/server/facility-guards';
@@ -104,7 +105,7 @@ export async function generatePpmWorkOrder(occurrenceId: string): Promise<PpmRes
   revalidatePath('/estate');
   return { ok: true, ref };
 
-  });
+  }, 'facility');
 }
 
 /** Complete an occurrence. Server-side re-validation: every checklist item ticked
@@ -130,9 +131,9 @@ export async function completePpmOccurrence(occurrenceId: string, input: { check
 
   const live = occ;
   live.status = 'completed';
-  plan.lastServicedAt = NOW;
+  plan.lastServicedAt = operatingDateISO();
   plan.overdue = false;
-  plan.nextDue = addDays(NOW, intervalDays(plan.frequency));
+  plan.nextDue = addDays(operatingDateISO(), intervalDays(plan.frequency));
   // reset the runtime baseline on the asset's feed
   const rt = db.assetRuntime.find((r) => r.tenantId === occ.tenantId && String(r.assetId) === String(occ.assetId));
   if (rt) rt.runtimeHoursAtLastService = rt.runtimeHours;
@@ -141,7 +142,7 @@ export async function completePpmOccurrence(occurrenceId: string, input: { check
   revalidate();
   return { ok: true };
 
-  });
+  }, 'facility');
 }
 
 /** Reschedule an occurrence. Statutory occurrences clamp at their legal deadline. */
@@ -164,13 +165,13 @@ export async function reschedulePpmOccurrence(occurrenceId: string, newDate: str
   const from = live.status;
   live.dueDate = newDate;
   live.generateDate = addDays(newDate, -(plan?.leadTimeDays ?? 0));
-  live.status = ['wo_generated', 'in_progress'].includes(from) ? from : Date.parse(newDate) < Date.parse(NOW) ? 'overdue' : 'scheduled';
+  live.status = ['wo_generated', 'in_progress'].includes(from) ? from : newDate < operatingDateISO() ? 'overdue' : 'scheduled';
   if (plan) plan.rescheduleCount += 1;
   recordHistory('ppm', String(occ.planId), hist('RESCHEDULE', from, live.status, actor, `Rescheduled ${occ.assetName} to ${newDate}`));
   revalidate();
   return { ok: true };
 
-  });
+  }, 'facility');
 }
 
 /** HITL for an AI-F-01 suggestion. Approve pulls the plan forward and promotes
@@ -203,7 +204,7 @@ export async function decidePpmSuggestion(
     if (!isFacilityDate(newDue)) return { ok: false, error: 'Choose a valid service date.' };
     if (live.statutory && live.statutoryDeadline && newDue > live.statutoryDeadline) return { ok: false, error: `Statutory inspection cannot be moved past its legal deadline (${live.statutoryDeadline}).` };
     live.nextDue = newDue;
-    live.overdue = Date.parse(newDue) < Date.parse(NOW);
+    live.overdue = newDue < operatingDateISO();
     // promote the plan's earliest scheduled occurrence to the pulled-forward date
     const occ = db.ppmOccurrences
       .filter((o) => o.tenantId === plan.tenantId && o.planId === plan.id && o.status !== 'completed')
@@ -223,7 +224,7 @@ export async function decidePpmSuggestion(
   revalidate();
   return { ok: true };
 
-  });
+  }, 'facility');
 }
 
 /** Log a fresh runtime reading (simulated sensor feed). Recomputes the projection. */
@@ -240,11 +241,11 @@ export async function logRuntimeReading(assetId: string, addHours: number): Prom
   if (!rt) return { ok: false, error: 'No runtime feed for this asset.' };
   if (!Number.isFinite(rt.runtimeHours + addHours) || rt.runtimeHours + addHours > Number.MAX_SAFE_INTEGER) return { ok: false, error: 'Runtime is outside the supported range.' };
   rt.runtimeHours += addHours;
-  rt.lastReadingAt = NOW;
+  rt.lastReadingAt = operatingNowISO();
   revalidate();
   return { ok: true };
 
-  });
+  }, 'facility');
 }
 
 /* --- helpers -------------------------------------------------------------- */

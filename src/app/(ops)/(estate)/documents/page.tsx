@@ -1,8 +1,9 @@
+import { operatingClock } from '@/server/operating-clock';
 import { estateTargetOptions } from '@/server/reads/estate-target-options';
 import { requireCapability } from '@/server/guard';
 import { can } from '@/lib/authz';
 import { scopedDocumentRecords } from '@/server/reads/documents';
-import { NOW } from '@/domain/ppm';
+
 import { DocumentsWorkspace } from '@/components/documents/documents-workspace';
 import type { DocData } from '@/components/documents/types';
 import { withDurableRead } from '@/server/data/durable-records';
@@ -14,10 +15,11 @@ import { withDurableRead } from '@/server/data/durable-records';
 export default async function DocumentsPage() {
   return withDurableRead(async () => {
   const { actor } = await requireCapability('announcements', 'read', 'estate');
+  const clock = operatingClock();
   const canMutate = can(actor, 'announcements', 'update').allowed;
 
   const data: DocData = {
-    now: NOW,
+    now: clock.dateISO,
     canMutate,
     scopeLabel: actor.allEstates ? 'all estates' : `${actor.estateIds.length} estate(s)`,
     documents: scopedDocumentRecords(actor),

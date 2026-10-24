@@ -1,9 +1,10 @@
+import { operatingClock } from '@/server/operating-clock';
 import { estateTargetOptions } from '@/server/reads/estate-target-options';
 import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { can } from '@/lib/authz';
 import { repos } from '@/server/data';
-import { NOW_MS } from '@/domain/ppm';
+
 import { eventState, isEventFull, amenityLoad } from '@/domain/estate';
 import { EventsWorkspace, type EventRow, type AmenityRow } from '@/components/estate/events-workspace';
 import { withDurableRead } from '@/server/data/durable-records';
@@ -14,10 +15,11 @@ import { withDurableRead } from '@/server/data/durable-records';
 export default async function EventsPage() {
   return withDurableRead(async () => {
   const { actor } = await requireCapability('bookings_amenities', 'read', 'estate');
+  const clock = operatingClock();
   const events = repos.communityEvents.list(actor).items;
 
-  const upcoming = events.filter((e) => !e.cancelled && Date.parse(e.endISO) >= NOW_MS);
-  const load = amenityLoad(events, NOW_MS);
+  const upcoming = events.filter((e) => !e.cancelled && Date.parse(e.endISO) >= clock.nowMs);
+  const load = amenityLoad(events, clock.nowMs);
   const rows: EventRow[] = events.map((e) => ({ id: e.id, title: e.title, category: e.category, venue: e.venue, host: e.host, startISO: e.startISO, endISO: e.endISO, capacity: e.capacity, rsvps: e.rsvps, cancelled: e.cancelled }));
   const amenities: AmenityRow[] = load;
 
@@ -30,10 +32,10 @@ export default async function EventsPage() {
         kpis={{
           upcoming: upcoming.length,
           totalRsvps: upcoming.reduce((n, e) => n + e.rsvps, 0),
-          full: upcoming.filter((e) => isEventFull(e) && eventState(e, NOW_MS) !== 'past').length,
+          full: upcoming.filter((e) => isEventFull(e) && eventState(e, clock.nowMs) !== 'past').length,
           topVenue: load[0]?.venue ?? '—',
         }}
-        nowMs={NOW_MS}
+        nowMs={clock.nowMs}
         canMutate={can(actor, 'bookings_amenities', 'update').allowed}
         canCreate={can(actor, 'bookings_amenities', 'create').allowed}
       />

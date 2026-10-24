@@ -64,5 +64,5 @@ export async function createBooking(amenity: string, slotISO: string): Promise<B
   ['/portal/bookings', '/portal', '/bookings', '/estate'].forEach((p) => revalidatePath(p));
   return { ok: true, status, auto: rule.auto };
 
-  });
+  }, 'estate');
 }

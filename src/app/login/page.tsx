@@ -8,10 +8,19 @@ import { homeRouteFor } from '@/config/shells';
 import { brand } from '@/config/brand';
 import { SignInList } from '@/components/auth/sign-in-list';
 import { reviewModeEnabled } from '@/server/review-auth';
+import { nativeAuthEnabled } from '@/server/auth/mode';
+import { getNativeIdentity } from '@/server/auth/company';
+import { AccountForm } from '@/components/auth/account-form';
+import { loginAccount } from '@/server/actions/company-auth';
 
 /** The signed-out landing (SC-01 sign-in). Public — not gated. In dev it offers
  *  the identity presets as accounts; production swaps in the real credential UI. */
-export default async function LoginPage() {
+export default async function LoginPage({searchParams}:{searchParams:Promise<{invite?:string}>}) {
+  if (nativeAuthEnabled()) {
+    const raw=(await searchParams)?.invite;const invite=typeof raw==='string'&&/^[A-Za-z0-9_-]{43}$/.test(raw)?raw:undefined;
+    if (await getNativeIdentity()) redirect(invite?`/invite/${invite}`:'/companies');
+    return <AccountForm mode="login" action={loginAccount} invitationToken={invite} />;
+  }
   if (reviewModeEnabled()) redirect('/review/login');
   const session = await getSession();
   const configured = clerkConfigured();

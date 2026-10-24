@@ -1,7 +1,7 @@
 import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
-import { NOW_MS } from '@/domain/ppm';
+import { operatingClock } from '@/server/operating-clock';
 import { CalendarWorkspace, type CalBooking, type CalApt } from '@/components/shortlet/calendar-workspace';
 import { withDurableRead } from '@/server/data/durable-records';
 
@@ -10,6 +10,8 @@ import { withDurableRead } from '@/server/data/durable-records';
  *  same-day-turnover flags, and outbound .ics export. */
 export default async function ShortletCalendarPage() {
   return withDurableRead(async () => {
+  const { dateISO: TODAY } = operatingClock();
+  const NOW_MS = Date.parse(TODAY);
   const { actor } = await requireCapability('bookings_amenities', 'read', 'shortlet');
   const apts = repos.shortletApartments.list(actor).items;
   const props = new Map(repos.shortletProperties.list(actor).items.map((p) => [p.id, p.name]));

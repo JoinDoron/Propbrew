@@ -19,6 +19,7 @@ import { EstateCreateActions } from './estate-create-actions';
 import { AskData } from '@/components/reports/ask-data';
 import styles from './estate-overview.module.css';
 import { withDurableRead } from '@/server/data/durable-records';
+import { nativeEstateCreationReady } from '@/server/data/company-estate-access';
 
 /** Summary totals must include every scoped page, not just the first 50 rows. */
 function allRows<T>(readPage: (cursor?: string | null) => Page<T>): T[] {
@@ -72,7 +73,8 @@ export async function EstateHome({ currency = 'NGN' }: { currency?: CurrencyCode
   const review = session.key === 'private-review' && reviewModeEnabled() && isReviewActor(actor);
   const demo = review || session.key !== 'clerk' && devIdentityEnabled();
   const persistent = durableRecordsEnabled();
-  const canAdd = canRegisterEstateRecords(actor);
+  const native = nativeEstateCreationReady(actor);
+  const canAdd = canRegisterEstateRecords(actor) && (!actor.companyAccess || native);
   const now = demo ? `${NOW}T09:00:00Z` : new Date().toISOString();
   const overview = buildEstateOverview({ sites, units, residents, invoices, workOrders, currency, now });
   const { collections, maintenance } = overview;
@@ -108,7 +110,7 @@ export async function EstateHome({ currency = 'NGN' }: { currency?: CurrencyCode
               <option value="NGN">NGN (₦)</option><option value="USD">USD ($)</option><option value="GHS">GHS (GH₵)</option><option value="KES">KES (KSh)</option>
             </select></label><button className={styles.button} type="submit">Apply</button>
           </form> : null}
-          <EstateCreateActions canAddProperty={canAdd} canAddTenant={canAdd} persistent={persistent} demo={review || demo && process.env.NODE_ENV !== 'production' && (!process.env.DATA_SOURCE || process.env.DATA_SOURCE === 'memory')} asOfDate={overview.asOfLagosDate ?? now.slice(0, 10)} units={availableUnits} />
+          <EstateCreateActions canAddProperty={canAdd} canAddTenant={canAdd} persistent={persistent} demo={review || demo && process.env.NODE_ENV !== 'production' && (!process.env.DATA_SOURCE || process.env.DATA_SOURCE === 'memory')} native={native} asOfDate={overview.asOfLagosDate ?? now.slice(0, 10)} units={availableUnits} />
         </div>
       </header>
 <p className={styles.scope}><ShieldCheck size={13} aria-hidden="true" />{session.tenantLabel} · only your authorised records<span aria-hidden="true">·</span><span>{demo ? 'Sample snapshot' : 'Snapshot'} as of {dateLabel(now)} · Lagos time</span>{demo ? <span className={styles.demo}>Demo data, not live operations</span> : null}</p>

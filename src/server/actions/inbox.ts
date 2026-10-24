@@ -15,7 +15,7 @@ export async function markNotificationsRead(): Promise<void> {
   const actor = await getActor();
   markAllNotificationsRead(actor.userId, actor.roles);
 
-  });
+  }, ['estate', 'facility', 'shortlet', 'construction'], 'read');
 }
 
 export async function readThread(threadId: string): Promise<void> {
@@ -23,7 +23,7 @@ export async function readThread(threadId: string): Promise<void> {
   const actor = await getActor();
   markThreadRead(actor.userId, actor.roles, threadId);
 
-  });
+  }, ['estate', 'facility', 'shortlet', 'construction'], 'read');
 }
 
 export async function sendMessage(threadId: string, text: string): Promise<{ ok: boolean }> {
@@ -34,5 +34,5 @@ export async function sendMessage(threadId: string, text: string): Promise<{ ok:
   appendMessage(actor.userId, actor.roles, threadId, trimmed);
   return { ok: true };
 
-  });
+  }, ['estate', 'facility', 'shortlet', 'construction']);
 }

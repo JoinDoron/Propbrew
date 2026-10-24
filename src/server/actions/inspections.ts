@@ -18,7 +18,8 @@ import { getActor } from '@/server/session';
 import { ForbiddenError, assertCan, type Actor } from '@/lib/authz';
 import { scopedMutableGet } from '@/server/data';
 import { db } from '@/server/data/store';
-import { NOW, addDaysISO, SEVERITY_PRIORITY } from '@/domain/inspections';
+import { addDaysISO, SEVERITY_PRIORITY } from '@/domain/inspections';
+import { operatingDateISO } from '@/server/operating-clock';
 import { INSPECTION_TEMPLATES, templateChecklist } from '@/domain/inspection-templates';
 import { isFacilityDate } from '@/server/facility-guards';
 
@@ -99,7 +100,7 @@ export async function runInspection(
   live.passItems = applied.filter((c) => c.result === 'pass').length;
   live.failItems = failed.length;
   live.status = failed.length > 0 ? 'failed' : 'passed';
-  live.completedDate = NOW;
+  live.completedDate = operatingDateISO();
   live.raisedWorkOrders = refs.length;
   live.raisedWorkOrderRefs = refs;
 
@@ -107,7 +108,7 @@ export async function runInspection(
   if (failed.length === 0) {
     const ob = db.complianceObligations.find((o) => o.tenantId === live.tenantId && o.id === live.obligationId);
     if (ob) {
-      ob.validUntil = addDaysISO(NOW, ob.cadenceDays);
+      ob.validUntil = addDaysISO(operatingDateISO(), ob.cadenceDays);
       ob.lastInspectionRef = live.ref;
     }
   }
@@ -116,7 +117,7 @@ export async function runInspection(
   if (refs.length > 0) revalidatePath('/estate');
   return { ok: true, raised: refs.length, passed: failed.length === 0 };
 
-  });
+  }, 'facility');
 }
 
 
@@ -134,7 +135,7 @@ export async function scheduleInspection(input: { obligationId: string; date: st
 
   const template = INSPECTION_TEMPLATES[ob.templateKey] ?? INSPECTION_TEMPLATES.general;
   const ref = `INS-${1300 + nextRecordSequence('inspections:inspCounter', 0)}`;
-  const status = Date.parse(input.date) < Date.parse(NOW) ? 'overdue' : 'scheduled';
+  const status = input.date < operatingDateISO() ? 'overdue' : 'scheduled';
 
   db.inspections.push({
     tenantId: ob.tenantId,
@@ -160,7 +161,7 @@ export async function scheduleInspection(input: { obligationId: string; date: st
   REVALIDATE.forEach((p) => revalidatePath(p));
   return { ok: true };
 
-  });
+  }, 'facility');
 }
 
 /** Reschedule a scheduled/overdue inspection. */
@@ -175,9 +176,9 @@ export async function rescheduleInspection(inspectionId: string, newDate: string
   if (!isFacilityDate(newDate)) return { ok: false, error: 'Pick a valid inspection date.' };
   const live = insp;
   live.scheduledDate = newDate;
-  live.status = Date.parse(newDate) < Date.parse(NOW) ? 'overdue' : 'scheduled';
+  live.status = newDate < operatingDateISO() ? 'overdue' : 'scheduled';
   REVALIDATE.forEach((p) => revalidatePath(p));
   return { ok: true };
 
-  });
+  }, 'facility');
 }

@@ -1,5 +1,6 @@
 import 'server-only';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import type { CompanyPrincipal } from '@/server/auth/company';
 
 export type WorkspaceRecordState = {
   schemaVersion: 1;
@@ -8,7 +9,7 @@ export type WorkspaceRecordState = {
   auxiliary: Record<string, unknown>;
   sequences: Record<string, number>;
 };
-export type RecordContext = { state: WorkspaceRecordState; domainTenantId: string; mode: 'read' | 'write'; retainedSyncReceipts?: Record<string, unknown>[] };
+export type RecordContext = { state: WorkspaceRecordState; domainTenantId: string; mode: 'read' | 'write'; retainedSyncReceipts?: Record<string, unknown>[]; companyPrincipal?: CompanyPrincipal };
 const root = globalThis as typeof globalThis & { __propbrewRecordContext?: AsyncLocalStorage<RecordContext> };
 const contexts = root.__propbrewRecordContext ??= new AsyncLocalStorage<RecordContext>();
 const localAuxiliary: Record<string, unknown> = Object.create(null);

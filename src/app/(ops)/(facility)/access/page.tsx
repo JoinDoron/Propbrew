@@ -1,8 +1,9 @@
+import { operatingClock } from '@/server/operating-clock';
 import { can } from '@/lib/authz';
 import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
-import { NOW_MS } from '@/domain/ppm';
+
 import { visitorStats, accessThreats } from '@/domain/facility';
 import { AccessWorkspace } from '@/components/facility/access-workspace';
 import { withDurableRead } from '@/server/data/durable-records';
@@ -13,11 +14,12 @@ import { withDurableRead } from '@/server/data/durable-records';
 export default async function AccessPage() {
   return withDurableRead(async () => {
   const { actor } = await requireCapability('assets_ppm', 'read', 'facility');
+  const clock = operatingClock();
   const points = repos.accessPoints.list(actor).items;
   const passes = repos.visitorPasses.list(actor).items;
   const events = repos.accessEvents.list(actor).items;
 
-  const stats = visitorStats(passes, NOW_MS);
+  const stats = visitorStats(passes, clock.nowMs);
   return (
     <div className="pb-page">
       <PageHeader title="Access &amp; visitors" subtitle="Review access points, visitor passes and gate activity." />
@@ -34,7 +36,7 @@ export default async function AccessPage() {
           totalPoints: points.length,
           threats: accessThreats(points).length,
         }}
-        nowMs={NOW_MS}
+        nowMs={clock.nowMs}
       />
     </div>
   );

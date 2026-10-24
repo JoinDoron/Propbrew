@@ -1,8 +1,9 @@
+import { operatingClock } from '@/server/operating-clock';
 import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
 import { can } from '@/lib/authz';
-import { NOW_MS } from '@/domain/ppm';
+
 import { siteHealth, dieselCost, gridReliancePct, contractStatus, portfolioTotals } from '@/domain/facility';
 import { PortfolioWorkspace, type PortfolioEstateVitals } from '@/components/facility/portfolio-workspace';
 import { withDurableRead } from '@/server/data/durable-records';
@@ -17,6 +18,7 @@ const UNPAID = new Set(['issued', 'partially_paid', 'overdue', 'in_arrears', 'es
 export default async function PortfolioPage() {
   return withDurableRead(async () => {
   const { actor } = await requireCapability('reports_analytics', 'read', 'estate');
+  const clock = operatingClock();
   const sites = repos.sites.all(actor);
   const systems = repos.buildingSystems.list(actor).items;
   const alarms = repos.facilityAlarms.list(actor).items;
@@ -47,11 +49,11 @@ export default async function PortfolioPage() {
       healthScore: sysAt.length ? siteHealth(sysAt).score : 0,
       systemCount: sysAt.length,
       openWos: openWo.length,
-      overdueWos: openWo.filter((w) => w.resolveDueAt && Date.parse(w.resolveDueAt) < NOW_MS).length,
+      overdueWos: openWo.filter((w) => w.resolveDueAt && Date.parse(w.resolveDueAt) < clock.nowMs).length,
       openAlarms: alarms.filter((a) => a.siteId === sid && !a.acknowledged).length,
       dieselSpendMinor: dieselCost(litresMonth),
       gensetPct: gridReliancePct(gensAt).gensetPct,
-      contractsAtRisk: contracts.filter((c) => c.siteId === sid && contractStatus(c, NOW_MS).daysLeft <= 45).length,
+      contractsAtRisk: contracts.filter((c) => c.siteId === sid && contractStatus(c, clock.nowMs).daysLeft <= 45).length,
       arrearsMinor: arrears,
     };
   });

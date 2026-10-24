@@ -2,7 +2,7 @@ import { can } from '@/lib/authz';
 import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
-import { NOW_MS } from '@/domain/ppm';
+import { operatingClock } from '@/server/operating-clock';
 import { issueStats } from '@/domain/shortlet';
 import { MaintenanceWorkspace, type IssueRow } from '@/components/shortlet/maintenance-workspace';
 import { withDurableRead } from '@/server/data/durable-records';
@@ -11,6 +11,7 @@ import { withDurableRead } from '@/server/data/durable-records';
  *  auto-suggested priority, then drive Open → In progress → Resolved. */
 export default async function ShortletMaintenancePage() {
   return withDurableRead(async () => {
+  const { nowMs: NOW_MS } = operatingClock();
   const { actor } = await requireCapability('bookings_amenities', 'read', 'shortlet');
   const apts = repos.shortletApartments.list(actor).items;
   const aptName = new Map(apts.map((a) => [a.id, a.name]));

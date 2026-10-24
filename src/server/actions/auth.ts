@@ -17,8 +17,15 @@ import { DEV_IDENTITY_COOKIE, SIGNED_OUT_COOKIE, devIdentityEnabled } from '@/se
 import { identityByKey } from '@/server/identities';
 import { homeRouteFor } from '@/config/shells';
 import { REVIEW_COOKIE_OPTIONS, REVIEW_CSRF_COOKIE, REVIEW_SESSION_COOKIE, reviewModeEnabled } from '@/server/review-auth';
+import { nativeAuthEnabled } from '@/server/auth/mode';
+import { getNativeAuth } from '@/server/auth/auth';
+import { headers } from 'next/headers';
 
 export async function signOut(): Promise<void> {
+  if (nativeAuthEnabled()) {
+    await getNativeAuth().api.signOut({ headers: await headers() });
+    redirect('/login');
+  }
   if (reviewModeEnabled()) {
     const store = await cookies();
     store.set(REVIEW_SESSION_COOKIE, '', { ...REVIEW_COOKIE_OPTIONS, maxAge: 0 });

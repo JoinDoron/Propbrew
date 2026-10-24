@@ -1,7 +1,7 @@
 import 'server-only';
 
 import type { WorkOrder } from '@/domain/entities';
-import { NOW_MS } from '@/domain/ppm';
+import { operatingDateISO } from '@/server/operating-clock';
 import { db } from '@/server/data/store';
 import { vendors } from '@/server/data/seed/fixtures';
 
@@ -22,7 +22,7 @@ export function facilityAssignees(tenantId: string | null, siteId: string): Assi
       && user.roles.includes('technician') && (user.allEstates || user.estateIds.some((id) => String(id) === String(siteId))))
       .map((user) => ({ assigneeName: user.name, assigneeUserId: user.id, vendorOrgId: undefined })),
     ...vendors.filter((vendor) => vendor.tenantId === tenantId && ['valid', 'expiring'].includes(vendor.compliance)
-      && isFacilityDate(vendor.insuranceExpiry) && Date.parse(vendor.insuranceExpiry) >= NOW_MS)
+      && isFacilityDate(vendor.insuranceExpiry) && vendor.insuranceExpiry >= operatingDateISO())
       .map((vendor) => ({ assigneeName: vendor.name, assigneeUserId: undefined, vendorOrgId: vendor.id })),
   ];
 }

@@ -20,7 +20,7 @@ export type GanttTask = {
 export type MilestoneRow = { id: string; name: string; dueISO: string; status: string; band: Tone };
 
 const STATUS_TONE: Record<string, Tone> = { not_started: 'muted', in_progress: 'progress', blocked: 'danger', done: 'success' };
-const displayDate = (value: string) => new Date(value).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Africa/Lagos' });
+const displayDate = (value: string) => Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Africa/Lagos' }) : 'Not recorded';
 
 export function ScheduleWorkspace({ projectName, tasks, milestones, kpis, canMutate, canCreate = false }: {
   projectName: string;
@@ -38,6 +38,7 @@ export function ScheduleWorkspace({ projectName, tasks, milestones, kpis, canMut
   const { act, confirmation, pending } = useConstructionReview(() => router.refresh(), flash);
 
   const span = Math.max(1, ...tasks.map((t) => t.offsetDays + t.durationDays));
+  const hasForecast = Number.isFinite(Date.parse(kpis.forecastFinishISO)) && Number.isFinite(Date.parse(kpis.plannedFinishISO));
   // Everything downstream of the hovered task — the "what slips if this slips" cascade.
   const cascade = hover ? new Set(tasks.find((t) => t.id === hover)?.downstream ?? []) : new Set<string>();
 
@@ -50,8 +51,7 @@ export function ScheduleWorkspace({ projectName, tasks, milestones, kpis, canMut
             <div className="text-[14px] text-text-3">CRITICAL PATH · {projectName.toUpperCase()}</div>
             <h2 className="text-[21px] font-medium tracking-[-0.02em] leading-tight mt-0.5">{kpis.criticalCount} tasks on the critical chain</h2>
             <div className="text-[14px] text-text-3 mt-0.5">
-              {kpis.durationDays}-day network · estimated finish <span className="font-medium" style={{ color: toneVar(kpis.slipDays > 0 ? 'danger' : 'success') }}>{displayDate(kpis.forecastFinishISO)}</span>
-              {kpis.slipDays > 0 ? ` · ${kpis.slipDays}d later than plan` : ' · on plan'}
+              {hasForecast ? <>{kpis.durationDays}-day network · estimated finish <span className="font-medium" style={{ color: toneVar(kpis.slipDays > 0 ? 'danger' : 'success') }}>{displayDate(kpis.forecastFinishISO)}</span>{kpis.slipDays > 0 ? ` · ${kpis.slipDays}d later than plan` : ' · on plan'}</> : 'Add a project and schedule to calculate a finish forecast.'}
             </div>
           </div>
         </div>
@@ -120,7 +120,7 @@ export function ScheduleWorkspace({ projectName, tasks, milestones, kpis, canMut
               <Kpi label="Network duration" value={`${kpis.durationDays}d`} tone="info" icon={<CalendarClock size={16} />} />
               <Kpi label="On critical path" value={String(kpis.criticalCount)} tone="danger" icon={<Zap size={16} />} />
               <Kpi label="Blocked tasks" value={String(kpis.blocked)} tone={kpis.blocked ? 'danger' : 'success'} icon={<TriangleAlert size={16} />} />
-              <Kpi label="Forecast slip" value={kpis.slipDays > 0 ? `+${kpis.slipDays}d` : 'on plan'} tone={kpis.slipDays > 0 ? 'warn' : 'success'} icon={<Flag size={16} />} />
+              <Kpi label="Forecast slip" value={!hasForecast ? '—' : kpis.slipDays > 0 ? `+${kpis.slipDays}d` : 'on plan'} tone={!hasForecast ? 'muted' : kpis.slipDays > 0 ? 'warn' : 'success'} icon={<Flag size={16} />} />
             </div>
           </div>
         }

@@ -1,7 +1,7 @@
 import { requireCapability } from '@/server/guard';
 import { can } from '@/lib/authz';
 import { constructionWorld, signalStates, signalEscalations } from '@/server/reads/construction';
-import { NOW_MS } from '@/domain/ppm';
+import { operatingClock } from '@/server/operating-clock';
 import { scanRisks } from '@/domain/construction';
 import { RiskRadar, type RadarSignal } from '@/components/construction/risk-radar';
 import { withDurableRead } from '@/server/data/durable-records';
@@ -12,6 +12,7 @@ import { withDurableRead } from '@/server/data/durable-records';
  *  Advisory only: acknowledge, snooze, dismiss, or escalate into a real Issue. */
 export default async function ConstructionRiskPage() {
   return withDurableRead(async () => {
+  const { nowMs: NOW_MS } = operatingClock();
   const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const canMutate = can(actor, 'reports_analytics', 'update').allowed;
   const canCreate = can(actor, 'reports_analytics', 'create').allowed;

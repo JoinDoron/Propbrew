@@ -16,7 +16,7 @@ import { z } from 'zod';
 import { getActor } from '@/server/session';
 import { ForbiddenError, assertCan, matchesScope, type ScopeFilter } from '@/lib/authz';
 import { db } from '@/server/data/store';
-import { NOW } from '@/domain/ppm';
+import { operatingNowISO } from '@/server/operating-clock';
 import { BLOCKS, estimateReach, targetSize, type Channel } from '@/domain/announcements';
 import { ANNOUNCEMENT_SCOPES, type AnnouncementScope } from '@/domain/enums';
 
@@ -80,7 +80,7 @@ export async function sendAnnouncement(input: SendInput): Promise<SendResult> {
     audience: data.scope === 'building' ? `${data.block} · ${data.audience}` : data.audience,
     scheduleAt: data.scheduleAt ? new Date(data.scheduleAt).toISOString() : null,
     // Publishing an in-app record is not a provider delivery acknowledgement.
-    sentAt: scheduled ? null : NOW,
+    sentAt: scheduled ? null : operatingNowISO(),
     delivered: 0,
     read: 0,
     aiDrafted: data.aiDrafted,
@@ -90,5 +90,5 @@ export async function sendAnnouncement(input: SendInput): Promise<SendResult> {
   revalidatePath('/estate');
   return { ok: true, reach, scheduled };
 
-  });
+  }, 'estate');
 }

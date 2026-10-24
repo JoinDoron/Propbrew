@@ -1,3 +1,4 @@
+import { operatingClock } from '@/server/operating-clock';
 import { PageHeader } from '@/components/ui/page-header';
 import { facilityMoney } from '@/components/facility/facility-format';
 import { FacilityKpi } from '@/components/facility/facility-ui';
@@ -6,7 +7,7 @@ import layout from '@/components/ui/workspace-layout.module.css';
 import facilityStyles from '@/components/facility/facility-workspaces.module.css';
 import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
-import { NOW_MS } from '@/domain/ppm';
+
 import { contractStatus, coverageGap, CATEGORY_LABEL } from '@/domain/facility';
 import { toneVar } from '@/lib/status-tones';
 import { PageTabs } from '@/components/ui/page-tabs';
@@ -20,17 +21,18 @@ import { withDurableRead } from '@/server/data/durable-records';
 export default async function ContractsPage() {
   return withDurableRead(async () => {
   const { actor } = await requireCapability('assets_ppm', 'read', 'facility');
+  const clock = operatingClock();
   const contracts = repos.facilityContracts.list(actor).items;
   const sites = new Map<string, string>(repos.sites.all(actor).map((s) => [s.id, s.name]));
 
-  const active = contracts.filter((c) => contractStatus(c, NOW_MS).daysLeft >= 0);
-  const expiring = contracts.filter((c) => { const d = contractStatus(c, NOW_MS).daysLeft; return d >= 0 && d <= 45; });
+  const active = contracts.filter((c) => contractStatus(c, clock.nowMs).daysLeft >= 0);
+  const expiring = contracts.filter((c) => { const d = contractStatus(c, clock.nowMs).daysLeft; return d >= 0 && d <= 45; });
   const annualValues = new Map<string, number>();
   for (const contract of contracts) annualValues.set(contract.value.currency, (annualValues.get(contract.value.currency) ?? 0) + contract.value.minor);
   const annualValue = [...annualValues].map(([currency, minor]) => facilityMoney(minor, currency)).join(' · ') || '—';
   const avgSla = contracts.length ? Math.round(contracts.reduce((n, c) => n + c.slaActualPct, 0) / contracts.length) : 0;
-  const gaps = coverageGap(contracts, NOW_MS);
-  const sorted = [...contracts].sort((a, b) => contractStatus(a, NOW_MS).daysLeft - contractStatus(b, NOW_MS).daysLeft);
+  const gaps = coverageGap(contracts, clock.nowMs);
+  const sorted = [...contracts].sort((a, b) => contractStatus(a, clock.nowMs).daysLeft - contractStatus(b, clock.nowMs).daysLeft);
 
   return (
     <div className="pb-page">
@@ -58,10 +60,10 @@ export default async function ContractsPage() {
         </div> },
         { id: 'register', label: 'Contract register & SLAs', count: contracts.length, content: (
       <div className={layout.layout}>
-        <p className={layout.metadata}>Recorded snapshot · {new Date(NOW_MS).toLocaleDateString('en-NG', { timeZone: 'Africa/Lagos' })} · Agreements are ordered by renewal urgency. Native currencies remain separate.</p>
+        <p className={layout.metadata}>Recorded snapshot · {new Date(clock.nowMs).toLocaleDateString('en-NG', { timeZone: 'Africa/Lagos' })} · Agreements are ordered by renewal urgency. Native currencies remain separate.</p>
         {sorted.length === 0 && <Card><EmptyState title="No contracts in your scope" description="Recorded service agreements and their renewal dates will appear here." /></Card>}
         {sorted.map((c) => {
-          const st = contractStatus(c, NOW_MS);
+          const st = contractStatus(c, clock.nowMs);
           const slaOk = c.slaActualPct >= c.slaTargetPct;
           return (
             <Card key={c.id} className={layout.panel}>

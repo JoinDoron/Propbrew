@@ -1,7 +1,7 @@
 import { requireCapability } from '@/server/guard';
 import { can } from '@/lib/authz';
 import { constructionWorld } from '@/server/reads/construction';
-import { NOW_MS } from '@/domain/ppm';
+import { operatingClock } from '@/server/operating-clock';
 import {
   criticalPath, taskDurationDays, slipPropagation, projectEVMOf, forecastFinishISO, milestoneBand,
 } from '@/domain/construction';
@@ -13,6 +13,7 @@ import { withDurableRead } from '@/server/data/durable-records';
  *  hover cascade showing exactly what slips when a task slips. */
 export default async function ConstructionSchedulePage() {
   return withDurableRead(async () => {
+  const { nowMs: NOW_MS } = operatingClock();
   const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const canMutate = can(actor, 'reports_analytics', 'update').allowed;
   const canCreate = can(actor, 'reports_analytics', 'create').allowed;

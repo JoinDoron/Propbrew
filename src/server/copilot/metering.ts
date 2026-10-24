@@ -51,7 +51,7 @@ export async function recordUsage(tenantId: string, inputTokens: number, outputT
   const row = db.copilotUsage.find((r) => r.tenantId === tenantId);
   if (row) { row.requests += 1; row.inputTokens += inputTokens; row.outputTokens += outputTokens; row.costMinorNgn += cost; }
   else db.copilotUsage.push({ tenantId, requests: 1, inputTokens, outputTokens, costMinorNgn: cost });
-  });
+  }, ['estate','facility','shortlet','construction'], 'read');
 }
 
 /* --- sliding-window rate limiter (ephemeral) ------------------------------ */

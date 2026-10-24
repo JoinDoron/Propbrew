@@ -1,7 +1,7 @@
 import { requireCapability } from '@/server/guard';
 import { can } from '@/lib/authz';
 import { constructionWorld, signalStates } from '@/server/reads/construction';
-import { NOW, NOW_MS } from '@/domain/ppm';
+import { operatingClock } from '@/server/operating-clock';
 import {
   scanRisks, portfolioConfidence, projectEVMOf, forecastFinishISO, moneySCurve,
   deliveryRadar, attendanceSummary,
@@ -16,6 +16,7 @@ const OPEN_PO = ['issued', 'acknowledged', 'part_delivered', 'approved'];
  *  per-project earned-value sparklines, and today's delivery radar. */
 export default async function ConstructionPage() {
   return withDurableRead(async () => {
+  const { nowMs: NOW_MS, dateISO: TODAY } = operatingClock();
   const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const canMutate = can(actor, 'reports_analytics', 'update').allowed;
 
@@ -29,7 +30,7 @@ export default async function ConstructionPage() {
     href: s.href, state: states.get(s.id),
   }));
 
-  const today = NOW.slice(0, 10);
+  const today = TODAY;
   const active = world.projects.filter((p) => p.status === 'active' || p.status === 'closing');
   const projectRows: ProjectRow[] = world.projects.map((p) => {
     const evm = projectEVMOf(p, world.costCodes);

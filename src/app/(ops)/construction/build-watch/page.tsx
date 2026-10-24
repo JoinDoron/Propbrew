@@ -2,7 +2,7 @@ import { requireCapability } from '@/server/guard';
 import { effectiveLevel } from '@/lib/authz';
 import { repos } from '@/server/data';
 import { constructionWorld } from '@/server/reads/construction';
-import { NOW_MS } from '@/domain/ppm';
+import { operatingClock } from '@/server/operating-clock';
 import {
   projectEVMOf, forecastFinishISO, buildConfidence, coverageGaps, safetyStats,
   zoneProgress, zoneBand, milestoneBand,
@@ -16,6 +16,7 @@ import { withDurableRead } from '@/server/data/durable-records';
  *  Commercial detail is withheld from view-only stakeholders. */
 export default async function ConstructionBuildWatchPage() {
   return withDurableRead(async () => {
+  const { nowMs: NOW_MS } = operatingClock();
   const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const showCommercials = ['F', 'M'].includes(effectiveLevel(actor, 'reports_analytics'));
   const world = constructionWorld(actor);

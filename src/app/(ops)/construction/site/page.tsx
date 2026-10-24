@@ -1,7 +1,7 @@
 import { requireCapability } from '@/server/guard';
 import { can } from '@/lib/authz';
 import { constructionWorld } from '@/server/reads/construction';
-import { NOW_MS } from '@/domain/ppm';
+import { operatingClock } from '@/server/operating-clock';
 import { reportBand, reportCompleteness, coverageGaps } from '@/domain/construction';
 import { SiteWorkspace, type ReportRow, type SiteIssueRow } from '@/components/construction/site-workspace';
 import { withDurableRead } from '@/server/data/durable-records';
@@ -12,6 +12,7 @@ import { withDurableRead } from '@/server/data/durable-records';
  *  immutable site diary compiled only from approved records. */
 export default async function ConstructionSitePage() {
   return withDurableRead(async () => {
+  const { nowMs: NOW_MS } = operatingClock();
   const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const canMutate = can(actor, 'reports_analytics', 'update').allowed;
   const world = constructionWorld(actor);

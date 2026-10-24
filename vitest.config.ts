@@ -10,7 +10,7 @@ export default defineConfig({
   },
   test: {
     include: ['tests/**/*.{test,spec}.ts', 'src/**/*.{test,spec}.ts'],
-    exclude: ['tests/e2e/**'],
+    exclude: ['tests/e2e/**', 'tests/e2e-company-auth/**'],
     environment: 'node',
   },
 });

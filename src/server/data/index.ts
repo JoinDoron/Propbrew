@@ -17,8 +17,26 @@ import { assertCan, applyScope, type Action, type Actor, type Capability, type S
 import type { Page } from '@/domain/primitives';
 import * as seed from './seed/fixtures';
 import { db } from './store';
+import { currentRecordContext, durableRecordsEnabled } from './record-context';
 
 const DEFAULT_PAGE = 50;
+
+/** These legacy read-only registers have no mutable collection in the current
+ * schema. Use one when supplied by a future schema; native companies otherwise
+ * see an empty register, while the private sample retains its fixture records. */
+function fixtureOrStoredRows<T extends ScopableRow>(name: string, fixtures: readonly T[]): readonly T[] {
+  const context = currentRecordContext();
+  if (!context) {
+    if (durableRecordsEnabled()) throw new Error('Database records must be read inside an authenticated record context.');
+    return fixtures;
+  }
+  const rows = context.state.collections[name];
+  if (rows !== undefined) {
+    if (!Array.isArray(rows)) throw new Error('Stored record collection is invalid.');
+    return rows as T[];
+  }
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(context.domainTenantId) ? [] : fixtures;
+}
 
 /** Assert the capability, scope the rows in-memory, and paginate. */
 function scopedList<T extends ScopableRow>(
@@ -106,8 +124,8 @@ export const repos = {
     },
   },
   assets: {
-    list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', seed.assets, o),
-    get: (a: Actor, id: string) => scopedGet(a, 'assets_ppm', seed.assets, id),
+    list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', fixtureOrStoredRows('assets', seed.assets), o),
+    get: (a: Actor, id: string) => scopedGet(a, 'assets_ppm', fixtureOrStoredRows('assets', seed.assets), id),
   },
   ppmPlans: {
     list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', db.ppmPlans, o),
@@ -131,7 +149,7 @@ export const repos = {
   },
   vendors: {
     // Vendors are read via the work_orders capability (the proposed nav mapping).
-    list: (a: Actor, o?: ListOpts) => scopedList(a, 'work_orders', seed.vendors, o),
+    list: (a: Actor, o?: ListOpts) => scopedList(a, 'work_orders', fixtureOrStoredRows('vendors', seed.vendors), o),
   },
   announcements: {
     list: (a: Actor, o?: ListOpts) => scopedList(a, 'announcements', db.announcements, o),
@@ -152,7 +170,7 @@ export const repos = {
     list: (a: Actor, o?: ListOpts) => scopedList(a, 'announcements', db.documents, o),
   },
   investorProjects: {
-    list: (a: Actor, o?: ListOpts) => scopedList(a, 'investor_projects', seed.investorProjects, o),
+    list: (a: Actor, o?: ListOpts) => scopedList(a, 'investor_projects', fixtureOrStoredRows('investorProjects', seed.investorProjects), o),
   },
   listings: {
     list: (a: Actor, o?: ListOpts) => scopedList(a, 'marketplace', db.listings, o),

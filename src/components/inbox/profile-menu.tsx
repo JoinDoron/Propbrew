@@ -9,11 +9,13 @@ import type { Workspace } from '@/config/workspaces';
 import { Popover } from './popover';
 import { signOut } from '@/server/actions/auth';
 
-export function ProfileMenu({ name, roleSummary, tenantLabel, workspace }: {
+export function ProfileMenu({ name, roleSummary, tenantLabel, workspace, companyAccount, canManageTeam }: {
   name: string;
   roleSummary: string;
   tenantLabel: string;
   workspace?: Pick<Workspace, 'id' | 'name' | 'icon'>;
+  companyAccount?: boolean;
+  canManageTeam?: boolean;
 }) {
   const [pending, start] = useTransition();
   const trigger = useRef<HTMLButtonElement>(null);
@@ -71,6 +73,11 @@ export function ProfileMenu({ name, roleSummary, tenantLabel, workspace }: {
             </div>
           )}
           <div className="p-1.5">
+            {companyAccount && <div className="grid gap-1 border-b border-border pb-2 mb-2">
+              <Link className="px-2.5 py-2 rounded-lg text-sm hover:bg-surface-2" href="/companies" onClick={close}>Switch company</Link>
+              {canManageTeam && <Link className="px-2.5 py-2 rounded-lg text-sm hover:bg-surface-2" href="/company/team" onClick={close}>Team & access</Link>}
+              <Link className="px-2.5 py-2 rounded-lg text-sm hover:bg-surface-2" href="/account/security" onClick={close}>Account security</Link>
+            </div>}
             <button
               type="button"
               onClick={() => start(async () => { close(); await signOut(); })}

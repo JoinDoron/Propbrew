@@ -1,8 +1,9 @@
+import { operatingClock } from '@/server/operating-clock';
 import { can } from '@/lib/authz';
 import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
-import { NOW_MS } from '@/domain/ppm';
+
 import { siteHealth } from '@/domain/facility';
 import { ControlCenter, type SystemRow, type SensorRow, type AlarmRow } from '@/components/facility/control-center';
 import { withDurableRead } from '@/server/data/durable-records';
@@ -13,6 +14,7 @@ import { withDurableRead } from '@/server/data/durable-records';
 export default async function ControlCenterPage() {
   return withDurableRead(async () => {
   const { actor } = await requireCapability('assets_ppm', 'read', 'facility');
+  const clock = operatingClock();
   const sites = new Map<string, string>(repos.sites.all(actor).map((s) => [s.id, s.name]));
   const systems = repos.buildingSystems.list(actor).items;
   const sensors = repos.facilitySensors.list(actor).items;
@@ -37,7 +39,7 @@ export default async function ControlCenterPage() {
         sensors={sensorRows}
         alarms={alarmRows}
         kpis={{ operational: systems.filter((s) => s.status === 'operational' || s.status === 'standby').length, total: systems.length, powerSource: power?.text ?? '—', waterPct: water?.value ?? 0 }}
-        nowMs={NOW_MS}
+        nowMs={clock.nowMs}
       />
     </div>
   );

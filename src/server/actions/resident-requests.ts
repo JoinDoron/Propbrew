@@ -18,7 +18,7 @@ import { getActiveUnitId } from '@/server/active-unit';
 import { repos } from '@/server/data';
 import { db, recordHistory } from '@/server/data/store';
 import { nextWorkOrderRef } from '@/server/data/store';
-import { NOW, NOW_MS } from '@/domain/ppm';
+import { operatingClock } from '@/server/operating-clock';
 import { triageRequest } from '@/domain/resident-portal';
 import type { WorkOrder } from '@/domain/entities';
 import { nowISO } from '@/server/clock';
@@ -45,11 +45,12 @@ export async function raiseRequest(input: { title: string; description?: string 
   const estateId = actor.estateIds[0] ?? 's-gardens';
   const me = repos.residents.list(actor).items.find((r) => r.userId === actor.userId);
   const ref = nextWorkOrderRef();
-  const hrs = (n: number) => new Date(NOW_MS + n * 3600 * 1000).toISOString();
+  const clock = operatingClock();
+  const hrs = (n: number) => new Date(clock.nowMs + n * 3600 * 1000).toISOString();
 
   const wo = {
     tenantId: actor.tenantId,
-    createdAt: NOW, createdBy: actor.userId, updatedAt: NOW, updatedBy: actor.userId,
+    createdAt: clock.iso, createdBy: actor.userId, updatedAt: clock.iso, updatedBy: actor.userId,
     id: `wo-res-${nextRecordSequence('resident-requests:counter', 0, true)}`,
     ref,
     title,
@@ -80,5 +81,5 @@ export async function raiseRequest(input: { title: string; description?: string 
   ['/portal/requests', '/portal', '/work-orders', '/estate/work-orders', '/people', '/facility', '/estate', '/dashboard'].forEach((p) => revalidatePath(p));
   return { ok: true, ref };
 
-  });
+  }, 'estate');
 }

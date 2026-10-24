@@ -10,6 +10,7 @@ import { requireOperatorSession } from '@/server/workspaces';
 import { canEnterWorkspace, workspaceById, type WorkspaceId } from '@/config/workspaces';
 import { can } from '@/lib/authz';
 import { withDurableRead } from '@/server/data/durable-records';
+import { canManageCompanyMembers } from '@/lib/auth/company-policy';
 
 /**
  * Server frame for an authenticated route group. Redirects to /login when there
@@ -38,6 +39,8 @@ export async function ShellFrame({ expected, workspace, children }: { expected: 
     roleSummary: session.roleSummary,
     tenantLabel: session.tenantLabel,
     outboxOwner: actor.tenantId ? JSON.stringify([actor.tenantId, actor.userId]) : undefined,
+    companyAccount: Boolean(actor.companyAccess),
+    canManageTeam: Boolean(actor.companyAccess) && canManageCompanyMembers(actor),
   };
 
   const canReadWorkOrders = can(actor, 'work_orders', 'read').allowed;

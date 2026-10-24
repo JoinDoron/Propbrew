@@ -16,7 +16,7 @@ import { getActor } from '@/server/session';
 import { ForbiddenError, assertCan } from '@/lib/authz';
 import { repos } from '@/server/data';
 import { db, recordHistory } from '@/server/data/store';
-import { NOW } from '@/domain/ppm';
+import { operatingNowISO } from '@/server/operating-clock';
 import type { MarketplaceOrder } from '@/domain/entities';
 import { nowISO } from '@/server/clock';
 
@@ -51,7 +51,7 @@ export async function placeOrder(listingId: string): Promise<OrderResult> {
     listingTitle: listing.title,
     status: 'placed',
     amount: listing.price,
-    placedAt: NOW,
+    placedAt: operatingNowISO(),
   } as unknown as MarketplaceOrder;
 
   db.marketplaceOrders.unshift(order);
@@ -64,5 +64,5 @@ export async function placeOrder(listingId: string): Promise<OrderResult> {
   ['/portal/marketplace', '/portal', '/marketplace'].forEach((p) => revalidatePath(p));
   return { ok: true, ref };
 
-  });
+  }, 'estate');
 }

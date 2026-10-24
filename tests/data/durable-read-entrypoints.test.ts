@@ -82,7 +82,10 @@ describe('durable authenticated read entrypoints', () => {
       const returned = fn.body!.statements[0];
       expect(ts.isReturnStatement(returned)).toBe(true);
       const imports = source(file).statements.filter(ts.isImportDeclaration).map((node) => node.moduleSpecifier.getText());
-      expect(imports.every((specifier) => specifier === "'@/components/shell-frame'")).toBe(true);
+      const allowed = file === 'src/app/(ops)/construction/layout.tsx'
+        ? ["'@/components/shell-frame'", "'@/components/construction/construction-ui'", "'@/server/operating-clock'"]
+        : ["'@/components/shell-frame'"];
+      expect(imports.every((specifier) => allowed.includes(specifier))).toBe(true);
     }
   });
 

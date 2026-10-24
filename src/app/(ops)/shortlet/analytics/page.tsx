@@ -1,7 +1,7 @@
 import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
-import { NOW_MS } from '@/domain/ppm';
+import { operatingClock } from '@/server/operating-clock';
 import { revenueVsExpense, profitByProperty, occupancyRate, sourcePerformance } from '@/domain/shortlet';
 import { ShortletAnalytics, type AptOcc } from '@/components/shortlet/analytics';
 import { withDurableRead } from '@/server/data/durable-records';
@@ -12,6 +12,8 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
  *  occupancy per apartment, booking-source performance, CSV export. */
 export default async function ShortletAnalyticsPage() {
   return withDurableRead(async () => {
+  const { dateISO: TODAY } = operatingClock();
+  const NOW_MS = Date.parse(TODAY);
   const { actor } = await requireCapability('bookings_amenities', 'read', 'shortlet');
   const bookings = repos.shortletBookings.list(actor).items;
   const expenses = repos.shortletExpenses.list(actor).items;

@@ -1,7 +1,7 @@
 import { requireCapability } from '@/server/guard';
 import { effectiveLevel } from '@/lib/authz';
 import { constructionWorld } from '@/server/reads/construction';
-import { NOW_MS } from '@/domain/ppm';
+import { operatingClock } from '@/server/operating-clock';
 import { suggestedQuestions } from '@/domain/construction';
 import { CopilotWorkspace } from '@/components/construction/copilot-workspace';
 import { withDurableRead } from '@/server/data/durable-records';
@@ -12,6 +12,7 @@ import { withDurableRead } from '@/server/data/durable-records';
  *  View-only stakeholders get commercial figures withheld. */
 export default async function ConstructionCopilotPage() {
   return withDurableRead(async () => {
+  const { nowMs: NOW_MS } = operatingClock();
   const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const canSeeCommercials = ['F', 'M'].includes(effectiveLevel(actor, 'reports_analytics'));
   const world = constructionWorld(actor);

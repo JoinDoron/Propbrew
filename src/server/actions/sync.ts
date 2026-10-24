@@ -1,5 +1,7 @@
 'use server';
 
+import { operatingDateISO, operatingNowISO } from '@/server/operating-clock';
+
 import { withDurableMutation } from '@/server/data/durable-records';
 import { retainPendingSyncReceipt } from '@/server/data/record-context';
 
@@ -10,7 +12,7 @@ import { canEnterWorkspace } from '@/config/workspaces';
 import { db } from '@/server/data/store';
 import { scopedMutableGet } from '@/server/data';
 import { money } from '@/domain/primitives';
-import { NOW } from '@/domain/ppm';
+
 import { outboxOwnerKey, type OpKind, type SyncOutcome } from '@/domain/sync';
 import { syncFingerprint, syncInputSchema } from '@/server/sync-validation';
 
@@ -54,7 +56,7 @@ export async function syncOperation(raw: SyncInput): Promise<SyncOutcome> {
   if (receipt?.status === 'abandoned') return conflict('This offline copy was discarded and cannot be sent again.', 'Discarded by its author');
   if (receipt?.status === 'applied') return { ok: true, id, duplicate: true, ref: receipt.ref };
   if (!receipt) {
-    receipt = { tenantId: project.tenantId, actorId: actor.userId, opId: id, kind: input.kind, payloadHash, status: 'pending', appliedISO: NOW };
+    receipt = { tenantId: project.tenantId, actorId: actor.userId, opId: id, kind: input.kind, payloadHash, status: 'pending', appliedISO: operatingNowISO() };
     db.syncLedger.push(receipt);
   }
   retainPendingSyncReceipt(receipt);
@@ -97,8 +99,8 @@ export async function syncOperation(raw: SyncInput): Promise<SyncOutcome> {
         return !dep || dep.projectId !== task.projectId || dep.status !== 'done';
       })) return conflict('Complete the predecessor tasks before recording progress.', 'Unfinished predecessor tasks');
       task.percentComplete = pct; task.status = pct === 0 ? 'not_started' : pct === 100 ? 'done' : 'in_progress';
-      if (pct > 0 && !task.actualStartISO) task.actualStartISO = NOW.slice(0, 10);
-      if (pct === 100 && !task.actualFinishISO) task.actualFinishISO = NOW.slice(0, 10);
+      if (pct > 0 && !task.actualStartISO) task.actualStartISO = operatingDateISO();
+      if (pct === 100 && !task.actualFinishISO) task.actualFinishISO = operatingDateISO();
       ref = task.name; break;
     }
     case 'safety_event': {
@@ -111,7 +113,7 @@ export async function syncOperation(raw: SyncInput): Promise<SyncOutcome> {
   PATHS.forEach((path) => revalidatePath(path));
   return { ok: true, id, duplicate: false, ref };
 
-  });
+  }, 'construction');
 }
 
 /** Only the authenticated author may discard their exact previously attempted copy. */
@@ -127,5 +129,5 @@ export async function abandonOperation(input: SyncInput): Promise<{ ok: true } |
   receipt.status = 'abandoned';
   return { ok: true };
 
-  });
+  }, 'construction');
 }

@@ -2,7 +2,7 @@ import { requireCapability } from '@/server/guard';
 import { can } from '@/lib/authz';
 import { constructionWorld } from '@/server/reads/construction';
 import { repos } from '@/server/data';
-import { NOW_MS } from '@/domain/ppm';
+import { operatingClock } from '@/server/operating-clock';
 import { scoreQuotes, budgetException, isOverdue, vendorBand } from '@/domain/construction';
 import { ProcurementWorkspace, type RequestRow, type RfqRow, type OrderRow } from '@/components/construction/procurement-workspace';
 import { withDurableRead } from '@/server/data/durable-records';
@@ -15,6 +15,7 @@ const OPEN_PO = ['issued', 'acknowledged', 'part_delivered', 'approved'];
  *  commits budget, and receiving books both stock and actual cost. */
 export default async function ConstructionProcurementPage() {
   return withDurableRead(async () => {
+  const { nowMs: NOW_MS } = operatingClock();
   const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const canMutate = can(actor, 'reports_analytics', 'update').allowed;
   const world = constructionWorld(actor);

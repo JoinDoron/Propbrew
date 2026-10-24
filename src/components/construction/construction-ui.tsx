@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, useTransition, type CSSProperties, type ReactNode } from 'react';
+import { createContext, useContext, useRef, useState, useTransition, type CSSProperties, type ReactNode } from 'react';
 import { Check, Info, Search, X } from 'lucide-react';
 import { Card, CardHeader, KpiCard, IconButton, Button, EmptyState } from '@/components/ui';
 import { PortalDialog } from '@/components/portal/portal-dialog';
@@ -9,9 +9,14 @@ import { NOW } from '@/domain/ppm';
 import shared from '@/components/ui/workspace-layout.module.css';
 import styles from './construction-ui.module.css';
 
+const ConstructionSnapshot = createContext({ iso: NOW, native: false });
+export function ConstructionSnapshotProvider({ snapshot, children }: { snapshot: { iso: string; native: boolean }; children?: ReactNode }) {
+  return <ConstructionSnapshot.Provider value={snapshot}>{children}</ConstructionSnapshot.Provider>;
+}
 /** Composed operational patterns; construction diagrams keep their own geometry. */
-export function ConstructionFrame({ children }: { children: ReactNode }) {
-  return <div className={`${shared.layout} ${styles.workspace}`}><div data-construction-snapshot="true" className={shared.metadata}>Recorded snapshot · {new Date(NOW).toLocaleDateString('en-NG', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Africa/Lagos' })} · WAT. Forecasts and rule-match scores are estimates, not independently verified site evidence.</div>{children}</div>;
+export function ConstructionFrame({ children, snapshotISO, native }: { children: ReactNode; snapshotISO?: string; native?: boolean }) {
+  const snapshot = useContext(ConstructionSnapshot);
+  return <div className={`${shared.layout} ${styles.workspace}`}><div data-construction-snapshot="true" className={shared.metadata}>{(native ?? snapshot.native) ? 'Company records' : 'Recorded snapshot'} · {new Date(snapshotISO ?? snapshot.iso).toLocaleDateString('en-NG', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Africa/Lagos' })} · WAT. Forecasts and rule-match scores are estimates, not independently verified site evidence.</div>{children}</div>;
 }
 
 export function ConstructionPanel({ children, className = '', style }: { children: ReactNode; className?: string; style?: CSSProperties }) {

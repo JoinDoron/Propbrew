@@ -16,12 +16,17 @@ import { redirect } from 'next/navigation';
 import type { Actor } from '@/lib/authz';
 import { DEFAULT_IDENTITY_KEY, DEV_IDENTITIES, identityByKey, type DevIdentity } from './identities';
 import { assertReviewReadiness, getReviewSession, reviewModeEnabled } from './review-auth';
+import { nativeAuthEnabled } from './auth/mode';
+import { assertNativeAuthReadiness } from './auth/auth';
+import { getCompanyPrincipal, getNativeIdentity } from './auth/company';
+import { currentRecordContext } from './data/record-context';
 
 export const DEV_IDENTITY_COOKIE = 'vesta_dev_identity';
 export const SIGNED_OUT_COOKIE = 'vesta_signed_out';
 
 /** Prevent an accidental production launch with the reset-on-restart demo store. */
 export function assertProductionReadiness(): void {
+  if (nativeAuthEnabled()) { assertNativeAuthReadiness(); return; }
   if (reviewModeEnabled()) { assertReviewReadiness(); return; }
   if (process.env.NODE_ENV === 'production' && process.env.NEXT_PHASE !== 'phase-production-build' && process.env.REEVE_ALLOW_IN_MEMORY_DATA !== '1' && process.env.DATA_SOURCE !== 'http') {
     throw new Error('Durable DATA_SOURCE is required in production. Set DATA_SOURCE=http after configuring the database adapter.');
@@ -41,6 +46,7 @@ export function assertProductionReadiness(): void {
  * only as a deliberate act by whoever controls the environment.
  */
 export function devIdentityEnabled(): boolean {
+  if (nativeAuthEnabled()) return false;
   if (reviewModeEnabled()) return false;
   if (process.env.NODE_ENV !== 'production') {
     return process.env.NEXT_PUBLIC_DEV_IDENTITY === '1';
@@ -55,6 +61,11 @@ export function devIdentityEnabled(): boolean {
  */
 export async function getSession(): Promise<DevIdentity | null> {
   assertProductionReadiness();
+  if (nativeAuthEnabled()) {
+    const principal = currentRecordContext()?.companyPrincipal ?? await getCompanyPrincipal();
+    if (!principal) return null;
+    return { key: 'company', label: principal.user.name, roleSummary: principal.membership.companyRole === 'member' ? 'Team member' : principal.membership.companyRole === 'owner' ? 'Company owner' : 'Company administrator', tenantLabel: principal.company.name, actor: principal.actor };
+  }
   if (reviewModeEnabled()) return getReviewSession();
   const store = await cookies();
 
@@ -120,6 +131,7 @@ export async function getDevIdentity(): Promise<DevIdentity> {
 export async function getActor(): Promise<Actor> {
   const session = await getSession();
   if (!session) {
+    if (nativeAuthEnabled() && await getNativeIdentity()) redirect('/companies');
     if (reviewModeEnabled()) redirect('/review/login');
     // New verified owners have no tenant Actor until activation. They may only
     // reach their self-owned onboarding record, never a seeded tenant.

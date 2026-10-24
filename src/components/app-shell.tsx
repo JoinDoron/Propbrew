@@ -48,6 +48,8 @@ export type ShellIdentity = {
   roleSummary: string;
   tenantLabel: string;
   outboxOwner?: string;
+  companyAccount?: boolean;
+  canManageTeam?: boolean;
 };
 
 export function AppShell({
@@ -242,6 +244,7 @@ export function AppShell({
           <NotificationsMenu notifications={notifications} unread={unreadNotifications} />
           <span className={styles.headerDivider} aria-hidden="true" />
           <ProfileMenu name={identity.name} roleSummary={identity.roleSummary} tenantLabel={identity.tenantLabel}
+            companyAccount={identity.companyAccount} canManageTeam={identity.canManageTeam}
             workspace={workspace ? { id: workspace.id, name: workspace.name, icon: workspace.icon } : undefined} />
         </div>
         </div>

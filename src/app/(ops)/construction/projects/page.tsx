@@ -1,7 +1,7 @@
 import { requireCapability } from '@/server/guard';
 import { can } from '@/lib/authz';
 import { constructionWorld } from '@/server/reads/construction';
-import { NOW_MS } from '@/domain/ppm';
+import { operatingClock } from '@/server/operating-clock';
 import { projectEVMOf, forecastFinishISO, projectHealth, projectCommittedMinor, projectActualMinor, milestoneBand } from '@/domain/construction';
 import { ProjectsWorkspace, type ProjectCard } from '@/components/construction/projects-workspace';
 import { withDurableRead } from '@/server/data/durable-records';
@@ -11,6 +11,7 @@ import { withDurableRead } from '@/server/data/durable-records';
  *  composite health score, forecast finish and milestone status. */
 export default async function ConstructionProjectsPage() {
   return withDurableRead(async () => {
+  const { nowMs: NOW_MS } = operatingClock();
   const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const canMutate = can(actor, 'reports_analytics', 'create').allowed;
   const world = constructionWorld(actor);

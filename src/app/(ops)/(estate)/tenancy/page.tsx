@@ -1,9 +1,10 @@
+import { operatingClock } from '@/server/operating-clock';
 import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { can } from '@/lib/authz';
 import { ScopeBanner } from '@/components/domain';
 import { repos } from '@/server/data';
-import { NOW_MS } from '@/domain/ppm';
+
 import { depositExposureMinor, leaseRunwayDays } from '@/domain/estate';
 import { TenancyWorkspace, type TenancyRow } from '@/components/estate/tenancy-workspace';
 import { withDurableRead } from '@/server/data/durable-records';
@@ -15,6 +16,7 @@ const IN_MOTION = new Set(['approved', 'moving_in', 'notice', 'moving_out']);
 export default async function TenancyPage() {
   return withDurableRead(async () => {
   const { actor } = await requireCapability('users_roles', 'read', 'estate');
+  const clock = operatingClock();
   const tenancies = repos.tenancies.list(actor).items;
 
   const rows: TenancyRow[] = tenancies.map((t) => ({
@@ -31,10 +33,10 @@ export default async function TenancyPage() {
         kpis={{
           active: tenancies.filter((t) => t.stage === 'active').length,
           inMotion: tenancies.filter((t) => IN_MOTION.has(t.stage)).length,
-          renewalsSoon: tenancies.filter((t) => { const d = leaseRunwayDays(t, NOW_MS); return t.stage === 'active' && d !== null && d <= 45; }).length,
+          renewalsSoon: tenancies.filter((t) => { const d = leaseRunwayDays(t, clock.nowMs); return t.stage === 'active' && d !== null && d <= 45; }).length,
           depositExposureMinor: depositExposureMinor(tenancies),
         }}
-        nowMs={NOW_MS}
+        nowMs={clock.nowMs}
         canMutate={can(actor, 'users_roles', 'update').allowed}
       />
     </div>

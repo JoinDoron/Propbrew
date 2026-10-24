@@ -20,7 +20,7 @@ import { ForbiddenError, assertCan } from '@/lib/authz';
 import { repos } from '@/server/data';
 import { db, recordProxyReturnNotice } from '@/server/data/store';
 import { units } from '@/server/data/seed/fixtures';
-import { NOW } from '@/domain/ppm';
+import { operatingNowISO } from '@/server/operating-clock';
 import { isEventFull, proxyWouldCycle, cascadeRevokeUpstream, type VoteChoice } from '@/domain/estate';
 
 export type Res = { ok: true; ref?: string } | { ok: false; error: string };
@@ -43,7 +43,7 @@ export async function residentRsvp(eventId: string): Promise<Res> {
   paths();
   return { ok: true, ref: e.title };
 
-  });
+  }, 'estate');
 }
 
 export async function residentVote(motionId: string, choice: VoteChoice): Promise<Res> {
@@ -61,7 +61,7 @@ export async function residentVote(motionId: string, choice: VoteChoice): Promis
   paths();
   return { ok: true, ref: m.ref };
 
-  });
+  }, 'estate');
 }
 
 /** Hand your unit's vote to a holder (e.g. the Chair) with an instruction — for
@@ -91,7 +91,7 @@ export async function residentAssignProxy(motionId: string, holderName: string, 
   paths();
   return { ok: true, ref: holderName.trim() };
 
-  });
+  }, 'estate');
 }
 
 export async function residentRevokeProxy(motionId: string): Promise<Res> {
@@ -108,7 +108,7 @@ export async function residentRevokeProxy(motionId: string): Promise<Res> {
   paths();
   return { ok: true, ref: cascaded.length ? `${cascaded.length} delegated ${cascaded.length === 1 ? 'proxy' : 'proxies'} returned` : undefined };
 
-  });
+  }, 'estate');
 }
 
 export async function dismissProxyNotice(id: string): Promise<Res> {
@@ -120,7 +120,7 @@ export async function dismissProxyNotice(id: string): Promise<Res> {
   paths();
   return { ok: true };
 
-  });
+  }, 'estate');
 }
 
 /** Cast a resident's single unit-weighted ballot for a candidate in the board
@@ -140,7 +140,7 @@ export async function residentVoteCandidate(electionId: string, candidateId: str
   paths();
   return { ok: true, ref: cand.residentName };
 
-  });
+  }, 'estate');
 }
 
 /** Stand for the vacant board seat from the portal — a resident nominates
@@ -160,7 +160,7 @@ export async function residentSelfNominate(electionId: string, statement: string
   paths();
   return { ok: true, ref: myName };
 
-  });
+  }, 'estate');
 }
 
 /** A resident confirms they've collected their own parcel — frees the locker. */
@@ -173,13 +173,13 @@ export async function residentCollectParcel(parcelId: string): Promise<Res> {
   if (!p) return { ok: false, error: 'Parcel not found.' };
   if (p.residentName !== myName) return { ok: false, error: 'That parcel isn’t yours.' };
   if (p.status === 'collected') return { ok: false, error: 'Already collected.' };
-  p.status = 'collected'; p.collectedISO = new Date(Date.parse(NOW)).toISOString();
+  p.status = 'collected'; p.collectedISO = new Date(Date.parse(operatingNowISO())).toISOString();
   const locker = db.lockers.find((l) => l.parcelId === parcelId);
   if (locker) locker.parcelId = undefined;
   ['/portal/community', '/portal', '/parcels'].forEach((path) => revalidatePath(path));
   return { ok: true, ref: p.code };
 
-  });
+  }, 'estate');
 }
 
 export async function residentRedeem(perkId: string): Promise<Res> {
@@ -197,5 +197,5 @@ export async function residentRedeem(perkId: string): Promise<Res> {
   paths();
   return { ok: true, ref: p.title };
 
-  });
+  }, 'estate');
 }

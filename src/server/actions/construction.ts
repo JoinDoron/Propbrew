@@ -1,5 +1,7 @@
 'use server';
 
+import { operatingDateISO, operatingNowISO, operatingNowMs } from '@/server/operating-clock';
+
 import { withDurableMutation } from '@/server/data/durable-records';
 
 import { nextRecordSequence } from '@/server/data/record-context';
@@ -20,7 +22,7 @@ import { ForbiddenError, assertCan, type Actor } from '@/lib/authz';
 import { db } from '@/server/data/store';
 import { repos, scopedMutableGet } from '@/server/data';
 import { money, type Money } from '@/domain/primitives';
-import { NOW, NOW_MS } from '@/domain/ppm';
+
 import { constructionWorld } from '@/server/reads/construction';
 import { canEnterWorkspace } from '@/config/workspaces';
 import {
@@ -57,7 +59,7 @@ export async function submitReport(id: string): Promise<Res> {
   if (r.status !== 'draft' && r.status !== 'returned') return { ok: false, error: 'Only a draft can be submitted.' };
   r.status = 'submitted'; revalidate(); return { ok: true, ref: r.dateISO };
 
-  });
+  }, 'construction');
 }
 export async function reviewReport(id: string): Promise<Res> {
   return withDurableMutation(async () => {
@@ -66,7 +68,7 @@ export async function reviewReport(id: string): Promise<Res> {
   if (r.status !== 'submitted') return { ok: false, error: 'Only a submitted report can be reviewed.' };
   r.status = 'reviewed'; revalidate(); return { ok: true };
 
-  });
+  }, 'construction');
 }
 export async function approveDailyReport(id: string): Promise<Res> {
   return withDurableMutation(async () => {
@@ -78,7 +80,7 @@ export async function approveDailyReport(id: string): Promise<Res> {
   if (me && r.officer.toLowerCase() === me) return { ok: false, error: 'You submitted this report — a different manager must approve it.' };
   r.status = 'approved'; revalidate(); return { ok: true, ref: r.dateISO };
 
-  });
+  }, 'construction');
 }
 export async function returnDailyReport(id: string, reason: string): Promise<Res> {
   return withDurableMutation(async () => {
@@ -88,7 +90,7 @@ export async function returnDailyReport(id: string, reason: string): Promise<Res
   if (!['submitted', 'reviewed'].includes(r.status)) return { ok: false, error: 'Only a submitted or reviewed report can be returned. Approved reports require an adjustment.' };
   r.status = 'returned'; r.constraints = [...r.constraints, `Returned: ${reason.trim()}`]; revalidate(); return { ok: true };
 
-  });
+  }, 'construction');
 }
 
 /* --- schedule ------------------------------------------------------------- */
@@ -101,11 +103,11 @@ export async function updateTaskProgress(id: string, pct: number): Promise<Res> 
   if (pct > 0 && t.dependsOn.some((dependencyId) => scopedMutableGet(g.actor, 'reports_analytics', db.constructionTasks, dependencyId, 'read')?.status !== 'done')) return { ok: false, error: 'Complete the predecessor tasks before recording progress.' };
   const p = Math.max(0, Math.min(100, Math.round(pct)));
   t.percentComplete = p; t.status = p === 0 ? 'not_started' : p >= 100 ? 'done' : 'in_progress';
-  if (p > 0 && !t.actualStartISO) t.actualStartISO = NOW.slice(0, 10);
-  if (p >= 100 && !t.actualFinishISO) t.actualFinishISO = NOW.slice(0, 10);
+  if (p > 0 && !t.actualStartISO) t.actualStartISO = operatingDateISO();
+  if (p >= 100 && !t.actualFinishISO) t.actualFinishISO = operatingDateISO();
   revalidate(); return { ok: true, ref: t.name };
 
-  });
+  }, 'construction');
 }
 export async function advanceMilestone(id: string): Promise<Res> {
   return withDurableMutation(async () => {
@@ -114,17 +116,17 @@ export async function advanceMilestone(id: string): Promise<Res> {
   if (m.status === 'accepted') return { ok: false, error: 'This milestone is already accepted.' };
   m.status = 'accepted'; revalidate(); return { ok: true, ref: m.name };
 
-  });
+  }, 'construction');
 }
 export async function escalateTaskToIssue(taskId: string): Promise<Res> {
   return withDurableMutation(async () => {
   const g = await gate('create'); if (!g.ok) return g;
   const t = scopedMutableGet(g.actor, 'reports_analytics', db.constructionTasks, taskId, 'create'); if (!t) return { ok: false, error: 'Task not found.' };
   const id = `is-esc-${nextRecordSequence('construction:issueSeq', 0, true)}`;
-  db.constructionIssues.unshift({ tenantId: g.actor.tenantId, id, projectId: t.projectId, category: 'Schedule', title: `Overdue task escalated: ${t.name}`, severity: 'high', owner: t.owner, raisedISO: NOW.slice(0, 10), dueISO: daysISO(NOW, 3), status: 'open', correctiveAction: 'Recovery plan required' } as (typeof db.constructionIssues)[number]);
+  db.constructionIssues.unshift({ tenantId: g.actor.tenantId, id, projectId: t.projectId, category: 'Schedule', title: `Overdue task escalated: ${t.name}`, severity: 'high', owner: t.owner, raisedISO: operatingDateISO(), dueISO: daysISO(operatingDateISO(), 3), status: 'open', correctiveAction: 'Recovery plan required' } as (typeof db.constructionIssues)[number]);
   revalidate(); return { ok: true, ref: t.name };
 
-  });
+  }, 'construction');
 }
 
 /* --- procurement (PR → RFQ award → PO → delivery) ------------------------- */
@@ -135,7 +137,7 @@ export async function approvePurchaseRequest(id: string): Promise<Res> {
   if (pr.status !== 'pending' && pr.status !== 'draft') return { ok: false, error: 'Only a pending request can be approved.' };
   pr.status = 'approved'; revalidate(); return { ok: true, ref: pr.ref };
 
-  });
+  }, 'construction');
 }
 /** Award an RFQ to a vendor: issue a PO from the winning quote and commit budget. */
 export async function awardRfq(rfqId: string, vendorId: string): Promise<Res> {
@@ -153,12 +155,12 @@ export async function awardRfq(rfqId: string, vendorId: string): Promise<Res> {
   rfq.status = 'awarded'; rfq.awardedVendorId = vendorId;
   const latest = Math.max(3014, ...db.constructionOrders.filter((order) => order.tenantId === g.actor.tenantId).map((order) => Number(/^PO-(\d+)$/.exec(order.ref)?.[1] ?? 0)));
   const ref = `PO-${latest + 1}`;
-  db.constructionOrders.unshift({ tenantId: g.actor.tenantId, id: `po-new-${randomUUID()}`, ref, projectId: rfq.projectId, vendorId, vendorName: q.vendorName, item: rfq.item, qty: rfq.qty, unit: rfq.unit, costCode: req.costCode, value: q.price, status: 'issued', issuedISO: NOW.slice(0, 10), expectedISO: daysISO(NOW, q.leadDays), deliveredQty: 0 } as (typeof db.constructionOrders)[number]);
+  db.constructionOrders.unshift({ tenantId: g.actor.tenantId, id: `po-new-${randomUUID()}`, ref, projectId: rfq.projectId, vendorId, vendorName: q.vendorName, item: rfq.item, qty: rfq.qty, unit: rfq.unit, costCode: req.costCode, value: q.price, status: 'issued', issuedISO: operatingDateISO(), expectedISO: daysISO(operatingDateISO(), q.leadDays), deliveredQty: 0 } as (typeof db.constructionOrders)[number]);
   req.status = 'ordered';
   cc.committed = addMinor(cc.committed, q.price.minor);
   revalidate(); return { ok: true, ref };
 
-  });
+  }, 'construction');
 }
 export async function approvePurchaseOrder(id: string): Promise<Res> {
   return withDurableMutation(async () => {
@@ -167,7 +169,7 @@ export async function approvePurchaseOrder(id: string): Promise<Res> {
   if (!['draft', 'approved'].includes(po.status)) return { ok: false, error: 'Only a draft or approved order can advance to issue.' };
   po.status = po.status === 'draft' ? 'approved' : 'issued'; revalidate(); return { ok: true, ref: po.ref };
 
-  });
+  }, 'construction');
 }
 /** Receive against a PO: advance delivery, book stock AND actual cost. */
 export async function receiveDelivery(poId: string, qty: number): Promise<Res> {
@@ -197,11 +199,11 @@ export async function receiveDelivery(poId: string, qty: number): Promise<Res> {
     const st = repos.constructionStock.list(g.actor, { limit: Number.MAX_SAFE_INTEGER }).items.find((s) => s.materialId === mat.id && s.warehouseId === warehouse.id);
     if (st) { st.onHand += recv; st.inTransit = Math.max(0, st.inTransit - recv); }
     else db.constructionStock.push({ tenantId: g.actor.tenantId, id: `st-receive-${randomUUID()}`, materialId: mat.id, warehouseId: warehouse.id, onHand: recv, reserved: 0, inTransit: 0 } as (typeof db.constructionStock)[number]);
-    db.constructionMovements.unshift({ tenantId: g.actor.tenantId, id: `sm-new-${nextRecordSequence('construction:movSeq', 0, true)}`, materialId: mat.id, kind: 'receipt', qty: recv, atISO: NOW.slice(0, 10), projectId: po.projectId, costCode: po.costCode, ref: po.ref, by: nameOf(g.actor) } as (typeof db.constructionMovements)[number]);
+    db.constructionMovements.unshift({ tenantId: g.actor.tenantId, id: `sm-new-${nextRecordSequence('construction:movSeq', 0, true)}`, materialId: mat.id, kind: 'receipt', qty: recv, atISO: operatingDateISO(), projectId: po.projectId, costCode: po.costCode, ref: po.ref, by: nameOf(g.actor) } as (typeof db.constructionMovements)[number]);
   }
   revalidate(); return { ok: true, ref: `${recv} ${po.unit}` };
 
-  });
+  }, 'construction');
 }
 
 /* --- materials ------------------------------------------------------------ */
@@ -220,10 +222,10 @@ export async function issueMaterials(materialId: string, qty: number, projectId:
     if (remaining === 0) break;
   }
   const movSeq = nextRecordSequence('construction:movSeq', 0, true);
-  db.constructionMovements.unshift({ tenantId: g.actor.tenantId, id: `sm-new-${movSeq}`, materialId, kind: 'issue', qty, atISO: NOW.slice(0, 10), projectId, ref: `MI-${470 + movSeq}`, by: nameOf(g.actor) } as (typeof db.constructionMovements)[number]);
+  db.constructionMovements.unshift({ tenantId: g.actor.tenantId, id: `sm-new-${movSeq}`, materialId, kind: 'issue', qty, atISO: operatingDateISO(), projectId, ref: `MI-${470 + movSeq}`, by: nameOf(g.actor) } as (typeof db.constructionMovements)[number]);
   revalidate(); return { ok: true };
 
-  });
+  }, 'construction');
 }
 
 /* --- cost control --------------------------------------------------------- */
@@ -236,10 +238,10 @@ export async function raiseVariation(input: VariationInput): Promise<Res> {
   if (!Number.isFinite(input.costImpactNaira) || !Number.isSafeInteger(Math.round(input.costImpactNaira * 100)) || !Number.isFinite(input.scheduleImpactDays) || !Number.isSafeInteger(Math.round(input.scheduleImpactDays))) return { ok: false, error: 'Enter finite cost and schedule impacts.' };
   const varSeq = nextRecordSequence('construction:varSeq', 0, true);
   const ref = `VO-${12 + db.constructionVariations.length + (varSeq)}`;
-  db.constructionVariations.unshift({ tenantId: g.actor.tenantId, id: `var-new-${varSeq}`, ref, projectId: input.projectId, title: input.title.trim(), reason: input.reason.trim() || 'Not stated', costImpact: money(Math.round((input.costImpactNaira || 0) * 100)), scheduleImpactDays: Math.round(input.scheduleImpactDays || 0), status: 'submitted', raisedISO: NOW.slice(0, 10) } as (typeof db.constructionVariations)[number]);
+  db.constructionVariations.unshift({ tenantId: g.actor.tenantId, id: `var-new-${varSeq}`, ref, projectId: input.projectId, title: input.title.trim(), reason: input.reason.trim() || 'Not stated', costImpact: money(Math.round((input.costImpactNaira || 0) * 100)), scheduleImpactDays: Math.round(input.scheduleImpactDays || 0), status: 'submitted', raisedISO: operatingDateISO() } as (typeof db.constructionVariations)[number]);
   revalidate(); return { ok: true, ref };
 
-  });
+  }, 'construction');
 }
 export async function approveVariation(id: string): Promise<Res> {
   return withDurableMutation(async () => {
@@ -248,45 +250,45 @@ export async function approveVariation(id: string): Promise<Res> {
   if (v.status !== 'submitted') return { ok: false, error: 'Only a submitted variation can be approved.' };
   v.status = 'approved'; revalidate(); return { ok: true, ref: v.ref };
 
-  });
+  }, 'construction');
 }
 
 /* --- risk radar (advisory lifecycle) -------------------------------------- */
 function setSignalState(actor: Actor, signalId: string, state: 'ack' | 'snoozed' | 'escalated' | 'dismissed') {
   const existing = db.constructionSignalStates.find((s) => s.tenantId === actor.tenantId && s.signalId === signalId);
   if (existing) { existing.state = state; return existing; }
-  const row: (typeof db.constructionSignalStates)[number] = { tenantId: actor.tenantId!, signalId, state, atISO: NOW };
+  const row: (typeof db.constructionSignalStates)[number] = { tenantId: actor.tenantId!, signalId, state, atISO: operatingNowISO() };
   db.constructionSignalStates.push(row); return row;
 }
 export async function acknowledgeSignal(signalId: string): Promise<Res> {
   return withDurableMutation(async () => {
   const g = await gate('update'); if (!g.ok) return g;
-  if (!scanRisks(constructionWorld(g.actor), NOW_MS).some((signal) => signal.id === signalId)) return { ok: false, error: 'Signal not found in your authorised projects.' };
+  if (!scanRisks(constructionWorld(g.actor), operatingNowMs()).some((signal) => signal.id === signalId)) return { ok: false, error: 'Signal not found in your authorised projects.' };
   setSignalState(g.actor, signalId, 'ack'); revalidate(); return { ok: true };
 
-  });
+  }, 'construction');
 }
 export async function snoozeSignal(signalId: string): Promise<Res> {
   return withDurableMutation(async () => {
   const g = await gate('update'); if (!g.ok) return g;
-  if (!scanRisks(constructionWorld(g.actor), NOW_MS).some((signal) => signal.id === signalId)) return { ok: false, error: 'Signal not found in your authorised projects.' };
+  if (!scanRisks(constructionWorld(g.actor), operatingNowMs()).some((signal) => signal.id === signalId)) return { ok: false, error: 'Signal not found in your authorised projects.' };
   setSignalState(g.actor, signalId, 'snoozed'); revalidate(); return { ok: true };
 
-  });
+  }, 'construction');
 }
 export async function dismissSignal(signalId: string): Promise<Res> {
   return withDurableMutation(async () => {
   const g = await gate('update'); if (!g.ok) return g;
-  if (!scanRisks(constructionWorld(g.actor), NOW_MS).some((signal) => signal.id === signalId)) return { ok: false, error: 'Signal not found in your authorised projects.' };
+  if (!scanRisks(constructionWorld(g.actor), operatingNowMs()).some((signal) => signal.id === signalId)) return { ok: false, error: 'Signal not found in your authorised projects.' };
   setSignalState(g.actor, signalId, 'dismissed'); revalidate(); return { ok: true };
 
-  });
+  }, 'construction');
 }
 export async function escalateSignalToIssue(signalId: string, projectId: string, title: string): Promise<Res> {
   return withDurableMutation(async () => {
   const g = await gate('create'); if (!g.ok) return g;
   if (!scopedMutableGet(g.actor, 'reports_analytics', db.constructionProjects, projectId, 'create')) return { ok: false, error: 'Project not found.' };
-  const signal = scanRisks(constructionWorld(g.actor), NOW_MS).find((row) => row.id === signalId && row.projectId === projectId);
+  const signal = scanRisks(constructionWorld(g.actor), operatingNowMs()).find((row) => row.id === signalId && row.projectId === projectId);
   if (!signal || !title?.trim()) return { ok: false, error: 'Signal not found in this authorised project.' };
   const receipt = db.constructionSignalStates.find((row) => row.tenantId === g.actor.tenantId && row.signalId === signalId);
   if (receipt?.escalatedIssueId) {
@@ -296,10 +298,10 @@ export async function escalateSignalToIssue(signalId: string, projectId: string,
   }
   if (receipt?.state === 'escalated') return { ok: false, error: 'This signal has already been escalated.' };
   const id = `is-esc-${nextRecordSequence('construction:issueSeq', 0, true)}`;
-  db.constructionIssues.unshift({ tenantId: g.actor.tenantId, id, projectId, category: 'Risk', title: `Escalated: ${signal.title}`, severity: 'high', owner: nameOf(g.actor), raisedISO: NOW.slice(0, 10), dueISO: daysISO(NOW, 5), status: 'open', correctiveAction: 'From risk radar' } as (typeof db.constructionIssues)[number]);
+  db.constructionIssues.unshift({ tenantId: g.actor.tenantId, id, projectId, category: 'Risk', title: `Escalated: ${signal.title}`, severity: 'high', owner: nameOf(g.actor), raisedISO: operatingDateISO(), dueISO: daysISO(operatingDateISO(), 5), status: 'open', correctiveAction: 'From risk radar' } as (typeof db.constructionIssues)[number]);
   setSignalState(g.actor, signalId, 'escalated').escalatedIssueId = id; revalidate(); return { ok: true, ref: id };
 
-  });
+  }, 'construction');
 }
 
 /* --- projects ------------------------------------------------------------- */
@@ -309,13 +311,13 @@ export async function createProject(input: ProjectInput): Promise<Res> {
   const g = await gate('create'); if (!g.ok) return g;
   if (!input.name?.trim()) return { ok: false, error: 'Enter a project name.' };
   if (!Number.isFinite(input.contractNaira) || !safeMinor(Math.round(input.contractNaira * 100)) || !Number.isFinite(input.budgetNaira) || !safeMinor(Math.round(input.budgetNaira * 100))) return { ok: false, error: 'Enter finite, non-negative NGN contract and budget amounts.' };
-  if (input.plannedFinishISO && (!validDate(input.plannedFinishISO) || input.plannedFinishISO < NOW.slice(0, 10))) return { ok: false, error: 'Choose a valid planned finish on or after the project start.' };
+  if (input.plannedFinishISO && (!validDate(input.plannedFinishISO) || input.plannedFinishISO < operatingDateISO())) return { ok: false, error: 'Choose a valid planned finish on or after the project start.' };
   const projSeq = nextRecordSequence('construction:projSeq', 0, true);
   const id = `cp-new-${projSeq}`;
-  db.constructionProjects.unshift({ tenantId: g.actor.tenantId, id, projectId: id, code: `NEW-${projSeq}`, name: input.name.trim(), location: input.location.trim() || 'Lagos', clientName: input.clientName.trim() || '7 Fifteen Capital', pmName: nameOf(g.actor), status: 'planning', contractValue: money(Math.round((input.contractNaira || 0) * 100)), approvedBudget: money(Math.round((input.budgetNaira || 0) * 100)), startISO: NOW.slice(0, 10), plannedFinishISO: input.plannedFinishISO || daysISO(NOW, 540), plannedPercent: 0, percentComplete: 0 } as (typeof db.constructionProjects)[number]);
+  db.constructionProjects.unshift({ tenantId: g.actor.tenantId, id, projectId: id, code: `NEW-${projSeq}`, name: input.name.trim(), location: input.location.trim() || 'Lagos', clientName: input.clientName.trim() || 'Not recorded', pmName: nameOf(g.actor), status: 'planning', contractValue: money(Math.round((input.contractNaira || 0) * 100)), approvedBudget: money(Math.round((input.budgetNaira || 0) * 100)), startISO: operatingDateISO(), plannedFinishISO: input.plannedFinishISO || daysISO(operatingDateISO(), 540), plannedPercent: 0, percentComplete: 0 } as (typeof db.constructionProjects)[number]);
   revalidate(); return { ok: true, ref: input.name.trim() };
 
-  });
+  }, 'construction');
 }
 
 /* --- workforce ------------------------------------------------------------ */
@@ -324,14 +326,14 @@ export async function clockWorker(workerId: string, projectId: string, present: 
   const g = await gate('update'); if (!g.ok) return g;
   const worker = scopedMutableGet(g.actor, 'reports_analytics', db.constructionWorkers, workerId, 'update');
   if (!worker || !scopedMutableGet(g.actor, 'reports_analytics', db.constructionProjects, projectId, 'update') || worker.projectId !== projectId) return { ok: false, error: 'Worker and project assignment not found.' };
-  const today = NOW.slice(0, 10);
+  const today = operatingDateISO();
   const existing = db.constructionAttendance.find((a) => a.tenantId === g.actor.tenantId && a.projectId === projectId && a.workerId === workerId && a.dateISO === today);
   if (existing && ['gps', 'qr'].includes(existing.method)) return { ok: false, error: 'Manual attendance cannot replace recorded GPS or QR evidence. Review the source attendance record.' };
   if (existing) { existing.status = present ? 'present' : 'absent'; existing.clockIn = present ? '07:30' : undefined; existing.method = 'manual'; existing.withinGeofence = false; }
   else db.constructionAttendance.unshift({ tenantId: g.actor.tenantId, id: `at-new-${workerId}`, workerId, projectId, dateISO: today, clockIn: present ? '07:30' : undefined, hours: 0, overtime: 0, method: 'manual', withinGeofence: false, status: present ? 'present' : 'absent' } as (typeof db.constructionAttendance)[number]);
   revalidate(); return { ok: true };
 
-  });
+  }, 'construction');
 }
 
 /* --- digest --------------------------------------------------------------- */
@@ -341,7 +343,7 @@ export async function publishDigest(projectId: string): Promise<Res> {
   const p = scopedMutableGet(g.actor, 'reports_analytics', db.constructionProjects, projectId, 'update'); if (!p) return { ok: false, error: 'Project not found.' };
   revalidate(); return { ok: true, ref: p.name };
 
-  });
+  }, 'construction');
 }
 
 /* --- document revision control -------------------------------------------- */
@@ -363,7 +365,7 @@ export async function issueRevision(docId: string, changeNote: string): Promise<
   const id = `doc-rev-${nextRecordSequence('construction:revSeq', 0, true)}`;
   db.constructionDocs.unshift({
     ...prior, id, revision, status: 'draft',
-    effectiveISO: NOW.slice(0, 10), changeNote: changeNote.trim() || undefined,
+    effectiveISO: operatingDateISO(), changeNote: changeNote.trim() || undefined,
     uploadedBy: nameOf(g.actor), approvedBy: undefined, approvedISO: undefined,
     supersedesId: prior.id, supersededById: undefined,
   } as (typeof db.constructionDocs)[number]);
@@ -373,7 +375,7 @@ export async function issueRevision(docId: string, changeNote: string): Promise<
   revalidate();
   return { ok: true, ref: `${prior.number} rev ${revision}` };
 
-  });
+  }, 'construction');
 }
 
 export async function approveRevision(docId: string): Promise<Res> {
@@ -391,11 +393,11 @@ export async function approveRevision(docId: string): Promise<Res> {
       other.supersededById = doc.id;
     }
   }
-  doc.status = 'approved'; doc.approvedBy = nameOf(g.actor); doc.approvedISO = NOW.slice(0, 10);
+  doc.status = 'approved'; doc.approvedBy = nameOf(g.actor); doc.approvedISO = operatingDateISO();
   revalidate();
   return { ok: true, ref: `${doc.number} rev ${doc.revision}` };
 
-  });
+  }, 'construction');
 }
 
 /** Formally issue a revision to a party — the distribution record an audit asks for. */
@@ -410,12 +412,12 @@ export async function sendTransmittal(docId: string, toParty: string, purpose: '
   }
   db.constructionTransmittals.unshift({
     tenantId: g.actor.tenantId, id: `tr-new-${nextRecordSequence('construction:trSeq', 0, true)}`, docId, docNumber: doc.number,
-    revision: doc.revision, toParty: toParty.trim(), sentISO: NOW.slice(0, 10), purpose,
+    revision: doc.revision, toParty: toParty.trim(), sentISO: operatingDateISO(), purpose,
   } as unknown as (typeof db.constructionTransmittals)[number]);
   revalidate();
   return { ok: true, ref: `${doc.number} rev ${doc.revision} → ${toParty.trim()}` };
 
-  });
+  }, 'construction');
 }
 
 export async function answerRfi(rfiId: string, answer: string): Promise<Res> {
@@ -425,11 +427,11 @@ export async function answerRfi(rfiId: string, answer: string): Promise<Res> {
   if (!r) return { ok: false, error: 'RFI not found.' };
   if (!answer.trim()) return { ok: false, error: 'An answer is required.' };
   if (r.status === 'closed') return { ok: false, error: 'A closed RFI cannot be changed.' };
-  r.answer = answer.trim(); r.answeredISO = NOW.slice(0, 10); r.status = 'answered';
+  r.answer = answer.trim(); r.answeredISO = operatingDateISO(); r.status = 'answered';
   revalidate();
   return { ok: true, ref: r.ref };
 
-  });
+  }, 'construction');
 }
 
 export async function closeRfi(rfiId: string): Promise<Res> {
@@ -442,7 +444,7 @@ export async function closeRfi(rfiId: string): Promise<Res> {
   revalidate();
   return { ok: true, ref: r.ref };
 
-  });
+  }, 'construction');
 }
 
 /* --- BOQ import ------------------------------------------------------------ */
@@ -480,7 +482,7 @@ export async function importBoq(projectId: string, rows: BoqImportRow[]): Promis
   revalidate();
   return { ok: true, ref: `${created} created, ${updated} updated` };
 
-  });
+  }, 'construction');
 }
 
 /* --- timesheets → earned value -------------------------------------------- */
@@ -495,7 +497,7 @@ export async function submitTimesheet(id: string): Promise<Res> {
   revalidate();
   return { ok: true, ref: ts.ref };
 
-  });
+  }, 'construction');
 }
 
 /**
@@ -522,11 +524,11 @@ export async function approveTimesheet(id: string): Promise<Res> {
   if (code.actual.currency !== worker.dayRate.currency || !safeMinor(costMinor) || !Number.isSafeInteger(code.actual.minor + costMinor)) return { ok: false, error: 'Labour currency and finite cost must match the project cost code.' };
 
   code.actual = addMinor(code.actual, costMinor);
-  ts.status = 'approved'; ts.approvedBy = nameOf(g.actor); ts.approvedISO = NOW.slice(0, 10); ts.postedMinor = costMinor;
+  ts.status = 'approved'; ts.approvedBy = nameOf(g.actor); ts.approvedISO = operatingDateISO(); ts.postedMinor = costMinor;
   revalidate();
   return { ok: true, ref: `${ts.ref} · ₦${Math.round(costMinor / 100).toLocaleString('en-NG')} posted to ${ts.costCode}` };
 
-  });
+  }, 'construction');
 }
 
 export async function rejectTimesheet(id: string, reason: string): Promise<Res> {
@@ -540,7 +542,7 @@ export async function rejectTimesheet(id: string, reason: string): Promise<Res> 
   revalidate();
   return { ok: true, ref: ts.ref };
 
-  });
+  }, 'construction');
 }
 
 /* --- audit trail ----------------------------------------------------------- */
@@ -555,7 +557,7 @@ function audit(actor: Actor, entry: {
   const seq = db.constructionAudit.length + 1;
   db.constructionAudit.push({
     tenantId: actor.tenantId, id: `au-${seq}-${Date.now().toString(36)}`, seq,
-    atISO: new Date(Date.parse(NOW)).toISOString(),
+    atISO: new Date(Date.parse(operatingNowISO())).toISOString(),
     actorId: actor.userId, actorName: nameOf(actor), actorRole: actor.roles[0] ?? 'unknown',
     ...entry,
   } as unknown as (typeof db.constructionAudit)[number]);
@@ -569,7 +571,7 @@ function recordReason(actor: Actor, e: {
 }): void {
   db.constructionReasonEvents.push({
     tenantId: actor.tenantId, id: `re-${db.constructionReasonEvents.length + 1}-${Date.now().toString(36)}`,
-    atISO: NOW.slice(0, 10), by: nameOf(actor), ...e,
+    atISO: operatingDateISO(), by: nameOf(actor), ...e,
   } as unknown as (typeof db.constructionReasonEvents)[number]);
 }
 
@@ -583,7 +585,7 @@ const onHandOf = (actor: Actor, materialId: string, warehouseId?: string) =>
 function writeMovement(actor: Actor, kind: 'receipt' | 'issue' | 'transfer' | 'return' | 'adjust', materialId: string, qty: number, extra: { projectId?: string; costCode?: string; ref?: string } = {}): void {
   db.constructionMovements.unshift({
     tenantId: actor.tenantId, id: `mv-${kind}-${nextRecordSequence('construction:mvSeq', 0, true)}`, materialId, kind, qty,
-    atISO: new Date(Date.parse(NOW)).toISOString(), by: nameOf(actor), ...extra,
+    atISO: new Date(Date.parse(operatingNowISO())).toISOString(), by: nameOf(actor), ...extra,
   } as unknown as (typeof db.constructionMovements)[number]);
 }
 
@@ -611,7 +613,7 @@ export async function transferStock(materialId: string, fromWarehouseId: string,
   revalidate();
   return { ok: true, ref: `${qty} ${mat.unit} moved` };
 
-  });
+  }, 'construction');
 }
 
 /** Surplus coming back from site — needs a coded reason so returns are analysable. */
@@ -636,7 +638,7 @@ export async function returnStock(materialId: string, warehouseId: string, qty: 
   revalidate();
   return { ok: true, ref: `${qty} ${mat.unit} returned` };
 
-  });
+  }, 'construction');
 }
 
 /** Record a physical count. The variance is NOT written to stock until it is
@@ -653,13 +655,13 @@ export async function recordStockCount(materialId: string, warehouseId: string, 
   const ref = `SC-${2040 + db.constructionStockCounts.length + (scSeq)}`;
   db.constructionStockCounts.unshift({
     tenantId: g.actor.tenantId!, id: `sc-${scSeq}`, ref, warehouseId, materialId,
-    systemQty, countedQty, countedBy: nameOf(g.actor), countedISO: NOW.slice(0, 10), status: 'open',
+    systemQty, countedQty, countedBy: nameOf(g.actor), countedISO: operatingDateISO(), status: 'open',
   });
   audit(g.actor, { action: 'stock_count', entity: 'material', entityRef: mat.name, summary: `Counted ${countedQty} vs ${systemQty} on system`, before: String(systemQty), after: String(countedQty) });
   revalidate();
   return { ok: true, ref };
 
-  });
+  }, 'construction');
 }
 
 /** Apply a count's variance to stock, with a mandatory coded reason. This is the
@@ -691,7 +693,7 @@ export async function reconcileStockCount(countId: string, reasonCodeId: string,
   revalidate();
   return { ok: true, ref: `${count.ref} · ${delta >= 0 ? '+' : ''}${delta}` };
 
-  });
+  }, 'construction');
 }
 
 /* --- approval workflow ------------------------------------------------------ */
@@ -707,14 +709,14 @@ export async function raiseApproval(subject: 'purchase_request' | 'variation' | 
   const ref = `APR-${1050 + db.constructionApprovals.length + (aprSeq)}`;
   db.constructionApprovals.unshift({
     tenantId: g.actor.tenantId, id: `apr-new-${aprSeq}`, ref, subject, subjectRef, title, projectId,
-    amountMinor, raisedBy: nameOf(g.actor), raisedISO: new Date(Date.parse(NOW)).toISOString(),
+    amountMinor, raisedBy: nameOf(g.actor), raisedISO: new Date(Date.parse(operatingNowISO())).toISOString(),
     ruleId: rule.id, steps: stepsFromRule(rule), status: 'in_flight',
   } as unknown as (typeof db.constructionApprovals)[number]);
   audit(g.actor, { action: 'issue', entity: 'approval', entityRef: ref, projectId, summary: `Raised for approval on “${rule.name}”`, amountMinor });
   revalidate();
   return { ok: true, ref };
 
-  });
+  }, 'construction');
 }
 
 /** Approve or reject the step this actor actually owns. Segregation of duties and
@@ -734,7 +736,7 @@ export async function decideApproval(requestId: string, decision: 'approved' | '
     if (code.requiresNote && !comment?.trim()) return { ok: false, error: `“${code.label}” needs a note.` };
   }
 
-  const next = applyDecision(req, check.step.order, check.step.role, decision, nameOf(g.actor), NOW.slice(0, 10), comment);
+  const next = applyDecision(req, check.step.order, check.step.role, decision, nameOf(g.actor), operatingDateISO(), comment);
   db.constructionApprovals[idx] = next as (typeof db.constructionApprovals)[number];
 
   if (decision === 'rejected' && reasonCodeId) {
@@ -750,7 +752,7 @@ export async function decideApproval(requestId: string, decision: 'approved' | '
   revalidate();
   return { ok: true, ref: `${req.ref} · ${next.status === 'in_flight' ? 'advanced' : next.status}` };
 
-  });
+  }, 'construction');
 }
 
 /** Hand a live step to a named person (PRD §15.3 delegation). */
@@ -771,7 +773,7 @@ export async function delegateApproval(requestId: string, toName: string): Promi
   revalidate();
   return { ok: true, ref: `${req.ref} → ${toName.trim()}` };
 
-  });
+  }, 'construction');
 }
 
 /* --- FX revaluation -------------------------------------------------------- */
@@ -801,7 +803,7 @@ export async function updateFxRate(currency: CurrencyCode, newRate: number): Pro
 
   row.priorRate = oldRate;
   row.rate = newRate;
-  row.asOfISO = NOW.slice(0, 10);
+  row.asOfISO = operatingDateISO();
 
   const dir = newRate > oldRate ? 'weakened' : 'strengthened';
   audit(g.actor, {
@@ -819,5 +821,5 @@ export async function updateFxRate(currency: CurrencyCode, newRate: number): Pro
   revalidate();
   return { ok: true, ref: `${currency} → ₦${newRate}` };
 
-  });
+  }, 'construction');
 }

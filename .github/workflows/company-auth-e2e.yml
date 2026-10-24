@@ -1,0 +1,36 @@
+name: Native company browser workflows
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  native-accounts:
+    name: Real signup, company access and saved records
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install local PostgreSQL binaries
+        run: sudo apt-get update && sudo apt-get install -y postgresql postgresql-client
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Native account browser workflows with disposable database
+        run: node scripts/test-company-auth-e2e.mjs
+      - name: Preserve failure screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-company-browser-failures
+          path: .propbrew-local/company-auth-e2e-results
+          if-no-files-found: ignore
+          retention-days: 5

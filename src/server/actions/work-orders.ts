@@ -99,5 +99,5 @@ export async function fireWoTransition(
   revalidatePath('/portal/requests');
   return { ok: true, to: transition.to };
 
-  });
+  }, ['estate', 'facility']);
 }

@@ -29,6 +29,7 @@ export default async function WorkspacesPage({ searchParams }: { searchParams: P
         <header className={styles.header}>
           <Link href="/workspaces" className={styles.brand} aria-label="Propbrew workspaces"><PropbrewMark />propbrew</Link>
           <div className={styles.identity}><strong>{name} · {session.roleSummary}</strong><span>{session.tenantLabel}</span></div>
+          {actor.companyAccess && <nav aria-label="Company account"><Link href="/companies">Switch company</Link>{['owner','admin'].includes(actor.companyAccess.companyRole) && <> · <Link href="/company/team">Team & access</Link></>} · <Link href="/account/security">Account security</Link></nav>}
         </header>
         <section className={styles.intro} aria-labelledby="workspace-title">
           <p className={styles.eyebrow}><LayoutGrid size={13} aria-hidden="true" />One account. Focused workspaces.</p>

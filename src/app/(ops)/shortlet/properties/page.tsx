@@ -7,7 +7,7 @@ import styles from '@/components/shortlet/shortlet-directory-polish.module.css';
 import { ShortletMetric } from '@/components/shortlet/reference-ui';
 import { shortletDate, shortletMoney } from '@/components/shortlet/shortlet-format';
 import { repos } from '@/server/data';
-import { NOW_MS } from '@/domain/ppm';
+import { operatingClock } from '@/server/operating-clock';
 import { occupancyRate, suggestNightlyRate } from '@/domain/shortlet';
 import { Building2, Wifi, KeyRound, Sparkles, Landmark, BedDouble } from 'lucide-react';
 import { withDurableRead } from '@/server/data/durable-records';
@@ -15,6 +15,8 @@ import { withDurableRead } from '@/server/data/durable-records';
 /** Scoped property records and operator-reviewed rate suggestions. No automatic repricing. */
 export default async function ShortletPropertiesPage() {
   return withDurableRead(async () => {
+  const { dateISO: TODAY } = operatingClock();
+  const NOW_MS = Date.parse(TODAY);
   const { actor } = await requireCapability('bookings_amenities', 'read', 'shortlet');
   const props = repos.shortletProperties.list(actor).items;
   const apts = repos.shortletApartments.list(actor).items;

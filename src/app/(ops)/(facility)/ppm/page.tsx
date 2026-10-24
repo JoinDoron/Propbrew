@@ -1,8 +1,9 @@
+import { operatingClock } from '@/server/operating-clock';
 import { requireCapability } from '@/server/guard';
 import { effectiveLevel } from '@/lib/authz';
 import { repos, runtimeForActor } from '@/server/data';
 import { scoreAssets, coverageGaps } from '@/server/data/ppm-risk';
-import { NOW, WEEKLY_CAPACITY_HOURS } from '@/domain/ppm';
+import { WEEKLY_CAPACITY_HOURS } from '@/domain/ppm';
 import { PageHeader } from '@/components/ui/page-header';
 import { ScopeBanner } from '@/components/domain';
 import { MaintenanceWorkspace } from '@/components/ppm/maintenance-workspace';
@@ -17,13 +18,14 @@ import { withDurableRead } from '@/server/data/durable-records';
 export default async function PpmPage() {
   return withDurableRead(async () => {
   const { actor } = await requireCapability('assets_ppm', 'read', 'facility');
+  const clock = operatingClock();
   const canMutate = effectiveLevel(actor, 'assets_ppm') === 'M' || effectiveLevel(actor, 'assets_ppm') === 'F';
 
   const plans = repos.ppmPlans.list(actor).items;
   const nameById = new Map(repos.assets.list(actor).items.map((a) => [String(a.id), a.name]));
 
   const data: PpmData = {
-    now: NOW,
+    now: clock.dateISO,
     canMutate,
     weeklyCapacityHours: WEEKLY_CAPACITY_HOURS,
     occurrences: [...repos.ppmOccurrences.list(actor).items],

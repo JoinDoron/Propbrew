@@ -95,7 +95,8 @@ describe('Deep Facility register Clinexa polish', () => {
     const page = readFileSync(resolve(process.cwd(), 'src/app/(ops)/(facility)/work-orders/page.tsx'), 'utf8');
     expect(page).toContain('subtitle="SLA snapshot and rules-based advisory triage — every job from request to close"');
     expect(page).not.toContain('Live SLA countdowns');
-    expect(page).toContain('nowMs={NOW_MS}');
+    expect(page).toContain('const clock = operatingClock()');
+    expect(page).toContain('nowMs={clock.nowMs}');
   });
 
   it('selects matched vendors without leaving them hidden by the old search filter', () => {

@@ -1,7 +1,7 @@
 import { requireCapability } from '@/server/guard';
 import { can } from '@/lib/authz';
 import { constructionWorld } from '@/server/reads/construction';
-import { NOW, NOW_MS } from '@/domain/ppm';
+import { operatingClock } from '@/server/operating-clock';
 import { weeklyDigest, projectEVMOf } from '@/domain/construction';
 import { DigestWorkspace, type DigestView } from '@/components/construction/digest-workspace';
 import { withDurableRead } from '@/server/data/durable-records';
@@ -11,6 +11,7 @@ import { withDurableRead } from '@/server/data/durable-records';
  *  coverage-gap guard, and an explicit human publish step. */
 export default async function ConstructionDigestPage() {
   return withDurableRead(async () => {
+  const { nowMs: NOW_MS, dateISO: TODAY } = operatingClock();
   const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const canMutate = can(actor, 'reports_analytics', 'update').allowed;
   const world = constructionWorld(actor);
@@ -21,7 +22,7 @@ export default async function ConstructionDigestPage() {
       const d = weeklyDigest(p, world, NOW_MS);
       const evm = projectEVMOf(p, world.costCodes);
       return {
-        projectId: p.id, projectName: p.name, code: p.code, weekOfISO: NOW.slice(0, 10),
+        projectId: p.id, projectName: p.name, code: p.code, weekOfISO: TODAY,
         sections: d.sections,
         coverageGaps: d.coverageGaps,
         deltas: [

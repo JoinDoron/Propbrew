@@ -1,10 +1,11 @@
+import { operatingClock } from '@/server/operating-clock';
 import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { can } from '@/lib/authz';
 import { repos } from '@/server/data';
 import { getSession } from '@/server/session';
 import type { Page } from '@/domain/primitives';
-import { NOW_MS } from '@/domain/ppm';
+
 import { TechnicianWorkspace, type Job } from '@/components/facility/technician-workspace';
 import { withDurableRead } from '@/server/data/durable-records';
 
@@ -27,6 +28,7 @@ const keyFor = (tenantId: string, id: string) => JSON.stringify([tenantId, id]);
 export default async function FieldPage() {
   return withDurableRead(async () => {
   const { actor } = await requireCapability('work_orders', 'read', 'facility');
+  const clock = operatingClock();
   const jobs = allRows((cursor) => repos.workOrders.list(actor, { cursor, limit: 200 }));
   const seesSpaces = can(actor, 'assets_ppm', 'read').allowed;
   const sites = new Map(seesSpaces ? allRows((cursor) => repos.sites.list(actor, { cursor, limit: 200 })).map((site) => [keyFor(site.tenantId, site.id), site.name]) : []);
@@ -45,7 +47,7 @@ export default async function FieldPage() {
   return (
     <div className="pb-page">
       <PageHeader title="My day" subtitle="Your assigned jobs, priorities and next steps." />
-      <TechnicianWorkspace jobs={rows} techName={techName} nowMs={NOW_MS} canTransition={can(actor, 'work_orders', 'transition').allowed} />
+      <TechnicianWorkspace jobs={rows} techName={techName} nowMs={clock.nowMs} canTransition={can(actor, 'work_orders', 'transition').allowed} />
     </div>
   );
   });

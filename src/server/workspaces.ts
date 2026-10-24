@@ -7,11 +7,14 @@ import { shellFor, homeRouteFor } from '@/config/shells';
 import { canEnterWorkspace, type WorkspaceId } from '@/config/workspaces';
 import { getOwnerIdentity } from '@/server/onboarding/identity';
 import { getOwnerSetup } from '@/server/onboarding/repository';
+import { nativeAuthEnabled } from './auth/mode';
+import { getNativeIdentity } from './auth/company';
 
 /** Module choice never supplies or changes an Actor, role, tenant, or scope. */
 export const requireOperatorSession = cache(async () => {
   const session = await getSession();
   if (!session) {
+    if (nativeAuthEnabled() && await getNativeIdentity()) redirect('/companies');
     if (await getOwnerIdentity()) redirect('/onboarding');
     redirect('/login');
   }
@@ -31,5 +34,8 @@ export const requireOperatorSession = cache(async () => {
 export async function requireWorkspace(workspace: WorkspaceId) {
   const session = await requireOperatorSession();
   if (!canEnterWorkspace(session.actor, workspace)) notFound();
+  // Limit page affordances to this module. Membership authority remains the full
+  // server-loaded record, and action wrappers independently check the module.
+  if (session.actor.companyAccess) return { ...session, actor: { ...session.actor, companyAccess: { ...session.actor.companyAccess, modules: { [workspace]: session.actor.companyAccess.modules[workspace] } } } };
   return session;
 }

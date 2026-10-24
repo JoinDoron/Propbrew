@@ -1,7 +1,8 @@
+import { operatingClock } from '@/server/operating-clock';
 import { requireCapability } from '@/server/guard';
 import { repos, seed } from '@/server/data';
 import { can } from '@/lib/authz';
-import { NOW_MS } from '@/domain/ppm';
+
 import { CopilotWorkspace } from '@/components/facility/copilot-workspace';
 import { getTenantModel, type CopilotUsage } from '@/server/copilot/metering';
 import { readCopilotLedgerUsage } from '@/server/ai/copilot-ledger';
@@ -16,6 +17,7 @@ import { withDurableRead } from '@/server/data/durable-records';
 export default async function CopilotPage() {
   return withDurableRead(async () => {
   const { actor } = await requireCapability('assets_ppm', 'read', 'facility');
+  const clock = operatingClock();
   const world: CopilotWorld = {
     systems: [...repos.buildingSystems.list(actor).items],
     alarms: [...repos.facilityAlarms.list(actor).items],
@@ -25,7 +27,7 @@ export default async function CopilotPage() {
     permits: [...repos.facilityPermits.list(actor).items],
     incidents: [...repos.facilityIncidents.list(actor).items],
     sensors: [...repos.facilitySensors.list(actor).items],
-    nowMs: NOW_MS,
+    nowMs: clock.nowMs,
   };
   const userName = seed.users.find((u) => u.id === actor.userId)?.name ?? 'there';
   const tenantId = actor.tenantId!;

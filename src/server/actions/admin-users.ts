@@ -19,6 +19,8 @@ export type UserAdminResult = { ok: true; status: string } | { ok: false; error:
 export async function setUserStatus(userId: string, next: 'active' | 'suspended'): Promise<UserAdminResult> {
   return withDurableMutation(async () => {
   const actor = await getActor();
+  if (!actor.roles.includes('platform_admin') || actor.companyAccess !== undefined) return { ok: false, error: 'You cannot manage platform user accounts.' };
+  if (next !== 'active' && next !== 'suspended') return { ok: false, error: 'Choose a valid account status.' };
   try {
     assertCan(actor, 'users_roles', 'update');
   } catch (e) {
@@ -34,5 +36,5 @@ export async function setUserStatus(userId: string, next: 'active' | 'suspended'
   revalidatePath('/admin/overview');
   return { ok: true, status: next };
 
-  });
+  }, ['estate', 'facility', 'shortlet', 'construction']);
 }

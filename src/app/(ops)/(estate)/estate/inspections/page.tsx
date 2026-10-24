@@ -1,9 +1,10 @@
+import { operatingClock } from '@/server/operating-clock';
 import { requireCapability } from '@/server/guard';
 import { effectiveLevel } from '@/lib/authz';
 import { repos } from '@/server/data';
 import { listEstateWorkOrderSites } from '@/server/reads/estate-work-orders';
 import type { Page } from '@/domain/primitives';
-import { NOW } from '@/domain/inspections';
+
 import { PageHeader } from '@/components/ui/page-header';
 import { ScopeBanner } from '@/components/domain';
 import { InspectionsWorkspace } from '@/components/inspections/inspections-workspace';
@@ -28,6 +29,7 @@ const siteKey = (tenantId: string, siteId: string) => JSON.stringify([tenantId, 
 export default async function EstateInspectionsPage() {
   return withDurableRead(async () => {
   const { actor } = await requireCapability('inspections_compliance', 'read', 'estate');
+  const clock = operatingClock();
   const estateSites = listEstateWorkOrderSites(actor);
   const siteKeys = new Set(estateSites.map((site) => siteKey(site.tenantId, site.id)));
   const belongsToEstate = (row: { tenantId: string; siteId: string; estateId: string }) =>
@@ -35,7 +37,7 @@ export default async function EstateInspectionsPage() {
   const canMutate = ['F', 'M'].includes(effectiveLevel(actor, 'inspections_compliance'));
 
   const data: InspectionsData = {
-    now: NOW,
+    now: clock.dateISO,
     canMutate,
     workOrderBasePath: '/estate/work-orders',
     obligations: allRows((cursor) => repos.complianceObligations.list(actor, { cursor, limit: 200 })).filter(belongsToEstate),

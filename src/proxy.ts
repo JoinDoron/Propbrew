@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { websiteOnlyEnabled, websiteReleaseDecision } from '@/lib/website-release';
 import { reviewModeEnabled, reviewProxy } from '@/server/review-auth';
+import { nativeAuthEnabled } from '@/server/auth/mode';
+import { getSessionCookie } from 'better-auth/cookies';
 
 /**
  * Proxy (Next 16 renamed Middleware → Proxy). OPTIMISTIC redirect only.
@@ -35,6 +37,18 @@ export function proxy(request: NextRequest, event: Parameters<typeof clerkProxy>
   if (websiteOnlyEnabled(process.env.PROPBREW_WEBSITE_ONLY, process.env.NODE_ENV)) return NextResponse.next();
   const pathname = request.nextUrl.pathname;
   if (pathname.startsWith('/_next/static/') || pathname === '/_next/image' || pathname.startsWith('/brand/') || pathname === '/icon.svg' || pathname === '/favicon.ico') return NextResponse.next();
+  if (nativeAuthEnabled()) {
+    if (pathname.startsWith('/review/')) return new NextResponse('Not found',{status:404});
+    const aiRoutes=new Set(['/api/copilot','/api/estate/copilot','/api/shortlet/copilot','/api/construction/copilot']);
+    if(pathname.startsWith('/api/')) {
+      // Legacy mobile/provider endpoints stay closed until company-aware.
+      if(pathname.startsWith('/api/auth/')||pathname==='/api/companies'||pathname==='/api/companies/select'||pathname==='/api/v1/health'||aiRoutes.has(pathname))return NextResponse.next();
+      return new NextResponse('Not found',{status:404,headers:{'Cache-Control':'no-store'}});
+    }
+    const publicPage=pathname==='/'||pathname==='/login'||pathname.startsWith('/login/')||pathname==='/sign-up'||pathname.startsWith('/sign-up/')||pathname.startsWith('/invite/')||pathname==='/robots.txt'||pathname==='/sitemap.xml';
+    if(!publicPage&&!getSessionCookie(request,{cookiePrefix:'propbrew'}))return NextResponse.redirect(new URL('/login',request.url));
+    return NextResponse.next();
+  }
   if (process.env.CLERK_SECRET_KEY && process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) return clerkProxy(request, event);
   return NextResponse.next();
 }

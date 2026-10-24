@@ -1,6 +1,6 @@
 import { requireCapability } from '@/server/guard';
 import { constructionWorld } from '@/server/reads/construction';
-import { NOW_MS } from '@/domain/ppm';
+import { operatingClock } from '@/server/operating-clock';
 import { safetyStats, permitClashes, isOverdue } from '@/domain/construction';
 import { SafetyWorkspace, type PermitRow, type EventRow, type TalkRow } from '@/components/construction/safety-workspace';
 import { withDurableRead } from '@/server/data/durable-records';
@@ -10,6 +10,7 @@ import { withDurableRead } from '@/server/data/durable-records';
  *  the event log (near misses count as good reporting) and toolbox talks. */
 export default async function ConstructionSafetyPage() {
   return withDurableRead(async () => {
+  const { nowMs: NOW_MS } = operatingClock();
   const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const world = constructionWorld(actor);
 

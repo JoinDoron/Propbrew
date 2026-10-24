@@ -33,5 +33,5 @@ export async function sendReminderCampaign(ownerUserIds: string[]): Promise<Remi
   // Preserve the public result shape used by the preview UI; no delivery is claimed.
   return { ok: true, sent: recipients.length };
 
-  });
+  }, 'estate');
 }

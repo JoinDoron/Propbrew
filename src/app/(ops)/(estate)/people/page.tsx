@@ -13,6 +13,7 @@ import { requireOperatorSession } from '@/server/workspaces';
 import { NOW } from '@/domain/ppm';
 import { isReviewActor, reviewModeEnabled } from '@/server/review-auth';
 import { withDurableRead } from '@/server/data/durable-records';
+import { nativeEstateCreationReady } from '@/server/data/company-estate-access';
 
 function allRows<T>(read: (cursor?: string | null) => Page<T>): T[] {
   const rows: T[] = [];
@@ -56,7 +57,8 @@ export default async function PeoplePage() {
   const siteIds = new Set(sites.map((site) => keyFor(site.tenantId, site.id)));
   const units = seesSpaces ? allRows((cursor) => repos.units.list(actor, { cursor, limit: 200 })).filter((unit) => siteIds.has(keyFor(unit.tenantId, unit.siteId))) : [];
   const unitById = new Map(units.map((unit) => [keyFor(unit.tenantId, unit.id), unit]));
-  const canAddTenant = canRegisterEstateRecords(actor);
+  const native = nativeEstateCreationReady(actor);
+  const canAddTenant = canRegisterEstateRecords(actor) && (!actor.companyAccess || native);
   const session = canAddTenant ? await requireOperatorSession() : null;
   const review = session?.key === 'private-review' && reviewModeEnabled() && isReviewActor(actor);
   const demo = Boolean(review || session && session.key !== 'clerk' && devIdentityEnabled());
@@ -93,7 +95,7 @@ export default async function PeoplePage() {
       <PageHeader title="Residents" subtitle="The people, households and tenancies across your estate."
         scope={<ScopeBanner label={actor.allEstates ? 'all estates' : `${actor.estateIds.length} estate(s)`} />}
         actions={canAddTenant ? <EstateCreateActions canAddProperty={false} canAddTenant units={availableUnits}
-          persistent={persistent} demo={localDemo} asOfDate={`${datePart('year')}-${datePart('month')}-${datePart('day')}`} /> : undefined}
+          persistent={persistent} demo={localDemo} native={native} asOfDate={`${datePart('year')}-${datePart('month')}-${datePart('day')}`} /> : undefined}
       />
       <ResidentsExplorer
         residents={rows}

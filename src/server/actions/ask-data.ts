@@ -17,6 +17,7 @@ import { withDurableRead } from '@/server/data/durable-records';
  */
 
 import { getActor } from '@/server/session';
+import { canUseCompanyModule } from '@/lib/auth/company-policy';
 import { can } from '@/lib/authz';
 import { repos, seed } from '@/server/data';
 import { listEstateWorkOrders } from '@/server/reads/estate-work-orders';
@@ -60,6 +61,10 @@ function currencyReview(base: { scopeLabel: string }): DataAnswer {
 export async function askData(question: string): Promise<DataAnswer> {
   return withDurableRead(async () => {
   const actor = await getActor();
+  if (!canUseCompanyModule(actor, 'estate', 'read')) return {
+    matched: false, answer: 'Your account does not have access to Estate reports.',
+    sources: [], confidence: 0, scopeLabel: 'Estate workspace unavailable',
+  };
   const q = question.toLowerCase().trim();
   const scopeLabel = actor.allEstates ? 'all your estates' : `your ${actor.estateIds.length} estate(s)`;
 

@@ -6,10 +6,9 @@ import { PageTabs } from '@/components/ui/page-tabs';
 import { ScopeBanner } from '@/components/domain';
 import { WorkOrdersBoard } from '@/components/work-orders/work-orders-board';
 import { WorkOrdersIntel } from '@/components/work-orders/work-orders-intel';
-import { NOW_MS } from '@/domain/ppm';
+import { operatingClock } from '@/server/operating-clock';
 import { withDurableRead } from '@/server/data/durable-records';
 
-const NOW = '2026-07-26T09:00:00Z';
 const CLOSED = ['closed', 'cancelled', 'rejected', 'verified'];
 
 /** FM-03 — work-order register. The status tabs filter the list, and a List/Board
@@ -18,6 +17,8 @@ const CLOSED = ['closed', 'cancelled', 'rejected', 'verified'];
 export default async function WorkOrdersPage() {
   return withDurableRead(async () => {
   const { actor } = await requireCapability('work_orders', 'read', 'facility');
+  const clock = operatingClock();
+  const boardNowMs = clock.native ? clock.nowMs : Date.parse('2026-07-26T09:00:00Z');
   const canMutate = ['F', 'M'].includes(effectiveLevel(actor, 'work_orders'));
   const rows = repos.workOrders.list(actor).items;
   const wos = [...rows];
@@ -33,7 +34,7 @@ export default async function WorkOrdersPage() {
     priority: w.priority,
     assigneeName: w.assigneeName,
     respondDueAt: w.respondDueAt,
-    breached: !CLOSED.includes(w.status) && (w.respondDueAt ?? '') < NOW,
+    breached: !CLOSED.includes(w.status) && w.respondDueAt !== null && Date.parse(w.respondDueAt) < boardNowMs,
     cost: w.cost,
   }));
 
@@ -44,7 +45,7 @@ export default async function WorkOrdersPage() {
       />
       <PageTabs label="Work order sections" defaultTab="register" items={[
         { id: 'register', label: 'Work order register', count: rows.length, content: <WorkOrdersBoard rows={boardRows} canMutate={canMutate} /> },
-        { id: 'intelligence', label: 'SLA & AI intelligence', content: <WorkOrdersIntel wos={wos} nowMs={NOW_MS} canMutate={canMutate} /> },
+        { id: 'intelligence', label: 'SLA & AI intelligence', content: <WorkOrdersIntel wos={wos} nowMs={clock.nowMs} canMutate={canMutate} /> },
       ]} />
     </div>
   );

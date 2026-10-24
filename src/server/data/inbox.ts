@@ -9,7 +9,7 @@ import 'server-only';
  */
 
 import type { Role } from '@/domain/enums';
-import { getRecordAuxiliary, nextRecordSequence } from '@/server/data/record-context';
+import { currentRecordContext, getRecordAuxiliary, nextRecordSequence } from '@/server/data/record-context';
 
 export type NotifKind = 'info' | 'success' | 'warn' | 'danger';
 export type Notification = {
@@ -129,6 +129,13 @@ const GENERIC_THREAD: ThreadSeed = {
 
 function ensureSeeded(userId: string, role: Role): void {
   const records = inboxRecords(), key = userKey(userId);
+  // Real companies start with actual communications only. A demo's role-based
+  // payment notices and conversations must never appear as customer activity.
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentRecordContext()?.domainTenantId ?? '')) {
+    if (!Object.hasOwn(records.notifications, key)) records.notifications[key] = [];
+    if (!Object.hasOwn(records.threads, key)) records.threads[key] = [];
+    return;
+  }
   if (!Object.hasOwn(records.notifications, key)) {
     const seeds = NOTIFS[role] ?? [[120, 'Welcome to Reeve', 'You’re all set. Notifications will appear here.', 'info']];
     records.notifications[key] = seeds.map(([mins, title, body, kind, href], i) => ({ id: `n-${userId}-${i}`, title, body, kind, href, at: at(mins), read: i >= 3 }));

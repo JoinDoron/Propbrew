@@ -23,7 +23,10 @@ try {
   const port = await new Promise((resolve, reject) => { const socket = createServer(); socket.once('error', reject); socket.listen(0, '127.0.0.1', () => { const address = socket.address(); socket.close(() => resolve(address.port)); }); });
   await run(program('initdb'), ['-D', data, '-U', 'propbrew_workspace_test_admin', '--auth=trust', '--no-locale', '--encoding=UTF8']);
   await run(program('pg_ctl'), ['-D', data, '-l', join(directory, 'postgres.log'), '-o', `-h 127.0.0.1 -p ${port} -k ${directory}`, '-w', 'start']); started = true;
-  await run(process.execPath, ['node_modules/vitest/vitest.mjs', 'run', '--no-file-parallelism', 'tests/data/workspace-postgres.integration.test.ts', 'tests/data/native-postgres.integration.test.ts'], { visible: true, env: { ...process.env, PROPBREW_TEST_DATABASE_URL: `postgresql://propbrew_workspace_test_admin@127.0.0.1:${port}/postgres` } });
+  await run(process.execPath, ['node_modules/vitest/vitest.mjs', 'run', '--no-file-parallelism',
+    'tests/data/workspace-postgres.integration.test.ts', 'tests/data/native-postgres.integration.test.ts',
+    'tests/data/company-accounts.integration.test.ts', 'tests/data/company-ai-budget.integration.test.ts',
+  ], { visible: true, env: { ...process.env, PROPBREW_TEST_DATABASE_URL: `postgresql://propbrew_workspace_test_admin@127.0.0.1:${port}/postgres` } });
 } finally {
   if (started) await run(program('pg_ctl'), ['-D', data, '-m', 'immediate', '-w', 'stop']);
   await rm(directory, { recursive: true, force: true });

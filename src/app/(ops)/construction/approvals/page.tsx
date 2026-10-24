@@ -1,7 +1,7 @@
 import { requireCapability } from '@/server/guard';
 import { can } from '@/lib/authz';
 import { constructionWorld, actorName } from '@/server/reads/construction';
-import { NOW_MS } from '@/domain/ppm';
+import { operatingClock } from '@/server/operating-clock';
 import { canApprove, overdueSteps, approvalProgress, reasonsFor } from '@/domain/construction';
 import { ApprovalsWorkspace, type ReqView, type RuleView, type ReasonOption, type StepView } from '@/components/construction/approvals-workspace';
 import { withDurableRead } from '@/server/data/durable-records';
@@ -12,6 +12,7 @@ import { withDurableRead } from '@/server/data/durable-records';
  *  coded reason so the Pareto downstream is real. */
 export default async function ConstructionApprovalsPage() {
   return withDurableRead(async () => {
+  const { nowMs: NOW_MS } = operatingClock();
   const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const canMutate = can(actor, 'reports_analytics', 'update').allowed;
   const world = constructionWorld(actor);

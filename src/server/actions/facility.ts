@@ -18,7 +18,7 @@ import { ForbiddenError, assertCan, type Role } from '@/lib/authz';
 import { db, recordHistory } from '@/server/data/store';
 import { repos, scopedMutableGet } from '@/server/data';
 import { nextWorkOrderRef } from '@/server/data/store';
-import { NOW, NOW_MS } from '@/domain/ppm';
+import { operatingClock, operatingDateISO, operatingNowISO, operatingNowMs } from '@/server/operating-clock';
 import { COPILOT_MODELS, type CopilotModelId } from '@/domain/facility';
 import { setTenantModel } from '@/server/copilot/metering';
 import type { WorkOrder } from '@/domain/entities';
@@ -49,7 +49,7 @@ export async function acknowledgeAlarm(id: string): Promise<Res> {
   revalidate();
   return { ok: true };
 
-  });
+  }, 'facility');
 }
 
 /** Turn an alarm straight into a work order (the delight: one-tap dispatch). */
@@ -63,9 +63,10 @@ export async function dispatchWoFromAlarm(id: string): Promise<Res> {
   const woSeq = nextRecordSequence('facility:woSeq', 0, true);
   const ref = nextWorkOrderRef();
   const priority = al.severity === 'critical' ? 'emergency' : al.severity === 'warning' ? 'high' : 'routine';
-  const hrs = (n: number) => new Date(NOW_MS + n * 3600 * 1000).toISOString();
+  const clock = operatingClock();
+  const hrs = (n: number) => new Date(clock.nowMs + n * 3600 * 1000).toISOString();
   db.workOrders.unshift({
-    tenantId: g.actor.tenantId, createdAt: NOW, createdBy: g.actor.userId, updatedAt: NOW, updatedBy: g.actor.userId,
+    tenantId: g.actor.tenantId, createdAt: clock.iso, createdBy: g.actor.userId, updatedAt: clock.iso, updatedBy: g.actor.userId,
     id: `wo-alarm-${woSeq}`, ref, title: `${al.system}: ${al.message}`, siteId: al.siteId, estateId: al.siteId, assetId: al.assetId,
     status: 'new', priority, origin: 'sensor_alarm', requesterUserId: g.actor.userId, requesterName: 'Control Center', assigneeName: 'Unassigned',
     respondDueAt: hrs(priority === 'emergency' ? 1 : 4), resolveDueAt: hrs(priority === 'emergency' ? 8 : 48), cost: null,
@@ -78,7 +79,7 @@ export async function dispatchWoFromAlarm(id: string): Promise<Res> {
   revalidatePath('/people');
   return { ok: true, ref };
 
-  });
+  }, 'facility');
 }
 
 /* --- energy --------------------------------------------------------------- */
@@ -89,11 +90,11 @@ export async function logRefuel(generatorId: string, litres: number): Promise<Re
   if (!gen) return { ok: false, error: 'Generator not found.' };
   if (!Number.isFinite(litres) || !(litres > 0)) return { ok: false, error: 'Enter finite litres greater than zero.' };
   gen.fuelPct = Math.min(100, Math.round(gen.fuelPct + (litres / gen.tankLitres) * 100));
-  gen.lastRefuelISO = NOW;
+  gen.lastRefuelISO = operatingNowISO();
   revalidate();
   return { ok: true };
 
-  });
+  }, 'facility');
 }
 
 export async function logMeterReading(meterId: string, reading: number): Promise<Res> {
@@ -103,11 +104,11 @@ export async function logMeterReading(meterId: string, reading: number): Promise
   if (!m) return { ok: false, error: 'Meter not found.' };
   if (!Number.isFinite(reading) || reading < 0) return { ok: false, error: 'Enter a finite, non-negative meter reading.' };
   if (reading < m.reading) return { ok: false, error: 'Reading cannot be lower than the last one.' };
-  m.previous = m.reading; m.reading = reading; m.atISO = NOW;
+  m.previous = m.reading; m.reading = reading; m.atISO = operatingNowISO();
   revalidate();
   return { ok: true };
 
-  });
+  }, 'facility');
 }
 
 /* --- inventory ------------------------------------------------------------ */
@@ -121,7 +122,7 @@ export async function receiveStock(partId: string, qty: number): Promise<Res> {
   revalidate();
   return { ok: true };
 
-  });
+  }, 'facility');
 }
 
 /* --- safety --------------------------------------------------------------- */
@@ -135,11 +136,11 @@ export async function advancePermit(id: string): Promise<Res> {
   revalidate();
   return { ok: true };
 
-  });
+  }, 'facility');
 }
 
 /* --- access & visitors ---------------------------------------------------- */
-const nowIso = () => new Date(NOW_MS).toISOString();
+const nowIso = () => new Date(operatingNowMs()).toISOString();
 
 function logAccess(tenantId: string | null, siteId: string, pointName: string, kind: 'entry' | 'exit' | 'denied' | 'forced' | 'held', subjectName: string, credential: 'pass' | 'fob' | 'plate' | 'manual', passCode?: string) {
   db.accessEvents.unshift({ tenantId: tenantId ?? 't-lekki', id: `ae-new-${nextRecordSequence('facility:aeSeq', 0, true)}`, siteId, pointName, atISO: nowIso(), kind, subjectName, credential, passCode } as (typeof db.accessEvents)[number]);
@@ -153,7 +154,7 @@ export async function preRegisterVisitor(input: PreRegisterInput): Promise<Res> 
   const g = await gate('create'); if ('ok' in g) return g;
   if (!input.visitorName?.trim()) return { ok: false, error: 'Enter the visitor name.' };
   if (!['guest', 'contractor', 'delivery', 'ride_hail'].includes(input.kind)) return { ok: false, error: 'Choose a valid visitor type.' };
-  const today = nowIso().slice(0, 10);
+  const today = operatingDateISO();
   const validTo = input.validToISO || today;
   if (!isFacilityDate(validTo) || validTo < today) return { ok: false, error: 'Choose a valid pass expiry date on or after today.' };
   const site = repos.sites.list(g.actor).items[0];
@@ -168,7 +169,7 @@ export async function preRegisterVisitor(input: PreRegisterInput): Promise<Res> 
   revalidate();
   return { ok: true, ref: code };
 
-  });
+  }, 'facility');
 }
 
 export async function checkInVisitor(id: string): Promise<Res> {
@@ -177,14 +178,18 @@ export async function checkInVisitor(id: string): Promise<Res> {
   const p = scopedMutableGet(g.actor, 'assets_ppm', db.visitorPasses, id, 'update');
   if (!p) return { ok: false, error: 'Pass not found.' };
   if (p.status !== 'expected') return { ok: false, error: 'Only an expected visitor can be checked in.' };
-  const start = Date.parse(p.validFromISO), end = Date.parse(p.validToISO) + (isFacilityDate(p.validToISO) ? 86_400_000 - 1 : 0);
-  if (!Number.isFinite(start) || !Number.isFinite(end) || NOW_MS < start || NOW_MS > end) return { ok: false, error: 'This visitor pass is outside its valid entry window.' };
+  const clock = operatingClock();
+  // Date-only passes cover the Nigerian business day in native accounts.
+  // Explicit timestamps keep their own offset; sample records retain UTC dates.
+  const boundary = (value: string) => Date.parse(isFacilityDate(value) ? `${value}T00:00:00${clock.native ? '+01:00' : 'Z'}` : value);
+  const start = boundary(p.validFromISO), end = boundary(p.validToISO) + (isFacilityDate(p.validToISO) ? 86_400_000 - 1 : 0);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || clock.nowMs < start || clock.nowMs > end) return { ok: false, error: 'This visitor pass is outside its valid entry window.' };
   p.status = 'checked_in'; p.checkedInISO = nowIso();
   logAccess(g.actor.tenantId, p.siteId, 'Main Gate', 'entry', p.visitorName, 'pass', p.code);
   revalidate();
   return { ok: true, ref: p.code };
 
-  });
+  }, 'facility');
 }
 
 export async function checkOutVisitor(id: string): Promise<Res> {
@@ -198,7 +203,7 @@ export async function checkOutVisitor(id: string): Promise<Res> {
   revalidate();
   return { ok: true, ref: p.code };
 
-  });
+  }, 'facility');
 }
 
 export async function setAccessPointMode(id: string, mode: 'secured' | 'unlocked' | 'lockdown'): Promise<Res> {
@@ -212,7 +217,7 @@ export async function setAccessPointMode(id: string, mode: 'secured' | 'unlocked
   revalidate();
   return { ok: true };
 
-  });
+  }, 'facility');
 }
 
 /** One-tap estate lockdown / release — sets every point at once (the red button). */
@@ -227,7 +232,7 @@ export async function setEstateLockdown(on: boolean): Promise<Res> {
   revalidate();
   return { ok: true };
 
-  });
+  }, 'facility');
 }
 
 /* --- copilot config (per-tenant model choice) ----------------------------- */
@@ -249,7 +254,7 @@ export async function setCopilotModel(modelId: string): Promise<Res> {
   ['/copilot', '/estate/copilot', '/shortlet/copilot', '/construction/copilot'].forEach((path) => revalidatePath(path));
   return { ok: true };
 
-  });
+  }, 'facility');
 }
 
 /* --- sustainability ------------------------------------------------------- */
@@ -263,5 +268,5 @@ export async function setSustainabilityTarget(id: string, targetValue: number): 
   revalidate();
   return { ok: true };
 
-  });
+  }, 'facility');
 }

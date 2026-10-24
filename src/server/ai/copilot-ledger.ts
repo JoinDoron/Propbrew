@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { withTenant } from '@/server/db';
+import { nativeAuthEnabled } from '@/server/auth/mode';
 
 export type ReserveCopilotBudgetInput = {
   tenantId: string; actorId: string; feature: string; model: string; requestId: string;
@@ -40,7 +41,12 @@ export async function reserveCopilotBudget(input: ReserveCopilotBudgetInput): Pr
   if (!textValid(input.tenantId, 200) || !textValid(input.actorId, 200) || !textValid(input.feature, 80) || !textValid(input.model, 200) || !UUID.test(input.requestId) || !nonnegative(input.reservedCostMinorNgn) || !capValid(input.tenantCapMinorNgn) || !capValid(input.featureCapMinorNgn)) return { allowed: false, reason: 'invalid_reservation' };
   if (durable(input.tenantId)) {
     try {
-      const rows = await withTenant(input.tenantId, (query) => query`
+      const rows = await withTenant(input.tenantId, (query) => nativeAuthEnabled() ? query`
+        select allowed, reason from reserve_company_copilot_budget(
+          ${input.tenantId}::uuid, ${input.requestId}::uuid, ${input.actorId}, ${input.feature}, ${input.model},
+          ${input.reservedCostMinorNgn}::bigint, ${input.tenantCapMinorNgn}::bigint, ${input.featureCapMinorNgn}::bigint
+        )
+      ` : query`
         select allowed, reason from reserve_copilot_budget(
           ${input.tenantId}::uuid, ${input.requestId}::uuid, ${input.actorId}, ${input.feature}, ${input.model},
           ${input.reservedCostMinorNgn}::bigint, ${input.tenantCapMinorNgn}::bigint, ${input.featureCapMinorNgn}::bigint
@@ -49,7 +55,7 @@ export async function reserveCopilotBudget(input: ReserveCopilotBudgetInput): Pr
       return rows[0] ? { allowed: rows[0].allowed, ...(rows[0].reason ? { reason: rows[0].reason } : {}) } : { allowed: false, reason: 'ledger_unavailable' };
     } catch { return { allowed: false, reason: 'ledger_unavailable' }; }
   }
-  if (process.env.NODE_ENV === 'production') return { allowed: false, reason: 'ledger_unavailable' };
+  if (nativeAuthEnabled() || process.env.NODE_ENV === 'production') return { allowed: false, reason: 'ledger_unavailable' };
   // Non-UUID/no-database demonstration only. This is not a distributed budget store.
   const now = Date.now(); const day = utcDay(now); expireLocal(input.tenantId, now);
   const key = localKey(input.tenantId, input.requestId);
@@ -81,7 +87,7 @@ export async function finishCopilotBudget(input: FinishCopilotBudgetInput): Prom
       return { recorded: rows[0]?.recorded === true };
     } catch { return { recorded: false }; }
   }
-  if (process.env.NODE_ENV === 'production') return { recorded: false };
+  if (nativeAuthEnabled() || process.env.NODE_ENV === 'production') return { recorded: false };
   const row = localRows.get(localKey(input.tenantId, input.requestId));
   if (!row) return { recorded: false };
   if (row.status !== 'reserved' && row.status !== 'expired') return { recorded: true };
@@ -113,7 +119,7 @@ export async function readCopilotLedgerUsage(tenantId: string): Promise<CopilotL
       return totals;
     } catch { throw new Error('Copilot usage ledger unavailable.'); }
   }
-  if (process.env.NODE_ENV === 'production') throw new Error('Copilot usage ledger unavailable.');
+  if (nativeAuthEnabled() || process.env.NODE_ENV === 'production') throw new Error('Copilot usage ledger unavailable.');
   expireLocal(tenantId, Date.now());
   const totals: CopilotLedgerUsage = { requests: 0, inputTokens: 0, outputTokens: 0, costMinorNgn: 0 };
   for (const row of localRows.values()) {

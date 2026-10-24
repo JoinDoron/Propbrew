@@ -2,7 +2,7 @@ import { can } from '@/lib/authz';
 import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
-import { NOW_MS } from '@/domain/ppm';
+import { operatingClock } from '@/server/operating-clock';
 import { DEFAULT_TEMPLATES, renderTemplate, messageSchedule, whatsappStats } from '@/domain/shortlet';
 import { WhatsappWorkspace, type TimelineRow } from '@/components/shortlet/whatsapp-workspace';
 import { shortletDate, shortletMoney } from '@/components/shortlet/shortlet-format';
@@ -16,6 +16,7 @@ const TEMPLATE_BY_KEY = new Map(DEFAULT_TEMPLATES.map((t) => [t.key, t.body]));
  *  the WhatsApp Business API from the operator's number. */
 export default async function ShortletWhatsappPage() {
   return withDurableRead(async () => {
+  const { nowMs: NOW_MS } = operatingClock();
   const { actor } = await requireCapability('bookings_amenities', 'read', 'shortlet');
   const bookings = repos.shortletBookings.list(actor).items;
   const apts = new Map(repos.shortletApartments.list(actor).items.map((a) => [a.id, a]));

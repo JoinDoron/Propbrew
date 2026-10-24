@@ -13,6 +13,8 @@ import { NOW } from '@/domain/ppm';
 import { money } from '@/domain/primitives';
 import { assertReviewReadiness, isReviewActor, reviewModeEnabled } from '@/server/review-auth';
 import { currentRecordContext } from '@/server/data/record-context';
+import { nativeAuthEnabled } from '@/server/auth/mode';
+import { nativeEstateCreationReady } from '@/server/data/company-estate-access';
 import type { Actor } from '@/lib/authz';
 import type { Building, Resident, Site, Unit } from '@/domain/entities';
 
@@ -33,6 +35,13 @@ const tenantSchema = z.object({
 }).strict();
 
 async function registrationActor(): Promise<{ ok: true; actor: Actor } | { ok: false; error: string }> {
+  if (nativeAuthEnabled()) {
+    const session = await getSession();
+    if (!session || !nativeEstateCreationReady(session.actor, 'write')) {
+      return { ok: false, error: 'Sign in with an active company membership that can create Estate records. Database storage must be available.' };
+    }
+    return { ok: true, actor: session.actor };
+  }
   const review = reviewModeEnabled();
   const durableReview = review && process.env.DATA_SOURCE === 'postgres' && currentRecordContext()?.mode === 'write';
   if ((!review && process.env.NODE_ENV === 'production') || (process.env.DATA_SOURCE && process.env.DATA_SOURCE !== 'memory' && !durableReview)) {
@@ -68,7 +77,7 @@ function priorResult(actor: Actor, requestKey: string, kind: 'property' | 'tenan
 
 const refresh = () => ['/estate', '/properties', '/people', '/tenancy', '/spaces', '/portfolio', '/workspaces'].forEach((path) => revalidatePath(path));
 
-/** Sample record creation only: no infrastructure, subscription or billing changes. */
+/** Register company or authorised sample records; no subscription or billing changes. */
 export async function addEstateProperty(input: unknown): Promise<RegistrationResult> {
   return withDurableMutation(async () => {
   const gate = await registrationActor();
@@ -102,7 +111,7 @@ export async function addEstateProperty(input: unknown): Promise<RegistrationRes
   refresh();
   return { ok: true, ...result };
 
-  });
+  }, 'estate');
 }
 
 /** Add a scoped resident contact record; never creates an auth account or sends an invite. */
@@ -125,7 +134,10 @@ export async function addEstateTenant(input: unknown): Promise<RegistrationResul
   if (unit.occupancy !== 'vacant' || db.residents.some((resident) => resident.tenantId === gate.actor.tenantId && resident.unitId === unit.id && ['active', 'invited'].includes(resident.status))) {
     return { ok: false, error: 'This unit is no longer vacant or already has an active or invited tenant record.' };
   }
-  const future = data.moveInDate > NOW;
+  const referenceDate = nativeAuthEnabled()
+    ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Lagos', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+    : NOW;
+  const future = data.moveInDate > referenceDate;
   const tenantId = gate.actor.tenantId!;
   const id = `resident-${randomUUID()}`;
   const at = new Date().toISOString();
@@ -143,5 +155,5 @@ export async function addEstateTenant(input: unknown): Promise<RegistrationResul
   refresh();
   return { ok: true, ...result };
 
-  });
+  }, 'estate');
 }

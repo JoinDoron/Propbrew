@@ -72,5 +72,5 @@ export async function payAllOutstanding(): Promise<PayAllResult> {
       : 'Nothing to pay.',
   };
 
-  });
+  }, 'estate');
 }

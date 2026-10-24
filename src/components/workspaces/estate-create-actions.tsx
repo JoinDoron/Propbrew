@@ -9,8 +9,8 @@ import styles from './estate-create-actions.module.css';
 export type EstateUnitOption = { id: string; propertyName: string; label: string };
 type Mode = 'property' | 'tenant';
 
-export function EstateCreateActions({ canAddProperty, canAddTenant, units, demo, persistent = false, asOfDate }: {
-  canAddProperty: boolean; canAddTenant: boolean; units: EstateUnitOption[]; demo: boolean; persistent?: boolean; asOfDate: string;
+export function EstateCreateActions({ canAddProperty, canAddTenant, units, demo, native = false, persistent = false, asOfDate }: {
+  canAddProperty: boolean; canAddTenant: boolean; units: EstateUnitOption[]; demo: boolean; native?: boolean; persistent?: boolean; asOfDate: string;
 }) {
   const router = useRouter();
   const dialog = useRef<HTMLDialogElement>(null);
@@ -32,7 +32,7 @@ export function EstateCreateActions({ canAddProperty, canAddTenant, units, demo,
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (pending || !mode) return;
+    if (pending || !mode || !demo && !native) return;
     const fields = new FormData(event.currentTarget);
     const value = (key: string) => String(fields.get(key) ?? '').trim();
     const selectedMode = mode;
@@ -59,11 +59,11 @@ export function EstateCreateActions({ canAddProperty, canAddTenant, units, demo,
     <dialog ref={dialog} className={styles.dialog} aria-labelledby="estate-create-title" onCancel={(event) => { if (pending) event.preventDefault(); else setMode(null); }} onClose={() => setMode(null)}>
       <div className={styles.dialogHeader}><div><p className={styles.eyebrow}>Estate workspace</p><h2 id="estate-create-title">{title}</h2></div><button className={styles.close} type="button" aria-label="Close form" disabled={pending} onClick={() => setMode(null)}><X size={19} /></button></div>
       {success ? <div className={styles.success} role="status"><CheckCircle2 size={35} aria-hidden="true" /><h3>{mode === 'property' ? 'Property added' : 'Tenant record added'}</h3><p><strong>{success}</strong> is now in your estate register. The overview has been refreshed.</p>{mode === 'tenant' ? <p>No account or invitation has been created or sent.</p> : null}<p className={styles.demo}>{persistent ? 'This record is saved to the database.' : 'Sample changes last until this app restarts.'}</p><button className={styles.primary} type="button" onClick={() => setMode(null)}>Done</button></div>
-        : !demo ? <div className={styles.body}><p className={styles.notice}>Production registration is not activated yet. These forms will not claim to save a property or tenant until durable storage and organisation assignments are connected.</p><button className={styles.secondary} type="button" onClick={() => setMode(null)}>Close</button></div>
+        : !demo && !native ? <div className={styles.body}><p className={styles.notice}>Production registration is not activated yet. These forms will not claim to save a property or tenant until durable storage and organisation assignments are connected.</p><button className={styles.secondary} type="button" onClick={() => setMode(null)}>Close</button></div>
           : mode === 'tenant' && !units.length ? <div className={styles.body}><p className={styles.notice}>There are no vacant registered units you can assign. Add a property first, or update a unit’s availability in your register.</p>{canAddProperty ? <button type="button" className={styles.primary} onClick={() => open('property')}><Building2 size={14} aria-hidden="true" />Add property first</button> : null}</div>
             : <form onSubmit={submit} className={styles.body}>
               <p className={styles.description}>{mode === 'property' ? 'Register an estate property and its units. It will appear in your property totals, occupancy and tenant selectors.' : 'Add the tenant’s details to an available unit. This records a resident; it does not create a login, send an invitation or issue a rent invoice.'}</p>
-              <p className={styles.demo}>{persistent ? 'Database-backed review · use sample details only. Records are saved to the database.' : 'Sample workspace · use sample details only. Records reset when the app restarts.'}</p>
+              <p className={styles.demo}>{native ? 'Records are saved to your company database and remain within your authorised properties.' : persistent ? 'Database-backed review · use sample details only. Records are saved to the database.' : 'Sample workspace · use sample details only. Records reset when the app restarts.'}</p>
               <fieldset disabled={pending} className={styles.fields} key={mode}>
                 <label className={styles.full}>{mode === 'property' ? 'Property name' : 'Tenant full name'}<input name="name" required maxLength={120} placeholder={mode === 'property' ? 'e.g. Palm Grove Apartments' : 'e.g. Ada Okafor'} autoComplete={mode === 'property' ? 'off' : 'name'} /></label>
                 {mode === 'property' ? <>
@@ -77,7 +77,7 @@ export function EstateCreateActions({ canAddProperty, canAddTenant, units, demo,
                   <label>Household size<input name="household" type="number" required min={1} max={30} step={1} defaultValue={1} inputMode="numeric" /></label>
                   <label>Email (optional)<input name="email" type="email" maxLength={254} placeholder="tenant@example.com" autoComplete="email" /></label>
                   <label>Phone (optional)<input name="phone" type="tel" maxLength={32} placeholder="+234 800 000 0000" autoComplete="tel" /></label>
-                  <p className={`${styles.help} ${styles.full}`}>Dates after the snapshot date ({asOfDate}) reserve the unit and create an invited resident record. Earlier move-ins mark the resident active and the unit occupied.</p>
+                  <p className={`${styles.help} ${styles.full}`}>Dates after {native ? 'today' : 'the snapshot date'} ({asOfDate}) reserve the unit and create an invited resident record. Earlier move-ins mark the resident active and the unit occupied.</p>
                 </>}
               </fieldset>
               {error ? <p role="alert" className={styles.error}>{error}</p> : null}

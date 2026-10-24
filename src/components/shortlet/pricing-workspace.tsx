@@ -26,8 +26,17 @@ const PRESETS = [
   { label: 'Weekend premium', type: 'increase' as RuleType, pct: 15, from: '2026-08-01', to: '2026-08-31' },
   { label: 'Low-season deal', type: 'decrease' as RuleType, pct: 15, from: '2026-09-01', to: '2026-09-30' },
 ];
+const addDays = (iso: string, days: number) => new Date(Date.parse(iso) + days * 86_400_000).toISOString().slice(0, 10);
+function pricingPresets(currentDateISO?: string) {
+  if (!currentDateISO) return PRESETS;
+  return [
+    { label: 'Peak-season uplift', type: 'increase' as RuleType, pct: 25, from: currentDateISO, to: addDays(currentDateISO, 29) },
+    { label: 'Short-stay premium', type: 'increase' as RuleType, pct: 15, from: currentDateISO, to: addDays(currentDateISO, 6) },
+    { label: '30-day discount', type: 'decrease' as RuleType, pct: 15, from: currentDateISO, to: addDays(currentDateISO, 29) },
+  ];
+}
 
-export function PricingWorkspace({ apartments , canCreate = false, canUpdate = false}: { apartments: AptRow[] ; canCreate?: boolean; canUpdate?: boolean}) {
+export function PricingWorkspace({ apartments , canCreate = false, canUpdate = false, currentDateISO }: { apartments: AptRow[] ; canCreate?: boolean; canUpdate?: boolean; currentDateISO?: string }) {
   const [addFor, setAddFor] = useState<AptRow | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const router = useRouter();
@@ -62,7 +71,7 @@ export function PricingWorkspace({ apartments , canCreate = false, canUpdate = f
                     })}
                   </ul>
                 )}
-                <RateStrip apt={a} /></div>
+                <RateStrip apt={a} startISO={currentDateISO ?? '2026-08-01'} /></div>
               </Card>
             ))}
           </div>
@@ -74,7 +83,7 @@ export function PricingWorkspace({ apartments , canCreate = false, canUpdate = f
         }
       ]} />
 
-      {canCreate && addFor && <AddRuleDialog apt={addFor} onClose={() => setAddFor(null)} onDone={() => { setAddFor(null); flash('Pricing rule added'); }} />}
+      {canCreate && addFor && <AddRuleDialog apt={addFor} currentDateISO={currentDateISO} onClose={() => setAddFor(null)} onDone={() => { setAddFor(null); flash('Pricing rule added'); }} />}
 
       {toast && <ShortletFeedback message={toast} onClose={() => setToast(null)} />}
 
@@ -83,19 +92,19 @@ export function PricingWorkspace({ apartments , canCreate = false, canUpdate = f
 }
 
 /** A little 30-night effective-rate sparkline — where rules bite. */
-function RateStrip({ apt }: { apt: AptRow }) {
+function RateStrip({ apt, startISO }: { apt: AptRow; startISO: string }) {
   const days = useMemo(() => Array.from({ length: 30 }, (_, i) => {
-    const d = new Date('2026-08-01T00:00:00Z'); d.setUTCDate(d.getUTCDate() + i);
+    const d = new Date(`${startISO}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + i);
     const iso = d.toISOString().slice(0, 10);
     return { ...effectiveRate(apt.baseMinor, apt.rules, iso), iso };
-  }), [apt]);
+  }), [apt, startISO]);
   const max = Math.max(...days.map((d) => d.minor), apt.baseMinor);
   const min = Math.min(...days.map((d) => d.minor), apt.baseMinor);
   const actualMin = Math.min(...days.map((day) => day.minor));
   const actualMax = Math.max(...days.map((day) => day.minor));
   return (
     <section className={styles.rateSection}>
-      <h4>Effective rate illustration · 1–30 August 2026</h4>
+      <h4>Effective rate illustration · {fmt(days[0].iso)}–{fmt(days[29].iso)}</h4>
       <p className={styles.metadata}>Recorded rule calculation, not a demand forecast or live channel quote. {actualMax === actualMin ? `All 30 nights use ${money(actualMin)} per night.` : `Range: ${money(actualMin)} – ${money(actualMax)} per night.`}</p>
       <div className={styles.scroll} role="region" aria-label={`${apt.name} effective nightly rate illustration, horizontally scrollable`} tabIndex={0}><div className={styles.rateChart} role="img" aria-label={days.map((day) => `${fmt(day.iso)}: ${money(day.minor)}, ${day.rule ? 'matching rule' : 'base rate'}`).join('; ')}>
         {days.map((d, i) => (
@@ -106,10 +115,10 @@ function RateStrip({ apt }: { apt: AptRow }) {
   );
 }
 
-function AddRuleDialog({ apt, onClose, onDone }: { apt: AptRow; onClose: () => void; onDone: () => void }) {
+function AddRuleDialog({ apt, currentDateISO, onClose, onDone }: { apt: AptRow; currentDateISO?: string; onClose: () => void; onDone: () => void }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [label, setLabel] = useState(''); const [from, setFrom] = useState('2026-12-15'); const [to, setTo] = useState('2027-01-05');
+  const [label, setLabel] = useState(''); const [from, setFrom] = useState(currentDateISO ?? '2026-12-15'); const [to, setTo] = useState(currentDateISO ? addDays(currentDateISO, 29) : '2027-01-05');
   const [type, setType] = useState<RuleType>('increase'); const [pct, setPct] = useState('20'); const [amount, setAmount] = useState((apt.baseMinor / 100).toFixed(2));
   const [error, setError] = useState<string | null>(null);
   const form = useRef<HTMLFormElement>(null);
@@ -130,7 +139,7 @@ function AddRuleDialog({ apt, onClose, onDone }: { apt: AptRow; onClose: () => v
   return (
     <ShortletDialog title="New pricing rule" onClose={onClose} pending={pending} wide><p className={styles.text}>{apt.name} · {apt.property} · base {money(apt.baseMinor)} per night</p>
       <form ref={form} className={styles.form} onSubmit={(event) => event.preventDefault()}>
-        <fieldset><legend className={styles.rowTitle}>Start from a date-range template</legend><div className={`${styles.actions} mt-3`}>{PRESETS.map((preset) => <Button type="button" key={preset.label} onClick={() => applyPreset(preset)} icon={<Sparkles aria-hidden="true" size={16} />}>{preset.label}</Button>)}</div><p className={`${styles.metadata} mt-3`}>Templates cover every day in their range, including weekdays. Review and adjust before saving.</p></fieldset>
+        <fieldset><legend className={styles.rowTitle}>Start from a date-range template</legend><div className={`${styles.actions} mt-3`}>{pricingPresets(currentDateISO).map((preset) => <Button type="button" key={preset.label} onClick={() => applyPreset(preset)} icon={<Sparkles aria-hidden="true" size={16} />}>{preset.label}</Button>)}</div><p className={`${styles.metadata} mt-3`}>Templates cover every day in their range, including weekdays. Review and adjust before saving.</p></fieldset>
         <label className={styles.field}><span>Rule label</span><input aria-label="Label" required value={label} onChange={(event) => setLabel(event.target.value)} placeholder="e.g. Christmas surcharge" autoFocus /></label>
         <div className={styles.formGrid}><label className={styles.field}><span>From, inclusive</span><input aria-label="From" required type="date" value={from} max={to || undefined} onChange={(event) => setFrom(event.target.value)} /></label><label className={styles.field}><span>Through, inclusive</span><input aria-label="To" required type="date" value={to} min={from || undefined} onChange={(event) => setTo(event.target.value)} /></label></div>
         <fieldset><legend className={styles.rowTitle}>Rate adjustment</legend><div className={`${styles.actions} mt-3`}>{(['fixed', 'increase', 'decrease'] as RuleType[]).map((value) => <Button type="button" key={value} aria-pressed={type === value} variant={type === value ? 'primary' : 'secondary'} onClick={() => setType(value)}>{value === 'fixed' ? 'Fixed' : value === 'increase' ? 'Increase' : 'Decrease'}</Button>)}</div></fieldset>

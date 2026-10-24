@@ -16,7 +16,7 @@ const reservation = (overrides: Partial<ReserveCopilotBudgetInput> = {}): Reserv
 const finish = (reserved: ReserveCopilotBudgetInput, overrides: Partial<FinishCopilotBudgetInput> = {}): FinishCopilotBudgetInput => ({ tenantId: reserved.tenantId, requestId: reserved.requestId, inputTokens: 10, outputTokens: 20, costMinorNgn: 30, status: 'complete', promptRedacted: '[redacted prompt]', outputRedacted: '[redacted answer]', contextSummary: 'Scoped facts: systems2, alarms1; no raw records', ...overrides });
 
 beforeEach(async () => {
-  vi.resetModules(); vi.stubEnv('DATABASE_URL', ''); vi.stubEnv('NODE_ENV', 'test');
+  vi.resetModules(); vi.stubEnv('DATABASE_URL', ''); vi.stubEnv('NODE_ENV', 'test'); vi.stubEnv('PROPBREW_AUTH_MODE', '');
   delete (globalThis as typeof globalThis & { __propbrewCopilotLedger?: unknown }).__propbrewCopilotLedger;
   vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-24T09:00:00Z'));
   database.rows = []; database.fail = false; database.calls = [];
@@ -143,6 +143,25 @@ describe('durable Copilot ledger seam', () => {
     expect(database.calls).toHaveLength(1); expect(database.calls[0].tenantId).toBe(tenantId);
     expect(database.calls[0].sql).toContain('reserve_copilot_budget');
     expect(database.calls[0].values).toEqual([tenantId, input.requestId, input.actorId, input.feature, input.model, 100, 200, null]);
+    expect(database.calls[0].sql).not.toContain('reserve_company_copilot_budget');
+  });
+
+  it('routes native company reservations through the shared ceiling without changing tenant parameters', async () => {
+    vi.stubEnv('DATABASE_URL', 'postgresql://test.invalid/not-used'); vi.stubEnv('PROPBREW_AUTH_MODE', 'company');
+    database.rows = [{ allowed: false, reason: 'global_daily_budget_exceeded' }];
+    const input = reservation({ tenantId });
+    expect(await ledger.reserveCopilotBudget(input)).toEqual({ allowed: false, reason: 'global_daily_budget_exceeded' });
+    expect(database.calls).toHaveLength(1);
+    expect(database.calls[0].sql).toContain('reserve_company_copilot_budget');
+    expect(database.calls[0].values).toEqual([tenantId, input.requestId, input.actorId, input.feature, input.model, 100, 200, null]);
+  });
+
+  it('never uses a local budget fallback for native companies, including development mode', async () => {
+    vi.stubEnv('PROPBREW_AUTH_MODE', 'company');
+    const input = reservation();
+    expect(await ledger.reserveCopilotBudget(input)).toEqual({ allowed: false, reason: 'ledger_unavailable' });
+    expect(await ledger.finishCopilotBudget(finish(input))).toEqual({ recorded: false });
+    await expect(ledger.readCopilotLedgerUsage(input.tenantId)).rejects.toThrow('Copilot usage ledger unavailable');
   });
 
   it('fails closed when the migration or database is unavailable, without a local fallback', async () => {

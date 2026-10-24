@@ -16,6 +16,7 @@ import 'server-only';
  */
 
 import * as seed from './seed/fixtures';
+import { createBlankCompanyState } from './company-state';
 import { pushNotification } from './inbox';
 import { findTransition, workOrderMachine, type MachineKey } from '@/domain/workflows';
 import { money } from '@/domain/primitives';
@@ -367,6 +368,10 @@ if (!processStore.initialized) {
 }
 
 /** One-time bootstrap. Existing database state is never merged with or reset to fixtures. */
+export function blankCompanyWorkspaceState(): WorkspaceRecordState {
+  return createBlankCompanyState(processStore.db);
+}
+
 export function initialWorkspaceRecordState(domainTenantId: string): WorkspaceRecordState {
   const collections: Record<string, unknown> = {};
   const ownedAssetIds = new Set(seed.assets.filter((row) => row.tenantId === domainTenantId).map((row) => String(row.id)));

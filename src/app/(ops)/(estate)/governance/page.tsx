@@ -1,8 +1,9 @@
+import { operatingClock } from '@/server/operating-clock';
 import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { can } from '@/lib/authz';
 import { repos } from '@/server/data';
-import { NOW_MS } from '@/domain/ppm';
+
 import { GovernanceWorkspace, type MotionRow } from '@/components/estate/governance-workspace';
 import { withDurableRead } from '@/server/data/durable-records';
 
@@ -12,6 +13,7 @@ import { withDurableRead } from '@/server/data/durable-records';
 export default async function GovernancePage() {
   return withDurableRead(async () => {
   const { actor } = await requireCapability('announcements', 'read', 'estate');
+  const clock = operatingClock();
   const motions = repos.motions.list(actor).items;
 
   const rows: MotionRow[] = motions.map((m) => ({
@@ -24,7 +26,7 @@ export default async function GovernancePage() {
   return (
     <div className="pb-page">
       <PageHeader title="Governance" subtitle="Motions, quorum and transparent estate decisions." />
-      <GovernanceWorkspace motions={rows} nowMs={NOW_MS} canMutate={can(actor, 'announcements', 'update').allowed} />
+      <GovernanceWorkspace motions={rows} nowMs={clock.nowMs} canMutate={can(actor, 'announcements', 'update').allowed} />
     </div>
   );
   });

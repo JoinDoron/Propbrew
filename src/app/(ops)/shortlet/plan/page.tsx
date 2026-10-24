@@ -18,7 +18,7 @@ export default async function ShortletPlanPage() {
   const apts = repos.shortletApartments.list(actor).items;
   const currentKey = shortletSettings(actor.tenantId).planKey;
 
-  const usesWhatsapp = true; // messaging is configured
+  const usesWhatsapp = repos.shortletBookings.list(actor).items.some((booking) => booking.source === 'whatsapp');
   const usesIcal = apts.some((a) => a.channels.length > 0);
   const rec = recommendPlan(apts.length, usesWhatsapp, usesIcal);
 

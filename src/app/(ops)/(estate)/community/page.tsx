@@ -1,7 +1,8 @@
+import { operatingClock } from '@/server/operating-clock';
 import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
-import { NOW_MS } from '@/domain/ppm';
+
 import { communityHealth, npsScore, sentimentBreakdown, complaintHotspots, churnRisk } from '@/domain/estate';
 import { CommunityPulse, type AtRisk } from '@/components/estate/community-pulse';
 import { withDurableRead } from '@/server/data/durable-records';
@@ -14,6 +15,7 @@ const money = (m: number) => `₦${Math.round(m / 100).toLocaleString('en-NG')}`
 export default async function CommunityPage() {
   return withDurableRead(async () => {
   const { actor } = await requireCapability('announcements', 'read', 'estate');
+  const clock = operatingClock();
   const feedback = repos.residentFeedback.list(actor).items;
   const complaints = repos.complaints.list(actor).items;
   const engagement = repos.engagementSnapshot.list(actor).items[0];
@@ -52,7 +54,7 @@ export default async function CommunityPage() {
         complaints={complaints.map((c) => ({ id: c.id, building: c.building, category: c.category, severity: c.severity, status: c.status, atISO: c.atISO }))}
         hotspots={complaintHotspots(complaints)}
         atRisk={atRisk}
-        nowMs={NOW_MS}
+        nowMs={clock.nowMs}
       />
     </div>
   );

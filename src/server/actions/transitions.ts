@@ -99,7 +99,7 @@ export async function transition(machineKey: 'booking' | 'sos-event' | 'marketpl
   reg.paths.forEach((p) => revalidatePath(p));
   return { ok: true, to: t.to };
 
-  });
+  }, 'estate');
 }
 
 function readerFor(machineKey: 'booking' | 'sos-event' | 'marketplace-order'): 'bookings' | 'sosEvents' | 'marketplaceOrders' {
@@ -128,7 +128,7 @@ export async function issueInvoice(ref: string): Promise<TxResult> {
   ['/billing', '/estate', '/dashboard'].forEach((p) => revalidatePath(p));
   return { ok: true, to: t };
 
-  });
+  }, 'estate');
 }
 
 // Resident payment lives in resident-home.ts (`payChargeFromWallet`): the wallet
@@ -182,7 +182,7 @@ export async function raiseSos(): Promise<TxResult> {
   ['/portal/security', '/security', '/estate', '/dashboard'].forEach((p) => revalidatePath(p));
   return { ok: true, to: 'raised' };
 
-  });
+  }, 'estate');
 }
 
 /* --- helpers -------------------------------------------------------------- */

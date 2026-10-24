@@ -121,7 +121,7 @@ function NewProjectDialog({ onClose, onDone }: { onClose: () => void; onDone: (n
         <label className={styles.field}>Name<input aria-label="Name" value={f.name} onChange={(e) => set('name', e.target.value)} autoFocus placeholder="e.g. Harbour Point Phase 1" /></label>
         <div className={styles.formGrid}>
           <label className={styles.field}>Location<input aria-label="Location" value={f.location} onChange={(e) => set('location', e.target.value)} placeholder="Lekki, Lagos" /></label>
-          <label className={styles.field}>Client<input aria-label="Client" value={f.clientName} onChange={(e) => set('clientName', e.target.value)} placeholder="7 Fifteen Capital" /></label>
+          <label className={styles.field}>Client<input aria-label="Client" value={f.clientName} onChange={(e) => set('clientName', e.target.value)} placeholder="Client or project owner" /></label>
         </div>
         <div className={styles.formGrid}>
           <label className={styles.field}>Contract (₦)<input aria-label="Contract (₦)" type="number" min="0" step="0.01" value={f.contractNaira || ''} onChange={(e) => set('contractNaira', Number(e.target.value) || 0)} inputMode="decimal" /></label>

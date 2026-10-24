@@ -1,7 +1,7 @@
 import { requireCapability } from '@/server/guard';
 import { can } from '@/lib/authz';
 import { constructionWorld } from '@/server/reads/construction';
-import { NOW, NOW_MS } from '@/domain/ppm';
+import { operatingClock } from '@/server/operating-clock';
 import { attendanceSummary, labourCostMinor, certBand } from '@/domain/construction';
 import { WorkforceWorkspace, type WorkerRow } from '@/components/construction/workforce-workspace';
 import { withDurableRead } from '@/server/data/durable-records';
@@ -11,10 +11,11 @@ import { withDurableRead } from '@/server/data/durable-records';
  *  lapsing ticket before it blocks certified work. */
 export default async function ConstructionWorkforcePage() {
   return withDurableRead(async () => {
+  const { nowMs: NOW_MS, dateISO: TODAY } = operatingClock();
   const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const canMutate = can(actor, 'reports_analytics', 'update').allowed;
   const world = constructionWorld(actor);
-  const today = NOW.slice(0, 10);
+  const today = TODAY;
 
   // Focus the busiest site.
   const counts = new Map<string, number>();

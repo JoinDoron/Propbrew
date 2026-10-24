@@ -13,6 +13,8 @@ import { isReviewActor } from '@/server/review-auth';
 import { scopedMutableGet } from '@/server/data';
 import { db, nextWorkOrderRef, recordHistory } from '@/server/data/store';
 import { nowISO } from '@/server/clock';
+import { nativeAuthEnabled } from '@/server/auth/mode';
+import { nativeEstateCreationReady } from '@/server/data/company-estate-access';
 import type { WorkOrder } from '@/domain/entities';
 
 export type EstateWorkOrderResult = { ok: true; ref: string } | { ok: false; error: string };
@@ -31,7 +33,7 @@ const schema = z.object({
   idempotencyKey: z.string().uuid(),
 }).strict();
 
-/** Estate request creation in local/sample review workspaces; customer production still requires durable storage. */
+/** Estate request creation requires authenticated scope and an activated storage boundary. */
 export async function createEstateWorkOrder(input: unknown): Promise<EstateWorkOrderResult> {
   return withDurableMutation(async () => {
   const session = await requireWorkspace('estate');
@@ -45,8 +47,9 @@ export async function createEstateWorkOrder(input: unknown): Promise<EstateWorkO
 
   const privateReview = session.key === 'private-review' && isReviewActor(actor);
   const durableReview = privateReview && process.env.DATA_SOURCE === 'postgres' && currentRecordContext()?.mode === 'write';
-  if ((process.env.DATA_SOURCE && process.env.DATA_SOURCE !== 'memory' && !durableReview)
-    || !privateReview && (process.env.NODE_ENV === 'production' || session.key === 'clerk' || !devIdentityEnabled())) {
+  const native = nativeEstateCreationReady(actor, 'write');
+  if (nativeAuthEnabled() && !native || !native && ((process.env.DATA_SOURCE && process.env.DATA_SOURCE !== 'memory' && !durableReview)
+    || !privateReview && (process.env.NODE_ENV === 'production' || session.key === 'clerk' || !devIdentityEnabled()))) {
     return { ok: false, error: 'Durable estate work-order creation is not connected in this environment. No work order was created.' };
   }
   if (!actor.tenantId?.trim()) return { ok: false, error: 'A signed-in organisation assignment is required.' };
@@ -99,5 +102,5 @@ export async function createEstateWorkOrder(input: unknown): Promise<EstateWorkO
   for (const path of ['/estate/work-orders', `/estate/work-orders/${ref}`, '/work-orders', `/work-orders/${ref}`, '/estate', '/facility', '/dashboard', '/portal', '/portal/requests', '/people']) revalidatePath(path);
   return { ok: true, ref };
 
-  });
+  }, 'estate');
 }

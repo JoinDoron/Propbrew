@@ -1,7 +1,7 @@
 import { requireCapability } from '@/server/guard';
 import { can } from '@/lib/authz';
 import { constructionWorld } from '@/server/reads/construction';
-import { NOW_MS } from '@/domain/ppm';
+import { operatingClock } from '@/server/operating-clock';
 import { docRegister, rfiAgeing } from '@/domain/construction';
 import { DocumentsWorkspace, type RegisterRow, type RfiRow, type DocRev } from '@/components/construction/documents-workspace';
 import { withDurableRead } from '@/server/data/durable-records';
@@ -12,6 +12,7 @@ import { withDurableRead } from '@/server/data/durable-records';
  *  distribution is recorded as a transmittal. RFIs age against their due date. */
 export default async function ConstructionDocumentsPage() {
   return withDurableRead(async () => {
+  const { nowMs: NOW_MS } = operatingClock();
   const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const canMutate = can(actor, 'reports_analytics', 'update').allowed;
   const canCreate = can(actor, 'reports_analytics', 'create').allowed;

@@ -4,6 +4,7 @@ import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
 import { PricingWorkspace, type AptRow } from '@/components/shortlet/pricing-workspace';
 import { withDurableRead } from '@/server/data/durable-records';
+import { operatingClock } from '@/server/operating-clock';
 
 /** Dynamic pricing (flow idea) — operator-set seasonal rate rules per apartment
  *  (fixed / increase / decrease over a date range). Rules override the base rate
@@ -15,6 +16,7 @@ export default async function ShortletPricingPage() {
   const apts = repos.shortletApartments.list(actor).items;
   const props = new Map(repos.shortletProperties.list(actor).items.map((p) => [p.id, p.name]));
   const rules = repos.shortletPricingRules.list(actor).items;
+  const clock = operatingClock();
 
   const apartments: AptRow[] = apts.map((a) => ({
     id: a.id, name: a.name, property: props.get(a.propertyId) ?? '', baseMinor: a.nightlyRate.minor,
@@ -24,7 +26,7 @@ export default async function ShortletPricingPage() {
   return (
     <div className="pb-page">
       <PageHeader title="Seasonal pricing" subtitle="Set date-based rates and keep every pricing decision in your control." />
-      <PricingWorkspace canCreate={can(actor, 'bookings_amenities', 'create').allowed} canUpdate={can(actor, 'bookings_amenities', 'update').allowed} apartments={apartments} />
+      <PricingWorkspace canCreate={can(actor, 'bookings_amenities', 'create').allowed} canUpdate={can(actor, 'bookings_amenities', 'update').allowed} apartments={apartments} currentDateISO={clock.native ? clock.dateISO : undefined} />
     </div>
   );
   });

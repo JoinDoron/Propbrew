@@ -7,8 +7,23 @@ const directory = resolve(process.cwd(), 'src/server/actions');
 const nonOperational = new Set([
   'auth.ts:signOut', 'auth.ts:signInAs', 'dev-identity.ts:switchIdentity',
   'owner-onboarding.ts:saveOwnerSetupAction', 'owner-onboarding.ts:completeOwnerSetupAction',
+  'company-auth.ts:registerAccount', 'company-auth.ts:loginAccount', 'company-auth.ts:verifySecondFactor',
+  'companies.ts:createCompany', 'companies.ts:selectCompany', 'companies.ts:createCompanyInvite',
+  'companies.ts:updateCompanyMember', 'companies.ts:removeCompanyMember', 'companies.ts:acceptCompanyInvite',
 ]);
 const readOnly = new Set(['ask-data.ts:askData', 'documents.ts:searchDocuments']);
+const ownReadState = new Set(['inbox.ts:markNotificationsRead', 'inbox.ts:readThread']);
+const expectedModules: Record<string, readonly string[]> = {
+  'admin-users.ts': ['estate', 'facility', 'shortlet', 'construction'],
+  'announcements.ts': ['estate'], 'billing.ts': ['estate'], 'construction.ts': ['construction'],
+  'documents.ts': ['estate', 'construction'], 'estate.ts': ['estate'], 'estate-registration.ts': ['estate'],
+  'estate-work-orders.ts': ['estate'], 'facility.ts': ['facility'],
+  'inbox.ts': ['estate', 'facility', 'shortlet', 'construction'], 'inspections.ts': ['facility'],
+  'ppm.ts': ['facility'], 'resident-bills.ts': ['estate'], 'resident-bookings.ts': ['estate'],
+  'resident-community.ts': ['estate'], 'resident-home.ts': ['estate'], 'resident-orders.ts': ['estate'],
+  'resident-requests.ts': ['estate'], 'shortlet.ts': ['shortlet'], 'sync.ts': ['construction'],
+  'transitions.ts': ['estate'], 'vendor-listings.ts': ['estate'], 'work-orders.ts': ['estate', 'facility'],
+};
 const entries = readdirSync(directory).filter((file) => file.endsWith('.ts')).flatMap((file) => {
   const ast = ts.createSourceFile(file, readFileSync(join(directory, file), 'utf8'), ts.ScriptTarget.Latest, true);
   return ast.statements.filter((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node)
@@ -18,13 +33,14 @@ const entries = readdirSync(directory).filter((file) => file.endsWith('.ts')).fl
 const operational = entries.filter(({ key }) => !nonOperational.has(key));
 
 describe('operational action durability coverage', () => {
-  it('accounts for all 140 operational actions and only the five separate identity/onboarding actions', () => {
+  it('accounts for all 140 operational actions and the explicit separate account/onboarding actions', () => {
     expect(operational).toHaveLength(140);
     expect(entries.filter(({ key }) => nonOperational.has(key)).map(({ key }) => key).sort()).toEqual([...nonOperational].sort());
     expect(operational.filter(({ key }) => readOnly.has(key))).toHaveLength(2);
+    expect(operational.filter(({ key }) => !readOnly.has(key))).toHaveLength(138);
   });
 
-  it.each(operational)('protects the entire authenticated $key body', ({ ast, fn, key }) => {
+  it.each(operational)('protects the entire authenticated $key body', ({ ast, fn, key, file }) => {
     const expected = readOnly.has(key) ? 'withDurableRead' : 'withDurableMutation';
     expect(fn.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword)).toBe(true);
     const body = fn.body!.statements.filter((node) => !(ts.isExpressionStatement(node) && ts.isStringLiteral(node.expression)));
@@ -32,7 +48,16 @@ describe('operational action durability coverage', () => {
     const returned = body[0];
     if (!ts.isReturnStatement(returned) || !returned.expression || !ts.isCallExpression(returned.expression)) throw new Error(key + ' has no returned durability boundary.');
     expect(returned.expression.expression.getText(ast)).toBe(expected);
-    expect(returned.expression.arguments).toHaveLength(1);
+    expect(returned.expression.arguments).toHaveLength(readOnly.has(key) ? 1 : ownReadState.has(key) ? 3 : 2);
+    if (!readOnly.has(key)) {
+      const modules = returned.expression.arguments[1];
+      const literals = ts.isStringLiteral(modules) ? [modules]
+        : ts.isArrayLiteralExpression(modules) ? [...modules.elements] : [];
+      expect(literals.length, key + ' must declare at least one server-owned module').toBeGreaterThan(0);
+      expect(literals.every(ts.isStringLiteral), key + ' must use static module literals').toBe(true);
+      expect(literals.map((node) => (node as ts.StringLiteral).text)).toEqual(expectedModules[file]);
+      if (ownReadState.has(key)) expect(returned.expression.arguments[2].getText(ast)).toBe("'read'");
+    }
     const callback = returned.expression.arguments[0];
     expect(ts.isArrowFunction(callback) && ts.isBlock(callback.body)
       && callback.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword)).toBe(true);

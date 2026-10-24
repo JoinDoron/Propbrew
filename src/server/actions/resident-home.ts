@@ -29,7 +29,7 @@ export async function setActiveUnit(unitId: string): Promise<void> {
   store.set(ACTIVE_UNIT_COOKIE, unitId, { httpOnly: false, sameSite: 'lax', path: '/', maxAge: 60 * 60 * 24 * 30 });
   revalidatePath('/portal');
 
-  });
+  }, 'estate');
 }
 
 export type TopUpResult = { ok: true } | { ok: false; error: string };
@@ -57,7 +57,7 @@ export async function topUpWallet(unitId: string, amountNaira: number): Promise<
   ['/portal', '/portal/bills', '/billing', '/estate', '/dashboard'].forEach((p) => revalidatePath(p));
   return { ok: true };
 
-  });
+  }, 'estate');
 }
 
 /**
@@ -116,5 +116,5 @@ export async function payChargeFromWallet(ref: string): Promise<TopUpResult> {
   ['/portal/bills', '/portal', '/billing', '/estate', '/dashboard'].forEach((p) => revalidatePath(p));
   return { ok: true };
 
-  });
+  }, 'estate');
 }

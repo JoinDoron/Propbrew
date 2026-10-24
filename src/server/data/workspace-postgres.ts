@@ -61,6 +61,7 @@ export async function withWorkspaceState<T>(
   mode: 'read' | 'write',
   initialize: () => unknown,
   fn: (payload: unknown) => Promise<Outcome<T>>,
+  authorize?: (client: PoolClient) => Promise<void>,
 ): Promise<T> {
   namespace(domainTenantId);
   if (typeof tenantId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenantId)) throw new Error('A valid tenant UUID is required.');
@@ -76,6 +77,7 @@ export async function withWorkspaceState<T>(
   try {
     return await withTenantTransaction(canonicalTenantId, async (client) => {
       const row = await locked(client, canonicalTenantId, domainTenantId, initialize);
+      if (authorize) await authorize(client);
       const payload = detached(row.payload);
       const outcome = await fn(payload);
       if (outcome.commit === false) throw new DeclinedWorkspace(outcome.value);

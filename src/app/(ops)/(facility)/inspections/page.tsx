@@ -1,7 +1,8 @@
+import { operatingClock } from '@/server/operating-clock';
 import { requireCapability } from '@/server/guard';
 import { effectiveLevel } from '@/lib/authz';
 import { repos } from '@/server/data';
-import { NOW } from '@/domain/inspections';
+
 import { PageHeader } from '@/components/ui/page-header';
 import { ScopeBanner } from '@/components/domain';
 import { InspectionsWorkspace } from '@/components/inspections/inspections-workspace';
@@ -16,10 +17,11 @@ import { withDurableRead } from '@/server/data/durable-records';
 export default async function InspectionsPage() {
   return withDurableRead(async () => {
   const { actor } = await requireCapability('inspections_compliance', 'read', 'facility');
+  const clock = operatingClock();
   const canMutate = effectiveLevel(actor, 'inspections_compliance') === 'M' || effectiveLevel(actor, 'inspections_compliance') === 'F';
 
   const data: InspectionsData = {
-    now: NOW,
+    now: clock.dateISO,
     canMutate,
     obligations: [...repos.complianceObligations.list(actor).items],
     inspections: [...repos.inspections.list(actor).items],

@@ -1,3 +1,4 @@
+import { operatingClock } from '@/server/operating-clock';
 import { durableRecordsEnabled } from '@/server/data/record-context';
 import { requireCapability } from '@/server/guard';
 import { effectiveLevel } from '@/lib/authz';
@@ -10,9 +11,10 @@ import { ScopeBanner } from '@/components/domain';
 import { WorkOrdersBoard } from '@/components/work-orders/work-orders-board';
 import { WorkOrdersIntel } from '@/components/work-orders/work-orders-intel';
 import { EstateWorkOrderCreate } from '@/components/work-orders/estate-work-order-create';
-import { NOW_MS } from '@/domain/ppm';
+
 import { CLOSED } from '@/domain/work-orders';
 import { withDurableRead } from '@/server/data/durable-records';
+import { nativeEstateCreationReady } from '@/server/data/company-estate-access';
 
 const BASE_PATH = '/estate/work-orders';
 
@@ -20,8 +22,10 @@ const BASE_PATH = '/estate/work-orders';
 export default async function EstateWorkOrdersPage() {
   return withDurableRead(async () => {
   const { actor } = await requireCapability('work_orders', 'read', 'estate');
+  const clock = operatingClock();
   const session = await getSession();
-  const canMutate = ['F', 'M'].includes(effectiveLevel(actor, 'work_orders'));
+  const native = nativeEstateCreationReady(actor);
+  const canMutate = ['F', 'M'].includes(effectiveLevel(actor, 'work_orders')) && (!actor.companyAccess || native);
   const rows = listEstateWorkOrders(actor);
   const open = rows.filter((workOrder) => !CLOSED.includes(workOrder.status)).length;
   const sites = canMutate ? listEstateWorkOrderSites(actor).map((site) => ({ id: String(site.id), label: site.name })) : [];
@@ -34,7 +38,7 @@ export default async function EstateWorkOrdersPage() {
     id: workOrder.id, ref: workOrder.ref, title: workOrder.title, origin: workOrder.origin,
     requesterName: workOrder.requesterName, status: workOrder.status, priority: workOrder.priority,
     assigneeName: workOrder.assigneeName, respondDueAt: workOrder.respondDueAt,
-    breached: !CLOSED.includes(workOrder.status) && workOrder.respondDueAt !== null && Date.parse(workOrder.respondDueAt) < NOW_MS,
+    breached: !CLOSED.includes(workOrder.status) && workOrder.respondDueAt !== null && Date.parse(workOrder.respondDueAt) < clock.nowMs,
     cost: workOrder.cost,
   }));
 
@@ -42,8 +46,8 @@ export default async function EstateWorkOrdersPage() {
     <PageHeader title="Estate work orders" subtitle={`${open} open · ${rows.length} total · manage requests, assignments and resolution without leaving Estate`}
       scope={<ScopeBanner label="Authorised estate properties only" />} />
     <PageTabs label="Estate work order sections" defaultTab="register" items={[
-      { id: 'register', label: 'Work order register', count: rows.length, content: <WorkOrdersBoard rows={boardRows} canMutate={canMutate} basePath={BASE_PATH} createAction={<EstateWorkOrderCreate sites={sites} units={units} persistent={persistent} demo={demo} />} /> },
-      { id: 'intelligence', label: 'SLA & AI intelligence', content: <WorkOrdersIntel wos={rows} nowMs={NOW_MS} canMutate={canMutate} basePath={BASE_PATH} /> },
+      { id: 'register', label: 'Work order register', count: rows.length, content: <WorkOrdersBoard rows={boardRows} canMutate={canMutate} basePath={BASE_PATH} createAction={<EstateWorkOrderCreate sites={sites} units={units} persistent={persistent} demo={demo} native={native} />} /> },
+      { id: 'intelligence', label: 'SLA & AI intelligence', content: <WorkOrdersIntel wos={rows} nowMs={clock.nowMs} canMutate={canMutate} basePath={BASE_PATH} /> },
     ]} />
   </div>;
   });

@@ -19,7 +19,7 @@ import { scopedMutableGet } from '@/server/data';
 import { scopedDocumentRecords } from '@/server/reads/documents';
 import { db } from '@/server/data/store';
 import { searchDocs, type DocHit } from '@/domain/documents';
-import { NOW } from '@/domain/ppm';
+import { operatingNowISO } from '@/server/operating-clock';
 import type { DocType, ExtractedField } from '@/domain/entities';
 import type { Role } from '@/domain/enums';
 
@@ -76,13 +76,13 @@ export async function saveDocumentFields(docId: string, fields: ExtractedField[]
   const live = scopedMutableGet(actor, 'announcements', db.documents, docId);
   if (!live) return { ok: false, error: 'Document not found.' };
   live.extracted = parsed.data;
-  live.updatedAt = NOW;
+  live.updatedAt = operatingNowISO();
   const exp = expiryField(parsed.data);
   live.expiryDate = exp?.value || undefined;
   revalidatePath('/documents');
   return { ok: true };
 
-  });
+  }, ['estate', 'construction']);
 }
 
 
@@ -113,7 +113,7 @@ export async function uploadDocument(input: {
     estateId: estate.id,
     audience: data.audience,
     sizeKb: 0,
-    updatedAt: NOW,
+    updatedAt: operatingNowISO(),
     uploadedBy: name(actor),
     indexed: true,
     scanned: data.scanned,
@@ -126,5 +126,5 @@ export async function uploadDocument(input: {
   revalidatePath('/documents');
   return { ok: true, id };
 
-  });
+  }, ['estate', 'construction']);
 }

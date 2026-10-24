@@ -1,9 +1,10 @@
+import { operatingClock } from '@/server/operating-clock';
 import { estateTargetOptions } from '@/server/reads/estate-target-options';
 import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { can } from '@/lib/authz';
 import { repos } from '@/server/data';
-import { NOW_MS } from '@/domain/ppm';
+
 import { BoardWorkspace, type BoardRow, type MeetingRow, type ElectionRow, type EgmData } from '@/components/estate/board-workspace';
 import type { MotionStatus } from '@/domain/estate';
 import { withDurableRead } from '@/server/data/durable-records';
@@ -14,6 +15,7 @@ import { withDurableRead } from '@/server/data/durable-records';
 export default async function BoardPage() {
   return withDurableRead(async () => {
   const { actor } = await requireCapability('announcements', 'read', 'estate');
+  const clock = operatingClock();
   const members = repos.boardMembers.list(actor).items;
   const meetings = repos.meetings.list(actor).items;
   const motions = repos.motions.list(actor).items;
@@ -37,7 +39,7 @@ export default async function BoardPage() {
   return (
     <div className="pb-page">
       <PageHeader title="Board &amp; committee" subtitle="Committee members, meetings, elections and decisions." />
-      <BoardWorkspace estates={can(actor, 'announcements', 'create').allowed ? estateTargetOptions(actor, 'announcements', 'create') : []} members={memberRows} meetings={meetingRows} elections={electionRows} egm={egm} motionCounts={motionCounts} nowMs={NOW_MS}
+      <BoardWorkspace estates={can(actor, 'announcements', 'create').allowed ? estateTargetOptions(actor, 'announcements', 'create') : []} members={memberRows} meetings={meetingRows} elections={electionRows} egm={egm} motionCounts={motionCounts} nowMs={clock.nowMs}
         canCreate={can(actor, 'announcements', 'create').allowed} canMutate={can(actor, 'announcements', 'update').allowed} />
     </div>
   );

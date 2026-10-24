@@ -1,5 +1,7 @@
 'use server';
 
+import { operatingNowISO } from '@/server/operating-clock';
+
 import { withDurableMutation } from '@/server/data/durable-records';
 
 import { nextRecordSequence } from '@/server/data/record-context';
@@ -18,7 +20,7 @@ import { ForbiddenError, assertCan, type Role } from '@/lib/authz';
 import { repos, scopedMutableGet } from '@/server/data';
 import { db, recordHistory } from '@/server/data/store';
 import { money } from '@/domain/primitives';
-import { NOW } from '@/domain/ppm';
+
 import { nightsBetween, planFor } from '@/domain/shortlet';
 import { shortletSettings } from '@/server/shortlet-settings';
 import { shortletBookingMachine } from '@/domain/workflows';
@@ -75,7 +77,7 @@ export async function createBooking(input: { apartmentId: string; guestName: str
     checkIn: input.checkIn, checkOut: input.checkOut, nights, source: input.source, agentName: input.agentName?.trim() || undefined,
     nightlyRate: apt.nightlyRate, total: money(totalMinor, 'NGN'), paid: money(paidMinor, 'NGN'),
     cautionFee: money(cautionMinor, 'NGN'), cautionStatus: 'held', cautionDeducted: money(0, 'NGN'),
-    status, guestToken: randomUUID(), specialRequests: input.specialRequests?.trim() || undefined, createdAt: NOW,
+    status, guestToken: randomUUID(), specialRequests: input.specialRequests?.trim() || undefined, createdAt: operatingNowISO(),
   } as unknown as SlBooking;
 
   db.shortletBookings.unshift(booking);
@@ -83,7 +85,7 @@ export async function createBooking(input: { apartmentId: string; guestName: str
   revalidate();
   return { ok: true, ref };
 
-  });
+  }, 'shortlet');
 }
 
 /* --- advance a booking through the machine (FR-BM / FR-CI) ----------------- */
@@ -107,7 +109,7 @@ export async function advanceBooking(id: string, event: string): Promise<Res> {
   revalidate();
   return { ok: true, ref: live.ref };
 
-  });
+  }, 'shortlet');
 }
 
 /* --- record an off-platform payment (FR-BM-02) ---------------------------- */
@@ -126,7 +128,7 @@ export async function recordPayment(id: string, amountNaira: number): Promise<Re
   revalidate();
   return { ok: true };
 
-  });
+  }, 'shortlet');
 }
 
 /* --- checkout inspection → caution decision (FR-CI) ----------------------- */
@@ -155,7 +157,7 @@ export async function saveInspection(bookingId: string, items: InspectionItem[],
   revalidate();
   return { ok: true };
 
-  });
+  }, 'shortlet');
 }
 
 /* --- FR-IC: connect / disconnect an iCal channel on an apartment ---------- */
@@ -169,7 +171,7 @@ export async function toggleChannel(apartmentId: string, channel: Channel): Prom
   revalidate();
   return { ok: true };
 
-  });
+  }, 'shortlet');
 }
 
 /* --- FR-PL: change subscription plan -------------------------------------- */
@@ -182,7 +184,7 @@ export async function changePlan(planKey: PlanKey): Promise<Res> {
   revalidate();
   return { ok: true };
 
-  });
+  }, 'shortlet');
 }
 
 /* --- FR-TM: team management ------------------------------------------------ */
@@ -195,7 +197,7 @@ export async function inviteMember(input: { name: string; phone: string; role: T
   revalidate();
   return { ok: true };
 
-  });
+  }, 'shortlet');
 }
 
 export async function setMemberRole(id: string, role: TeamRole): Promise<Res> {
@@ -209,7 +211,7 @@ export async function setMemberRole(id: string, role: TeamRole): Promise<Res> {
   revalidate();
   return { ok: true };
 
-  });
+  }, 'shortlet');
 }
 
 export async function removeMember(id: string): Promise<Res> {
@@ -222,7 +224,7 @@ export async function removeMember(id: string): Promise<Res> {
   revalidate();
   return { ok: true };
 
-  });
+  }, 'shortlet');
 }
 
 /* --- dynamic pricing: seasonal rate rules --------------------------------- */
@@ -238,7 +240,7 @@ export async function addPricingRule(input: { apartmentId: string; label: string
   revalidate();
   return { ok: true };
 
-  });
+  }, 'shortlet');
 }
 export async function removePricingRule(id: string): Promise<Res> {
   return withDurableMutation(async () => {
@@ -249,7 +251,7 @@ export async function removePricingRule(id: string): Promise<Res> {
   revalidate();
   return { ok: true };
 
-  });
+  }, 'shortlet');
 }
 
 /* --- maintenance issue tracker -------------------------------------------- */
@@ -259,11 +261,11 @@ export async function logIssue(input: { apartmentId: string; title: string; desc
   if (!input.title.trim()) return { ok: false, error: 'Describe the issue.' };
   if (!scopedMutableGet(g.actor, 'bookings_amenities', db.shortletApartments, input.apartmentId, 'create')) return { ok: false, error: 'Apartment not found.' };
   if (!['low', 'medium', 'high', 'urgent'].includes(input.priority)) return { ok: false, error: 'Choose a valid priority.' };
-  db.shortletIssues.unshift({ tenantId: g.actor.tenantId, id: `mi-new-${nextRecordSequence('shortlet:miSeq', 0, true)}`, apartmentId: input.apartmentId, title: input.title.trim(), description: input.description.trim(), priority: input.priority ?? suggestPriority(input.title), status: 'open', createdAt: NOW } as unknown as MaintenanceIssue);
+  db.shortletIssues.unshift({ tenantId: g.actor.tenantId, id: `mi-new-${nextRecordSequence('shortlet:miSeq', 0, true)}`, apartmentId: input.apartmentId, title: input.title.trim(), description: input.description.trim(), priority: input.priority ?? suggestPriority(input.title), status: 'open', createdAt: operatingNowISO() } as unknown as MaintenanceIssue);
   revalidate();
   return { ok: true };
 
-  });
+  }, 'shortlet');
 }
 export async function advanceIssue(id: string): Promise<Res> {
   return withDurableMutation(async () => {
@@ -273,11 +275,11 @@ export async function advanceIssue(id: string): Promise<Res> {
   const next = ISSUE_NEXT[issue.status];
   if (!next) return { ok: false, error: 'Already resolved.' };
   issue.status = next.to;
-  if (next.to === 'resolved') issue.resolvedAt = NOW;
+  if (next.to === 'resolved') issue.resolvedAt = operatingNowISO();
   revalidate();
   return { ok: true };
 
-  });
+  }, 'shortlet');
 }
 
 /* --- direct booking page -------------------------------------------------- */
@@ -289,7 +291,7 @@ export async function toggleBookingPage(): Promise<Res> {
   revalidate();
   return { ok: true };
 
-  });
+  }, 'shortlet');
 }
 export async function saveBookingPage(input: { slug: string; cancellationPolicy: string; holdHours: number }): Promise<Res> {
   return withDurableMutation(async () => {
@@ -304,7 +306,7 @@ export async function saveBookingPage(input: { slug: string; cancellationPolicy:
   revalidate();
   return { ok: true };
 
-  });
+  }, 'shortlet');
 }
 export async function addPromoCode(input: { code: string; pct: number }): Promise<Res> {
   return withDurableMutation(async () => {
@@ -318,7 +320,7 @@ export async function addPromoCode(input: { code: string; pct: number }): Promis
   revalidate();
   return { ok: true };
 
-  });
+  }, 'shortlet');
 }
 export async function togglePromoCode(code: string): Promise<Res> {
   return withDurableMutation(async () => {
@@ -329,7 +331,7 @@ export async function togglePromoCode(code: string): Promise<Res> {
   revalidate();
   return { ok: true };
 
-  });
+  }, 'shortlet');
 }
 
 /* --- agents --------------------------------------------------------------- */
@@ -342,7 +344,7 @@ export async function inviteAgent(input: { name: string; phone: string; commissi
   revalidate();
   return { ok: true };
 
-  });
+  }, 'shortlet');
 }
 
 /* --- log an expense (FR-EX-01) -------------------------------------------- */
@@ -358,5 +360,5 @@ export async function logExpense(input: { propertyId: string; category: ExpenseC
   revalidate();
   return { ok: true };
 
-  });
+  }, 'shortlet');
 }

@@ -2,6 +2,8 @@
 
 ## Promotion gates
 
+For native personal/company login, use [Company accounts](COMPANY_ACCOUNTS.md) and migrations through 010. That release replaces the shared review credential; new company accounts never inherit the stored review tenant.
+
 1. Apply `db/migrations/*.sql` to a staging Neon branch, then production.
 2. Complete the real identity, operational storage and provider configuration for a customer launch. The signed private review uses `DATA_SOURCE=postgres` as described below; its forbidden provider credentials must remain absent. Never set `REEVE_ALLOW_IN_MEMORY_DATA=1` in production.
 3. Run typecheck, lint, all Vitest suites, `npm audit --omit=dev --audit-level=high`, and `npm run build`.

@@ -1,7 +1,7 @@
 import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
-import { NOW, NOW_MS } from '@/domain/ppm';
+import { operatingClock } from '@/server/operating-clock';
 import { statusTone, type Tone } from '@/lib/status-tones';
 import { periodKpis, revenueVsExpense, movementsOn, calendarBars, turnovers, outstandingMinor } from '@/domain/shortlet';
 import { ShortletDashboard, type CalRow, type Attn } from '@/components/shortlet/dashboard';
@@ -18,6 +18,8 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
  *  (un-inspected checkouts, same-day turnover flips, balances, enquiries). */
 export default async function ShortletDashboardPage() {
   return withDurableRead(async () => {
+  const { dateISO: TODAY } = operatingClock();
+  const NOW_MS = Date.parse(TODAY);
   const { actor } = await requireCapability('bookings_amenities', 'read', 'shortlet');
   const apartments = repos.shortletApartments.list(actor).items;
   const bookings = repos.shortletBookings.list(actor).items;
@@ -30,7 +32,7 @@ export default async function ShortletDashboardPage() {
   const monthStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
   const monthEnd = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1);
   const kpis = periodKpis(apartments, bookings, expenses, monthStart, monthEnd);
-  const move = movementsOn(bookings, NOW.slice(0, 10));
+  const move = movementsOn(bookings, TODAY);
 
   // 7-night occupancy strip
   const days = Array.from({ length: 7 }, (_, i) => new Date(NOW_MS + i * DAY)).map((d) => `${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getUTCDay()]} ${d.getUTCDate()}`);

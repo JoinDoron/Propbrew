@@ -4,6 +4,7 @@
  * permission grant: every page, query and mutation still checks its capability.
  */
 import { can, type Actor, type Capability } from '@/lib/authz';
+import { canUseCompanyModule } from '@/lib/auth/company-policy';
 import type { Role } from '@/domain/enums';
 import type { IconName } from '@/components/icon';
 
@@ -99,6 +100,7 @@ export function workspaceById(id: unknown): Workspace | undefined {
 export function canEnterWorkspace(actor: Actor, id: unknown): boolean {
   const workspace = workspaceById(id);
   if (!workspace || !actor.tenantId?.trim() || actor.roles.includes('platform_admin')) return false;
+  if (!canUseCompanyModule(actor, workspace.id, 'read')) return false;
   const policy = ENTRY_POLICY[workspace.id];
   return policy.roles.some((role) => actor.roles.includes(role))
     && policy.capabilities.some((capability) => can(actor, capability, 'read').allowed);

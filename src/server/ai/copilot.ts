@@ -11,6 +11,7 @@ import { featureControl } from './durable';
 import { finishCopilotBudget, reserveCopilotBudget } from './copilot-ledger';
 import { CopilotConnectionError, publicCopilotError, resolveCopilotProvider, streamCopilotAnswer } from './copilot-provider';
 import type { AiFeature } from './gateway';
+import { nativeAuthEnabled,nativeRequestOriginAllowed } from '@/server/auth/mode';
 
 const MAX_BODY_BYTES = 32_768;
 const MAX_CONTEXT_BYTES = 180_000;
@@ -63,7 +64,7 @@ export async function handleCopilot(request: Request, module: CopilotModule, bui
     // Reuse its configured canonical origin rather than trusting proxy headers.
     const originAllowed = reviewModeEnabled()
       ? reviewOriginAllowed(request)
-      : request.headers.get('Sec-Fetch-Site') !== 'cross-site' && (!origin || origin === new URL(request.url).origin);
+      : nativeAuthEnabled() ? nativeRequestOriginAllowed(request) : request.headers.get('Sec-Fetch-Site') !== 'cross-site' && (!origin || origin === new URL(request.url).origin);
     if (!originAllowed) throw new CopilotConnectionError('forbidden', 'This request must come from your Propbrew workspace.', 403);
     const session = await getSession();
     const actor = session?.actor;

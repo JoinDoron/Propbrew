@@ -56,7 +56,7 @@ export async function createListing(input: { title: string; category: string; pr
   ['/portal/listings', '/portal/marketplace', '/marketplace'].forEach((p) => revalidatePath(p));
   return { ok: true };
 
-  });
+  }, 'estate');
 }
 
 export async function toggleListing(listingId: string): Promise<ListingResult> {
@@ -78,5 +78,5 @@ export async function toggleListing(listingId: string): Promise<ListingResult> {
   ['/portal/listings', '/portal/marketplace', '/marketplace'].forEach((p) => revalidatePath(p));
   return { ok: true };
 
-  });
+  }, 'estate');
 }

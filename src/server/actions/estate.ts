@@ -15,7 +15,7 @@ import { revalidatePath } from 'next/cache';
 import { getActor } from '@/server/session';
 import { ForbiddenError, assertCan, matchesScope, type Actor, type Capability, type ScopeFilter, type ScopableRow } from '@/lib/authz';
 import { db, recordProxyReturnNotice } from '@/server/data/store';
-import { NOW } from '@/domain/ppm';
+import { operatingDateISO, operatingNowISO, operatingNowMs } from '@/server/operating-clock';
 import { nextDunningStage, nextTenancyStage, motionOutcome, motionTally, isEventFull, tierFor, EARN_POINTS, electionWinner, cascadeRevokeUpstream, type VoteChoice, type EarnReason } from '@/domain/estate';
 import { reviewCollectionInvoice } from '@/domain/estate/collection-review';
 
@@ -68,7 +68,7 @@ export async function acknowledgeFeedback(id: string): Promise<Res> {
   revalidate();
   return { ok: true };
 
-  });
+  }, 'estate');
 }
 
 export async function resolveComplaint(id: string): Promise<Res> {
@@ -80,7 +80,7 @@ export async function resolveComplaint(id: string): Promise<Res> {
   revalidate();
   return { ok: true };
 
-  });
+  }, 'estate');
 }
 
 /* --- collections ---------------------------------------------------------- */
@@ -90,11 +90,11 @@ export async function sendReminder(caseId: string): Promise<Res> {
   const c = scoped(g, db.collectionCases, caseId);
   if (!c) return { ok: false, error: 'Case not found.' };
   const balance = collectionBalance(g, c); if ('error' in balance) return { ok: false, error: balance.error };
-  c.remindersSent += 1; c.lastActionISO = NOW;
+  c.remindersSent += 1; c.lastActionISO = operatingNowISO();
   revalidate();
   return { ok: true, ref: c.invoiceRef };
 
-  });
+  }, 'estate');
 }
 
 export async function advanceDunning(caseId: string): Promise<Res> {
@@ -104,11 +104,11 @@ export async function advanceDunning(caseId: string): Promise<Res> {
   if (!c) return { ok: false, error: 'Case not found.' };
   const balance = collectionBalance(g, c); if ('error' in balance) return { ok: false, error: balance.error };
   if (c.stage === 'escalated') return { ok: false, error: 'This collection case is already at its final stage.' };
-  c.stage = nextDunningStage(c.stage); c.lastActionISO = NOW;
+  c.stage = nextDunningStage(c.stage); c.lastActionISO = operatingNowISO();
   revalidate();
   return { ok: true, ref: c.invoiceRef };
 
-  });
+  }, 'estate');
 }
 
 export async function recordPromise(caseId: string, amountMajor: number, dueISO: string): Promise<Res> {
@@ -122,11 +122,11 @@ export async function recordPromise(caseId: string, amountMajor: number, dueISO:
   if (minor > balance.minor) return { ok: false, error: 'A promise cannot exceed the recorded outstanding invoice balance.' };
   if (!validDate(dueISO)) return { ok: false, error: 'Pick a valid promise date.' };
   c.promiseAmountMinor = minor; c.promiseDueISO = dueISO; c.promiseStatus = 'pending';
-  c.stage = 'plan'; c.lastActionISO = NOW;
+  c.stage = 'plan'; c.lastActionISO = operatingNowISO();
   revalidate();
   return { ok: true, ref: c.invoiceRef };
 
-  });
+  }, 'estate');
 }
 
 /* --- tenancy -------------------------------------------------------------- */
@@ -137,12 +137,12 @@ export async function advanceTenancy(id: string): Promise<Res> {
   if (!t) return { ok: false, error: 'Tenancy not found.' };
   if (t.stage === 'closed') return { ok: false, error: 'This tenancy is closed.' };
   t.stage = nextTenancyStage(t.stage);
-  if (t.stage === 'active' && !t.moveInISO) t.moveInISO = NOW;
+  if (t.stage === 'active' && !t.moveInISO) t.moveInISO = operatingDateISO();
   if (t.stage === 'moving_in' && t.depositStatus === 'pending') t.depositStatus = 'held';
   revalidate();
   return { ok: true };
 
-  });
+  }, 'estate');
 }
 
 export async function settleDeposit(id: string, refundMajor: number): Promise<Res> {
@@ -158,7 +158,7 @@ export async function settleDeposit(id: string, refundMajor: number): Promise<Re
   revalidate();
   return { ok: true };
 
-  });
+  }, 'estate');
 }
 
 /* --- parcels -------------------------------------------------------------- */
@@ -178,13 +178,13 @@ export async function logParcel(input: LogParcelInput): Promise<Res> {
   db.parcels.unshift({
     tenantId: estate.tenantId, id, estateId: estate.id,
     code, residentName: input.residentName.trim(), unitLabel: input.unitLabel.trim() || '—', courier: input.courier.trim() || 'Courier',
-    lockerLabel: locker?.label, size: input.size, status: locker ? 'stored' : 'received', receivedISO: new Date(Date.parse(NOW)).toISOString(),
+    lockerLabel: locker?.label, size: input.size, status: locker ? 'stored' : 'received', receivedISO: new Date(Date.parse(operatingNowISO())).toISOString(),
   } as (typeof db.parcels)[number]);
   if (locker) locker.parcelId = id;
   revalidate();
   return { ok: true, ref: code };
 
-  });
+  }, 'estate');
 }
 
 export async function collectParcel(id: string): Promise<Res> {
@@ -193,13 +193,13 @@ export async function collectParcel(id: string): Promise<Res> {
   const p = scoped(g, db.parcels, id);
   if (!p) return { ok: false, error: 'Parcel not found.' };
   if (p.status === 'collected') return { ok: false, error: 'Already collected.' };
-  p.status = 'collected'; p.collectedISO = new Date(Date.parse(NOW)).toISOString();
+  p.status = 'collected'; p.collectedISO = new Date(Date.parse(operatingNowISO())).toISOString();
   const locker = db.lockers.find((l) => l.parcelId === id && sameEstate(l, p) && matchesScope(l, g.scope));
   if (locker) locker.parcelId = undefined;
   revalidate();
   return { ok: true, ref: p.code };
 
-  });
+  }, 'estate');
 }
 
 export async function notifyResident(id: string): Promise<Res> {
@@ -210,7 +210,7 @@ export async function notifyResident(id: string): Promise<Res> {
   revalidate();
   return { ok: true, ref: p.code };
 
-  });
+  }, 'estate');
 }
 
 /* --- governance & e-voting ------------------------------------------------ */
@@ -224,7 +224,7 @@ export async function openMotion(id: string): Promise<Res> {
   revalidate();
   return { ok: true, ref: m.ref };
 
-  });
+  }, 'estate');
 }
 
 /** Record a unit's vote (unit-weighted). One click = one unit's weight. */
@@ -240,7 +240,7 @@ export async function castVote(motionId: string, choice: VoteChoice): Promise<Re
   revalidate();
   return { ok: true, ref: m.ref };
 
-  });
+  }, 'estate');
 }
 
 export async function closeMotion(id: string): Promise<Res> {
@@ -255,7 +255,7 @@ export async function closeMotion(id: string): Promise<Res> {
   revalidatePath('/portal/announcements'); revalidatePath('/announcements');
   return { ok: true, ref: `${m.ref} ${m.status.replace('_', ' ')}` };
 
-  });
+  }, 'estate');
 }
 
 /** When a motion resolves, tell residents — an estate announcement of the AGM
@@ -267,7 +267,7 @@ function announceMotionOutcome(m: (typeof db.motions)[number]): void {
     tenantId: m.tenantId, id: `an-agm-${nextRecordSequence('estate:anSeq', 0, true)}`,
     title: `AGM result — ${m.title}`,
     body: `Motion ${m.ref} ${verdict}. Final turnout ${t.turnoutPct}% (quorum ${m.quorumPct}% required) with ${t.approvalPct}% in favour. Thank you to everyone who took part.`,
-    estateId: m.estateId, scope: 'estate', audience: 'All residents', sentAt: NOW, delivered: 0, read: 0, aiDrafted: false,
+    estateId: m.estateId, scope: 'estate', audience: 'All residents', sentAt: operatingNowISO(), delivered: 0, read: 0, aiDrafted: false,
   } as (typeof db.announcements)[number]);
 }
 
@@ -278,13 +278,13 @@ export async function rsvpEvent(id: string): Promise<Res> {
   const e = scoped(g, db.communityEvents, id);
   if (!e) return { ok: false, error: 'Event not found.' };
   if (e.cancelled) return { ok: false, error: 'This event was cancelled.' };
-  if (Date.parse(e.endISO) < Date.parse(NOW)) return { ok: false, error: 'This event has ended.' };
+  if (Date.parse(e.endISO) < operatingNowMs()) return { ok: false, error: 'This event has ended.' };
   if (isEventFull(e)) return { ok: false, error: 'This event is full.' };
   e.rsvps += 1;
   revalidate();
   return { ok: true };
 
-  });
+  }, 'estate');
 }
 
 export async function cancelRsvp(id: string): Promise<Res> {
@@ -292,12 +292,12 @@ export async function cancelRsvp(id: string): Promise<Res> {
   const g = await gate('bookings_amenities'); if (!g.ok) return g;
   const e = scoped(g, db.communityEvents, id);
   if (!e) return { ok: false, error: 'Event not found.' };
-  if (e.cancelled || Date.parse(e.endISO) < Date.parse(NOW)) return { ok: false, error: 'Reservations cannot be changed for a cancelled or ended event.' };
+  if (e.cancelled || Date.parse(e.endISO) < operatingNowMs()) return { ok: false, error: 'Reservations cannot be changed for a cancelled or ended event.' };
   if (e.rsvps > 0) e.rsvps -= 1;
   revalidate();
   return { ok: true };
 
-  });
+  }, 'estate');
 }
 
 export type CreateEventInput = { estateId?: string; title: string; category: 'social' | 'fitness' | 'kids' | 'meeting' | 'festive'; venue: string; host: string; startISO: string; capacity: number };
@@ -320,7 +320,7 @@ export async function createEvent(input: CreateEventInput): Promise<Res> {
   revalidate();
   return { ok: true, ref: input.title.trim() };
 
-  });
+  }, 'estate');
 }
 
 /* --- board & committee ---------------------------------------------------- */
@@ -338,14 +338,14 @@ export async function createMotion(input: CreateMotionInput): Promise<Res> {
   db.motions.push({
     tenantId: estate.tenantId, id: `mo-new-${moSeq}`, estateId: estate.id,
     ref: `AGM-${String(seq).padStart(2, '0')}`, title: input.title.trim(), summary: input.summary.trim() || 'Motion tabled by the committee.',
-    category: input.category, status: 'draft', opensISO: NOW.slice(0, 10), closesISO: NOW.slice(0, 10),
+    category: input.category, status: 'draft', opensISO: operatingDateISO(), closesISO: operatingDateISO(),
     eligibleWeight: estate.unitCount, forWeight: 0, againstWeight: 0, abstainWeight: 0,
     quorumPct: Math.min(100, Math.max(1, Math.round(input.quorumPct || 33))), thresholdPct: Math.min(100, Math.max(1, Math.round(input.thresholdPct || 50))),
   } as (typeof db.motions)[number]);
   revalidate();
   return { ok: true, ref: `AGM-${String(seq).padStart(2, '0')}` };
 
-  });
+  }, 'estate');
 }
 
 export async function recordMeetingHeld(id: string, attendees: number): Promise<Res> {
@@ -376,7 +376,7 @@ export async function recordMeetingHeld(id: string, attendees: number): Promise<
   if (outcomes.length) parts.push(outcomes.join(', '));
   return { ok: true, ref: parts.join(' · ') };
 
-  });
+  }, 'estate');
 }
 
 /* --- loyalty & rewards ---------------------------------------------------- */
@@ -387,14 +387,14 @@ export async function awardPoints(memberId: string, reason: EarnReason): Promise
   if (!m) return { ok: false, error: 'Member not found.' };
   if (!Object.hasOwn(EARN_POINTS, reason) || !Number.isSafeInteger(m.points + EARN_POINTS[reason])) return { ok: false, error: 'Choose a valid points reason.' };
   m.points += EARN_POINTS[reason];
-  m.lastEarnedISO = NOW;
+  m.lastEarnedISO = operatingDateISO();
   if (reason === 'on_time_payment') m.onTimeStreak += 1;
   if (reason === 'event') m.eventsAttended += 1;
   if (reason === 'poll') m.pollsVoted += 1;
   revalidate();
   return { ok: true };
 
-  });
+  }, 'estate');
 }
 
 export async function redeemPerk(memberId: string, perkId: string): Promise<Res> {
@@ -410,7 +410,7 @@ export async function redeemPerk(memberId: string, perkId: string): Promise<Res>
   revalidate();
   return { ok: true, ref: p.title };
 
-  });
+  }, 'estate');
 }
 
 /* --- board election (vacant seat) ----------------------------------------- */
@@ -432,7 +432,7 @@ export async function nominateCandidate(electionId: string, input: NominateInput
   revalidateElection();
   return { ok: true, ref: input.name.trim() };
 
-  });
+  }, 'estate');
 }
 
 export async function openElectionVoting(electionId: string): Promise<Res> {
@@ -446,7 +446,7 @@ export async function openElectionVoting(electionId: string): Promise<Res> {
   revalidateElection();
   return { ok: true, ref: el.ref };
 
-  });
+  }, 'estate');
 }
 
 /** Close voting: the plurality winner (if quorate, no tie) takes the seat and
@@ -460,17 +460,17 @@ export async function decideElection(electionId: string): Promise<Res> {
   const winner = electionWinner(el);
   if (!winner) return { ok: false, error: 'Cannot decide yet — quorum not met or the vote is tied.' };
   el.status = 'decided'; el.winnerCandidateId = winner.id;
-  const termEndDate = new Date(NOW);
+  const termEndDate = new Date(operatingDateISO());
   termEndDate.setUTCFullYear(termEndDate.getUTCFullYear() + 2);
   const termEnd = termEndDate.toISOString().slice(0, 10);
   db.boardMembers.push({
     tenantId: el.tenantId, id: `bd-el-${el.id}`, estateId: el.estateId,
-    name: winner.residentName, unitLabel: winner.unitLabel, role: 'Member', portfolio: el.portfolio, sinceISO: NOW.slice(0, 10), termEndISO: termEnd,
+    name: winner.residentName, unitLabel: winner.unitLabel, role: 'Member', portfolio: el.portfolio, sinceISO: operatingDateISO(), termEndISO: termEnd,
   } as (typeof db.boardMembers)[number]);
   revalidateElection();
   return { ok: true, ref: winner.residentName };
 
-  });
+  }, 'estate');
 }
 
 /* --- proxy voting (EGM) --------------------------------------------------- */
@@ -492,7 +492,7 @@ export async function exerciseProxies(motionId: string): Promise<Res> {
   ['/governance', '/board', '/portal/community'].forEach((path) => revalidatePath(path));
   return { ok: true, ref: `${held.length} proxies` };
 
-  });
+  }, 'estate');
 }
 
 /** Revoke a single proxy in the register — and cascade to anyone who delegated
@@ -513,5 +513,5 @@ export async function revokeProxyLink(proxyId: string): Promise<Res> {
   ['/board', '/governance', '/portal/community'].forEach((path) => revalidatePath(path));
   return { ok: true, ref: `${px.grantorName} withdrawn${cascaded.length ? ` · ${cascaded.length} cascaded` : ''}` };
 
-  });
+  }, 'estate');
 }
