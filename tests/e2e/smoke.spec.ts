@@ -10,22 +10,25 @@ test('legacy dashboard opens the workspace chooser', async ({ page }) => {
 
 test('Estate overview includes portfolio operations and currency-specific empty states', async ({ page }) => {
   await page.goto('/estate');
+  // Tabs enter the shell header after hydration; interact with that ready surface
+  // again after submitting the currency form triggers a full page navigation.
+  const tabs = page.getByRole('banner').getByRole('tablist', { name: 'Estate overview sections', exact: true });
   await expect(page.getByRole('button', { name: 'Add property', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Add tenant', exact: true })).toBeVisible();
-  await expect(page.getByRole('tab', { name: 'Overview', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(tabs.getByRole('tab', { name: 'Overview', exact: true })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('region', { name: 'Analytics snapshot', exact: true })).toBeVisible();
   await expect(page.getByRole('article', { name: 'Occupancy rate', exact: true })).toContainText('registered units');
-  await page.getByRole('tab', { name: 'Collections', exact: true }).click();
+  await tabs.getByRole('tab', { name: 'Collections', exact: true }).click();
   for (const section of ['Collection trends', 'Portfolio pulse']) await expect(page.getByRole('region', { name: section, exact: true })).toBeVisible();
-  await page.getByRole('tab', { name: 'Properties', exact: true }).click();
+  await tabs.getByRole('tab', { name: 'Properties', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Property performance', exact: true })).toBeVisible();
-  await page.getByRole('tab', { name: 'Maintenance', exact: true }).click();
+  await tabs.getByRole('tab', { name: 'Maintenance', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Maintenance summary', exact: true })).toBeVisible();
   await page.getByRole('combobox', { name: 'Display currency', exact: true }).selectOption('USD');
   await page.getByRole('button', { name: 'Apply', exact: true }).click();
   await expect(page).toHaveURL(/\/estate\?currency=USD$/);
   await expect(page.getByRole('article', { name: 'Charges collected', exact: true })).not.toContainText('₦');
-  await page.getByRole('tab', { name: 'Collections', exact: true }).click();
+  await tabs.getByRole('tab', { name: 'Collections', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Collection trends', exact: true })).toContainText('USD');
 });
 
@@ -52,7 +55,7 @@ test('Estate Properties supports list/grid views, unit details and navigation or
   await expect(page.getByRole('table', { name: 'Property list', exact: true })).toHaveCount(0);
   await page.getByRole('tab', { name: 'Occupancy summary', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Property register summary', exact: true })).toBeVisible();
-  await page.getByRole('tab', { name: 'Properties', exact: true }).click();
+  await page.getByRole('tab', { name: /^Properties(?: \d+)?$/ }).click();
   await expect(page.getByRole('button', { name: 'Grid view', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: 'View units at Lekki Gardens Estate', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Lekki Gardens Estate', exact: true })).toBeVisible();
@@ -76,6 +79,7 @@ for (const workspace of ['Estate', 'Facility', 'Shortlet', 'Construction']) {
     for (const other of ['Estate', 'Facility', 'Shortlet', 'Construction'].filter((name) => name !== workspace)) {
       await expect(page.getByRole('navigation', { name: `${other} navigation`, exact: true })).toHaveCount(0);
     }
+    await page.getByRole('button', { name: 'Account menu', exact: true }).click();
     await page.getByRole('link', { name: `Switch workspace, current ${workspace}`, exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/workspaces\\?from=${id}$`));
     await expect(page.getByRole('heading', { name: 'Choose your workspace', exact: true })).toBeVisible();
