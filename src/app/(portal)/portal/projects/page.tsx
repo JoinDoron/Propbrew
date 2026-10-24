@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
 import { InvestorPortfolioWorkspace } from '@/components/portal/investor-portfolio-workspace';
@@ -12,8 +13,11 @@ export default async function MyProjectsPage() {
   const projects = [...repos.investorProjects.list(actor).items];
 
   return (
-    <div className="max-w-[860px] mx-auto">
+    <div className="pb-page">
+      <PageHeader title="My investments" subtitle="Your project holdings, progress and payment plans." />
+      <div className="w-full min-w-0 flex flex-col gap-6">
       <InvestorPortfolioWorkspace projects={projects} />
+      </div>
     </div>
   );
 }

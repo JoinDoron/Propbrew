@@ -1,89 +1,35 @@
 'use client';
 
 import { useState } from 'react';
-import { MessageCircle, Send, Check, CheckCheck, Clock, Zap, Sparkles, Crown } from 'lucide-react';
-import { toneVar, type Tone } from '@/lib/status-tones';
+import { CalendarClock, Check, MessageCircle, ShieldCheck } from 'lucide-react';
+import { Card, CardHeader, EmptyState, StatusPill } from '@/components/ui';
+import { PageTabs } from '@/components/ui/page-tabs';
+import { ShortletFeedback, ShortletMetric, ShortletNotice, shortletStyles } from './reference-ui';
+import { shortletDate } from './shortlet-format';
+import styles from './shortlet-specialists-polish.module.css';
 
 export type Template = { key: string; label: string; trigger: string; body: string };
 export type TimelineMsg = { key: string; label: string; whenISO: string; status: string; preview: string };
 export type TimelineRow = { id: string; ref: string; guest: string; apt: string; messages: TimelineMsg[] };
 export type WaStats = { sent: number; scheduled: number; delivered: number; read: number };
 
-const STATUS_TONE: Record<string, Tone> = { sent: 'success', scheduled: 'info', pending: 'neutral', skipped: 'muted' };
-
-export function WhatsappWorkspace({ stats, templates: initial, sampleVars, timeline }: { stats: WaStats; templates: Template[]; sampleVars: Record<string, string>; timeline: TimelineRow[] }) {
+export function WhatsappWorkspace({ stats, templates: initial, sampleVars, timeline, canUpdate = false }: { stats: WaStats; templates: Template[]; sampleVars: Record<string, string>; timeline: TimelineRow[]; canUpdate?: boolean }) {
   const [templates, setTemplates] = useState(initial);
-  const [enabled, setEnabled] = useState<Record<string, boolean>>(Object.fromEntries(initial.map((t) => [t.key, true])));
+  const [enabled, setEnabled] = useState<Record<string, boolean>>(Object.fromEntries(initial.map((template) => [template.key, true])));
   const [openId, setOpenId] = useState(timeline[0]?.id ?? '');
-  const [toast, setToast] = useState<string | null>(null);
-  const flash = (m: string) => { setToast(m); setTimeout(() => setToast(null), 2600); };
-  const render = (body: string) => body.replace(/\{\{(\w+)\}\}/g, (_, k) => sampleVars[k] ?? `{{${k}}}`);
-  const active = timeline.find((t) => t.id === openId) ?? timeline[0];
+  const [message, setMessage] = useState<string | null>(null);
+  const active = timeline.find((row) => row.id === openId) ?? timeline[0];
+  const substitute = (body: string) => body.replace(/\{\{(\w+)\}\}/g, (_, key) => sampleVars[key] ?? '{{' + key + '}}');
 
-  return (
-    <div className="flex flex-col gap-3.5">
-      <div className="rounded-xl px-4 py-2.5 text-[12px] flex items-center gap-2 flex-wrap" style={{ background: 'color-mix(in srgb, #25D366 8%, transparent)', border: '1px solid color-mix(in srgb, #25D366 30%, transparent)' }}>
-        <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase px-1.5 py-0.5 rounded" style={{ background: '#25D366', color: '#fff' }}><Crown size={10} /> Starter tier+</span>
-        <span className="text-text-2">Automated guest messaging via the WhatsApp Business API. Templated per booking, sent from your number. Per-conversation cost is metered.</span>
-      </div>
-
-      <div className="grid grid-cols-2 min-[720px]:grid-cols-4 gap-2.5">
-        <Kpi label="Sent" value={String(stats.sent)} tone="success" icon={<Send size={16} />} />
-        <Kpi label="Scheduled" value={String(stats.scheduled)} tone="info" icon={<Clock size={16} />} />
-        <Kpi label="Delivered" value={stats.sent ? `${Math.round((stats.delivered / stats.sent) * 100)}%` : '—'} tone="progress" icon={<Check size={16} />} />
-        <Kpi label="Read" value={stats.sent ? `${Math.round((stats.read / stats.sent) * 100)}%` : '—'} tone="success" icon={<CheckCheck size={16} />} />
-      </div>
-
-      <div className="grid grid-cols-1 min-[900px]:grid-cols-[1fr_360px] gap-3.5 items-start">
-        {/* Templates + automations */}
-        <div className="flex flex-col gap-2.5">
-          {templates.map((t, i) => (
-            <div key={t.key} className="bg-surface border border-border rounded-2xl shadow-card p-4">
-              <div className="flex items-center gap-2">
-                <span className="w-7 h-7 rounded-lg grid place-items-center flex-none" style={{ background: 'color-mix(in srgb, #25D366 14%, transparent)', color: '#1da851' }}><MessageCircle size={15} /></span>
-                <div className="min-w-0 flex-1"><div className="text-[13px] font-semibold">{t.label}</div><div className="text-[10.5px] text-text-3 flex items-center gap-1"><Zap size={10} /> {t.trigger}</div></div>
-                <button role="switch" aria-checked={enabled[t.key]} onClick={() => { setEnabled((p) => ({ ...p, [t.key]: !p[t.key] })); flash(enabled[t.key] ? `${t.label} paused` : `${t.label} on`); }} className={`w-9 h-5 rounded-full relative flex-none transition-colors ${enabled[t.key] ? 'bg-[#25D366]' : 'bg-surface-3'}`}>
-                  <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${enabled[t.key] ? 'left-4' : 'left-0.5'}`} />
-                </button>
-              </div>
-              <textarea value={t.body} onChange={(e) => setTemplates((prev) => prev.map((x, j) => (j === i ? { ...x, body: e.target.value } : x)))} rows={2} className="w-full mt-2.5 px-2.5 py-2 rounded-lg border border-border-2 bg-surface text-[12px] leading-relaxed outline-none focus:border-primary resize-none" />
-              <div className="mt-1.5 rounded-lg p-2.5 text-[11.5px] leading-relaxed" style={{ background: 'color-mix(in srgb, #25D366 7%, transparent)' }}>{render(t.body)}</div>
-            </div>
-          ))}
-          <p className="text-[10.5px] text-text-3 flex items-center gap-1"><Sparkles size={11} /> Variables like <code className="font-mono">{'{{guest}}'}</code>, <code className="font-mono">{'{{wifi}}'}</code>, <code className="font-mono">{'{{link}}'}</code> auto-fill per booking.</p>
-        </div>
-
-        {/* Message timeline */}
-        <div className="bg-surface border border-border rounded-2xl shadow-card overflow-hidden">
-          <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
-            <MessageCircle size={14} className="text-text-3" />
-            <select value={openId} onChange={(e) => setOpenId(e.target.value)} className="flex-1 h-8 px-2 rounded-lg border border-border-2 bg-surface text-[12px] outline-none">
-              {timeline.map((t) => <option key={t.id} value={t.id}>{t.guest} · {t.apt}</option>)}
-            </select>
-          </div>
-          <div className="p-3 flex flex-col gap-2.5" style={{ background: 'color-mix(in srgb, var(--surface-2) 60%, transparent)' }}>
-            {active?.messages.map((m) => (
-              <div key={m.key} className="flex flex-col items-end">
-                <div className="max-w-[85%] rounded-2xl rounded-br-sm px-3 py-2 text-[11.5px] leading-relaxed shadow-sm" style={{ background: m.status === 'sent' ? '#DCF8C6' : 'var(--surface)', color: m.status === 'sent' ? '#0b1f14' : 'var(--text-2)', border: m.status !== 'sent' ? '1px dashed var(--border-2)' : 'none' }}>
-                  {m.preview}
-                  <div className="flex items-center gap-1 justify-end mt-1 text-[9px]" style={{ color: m.status === 'sent' ? '#3a7d54' : 'var(--text-3)' }}>
-                    {m.whenISO.slice(5)}
-                    {m.status === 'sent' ? <CheckCheck size={11} /> : m.status === 'scheduled' ? <Clock size={10} /> : null}
-                  </div>
-                </div>
-                <span className="text-[9px] mt-0.5 font-semibold uppercase" style={{ color: toneVar(STATUS_TONE[m.status] ?? 'neutral') }}>{m.label} · {m.status}</span>
-              </div>
-            ))}
-            {!active && <p className="text-[12px] text-text-3 text-center py-6">No bookings to message.</p>}
-          </div>
-        </div>
-      </div>
-
-      {toast && <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[90] bg-text text-surface text-[13px] font-medium px-4 py-2.5 rounded-xl shadow-float animate-fade">{toast}</div>}
-    </div>
-  );
-}
-
-function Kpi({ label, value, tone, icon }: { label: string; value: string; tone: Tone; icon: React.ReactNode }) {
-  return <div className="bg-surface border border-border rounded-2xl shadow-card p-3.5"><span className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `color-mix(in srgb, ${toneVar(tone)} 14%, transparent)`, color: toneVar(tone) }}>{icon}</span><div className="text-[12px] text-text-2 font-medium mt-2.5">{label}</div><div className="text-[17px] font-bold tracking-[-0.02em] leading-none mt-1">{value}</div></div>;
+  return <div className={styles.stack}>
+    <ShortletNotice>WhatsApp planning preview · no messages are sent<p className={styles.text}>Timeline statuses are generated from booking dates, not provider callbacks. Delivered/read figures are modelled illustrations. Template edits and automation switches stay in this browser session; manager approval, provider templates and consent are required before any real send.</p></ShortletNotice>
+    <PageTabs label="WhatsApp communication sections" items={[
+      { id: 'messages', label: 'Message timeline', content: <div className={styles.stack}><Card><CardHeader title="Guest communication plan" subtitle="Date-based preview · not a message delivery log" action={<StatusPill status="Preview only" tone="neutral" />} /><div className={styles.stack}><label className={styles.field}>Guest booking<select value={active?.id ?? ''} aria-label="Select guest message timeline" disabled={!timeline.length} onChange={(event) => setOpenId(event.target.value)} className="pb-form-control">{timeline.length ? timeline.map((row) => <option key={row.id} value={row.id}>{row.guest} · {row.apt} · {row.ref}</option>) : <option value="">No bookings in scope</option>}</select></label>{active ? <dl className={styles.facts}><div><dt>Guest</dt><dd>{active.guest}</dd></div><div><dt>Booking reference</dt><dd>{active.ref}</dd></div><div><dt>Apartment</dt><dd>{active.apt || 'Not recorded'}</dd></div><div><dt>Planned message records</dt><dd>{active.messages.length}</dd></div></dl> : null}<p className={styles.metadata}>Showing all {timeline.length} supplied booking plan(s). The statuses below are planning states; they are not verified sends, deliveries or read receipts.</p></div></Card>
+        <Card padded={false} className={styles.panel}><div className={styles.header}><CardHeader title={active ? active.guest + ' · planned messages' : 'Planned messages'} subtitle={active ? active.ref + ' · ' + active.apt : 'Choose a booking to inspect its date-based communication plan'} action={<MessageCircle size={18} className="text-primary" />} /></div>{active?.messages.length ? <ol className={styles.timeline}>{active.messages.map((item, index) => <li key={item.key} className={styles.timelineItem}><span className={styles.step} aria-hidden="true">{index + 1}</span><div><div className={styles.toolbar}><h3 className={styles.title}>{item.label}</h3><StatusPill status={'Illustrative: ' + item.status.replaceAll('_', ' ')} tone={item.status === 'skipped' ? 'muted' : 'info'} /></div><p className={styles.metadata}>Planned local operating date: {shortletDate(item.whenISO)} · WAT date, not a dispatch timestamp</p><div className={styles.notice}><p className={styles.preview}>{item.preview || 'No message preview was supplied for this planning record.'}</p></div><p className={styles.metadata}>No provider message ID or delivery callback has been verified. Review the recipient, consent and sensitive access details before any real send.</p></div></li>)}</ol> : <div className={styles.empty}><EmptyState icon={<CalendarClock size={26} />} title={active ? 'No messages in this plan' : 'No bookings to message'} description={active ? 'No communication planning records were supplied for this booking.' : 'Communication plans appear for bookings in your current scope.'} /></div>}<p className={styles.footer}>This preview does not send a message or place anything in a delivery queue.</p></Card>
+      </div> },
+      { id: 'templates', label: 'Templates & automations', content: <div className={styles.stack}>{templates.length ? templates.map((template, index) => <Card key={template.key} padded={false} className={styles.panel}><div className={styles.header}><CardHeader title={template.label} subtitle={template.trigger} action={<StatusPill status={enabled[template.key] ? 'Included in preview' : 'Excluded from preview'} tone={enabled[template.key] ? 'info' : 'muted'} />} /></div><div className={styles.body}><div className={styles.stack}><div className={styles.toolbar}><div><h3 className={styles.rowTitle}>Include in session preview</h3><p className={styles.metadata}>This switch does not schedule or enable a provider automation.</p></div><button type="button" role="switch" aria-label={template.label + ' automation'} aria-checked={enabled[template.key] ?? false} disabled={!canUpdate} onClick={() => { setEnabled((previous) => ({ ...previous, [template.key]: !previous[template.key] })); setMessage('Preview preference changed for this session only. No automation was scheduled.'); }} className={styles.switch}><span className={styles.switchTrack} aria-hidden="true"><span /></span></button></div><div className={styles.twoColumns}><label className={styles.field}>Template draft<textarea value={template.body} aria-label={template.label + ' template'} disabled={!canUpdate} onChange={(event) => setTemplates((previous) => previous.map((item, itemIndex) => itemIndex === index ? { ...item, body: event.target.value } : item))} rows={7} className="pb-form-control" /><span className={styles.metadata}>Draft text stays in this browser session and is not an approved WhatsApp Business template.</span></label><section className={styles.notice} aria-label={template.label + ' sample substitution preview'}><h3 className={styles.title}>Sample substitution preview</h3><p className={styles.preview + ' mt-4'}>{substitute(template.body) || 'Add draft text to inspect the sample substitution.'}</p></section></div></div></div><p className={styles.footer}>Preview variables use supplied sample booking data. Missing values remain as placeholders. Edits are not saved to a provider or automatically sent to a guest.</p></Card>) : <Card><EmptyState icon={<MessageCircle size={26} />} title="No templates available" description="No guest communication templates were supplied." /></Card>}<Card><CardHeader title="Before enabling real messages" subtitle="Consent, content and operating approval remain separate from this preview" action={<ShieldCheck size={18} className="text-primary" />} /><ul className={styles.checkList}><li><Check size={16} aria-hidden="true" />Review variables such as {'{{guest}}'}, {'{{wifi}}'} and {'{{link}}'} against the intended guest and booking.</li><li><Check size={16} aria-hidden="true" />Have a manager approve the final message and confirm consent, quiet hours and emergency handling.</li><li><Check size={16} aria-hidden="true" />Verify the provider-approved template and delivery callback before treating a message as sent, delivered or read.</li></ul></Card></div> },
+      { id: 'summary', label: 'Delivery summary', content: <div className={styles.stack}><div className={shortletStyles.metrics}><ShortletMetric label="Modelled past sends" value={String(stats.sent)} /><ShortletMetric label="Modelled scheduled" value={String(stats.scheduled)} /><ShortletMetric label="Illustrative delivered" value={String(stats.delivered)} /><ShortletMetric label="Illustrative read" value={String(stats.read)} /></div><Card padded={false} className={styles.panel}><div className={styles.header}><CardHeader title="Provider evidence required" subtitle="These are not operational delivery KPIs" action={<StatusPill status="No verified provider delivery" tone="neutral" />} /></div><div className={styles.body}><div className={styles.stack}><p className={styles.text}>Real delivery/read rates require signed WhatsApp Business callbacks, durable retry queues and consent-aware sends. No provider delivery has been verified in this workspace.</p><dl className={styles.facts}><div><dt>Message source</dt><dd>Booking-date planning model</dd></div><div><dt>Delivery / read source</dt><dd>Illustrative model</dd></div><div><dt>Provider callback evidence</dt><dd>Not connected</dd></div><div><dt>Send approval</dt><dd>Manager review required</dd></div></dl></div></div><p className={styles.footer}>No message is sent by viewing a timeline, editing a draft or changing a preview switch.</p></Card></div> },
+    ]} />
+    {message ? <ShortletFeedback message={message} onClose={() => setMessage(null)} /> : null}
+  </div>;
 }

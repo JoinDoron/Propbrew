@@ -1,5 +1,5 @@
 import { requireCapability } from '@/server/guard';
-import { effectiveLevel } from '@/lib/authz';
+import { can } from '@/lib/authz';
 import { constructionWorld } from '@/server/reads/construction';
 import { db } from '@/server/data/store';
 import { stockLedger, countVariance, reasonsFor } from '@/domain/construction';
@@ -10,8 +10,9 @@ import { StockWorkspace, type StockLine, type CountRow, type LedgerRow, type Rea
  *  adjusting are separate: a variance only moves the books once someone codes
  *  WHY, which is what makes the reason analytics real. */
 export default async function ConstructionStockPage() {
-  const { actor } = await requireCapability('reports_analytics');
-  const canMutate = ['F', 'M'].includes(effectiveLevel(actor, 'reports_analytics'));
+  const { actor, scope } = await requireCapability('reports_analytics', 'read', 'construction');
+  const canMutate = can(actor, 'reports_analytics', 'update').allowed;
+  const canCreate = can(actor, 'reports_analytics', 'create').allowed;
   const world = constructionWorld(actor);
 
   const matOf = (id: string) => world.materials.find((m) => m.id === id);
@@ -34,7 +35,15 @@ export default async function ConstructionStockPage() {
     })))
     .sort((a, b) => Date.parse(b.atISO) - Date.parse(a.atISO));
 
-  const counts: CountRow[] = db.constructionStockCounts.map((c) => {
+  // Counts have no repository adapter yet. Restrict the presentation to the
+  // same tenant and scoped parent materials/stores as the rest of this page.
+  const visibleMaterialIds = new Set(world.materials.map((material) => material.id));
+  const visibleWarehouseIds = new Set(world.warehouses.map((warehouse) => warehouse.id));
+  const scopedCounts = db.constructionStockCounts.filter((count) =>
+    (scope.tenantId === '*' || count.tenantId === scope.tenantId) &&
+    visibleMaterialIds.has(count.materialId) && visibleWarehouseIds.has(count.warehouseId),
+  );
+  const counts: CountRow[] = scopedCounts.map((c) => {
     const m = matOf(c.materialId);
     return {
       id: c.id, ref: c.ref, materialName: m?.name ?? c.materialId, unit: m?.unit ?? '',
@@ -51,7 +60,7 @@ export default async function ConstructionStockPage() {
   const open = counts.filter((c) => c.status === 'open');
 
   return (
-    <div className="max-w-[1000px] mx-auto">
+    <div className="pb-page">
       <StockWorkspace
         lines={lines}
         warehouses={world.warehouses.map((w) => ({ id: w.id, name: w.name }))}
@@ -66,6 +75,7 @@ export default async function ConstructionStockPage() {
           movements: world.movements.length,
         }}
         canMutate={canMutate}
+        canCreate={canCreate}
       />
     </div>
   );

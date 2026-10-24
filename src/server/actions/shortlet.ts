@@ -20,6 +20,7 @@ import type { SlBooking, SlInspection, InspectionItem, ExpenseCategory, BookingS
 import type { PlanKey, TeamRole, TeamMember } from '@/domain/shortlet/plan';
 import { suggestPriority, ISSUE_NEXT, type RuleType, type IssuePriority, type PricingRule, type MaintenanceIssue, type Agent } from '@/domain/shortlet/operations';
 import { nowISO } from '@/server/clock';
+import { canEnterWorkspace } from '@/config/workspaces';
 
 const PATHS = ['/shortlet', '/shortlet/bookings', '/shortlet/calendar', '/shortlet/inspections', '/shortlet/expenses', '/shortlet/analytics', '/shortlet/guests', '/shortlet/whatsapp', '/shortlet/channels', '/shortlet/plan', '/shortlet/team', '/shortlet/pricing', '/shortlet/maintenance', '/shortlet/agents', '/shortlet/reviews'];
 const revalidate = () => PATHS.forEach((p) => revalidatePath(p));
@@ -28,6 +29,7 @@ export type Res = { ok: true; ref?: string } | { ok: false; error: string };
 
 async function gate(action: 'create' | 'update' | 'transition'): Promise<{ actor: Awaited<ReturnType<typeof getActor>> } | { ok: false; error: string }> {
   const actor = await getActor();
+  if (!canEnterWorkspace(actor, 'shortlet')) return { ok: false, error: 'You cannot enter the shortlet workspace with this account.' };
   try { assertCan(actor, 'bookings_amenities', action); return { actor }; }
   catch (e) { if (e instanceof ForbiddenError) return { ok: false, error: 'You cannot manage short-let bookings.' }; throw e; }
 }

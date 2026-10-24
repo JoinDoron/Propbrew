@@ -1,5 +1,5 @@
 import { requireCapability } from '@/server/guard';
-import { effectiveLevel } from '@/lib/authz';
+import { can } from '@/lib/authz';
 import { constructionWorld } from '@/server/reads/construction';
 import { NOW_MS } from '@/domain/ppm';
 import { projectEVMOf, forecastFinishISO, projectHealth, projectCommittedMinor, projectActualMinor, milestoneBand } from '@/domain/construction';
@@ -9,8 +9,8 @@ import { ProjectsWorkspace, type ProjectCard } from '@/components/construction/p
  *  budget vs committed vs actual, physical progress against the baseline, a
  *  composite health score, forecast finish and milestone status. */
 export default async function ConstructionProjectsPage() {
-  const { actor } = await requireCapability('reports_analytics');
-  const canMutate = ['F', 'M'].includes(effectiveLevel(actor, 'reports_analytics'));
+  const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
+  const canMutate = can(actor, 'reports_analytics', 'create').allowed;
   const world = constructionWorld(actor);
 
   const projects: ProjectCard[] = world.projects.map((p) => {
@@ -31,7 +31,7 @@ export default async function ConstructionProjectsPage() {
   });
 
   return (
-    <div className="max-w-[1000px] mx-auto">
+    <div className="pb-page">
       <ProjectsWorkspace
         projects={projects}
         kpis={{

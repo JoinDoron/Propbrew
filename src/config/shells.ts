@@ -37,12 +37,6 @@ export function homeRouteFor(actor: Actor): string {
     if (actor.roles.includes('investor')) return '/portal/projects';
     return '/portal';
   }
-  // ops
-  if (actor.roles.includes('technician') && !actor.roles.includes('facility_manager')) {
-    return '/work-orders';
-  }
-  if (actor.roles.includes('security') && actor.roles.every((r) => r === 'security')) {
-    return '/security';
-  }
-  return '/dashboard';
+  // Operators choose a module; entering it never changes their permissions.
+  return '/workspaces';
 }

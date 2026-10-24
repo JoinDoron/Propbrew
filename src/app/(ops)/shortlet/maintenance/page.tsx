@@ -1,3 +1,5 @@
+import { can } from '@/lib/authz';
+import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
 import { NOW_MS } from '@/domain/ppm';
@@ -7,7 +9,7 @@ import { MaintenanceWorkspace, type IssueRow } from '@/components/shortlet/maint
 /** Maintenance issue tracker (flow idea) — log per-apartment issues with an
  *  auto-suggested priority, then drive Open → In progress → Resolved. */
 export default async function ShortletMaintenancePage() {
-  const { actor } = await requireCapability('bookings_amenities');
+  const { actor } = await requireCapability('bookings_amenities', 'read', 'shortlet');
   const apts = repos.shortletApartments.list(actor).items;
   const aptName = new Map(apts.map((a) => [a.id, a.name]));
   const issues = repos.shortletIssues.list(actor).items;
@@ -17,8 +19,9 @@ export default async function ShortletMaintenancePage() {
     .map((i) => ({ id: i.id, apt: aptName.get(i.apartmentId) ?? '', apartmentId: i.apartmentId, title: i.title, description: i.description, priority: i.priority, status: i.status, createdAt: i.createdAt, resolvedAt: i.resolvedAt }));
 
   return (
-    <div className="max-w-[820px] mx-auto">
-      <MaintenanceWorkspace issues={rows} apartments={apts.map((a) => ({ id: a.id, name: a.name }))} stats={issueStats(issues, NOW_MS)} />
+    <div className="pb-page">
+      <PageHeader title="Shortlet maintenance" subtitle="Keep apartments guest-ready with a clear issue workflow." />
+      <MaintenanceWorkspace canCreate={can(actor, 'bookings_amenities', 'create').allowed} canUpdate={can(actor, 'bookings_amenities', 'update').allowed} issues={rows} apartments={apts.map((a) => ({ id: a.id, name: a.name }))} stats={issueStats(issues, NOW_MS)} />
     </div>
   );
 }

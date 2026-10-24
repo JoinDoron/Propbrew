@@ -8,7 +8,7 @@ import { TwinWorkspace, type TwinZone } from '@/components/construction/twin-wor
  *  ahead, finishes trailing) is legible at a glance; issues and RFIs are pinned
  *  to the level they block. */
 export default async function ConstructionTwinPage() {
-  const { actor } = await requireCapability('reports_analytics');
+  const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const world = constructionWorld(actor);
 
   const counts = new Map<string, number>();
@@ -27,7 +27,7 @@ export default async function ConstructionTwinPage() {
   const roll = twinRollup(zones);
 
   return (
-    <div className="max-w-[1000px] mx-auto">
+    <div className="pb-page">
       <TwinWorkspace
         zones={rows}
         projectName={project?.name ?? 'Project'}

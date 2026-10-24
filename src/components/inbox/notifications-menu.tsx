@@ -55,9 +55,9 @@ export function NotificationsMenu({ notifications, unread }: { notifications: No
                 <div className={`flex gap-3 px-4 py-3 border-b border-border last:border-0 ${n.read ? '' : 'bg-primary-weak/40'} hover:bg-surface-2 transition-colors`}>
                   <span className="w-2 h-2 rounded-full mt-1.5 flex-none" style={{ background: n.read ? 'var(--border-2)' : DOT[n.kind] }} />
                   <div className="min-w-0">
-                    <div className="text-[13px] font-medium leading-snug">{n.title}</div>
+                    <div className="text-sm font-medium leading-snug">{n.title}</div>
                     <div className="text-[12px] text-text-3 mt-0.5 leading-snug">{n.body}</div>
-                    <div className="text-[11px] text-text-3 mt-1">{when(n.at)}</div>
+                    <div className="text-[12px] text-text-3 mt-1">{when(n.at)}</div>
                   </div>
                 </div>
               );

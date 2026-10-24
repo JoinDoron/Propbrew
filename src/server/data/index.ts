@@ -48,9 +48,50 @@ function scopedGet<T extends ScopableRow & { id: string }>(
   return match ?? null;
 }
 
+/**
+ * Scoped mutable lookup for server actions.
+ *
+ * Reads were already forced through `scopedList`, but several mutation paths
+ * loaded `db.*` by id after checking only the capability. That is insufficient:
+ * a caller can submit another tenant's id even when the UI never exposes it.
+ * Mutations must resolve the row through the same tenant/estate/ownership
+ * predicate as reads before changing the object.
+ */
+export function scopedMutableGet<T extends ScopableRow & { id: string }>(
+  actor: Actor,
+  capability: Capability,
+  rows: readonly T[],
+  id: string,
+  action: Action = 'update',
+): T | null {
+  const scope = assertCan(actor, capability, action);
+  const [match] = applyScope(rows.filter((r) => r.id === id), scope);
+  return match ?? null;
+}
+
 /* --- repositories --------------------------------------------------------- */
 
 type ListOpts = { cursor?: string | null; limit?: number };
+
+/**
+ * A Site's own id is its estate scope key. Keep that adapter-only projection
+ * separate from the public Site shape: otherwise an estate-less Site row would
+ * bypass the scope engine's estate predicate and expose unassigned properties.
+ */
+function scopedSites(actor: Actor, opts?: ListOpts) {
+  const page = scopedList(actor, 'assets_ppm', db.sites.map((site) => ({
+    tenantId: site.tenantId, siteId: site.id, site,
+  })), opts);
+  return { ...page, items: page.items.map(({ site }) => site) };
+}
+
+/** Unit identity is available to ownership predicates without changing Unit. */
+function scopedUnits(actor: Actor, opts?: ListOpts) {
+  const page = scopedList(actor, 'assets_ppm', db.units.map((unit) => ({
+    tenantId: unit.tenantId, siteId: unit.siteId, unitId: unit.id, unit,
+  })), opts);
+  return { ...page, items: page.items.map(({ unit }) => unit) };
+}
 
 export const repos = {
   workOrders: {
@@ -86,7 +127,7 @@ export const repos = {
     },
   },
   residents: {
-    list: (a: Actor, o?: ListOpts) => scopedList(a, 'users_roles', seed.residents, o),
+    list: (a: Actor, o?: ListOpts) => scopedList(a, 'users_roles', db.residents, o),
   },
   vendors: {
     // Vendors are read via the work_orders capability (the proposed nav mapping).
@@ -125,8 +166,14 @@ export const repos = {
     list: (a: Actor, o?: ListOpts) => scopedList(a, 'marketplace', db.marketplaceOrders, o),
   },
   sites: {
-    // Sites carry no per-row ownership; scoped by tenant + estate via siteId.
-    all: (a: Actor) => scopedList(a, 'assets_ppm', seed.sites, { limit: 100 }).items,
+    list: (a: Actor, o?: ListOpts) => scopedSites(a, o),
+    all: (a: Actor) => scopedSites(a, { limit: 100 }).items,
+  },
+  units: {
+    list: (a: Actor, o?: ListOpts) => scopedUnits(a, o),
+  },
+  buildings: {
+    list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', db.buildings, o),
   },
 
   /* --- Short-Let PMS (new module). Rides the §7 bookings capability (the

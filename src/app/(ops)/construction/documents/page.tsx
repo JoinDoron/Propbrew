@@ -1,5 +1,5 @@
 import { requireCapability } from '@/server/guard';
-import { effectiveLevel } from '@/lib/authz';
+import { can } from '@/lib/authz';
 import { constructionWorld } from '@/server/reads/construction';
 import { NOW_MS } from '@/domain/ppm';
 import { docRegister, rfiAgeing } from '@/domain/construction';
@@ -10,8 +10,9 @@ import { DocumentsWorkspace, type RegisterRow, type RfiRow, type DocRev } from '
  *  approved revisions are superseded rather than overwritten, and every formal
  *  distribution is recorded as a transmittal. RFIs age against their due date. */
 export default async function ConstructionDocumentsPage() {
-  const { actor } = await requireCapability('reports_analytics');
-  const canMutate = ['F', 'M'].includes(effectiveLevel(actor, 'reports_analytics'));
+  const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
+  const canMutate = can(actor, 'reports_analytics', 'update').allowed;
+  const canCreate = can(actor, 'reports_analytics', 'create').allowed;
   const world = constructionWorld(actor);
 
   const register: RegisterRow[] = docRegister(world.docs).map((r) => ({
@@ -31,7 +32,7 @@ export default async function ConstructionDocumentsPage() {
   const allRevs = register.flatMap((r) => r.revisions);
 
   return (
-    <div className="max-w-[1000px] mx-auto">
+    <div className="pb-page">
       <DocumentsWorkspace
         register={register}
         rfis={rfis}
@@ -43,6 +44,7 @@ export default async function ConstructionDocumentsPage() {
           overdueRfis: rfis.filter((r) => r.overdueDays > 0).length,
         }}
         canMutate={canMutate}
+        canCreate={canCreate}
       />
     </div>
   );

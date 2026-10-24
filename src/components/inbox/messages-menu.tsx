@@ -59,7 +59,7 @@ export function MessagesMenu({ threads, unread }: { threads: Thread[]; unread: n
                     <Avatar name={t.withName} size={34} />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-[13px] font-semibold truncate">{t.withName}</span>
+                        <span className="text-sm font-medium truncate">{t.withName}</span>
                         {u > 0 && <span className="ml-auto min-w-[16px] h-4 px-1 rounded-lg bg-primary text-white text-[10px] font-bold flex items-center justify-center flex-none">{u}</span>}
                       </div>
                       <div className="text-[12px] text-text-3 truncate">{last ? `${last.mine ? 'You: ' : ''}${last.text}` : t.subject}</div>
@@ -72,13 +72,13 @@ export function MessagesMenu({ threads, unread }: { threads: Thread[]; unread: n
         ) : (
           <div className="flex flex-col h-[420px]">
             <div className="flex items-center gap-2 px-3 h-12 border-b border-border flex-none">
-              <IconButton bordered={false} onClick={() => setActiveId(null)} title="Back" aria-label="Back" className="!w-8 !h-8">
+              <IconButton bordered={false} onClick={() => setActiveId(null)} title="Back" aria-label="Back">
                 <ArrowLeft size={16} />
               </IconButton>
               <Avatar name={active.withName} size={28} />
               <div className="min-w-0">
-                <div className="text-[13px] font-semibold truncate leading-tight">{active.withName}</div>
-                <div className="text-[11px] text-text-3 truncate">{active.subject}</div>
+                <div className="text-sm font-medium truncate leading-tight">{active.withName}</div>
+                <div className="text-[12px] text-text-3 truncate">{active.subject}</div>
               </div>
             </div>
             <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2">
@@ -94,9 +94,10 @@ export function MessagesMenu({ threads, unread }: { threads: Thread[]; unread: n
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && send()}
                 placeholder="Message…"
-                className="flex-1 h-9 px-3 rounded-lg border border-border bg-surface-2 text-[13px] outline-none focus:border-primary transition-colors"
+                aria-label="Message"
+                className="pb-form-control flex-1"
               />
-              <IconButton onClick={send} title="Send" aria-label="Send" className="!w-9 !h-9">
+              <IconButton onClick={send} title="Send" aria-label="Send">
                 <Send size={16} />
               </IconButton>
             </div>

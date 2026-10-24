@@ -2,141 +2,104 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { PartyPopper, Dumbbell, Baby, Users, Sparkles, CalendarPlus, MapPin, CalendarDays, Ticket, X, Check } from 'lucide-react';
+import { PartyPopper, Dumbbell, Baby, Users, Sparkles, CalendarPlus, MapPin, CalendarDays, Ticket, X, Clock, Search } from 'lucide-react';
+import { PageTabs } from '@/components/ui/page-tabs';
+import { Button, Card, CardHeader, EmptyState, IconButton, KpiCard, StatusPill } from '@/components/ui';
+import { PortalDialog } from '@/components/portal/portal-dialog';
 import { toneVar, type Tone } from '@/lib/status-tones';
 import { eventFillPct, eventState, type EventCategory } from '@/domain/estate';
 import { rsvpEvent, cancelRsvp, createEvent, type CreateEventInput } from '@/server/actions/estate';
+import layout from '@/components/ui/workspace-layout.module.css';
+import styles from './experience-workspaces.module.css';
 
 export type EventRow = { id: string; title: string; category: EventCategory; venue: string; host: string; startISO: string; endISO: string; capacity: number; rsvps: number; cancelled?: boolean };
 export type AmenityRow = { venue: string; rsvps: number; events: number };
-
-const CAT_ICON: Record<EventCategory, React.ReactNode> = { social: <PartyPopper size={15} />, fitness: <Dumbbell size={15} />, kids: <Baby size={15} />, meeting: <Users size={15} />, festive: <Sparkles size={15} /> };
+const CAT_ICON: Record<EventCategory, React.ReactNode> = { social: <PartyPopper size={20} />, fitness: <Dumbbell size={20} />, kids: <Baby size={20} />, meeting: <Users size={20} />, festive: <Sparkles size={20} /> };
 const CAT_TONE: Record<EventCategory, Tone> = { social: 'info', fitness: 'success', kids: 'warn', meeting: 'progress', festive: 'danger' };
-const dayKey = (iso: string) => new Date(iso).toLocaleDateString('en-NG', { weekday: 'short', day: 'numeric', month: 'short' });
-const time = (iso: string) => new Date(iso).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit', hour12: true });
+const dayKey = (iso: string) => new Date(iso).toLocaleDateString('en-NG', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Africa/Lagos' });
+const time = (iso: string) => new Date(iso).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Africa/Lagos' });
+type RsvpReview = { event: EventRow; release: boolean };
 
-export function EventsWorkspace({ events, amenities, kpis, nowMs }: {
+export function EventsWorkspace({ events, amenities, kpis, nowMs, canMutate = false, canCreate = false }: {
   events: EventRow[]; amenities: AmenityRow[];
   kpis: { upcoming: number; totalRsvps: number; full: number; topVenue: string };
-  nowMs: number;
+  nowMs: number; canMutate?: boolean; canCreate?: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [showCreate, setShowCreate] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
-  const flash = (m: string) => { setToast(m); setTimeout(() => setToast(null), 2600); };
-  const act = (fn: () => Promise<{ ok: boolean; error?: string }>, ok: string) => start(async () => { const r = await fn(); if (r.ok) { router.refresh(); flash(ok); } else flash(r.error ?? 'Failed'); });
-
+  const [review, setReview] = useState<RsvpReview | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
   const upcoming = events.filter((e) => !e.cancelled && Date.parse(e.endISO) >= nowMs).sort((a, b) => Date.parse(a.startISO) - Date.parse(b.startISO));
+  const visible = upcoming.filter((e) => `${e.title} ${e.venue} ${e.host}`.toLowerCase().includes(query.trim().toLowerCase()));
   const groups = new Map<string, EventRow[]>();
-  for (const e of upcoming) { const k = dayKey(e.startISO); groups.set(k, [...(groups.get(k) ?? []), e]); }
-  const maxLoad = Math.max(1, ...amenities.map((a) => a.rsvps));
-
-  return (
-    <div className="flex flex-col gap-3.5">
-      <div className="relative overflow-hidden rounded-2xl p-5 text-white shadow-card" style={{ background: 'linear-gradient(135deg,#2a1033 0%,#45184a 55%,#63265e 100%)' }}>
-        <div className="relative flex items-center gap-2 flex-wrap">
-          <span className="w-12 h-12 rounded-2xl grid place-items-center flex-none" style={{ background: 'rgba(255,255,255,.1)' }}><PartyPopper size={22} /></span>
-          <div className="min-w-0">
-            <div className="text-[11px] text-white/70 flex items-center gap-1.5"><CalendarDays size={12} /> COMMUNITY EVENTS</div>
-            <div className="text-[21px] font-bold tracking-[-0.02em] leading-tight mt-0.5">{kpis.upcoming} upcoming · {kpis.totalRsvps} RSVPs</div>
-            <div className="text-[12.5px] text-white/75 mt-0.5">{upcoming[0] ? `Next: ${upcoming[0].title} · ${dayKey(upcoming[0].startISO)}` : 'No upcoming events'}</div>
-          </div>
-          <button onClick={() => setShowCreate(true)} className="ml-auto inline-flex items-center gap-2 h-10 px-4 rounded-xl font-semibold text-[13px] bg-white text-[#63265e]"><CalendarPlus size={15} /> New event</button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 min-[720px]:grid-cols-4 gap-2.5">
-        <Kpi label="Upcoming" value={String(kpis.upcoming)} tone="progress" icon={<CalendarDays size={16} />} />
-        <Kpi label="Total RSVPs" value={String(kpis.totalRsvps)} tone="info" icon={<Ticket size={16} />} />
-        <Kpi label="Full events" value={String(kpis.full)} tone={kpis.full ? 'warn' : 'success'} icon={<Users size={16} />} />
-        <Kpi label="Busiest venue" value={kpis.topVenue} tone="success" icon={<MapPin size={16} />} />
-      </div>
-
-      <div className="grid grid-cols-1 min-[900px]:grid-cols-[1fr_280px] gap-3.5 items-start">
-        <div className="flex flex-col gap-3.5">
-          {[...groups.entries()].map(([day, list]) => (
-            <div key={day}>
-              <div className="text-[11px] font-semibold text-text-3 uppercase tracking-wide mb-1.5">{day}</div>
-              <div className="flex flex-col gap-2">
-                {list.map((e) => {
-                  const fill = eventFillPct(e); const state = eventState(e, nowMs); const full = state === 'full';
-                  return (
-                    <div key={e.id} className="bg-surface border border-border rounded-2xl shadow-card p-3.5 flex items-center gap-3">
-                      <span className="w-10 h-10 rounded-xl grid place-items-center flex-none" style={{ background: `color-mix(in srgb, ${toneVar(CAT_TONE[e.category])} 14%, transparent)`, color: toneVar(CAT_TONE[e.category]) }}>{CAT_ICON[e.category]}</span>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[13.5px] font-semibold truncate">{e.title}</div>
-                        <div className="text-[11px] text-text-3 truncate">{time(e.startISO)} · {e.venue} · {e.host}</div>
-                        <div className="flex items-center gap-2 mt-1.5">
-                          <div className="flex-1 h-1.5 rounded-full bg-surface-2 overflow-hidden max-w-[180px]"><div className="h-full rounded-full" style={{ width: `${fill}%`, background: toneVar(full ? 'danger' : fill >= 70 ? 'warn' : 'success') }} /></div>
-                          <span className="text-[10.5px] text-text-3">{e.rsvps}/{e.capacity}</span>
-                        </div>
-                      </div>
-                      <div className="flex flex-col gap-1.5 flex-none">
-                        <button disabled={pending || full} onClick={() => act(() => rsvpEvent(e.id), 'RSVP added')} className="text-[11.5px] px-2.5 h-7 rounded-lg font-medium bg-primary text-white disabled:opacity-40">{full ? 'Full' : 'RSVP'}</button>
-                        <button disabled={pending || e.rsvps === 0} onClick={() => act(() => cancelRsvp(e.id), 'RSVP released')} className="text-[10.5px] px-2.5 h-6 rounded-lg border border-border-2 disabled:opacity-40">Release</button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-          {upcoming.length === 0 && <div className="bg-surface border border-border rounded-2xl p-8 text-center text-[13px] text-text-3">No upcoming events. Create one to get the community together.</div>}
-        </div>
-
-        <section className="bg-surface border border-border rounded-2xl shadow-card p-4">
-          <div className="text-[12.5px] font-semibold mb-3 flex items-center gap-1.5"><MapPin size={14} className="text-text-3" /> Amenity demand</div>
-          <div className="flex flex-col gap-2.5">
-            {amenities.map((a) => (
-              <div key={a.venue}>
-                <div className="flex justify-between text-[11px] mb-0.5"><span className="text-text-2 truncate">{a.venue}</span><span className="font-mono text-text-3">{a.rsvps}</span></div>
-                <div className="h-1.5 rounded-full bg-surface-2 overflow-hidden"><div className="h-full rounded-full" style={{ width: `${Math.round((a.rsvps / maxLoad) * 100)}%`, background: toneVar('progress') }} /></div>
-                <div className="text-[10px] text-text-3 mt-0.5">{a.events} event{a.events === 1 ? '' : 's'}</div>
-              </div>
-            ))}
-            {amenities.length === 0 && <p className="text-[12px] text-text-3">No amenity bookings yet.</p>}
-          </div>
-        </section>
-      </div>
-
-      {showCreate && <CreateDialog onClose={() => setShowCreate(false)} onDone={(t) => { setShowCreate(false); flash(`Event created · ${t}`); }} />}
-      {toast && <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[90] bg-text text-surface text-[13px] font-medium px-4 py-2.5 rounded-xl shadow-float animate-fade">{toast}</div>}
-    </div>
-  );
+  for (const e of visible) { const k = dayKey(e.startISO); groups.set(k, [...(groups.get(k) ?? []), e]); }
+  const maxLoad = Math.max(0, ...amenities.map((a) => a.rsvps));
+  function confirm() {
+    if (!canMutate || pending || !review) return;
+    setError(null); start(async () => {
+      try {
+        const r = review.release ? await cancelRsvp(review.event.id) : await rsvpEvent(review.event.id);
+        if (!r.ok) { setError(r.error ?? 'The RSVP could not be updated.'); return; }
+        setFeedback(`${review.release ? 'One RSVP released' : 'One RSVP added'} · ${review.event.title}`); setReview(null); router.refresh();
+      } catch { setError('The RSVP could not be updated. Please try again.'); }
+    });
+  }
+  return <div className={layout.layout}>
+    <div className={layout.context}><p className={layout.metadata}>Community programme snapshot · {dayKey(new Date(nowMs).toISOString())} · times in WAT</p>{canCreate ? <Button variant="primary" icon={<CalendarPlus size={16} />} onClick={() => setShowCreate(true)}>New event</Button> : <StatusPill status="Read-only programme" tone="neutral" />}</div>
+    {feedback && <div role="status" className={`${layout.feedback} ${styles.feedback}`}><span>{feedback}</span><IconButton aria-label="Dismiss event update" onClick={() => setFeedback(null)}><X size={16} /></IconButton></div>}
+    <PageTabs label="Event sections" items={[
+      { id: 'events', label: 'Events', content: <div className={layout.layout}>
+        <Card><CardHeader title="Community schedule" subtitle="Review upcoming events, capacity and attendance reservations." /><div className={layout.toolbar}><label className={layout.search}><Search size={16} aria-hidden="true" /><input type="search" aria-label="Search community events" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search events, venues or hosts" /></label><span className={layout.metadata}>{visible.length} of {upcoming.length} upcoming events</span></div></Card>
+        {[...groups.entries()].map(([day, list]) => <section key={day} className={styles.eventGroup}><h3>{day}</h3>{list.map((e) => { const fill = eventFillPct(e); const state = eventState(e, nowMs); const full = state === 'full'; return <Card key={e.id}><div className={styles.event}>
+          <span className={styles.softIcon} style={{ color: toneVar(CAT_TONE[e.category]) }}>{CAT_ICON[e.category]}</span>
+          <div className={styles.eventContent}><div className={styles.context}><h4 className={styles.sectionTitle}>{e.title}</h4><StatusPill status={full ? 'Full' : state === 'filling' ? 'Filling up' : 'Upcoming'} tone={full || state === 'filling' ? 'warn' : 'info'} /></div><div className={styles.eventMeta}><span><Clock size={14} />{time(e.startISO)}–{time(e.endISO)} WAT</span><span><MapPin size={14} />{e.venue}</span><span>Hosted by {e.host}</span></div><div className={styles.eventFill}><div className={styles.progress} role="progressbar" aria-label={`${e.title} reserved capacity`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={fill}><span style={{ width: `${fill}%`, background: toneVar(full ? 'warn' : 'progress') }} /></div><span className={layout.metadata}>{e.rsvps} of {e.capacity} places reserved</span></div></div>
+          {canMutate && <div className={styles.eventActions}><Button variant="primary" disabled={pending || full} onClick={() => { setError(null); setReview({ event: e, release: false }); }} aria-label={`Review RSVP for ${e.title}`}>{full ? 'At capacity' : 'Add RSVP'}</Button><Button disabled={pending || e.rsvps === 0} onClick={() => { setError(null); setReview({ event: e, release: true }); }} aria-label={`Review RSVP release for ${e.title}`}>Release RSVP</Button></div>}
+        </div></Card>; })}</section>)}
+        {!visible.length && <Card><EmptyState icon={<CalendarDays size={24} />} title={upcoming.length ? 'No matching events' : 'No upcoming events'} description={upcoming.length ? 'Try another event title, venue or host.' : 'Upcoming events in your scope will appear here.'} /></Card>}
+        <Card padded={false}>
+          <div className={layout.registerHeader}><CardHeader title="Event register" subtitle="All recorded events in your scope, including past and cancelled programmes." /></div>
+          {events.length ? <div className="pb-table-scroll" role="region" aria-label="Community event register" tabIndex={0}>
+            <table className={`pb-data-table ${layout.table}`}>
+              <thead><tr>{['Event', 'Date & venue', 'Status', 'Reservations'].map((h) => <th key={h} scope="col">{h}</th>)}</tr></thead>
+              <tbody>{events.map((e) => {
+                const state = eventState(e, nowMs);
+                return <tr key={e.id}>
+                  <td><div className={layout.title}>{e.title}</div><div className={layout.metadata}>{e.host} · {e.category}</div></td>
+                  <td><div className={layout.body}>{dayKey(e.startISO)}</div><div className={layout.metadata}>{time(e.startISO)} WAT · {e.venue}</div></td>
+                  <td><StatusPill status={e.cancelled ? 'Cancelled' : state[0].toUpperCase() + state.slice(1)} tone={e.cancelled ? 'neutral' : state === 'full' ? 'warn' : state === 'past' ? 'neutral' : 'info'} /></td>
+                  <td>{e.rsvps} / {e.capacity}</td>
+                </tr>;
+              })}</tbody>
+            </table>
+          </div> : <EmptyState icon={<Ticket size={24} />} title="No event records" description="Your event register is empty." />}
+        </Card>
+      </div> },
+      { id: 'overview', label: 'Attendance & venues', content: <div className={layout.layout}>
+        <div className={layout.metrics}><KpiCard label="Upcoming events" value={String(kpis.upcoming)} icon={<CalendarDays size={18} />} /><KpiCard label="Upcoming RSVPs" value={String(kpis.totalRsvps)} icon={<Ticket size={18} />} /><KpiCard label="Events at capacity" value={String(kpis.full)} icon={<Users size={18} />} /><Card><CardHeader title="Busiest venue" action={<MapPin size={18} className="text-primary" />} /><p className={layout.sectionTitle}>{kpis.topVenue}</p></Card></div>
+        <Card><CardHeader title="Amenity demand" subtitle="Reservations across upcoming community events, not confirmed attendance." />{amenities.length ? <div className={styles.demand}>{amenities.map((a) => <div key={a.venue}><div className={styles.demandLabel}><span>{a.venue}</span><span>{a.rsvps} RSVPs</span></div><div className={styles.progress} role="img" aria-label={`${a.venue}: ${a.rsvps} reservations across ${a.events} events`}><span style={{ width: `${maxLoad > 0 ? Math.round((a.rsvps / maxLoad) * 100) : 0}%` }} /></div><p className={layout.metadata}>{a.events} event{a.events === 1 ? '' : 's'}</p></div>)}</div> : <EmptyState icon={<MapPin size={24} />} title="No venue demand yet" description="Demand appears when community events have reservations." />}</Card>
+      </div> },
+    ]} />
+    {canCreate && showCreate && <CreateDialog nowMs={nowMs} onClose={() => setShowCreate(false)} onDone={(ref) => { setShowCreate(false); setFeedback(`Event created · ${ref}`); }} />}
+    {canMutate && review && <PortalDialog label={review.release ? 'Release event RSVP' : 'Add event RSVP'} onClose={() => setReview(null)} canClose={!pending} width={520}><div className={layout.modal}><div className={layout.dialogHeader}><h2 className={layout.dialogTitle}>{review.release ? 'Release event RSVP' : 'Add event RSVP'}</h2><IconButton aria-label="Close RSVP confirmation" disabled={pending} onClick={() => setReview(null)}><X size={18} /></IconButton></div><div className={layout.dialogBody}><p className={layout.body}>This changes the event reservation count by one. It does not record a named attendee or send a confirmation message.</p><dl className={styles.facts}><div><dt>Event</dt><dd>{review.event.title}</dd></div><div><dt>Current reservations</dt><dd>{review.event.rsvps} / {review.event.capacity}</dd></div><div><dt>After confirmation</dt><dd>{review.event.rsvps + (review.release ? -1 : 1)} / {review.event.capacity}</dd></div></dl>{error && <p role="alert" className={layout.feedback}>{error}</p>}<div className={layout.actions}><Button disabled={pending} onClick={() => setReview(null)}>Cancel</Button><Button variant="primary" disabled={pending} onClick={confirm}>{pending ? 'Saving…' : review.release ? 'Confirm release' : 'Confirm RSVP'}</Button></div></div></div></PortalDialog>}
+  </div>;
 }
 
-function CreateDialog({ onClose, onDone }: { onClose: () => void; onDone: (t: string) => void }) {
+function CreateDialog({ nowMs, onClose, onDone }: { nowMs: number; onClose: () => void; onDone: (ref: string) => void }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [f, setF] = useState<CreateEventInput>({ title: '', category: 'social', venue: '', host: '', startISO: '2026-08-15', capacity: 30 });
+  const [f, setF] = useState<CreateEventInput>({ title: '', category: 'social', venue: '', host: '', startISO: new Date(nowMs).toISOString().slice(0, 10), capacity: 30 });
   const [error, setError] = useState<string | null>(null);
   const set = (k: keyof CreateEventInput, v: string | number) => setF((s) => ({ ...s, [k]: v }));
-  function submit() { setError(null); start(async () => { const r = await createEvent(f); if (!r.ok) { setError(r.error); return; } router.refresh(); onDone(r.ref ?? f.title); }); }
-  return (
-    <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center p-3 sm:p-4">
-      <div className="absolute inset-0 bg-[rgba(10,12,20,.45)] animate-fade" onClick={onClose} />
-      <div className="relative w-full max-w-[380px] bg-surface border border-border rounded-2xl shadow-float p-4 animate-[tms-slideup_.2s_ease]">
-        <div className="flex items-center justify-between mb-3"><h3 className="text-[15px] font-semibold">New community event</h3><button onClick={onClose} className="w-8 h-8 rounded-lg grid place-items-center hover:bg-surface-2"><X size={17} /></button></div>
-        <div className="flex flex-col gap-2.5">
-          <div><label className="lble">Title</label><input value={f.title} onChange={(e) => set('title', e.target.value)} className="inpe" autoFocus placeholder="e.g. Movie Night on the Lawn" /></div>
-          <div className="grid grid-cols-2 gap-2.5">
-            <div><label className="lble">Category</label><select value={f.category} onChange={(e) => set('category', e.target.value)} className="inpe"><option value="social">Social</option><option value="fitness">Fitness</option><option value="kids">Kids</option><option value="meeting">Meeting</option><option value="festive">Festive</option></select></div>
-            <div><label className="lble">Capacity</label><input value={String(f.capacity)} onChange={(e) => set('capacity', Number(e.target.value.replace(/[^0-9]/g, '')) || 0)} inputMode="numeric" className="inpe" /></div>
-          </div>
-          <div className="grid grid-cols-2 gap-2.5">
-            <div><label className="lble">Venue</label><input value={f.venue} onChange={(e) => set('venue', e.target.value)} className="inpe" placeholder="Clubhouse Hall" /></div>
-            <div><label className="lble">Date</label><input type="date" value={f.startISO} onChange={(e) => set('startISO', e.target.value)} className="inpe" /></div>
-          </div>
-          <div><label className="lble">Host</label><input value={f.host} onChange={(e) => set('host', e.target.value)} className="inpe" placeholder="Social Committee" /></div>
-        </div>
-        {error && <div className="text-[12px] text-negative mt-2">{error}</div>}
-        <div className="flex justify-end gap-2 mt-4"><button onClick={onClose} className="h-9 px-3.5 rounded-lg border border-border-2 text-[13px]">Cancel</button><button onClick={submit} disabled={pending || !f.title.trim()} className="h-9 px-4 rounded-lg bg-primary text-white text-[13px] font-medium disabled:opacity-50 inline-flex items-center gap-1"><Check size={13} /> {pending ? 'Creating…' : 'Create'}</button></div>
-        <style>{`.lble{display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--text-3);margin-bottom:4px}.inpe{width:100%;height:36px;padding:0 10px;border-radius:8px;border:1px solid var(--border-2);background:var(--surface);font-size:13px;outline:none}.inpe:focus{border-color:var(--primary)}`}</style>
-      </div>
-    </div>
-  );
-}
-function Kpi({ label, value, tone, icon }: { label: string; value: string; tone: Tone; icon: React.ReactNode }) {
-  return <div className="bg-surface border border-border rounded-2xl shadow-card p-3.5"><span className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `color-mix(in srgb, ${toneVar(tone)} 14%, transparent)`, color: toneVar(tone) }}>{icon}</span><div className="text-[12px] text-text-2 font-medium mt-2.5">{label}</div><div className="text-[15px] font-bold tracking-[-0.02em] leading-none mt-1 truncate">{value}</div></div>;
+  function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); if (pending) return; setError(null);
+    start(async () => { try { const r = await createEvent(f); if (!r.ok) { setError(r.error); return; } router.refresh(); onDone(r.ref ?? f.title); } catch { setError('The event could not be created. Please try again.'); } });
+  }
+  return <PortalDialog label="New community event" onClose={onClose} canClose={!pending} width={600}><div className={layout.modal}><div className={layout.dialogHeader}><h2 className={layout.dialogTitle}>New community event</h2><IconButton aria-label="Close new event" onClick={onClose} disabled={pending}><X size={18} /></IconButton></div><form onSubmit={submit} className={layout.dialogBody}>
+    <p className={layout.body}>Create a community programme. The current scheduler sets a two-hour event starting at 19:00 WAT on the selected date.</p>
+    <div className={styles.form}><label className={styles.field}><span className="pb-form-label">Event title</span><input className="pb-form-control" value={f.title} onChange={(e) => set('title', e.target.value)} placeholder="e.g. Movie night on the lawn" required disabled={pending} /></label><div className={styles.formGrid}><label className={styles.field}><span className="pb-form-label">Category</span><select className="pb-form-control" value={f.category} onChange={(e) => set('category', e.target.value)} disabled={pending}>{['social', 'fitness', 'kids', 'meeting', 'festive'].map((c) => <option key={c} value={c}>{c[0].toUpperCase() + c.slice(1)}</option>)}</select></label><label className={styles.field}><span className="pb-form-label">Capacity</span><input className="pb-form-control" type="number" min={1} step={1} required value={f.capacity || ''} onChange={(e) => set('capacity', Number(e.target.value))} disabled={pending} /></label></div><div className={styles.formGrid}><label className={styles.field}><span className="pb-form-label">Venue</span><input className="pb-form-control" value={f.venue} onChange={(e) => set('venue', e.target.value)} placeholder="Clubhouse Hall" disabled={pending} /></label><label className={styles.field}><span className="pb-form-label">Date</span><input className="pb-form-control" type="date" value={f.startISO} onChange={(e) => set('startISO', e.target.value)} required disabled={pending} /></label></div><label className={styles.field}><span className="pb-form-label">Host</span><input className="pb-form-control" value={f.host} onChange={(e) => set('host', e.target.value)} placeholder="Estate Office" disabled={pending} /></label></div>
+    {error && <p role="alert" className={layout.feedback}>{error}</p>}<div className={layout.actions}><Button type="button" onClick={onClose} disabled={pending}>Cancel</Button><Button type="submit" variant="primary" disabled={pending || !f.title.trim() || f.capacity <= 0}>{pending ? 'Creating…' : 'Create event'}</Button></div>
+  </form></div></PortalDialog>;
 }

@@ -1,0 +1,39 @@
+import { can } from '@/lib/authz';
+import { PageHeader } from '@/components/ui/page-header';
+import { requireCapability } from '@/server/guard';
+import { repos } from '@/server/data';
+import { NOW_MS } from '@/domain/ppm';
+import { visitorStats, accessThreats } from '@/domain/facility';
+import { AccessWorkspace } from '@/components/facility/access-workspace';
+
+/** Access & Visitors — visitor passes with pre-registration and gate check-in/out,
+ *  a live access-event feed, per-point secure/unlock control, and a one-tap estate
+ *  lockdown. Overstays and forced/held/offline points are flagged. */
+export default async function AccessPage() {
+  const { actor } = await requireCapability('assets_ppm', 'read', 'facility');
+  const points = repos.accessPoints.list(actor).items;
+  const passes = repos.visitorPasses.list(actor).items;
+  const events = repos.accessEvents.list(actor).items;
+
+  const stats = visitorStats(passes, NOW_MS);
+  return (
+    <div className="pb-page">
+      <PageHeader title="Access &amp; visitors" subtitle="Review access points, visitor passes and gate activity." />
+      <AccessWorkspace
+        canCreate={can(actor, 'assets_ppm', 'create').allowed}
+        canUpdate={can(actor, 'assets_ppm', 'update').allowed}
+        points={[...points]}
+        passes={[...passes]}
+        events={[...events]}
+        kpis={{
+          onSite: stats.onSite,
+          expectedToday: stats.expectedToday,
+          online: points.filter((p) => p.status === 'online').length,
+          totalPoints: points.length,
+          threats: accessThreats(points).length,
+        }}
+        nowMs={NOW_MS}
+      />
+    </div>
+  );
+}

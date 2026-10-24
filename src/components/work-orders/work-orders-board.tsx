@@ -1,144 +1,32 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { LayoutGrid, List, Plus } from 'lucide-react';
-import { Button } from '@/components/ui';
-import { DomainStatus, Money, ReadOnlyChip, SlaBadge } from '@/components/domain';
+import { Button, Card, CardHeader, EmptyState } from '@/components/ui';
+import { DomainStatus, ReadOnlyChip, SlaBadge } from '@/components/domain';
+import { facilityMoney } from '@/components/facility/facility-format';
 import { humanizeStatus, statusTone, toneVar } from '@/lib/status-tones';
 import type { Money as MoneyValue } from '@/domain/primitives';
 import type { WorkOrderStatus } from '@/domain/enums';
+import layout from '@/components/ui/workspace-layout.module.css';
+import polish from '@/components/facility/facility-registers-polish.module.css';
 
-export type WoRow = {
-  id: string;
-  ref: string;
-  title: string;
-  origin: string;
-  requesterName: string;
-  status: WorkOrderStatus;
-  priority: string;
-  assigneeName: string;
-  respondDueAt: string | null;
-  breached: boolean;
-  cost: MoneyValue | null;
-};
-
-// §10 lifecycle order — drives both the tab order and the board columns so the
-// pipeline always reads left-to-right as progress.
+export type WoRow = { id: string; ref: string; title: string; origin: string; requesterName: string; status: WorkOrderStatus; priority: string; assigneeName: string; respondDueAt: string | null; breached: boolean; cost: MoneyValue | null };
 const STATUS_ORDER: WorkOrderStatus[] = ['new', 'triaged', 'assigned', 'in_progress', 'on_hold', 'resolved', 'verified', 'closed', 'rejected', 'cancelled'];
 
-export function WorkOrdersBoard({ rows, canMutate }: { rows: WoRow[]; canMutate: boolean }) {
+export function WorkOrdersBoard({ rows, canMutate, basePath = '/work-orders', createAction }: { rows: WoRow[]; canMutate: boolean; basePath?: string; createAction?: ReactNode }) {
   const [status, setStatus] = useState<WorkOrderStatus | 'all'>('all');
   const [view, setView] = useState<'list' | 'board'>('list');
-
-  const counts = useMemo(() => rows.reduce<Record<string, number>>((a, w) => ((a[w.status] = (a[w.status] ?? 0) + 1), a), {}), [rows]);
-  const presentStatuses = STATUS_ORDER.filter((s) => counts[s]);
-  const filtered = status === 'all' ? rows : rows.filter((w) => w.status === status);
-
-  return (
-    <div className="flex flex-col gap-3.5">
-      {/* Toolbar */}
-      <div className="flex items-center gap-2 flex-wrap">
-        {view === 'list' ? (
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <Tab label="All" count={rows.length} active={status === 'all'} onClick={() => setStatus('all')} />
-            {presentStatuses.map((s) => (
-              <Tab key={s} label={humanizeStatus(s)} count={counts[s]} tone={s} active={status === s} onClick={() => setStatus(s)} />
-            ))}
-          </div>
-        ) : (
-          <div className="text-[13px] text-text-2 font-medium">Pipeline · {rows.length} work orders</div>
-        )}
-
-        <div className="ml-auto flex items-center gap-2">
-          <div className="inline-flex rounded-lg border border-border-2 bg-surface p-0.5">
-            <ToggleBtn active={view === 'list'} onClick={() => setView('list')} icon={<List size={15} />} label="List" />
-            <ToggleBtn active={view === 'board'} onClick={() => setView('board')} icon={<LayoutGrid size={15} />} label="Board" />
-          </div>
-          {canMutate ? <Button variant="primary" icon={<Plus size={15} />} className="!h-8 !text-[12px]">New</Button> : <ReadOnlyChip />}
-        </div>
-      </div>
-
-      {view === 'list' ? (
-        <div className="bg-surface border border-border rounded-2xl shadow-card overflow-hidden">
-          <div className="w-full overflow-x-auto">
-            <table className="w-full border-collapse text-sm">
-              <thead>
-                <tr>
-                  {['Ref', 'Job', 'Status', 'Priority', 'Assignee', 'SLA', 'Cost'].map((h, i) => (
-                    <th key={h} className={`text-left text-[10.5px] font-semibold tracking-[0.06em] uppercase text-text-3 px-4 py-2.5 border-b border-border whitespace-nowrap ${i > 4 ? 'text-right' : ''} ${i === 3 || i === 4 ? 'max-[720px]:hidden' : ''} ${i === 5 ? 'max-[560px]:hidden' : ''}`}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((w) => (
-                  <tr key={w.id} className="hover:bg-surface-2 transition-colors">
-                    <td className="px-4 py-2.5 border-b border-border"><Link href={`/work-orders/${w.ref}`} className="font-mono font-semibold text-[13px] text-primary hover:underline">{w.ref}</Link></td>
-                    <td className="px-4 py-2.5 border-b border-border">
-                      <Link href={`/work-orders/${w.ref}`} className="block">
-                        <div className="text-[13px] font-medium hover:text-primary transition-colors">{w.title}</div>
-                        <div className="text-[11.5px] text-text-3">{w.origin.replace(/_/g, ' ')} · {w.requesterName}</div>
-                      </Link>
-                    </td>
-                    <td className="px-4 py-2.5 border-b border-border"><DomainStatus type="work_order" status={w.status} /></td>
-                    <td className="px-4 py-2.5 border-b border-border text-[13px] capitalize max-[720px]:hidden">{w.priority}</td>
-                    <td className="px-4 py-2.5 border-b border-border text-[13px] text-text-2 max-[720px]:hidden">{w.assigneeName}</td>
-                    <td className="px-4 py-2.5 border-b border-border max-[560px]:hidden"><SlaBadge dueAt={w.respondDueAt} breached={w.breached} /></td>
-                    <td className="px-4 py-2.5 border-b border-border text-right"><Money value={w.cost} /></td>
-                  </tr>
-                ))}
-                {filtered.length === 0 && (
-                  <tr><td colSpan={7} className="px-4 py-10 text-center text-[13px] text-text-3">No work orders in “{humanizeStatus(status)}”.</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      ) : (
-        <div className="flex gap-3 overflow-x-auto pb-2">
-          {presentStatuses.map((s) => (
-            <div key={s} className="flex-none w-[260px] bg-surface-2 rounded-2xl border border-border p-2.5">
-              <div className="flex items-center gap-2 px-1.5 pb-2">
-                <span className="w-2 h-2 rounded-full" style={{ background: toneVar(statusTone('work-order', s)) }} />
-                <span className="text-[12.5px] font-semibold">{humanizeStatus(s)}</span>
-                <span className="text-[11px] text-text-3 font-mono ml-auto">{counts[s]}</span>
-              </div>
-              <div className="flex flex-col gap-2">
-                {rows.filter((w) => w.status === s).map((w) => (
-                  <Link key={w.id} href={`/work-orders/${w.ref}`} className="block bg-surface border border-border rounded-xl p-3 hover:border-primary transition-colors">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-mono text-[11.5px] font-semibold text-primary">{w.ref}</span>
-                      <span className="text-[10.5px] text-text-3 capitalize">{w.priority}</span>
-                    </div>
-                    <div className="text-[12.5px] font-medium mt-1 leading-snug">{w.title}</div>
-                    <div className="flex items-center justify-between gap-2 mt-2">
-                      <span className="text-[11px] text-text-3 truncate">{w.assigneeName}</span>
-                      {w.breached ? <SlaBadge dueAt={w.respondDueAt} breached /> : <Money value={w.cost} className="!text-[11.5px]" />}
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+  const counts = useMemo(() => rows.reduce<Record<string, number>>((accumulator, row) => ((accumulator[row.status] = (accumulator[row.status] ?? 0) + 1), accumulator), {}), [rows]);
+  const presentStatuses = STATUS_ORDER.filter((value) => counts[value]);
+  const filtered = status === 'all' ? rows : rows.filter((row) => row.status === status);
+  return <div className={layout.layout}>
+    <div className={layout.toolbar}>{view === 'list' ? <div className={layout.filters}><Tab label="All" count={rows.length} active={status === 'all'} onClick={() => setStatus('all')} />{presentStatuses.map((value) => <Tab key={value} label={humanizeStatus(value)} count={counts[value]} tone={value} active={status === value} onClick={() => setStatus(value)} />)}</div> : <p className={layout.body}>Pipeline · {rows.length} work orders · lifecycle order</p>}<div className={layout.filters}><div className="flex items-center gap-2" role="group" aria-label="Work order view"><Button icon={<List size={16} />} aria-pressed={view === 'list'} onClick={() => setView('list')}>List</Button><Button icon={<LayoutGrid size={16} />} aria-pressed={view === 'board'} onClick={() => setView('board')}>Board</Button></div>{canMutate ? createAction ?? <Button variant="primary" disabled title="Facility work-order registration is not connected" icon={<Plus size={16} />}>New · unavailable</Button> : <ReadOnlyChip />}</div></div>
+    {view === 'list' ? <Card padded={false}><div className={polish.registerHeader}><CardHeader title="Work order register" subtitle={`${filtered.length} matching records · all costs retain their recorded currency`} /></div><div className="pb-table-frame" role="region" aria-label="Work order register, horizontally scrollable" tabIndex={0}><table className={`pb-data-table ${polish.table}`}><thead><tr>{['Reference', 'Job', 'Status', 'Priority', 'Assignee', 'Response SLA', 'Recorded cost'].map((heading) => <th scope="col" key={heading}>{heading}</th>)}</tr></thead><tbody>{filtered.map((row) => <tr key={row.id}><th scope="row"><Link href={`${basePath}/${row.ref}`} className="font-medium text-primary">{row.ref}</Link></th><td><Link href={`${basePath}/${row.ref}`}><span><span className={layout.title}>{row.title}</span><span className={layout.metadata}>{row.origin.replaceAll('_', ' ')} · {row.requesterName}</span></span></Link></td><td><DomainStatus type="work_order" status={row.status} /></td><td className="capitalize">{row.priority}</td><td>{row.assigneeName || 'Unassigned'}</td><td><SlaBadge dueAt={row.respondDueAt} breached={row.breached} /></td><td className="whitespace-nowrap text-right tabular-nums">{row.cost ? facilityMoney(row.cost.minor, row.cost.currency) : 'Not recorded'}</td></tr>)}{!filtered.length && <tr><td colSpan={7}><EmptyState title={`No work orders in “${humanizeStatus(status)}”`} description="Choose another status to view the work orders in your current scope." /></td></tr>}</tbody></table></div><p className={layout.registerFooter}>Open a record for its details, evidence and permitted workflow actions. Monetary values are not proof of payment or settlement.</p></Card> : <div className={polish.board} role="region" aria-label="Work order pipeline, horizontally scrollable" tabIndex={0}>{presentStatuses.length ? presentStatuses.map((value) => <section key={value} className={polish.boardColumn}><header><span aria-hidden="true" className="w-2 h-2 rounded-full" style={{ background: toneVar(statusTone('work-order', value)) }} /><h3>{humanizeStatus(value)}</h3><span className="ml-auto text-xs tabular-nums text-text-3">{counts[value]}</span></header><div className="flex flex-col gap-4">{rows.filter((row) => row.status === value).map((row) => <Link key={row.id} href={`${basePath}/${row.ref}`} className={polish.boardLink}><Card padded={false} className={polish.boardCard}><div className={layout.toolbar}><span className="text-sm font-medium text-primary">{row.ref}</span><span className="text-xs capitalize text-text-3">{row.priority}</span></div><h4 className={layout.title}>{row.title}</h4><p className={layout.metadata}>{row.assigneeName || 'Unassigned'}</p><div className={layout.toolbar}>{row.breached ? <SlaBadge dueAt={row.respondDueAt} breached /> : null}<span className="text-sm tabular-nums">{row.cost ? facilityMoney(row.cost.minor, row.cost.currency) : 'No cost recorded'}</span></div></Card></Link>)}</div></section>) : <Card className="w-full"><EmptyState title="No work orders in this pipeline" description="No work orders are visible in your current scope." /></Card>}</div>}
+  </div>;
 }
 
 function Tab({ label, count, tone, active, onClick }: { label: string; count: number; tone?: WorkOrderStatus; active: boolean; onClick: () => void }) {
-  return (
-    <button onClick={onClick} className={`h-8 px-3 rounded-full text-[12.5px] font-medium border transition-colors inline-flex items-center gap-1.5 ${active ? 'border-primary bg-primary-weak text-primary' : 'border-border-2 bg-surface text-text-2 hover:bg-surface-2'}`}>
-      {tone && <span className="w-1.5 h-1.5 rounded-full" style={{ background: toneVar(statusTone('work-order', tone)) }} />}
-      {label}<span className={`font-mono ${active ? 'text-primary' : 'text-text-3'}`}>{count}</span>
-    </button>
-  );
-}
-
-function ToggleBtn({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
-  return (
-    <button onClick={onClick} className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-[12px] font-medium transition-colors ${active ? 'bg-primary text-white' : 'text-text-2 hover:bg-surface-2'}`}>
-      {icon}{label}
-    </button>
-  );
+  return <button type="button" aria-pressed={active} onClick={onClick} className="pb-filter inline-flex items-center gap-2">{tone && <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full" style={{ background: toneVar(statusTone('work-order', tone)) }} />}{label}<span className="tabular-nums text-text-3">{count}</span></button>;
 }

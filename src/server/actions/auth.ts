@@ -16,8 +16,20 @@ import { redirect } from 'next/navigation';
 import { DEV_IDENTITY_COOKIE, SIGNED_OUT_COOKIE, devIdentityEnabled } from '@/server/session';
 import { identityByKey } from '@/server/identities';
 import { homeRouteFor } from '@/config/shells';
+import { REVIEW_COOKIE_OPTIONS, REVIEW_CSRF_COOKIE, REVIEW_SESSION_COOKIE, reviewModeEnabled } from '@/server/review-auth';
 
 export async function signOut(): Promise<void> {
+  if (reviewModeEnabled()) {
+    const store = await cookies();
+    store.set(REVIEW_SESSION_COOKIE, '', { ...REVIEW_COOKIE_OPTIONS, maxAge: 0 });
+    store.set(REVIEW_CSRF_COOKIE, '', { ...REVIEW_COOKIE_OPTIONS, maxAge: 0 });
+    redirect('/review/login');
+  }
+  if (process.env.CLERK_SECRET_KEY && process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) {
+    const { auth, clerkClient } = await import('@clerk/nextjs/server');
+    const { sessionId } = await auth();
+    if (sessionId) await (await clerkClient()).sessions.revokeSession(sessionId);
+  }
   const store = await cookies();
   store.set(SIGNED_OUT_COOKIE, '1', { path: '/', httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 60 * 60 * 24 * 30 });
   redirect('/login');

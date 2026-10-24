@@ -12,10 +12,11 @@
  * there is no "show all" and KPI counts are computed under the same scope.
  */
 
-import { effectiveLevel, type Actor, type Capability } from '@/lib/authz';
+import { can, effectiveLevel, type Actor, type Capability } from '@/lib/authz';
 import type { Role } from '@/domain/enums';
 import type { IconName } from '@/components/icon';
 import type { Shell } from './shells';
+import { canEnterWorkspace, workspaceForPath, type WorkspaceId } from './workspaces';
 
 export type NavItem = {
   id: string;
@@ -38,6 +39,14 @@ export type NavItem = {
 };
 
 export type NavGroup = { label: string; items: NavItem[] };
+
+/** Detail pages inherit their most-specific local navigation item, never an
+ * unrelated workspace or the broad Estate overview prefix. */
+export function activeNavHref(groups: readonly NavGroup[], pathname: string): string | undefined {
+  return groups.flatMap((group) => group.items.map((item) => item.href))
+    .filter((href) => pathname === href || pathname.startsWith(href + '/'))
+    .sort((a, b) => b.length - a.length)[0];
+}
 
 /* --- OPS console (executive, estate/facility managers, technician, security) */
 
@@ -69,10 +78,13 @@ const OPS_NAV: NavGroup[] = [
   {
     label: 'Estate',
     items: [
+      { id: 'people', label: 'Residents', href: '/people', icon: 'users', capability: 'users_roles' },
+      { id: 'properties', label: 'Properties', href: '/properties', icon: 'building', capability: 'assets_ppm', proposed: true },
+      { id: 'estate-work-orders', label: 'Work Orders', href: '/estate/work-orders', icon: 'wrench', capability: 'work_orders' },
+      { id: 'estate-inspections', label: 'Inspections & Compliance', href: '/estate/inspections', icon: 'clipboard', capability: 'inspections_compliance' },
       { id: 'community', label: 'Community Pulse', href: '/community', icon: 'sparkles', capability: 'announcements', proposed: true },
       { id: 'billing', label: 'Billing', href: '/billing', icon: 'banknote', capability: 'charges_invoicing' },
       { id: 'collections', label: 'Collections', href: '/collections', icon: 'banknote', capability: 'charges_invoicing', proposed: true },
-      { id: 'people', label: 'Residents', href: '/people', icon: 'users', capability: 'users_roles' },
       { id: 'tenancy', label: 'Tenancy', href: '/tenancy', icon: 'building', capability: 'users_roles', proposed: true },
       { id: 'announcements', label: 'Announcements', href: '/announcements', icon: 'bell', capability: 'announcements' },
       { id: 'governance', label: 'Governance', href: '/governance', icon: 'scroll', capability: 'announcements', proposed: true },
@@ -91,6 +103,7 @@ const OPS_NAV: NavGroup[] = [
     items: [
       { id: 'portfolio', label: 'Portfolio', href: '/portfolio', icon: 'grid', capability: 'reports_analytics', proposed: true },
       { id: 'reports', label: 'Reports', href: '/reports', icon: 'trending', capability: 'reports_analytics' },
+      { id: 'estate-copilot', label: 'Ask Copilot', href: '/estate/copilot', icon: 'sparkles', capability: 'reports_analytics', proposed: true },
       { id: 'investors', label: 'Investors', href: '/investors', icon: 'building', capability: 'investor_projects' },
     ],
   },
@@ -106,9 +119,10 @@ const OPS_NAV: NavGroup[] = [
       { id: 'sl-inspections', label: 'Inspections', href: '/shortlet/inspections', icon: 'clipboard', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
       { id: 'sl-expenses', label: 'Expenses', href: '/shortlet/expenses', icon: 'banknote', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
       { id: 'sl-analytics', label: 'Analytics', href: '/shortlet/analytics', icon: 'trending', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
+      { id: 'sl-copilot', label: 'Ask Copilot', href: '/shortlet/copilot', icon: 'sparkles', capability: 'bookings_amenities', roles: ['executive', 'estate_manager'], proposed: true },
       { id: 'sl-guests', label: 'Guests', href: '/shortlet/guests', icon: 'users', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
       { id: 'sl-reviews', label: 'Reviews', href: '/shortlet/reviews', icon: 'clipboard', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
-      { id: 'sl-pricing', label: 'Dynamic pricing', href: '/shortlet/pricing', icon: 'trending', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
+      { id: 'sl-pricing', label: 'Seasonal pricing', href: '/shortlet/pricing', icon: 'trending', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
       { id: 'sl-maintenance', label: 'Maintenance', href: '/shortlet/maintenance', icon: 'wrench', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
       { id: 'sl-agents', label: 'Agents', href: '/shortlet/agents', icon: 'store', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
       { id: 'sl-whatsapp', label: 'WhatsApp', href: '/shortlet/whatsapp', icon: 'bell', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
@@ -218,13 +232,47 @@ const NAV_BY_SHELL: Record<Shell, NavGroup[]> = {
   admin: ADMIN_NAV,
 };
 
-/** Nav groups visible to this actor in this shell — capability- and role-gated. */
-export function visibleNav(shell: Shell, actor: Actor): NavGroup[] {
-  return NAV_BY_SHELL[shell]
+const WORKSPACE_GROUPS: Record<WorkspaceId, readonly string[]> = {
+  estate: ['Estate', 'Insights', 'Admin'],
+  facility: ['Facility'],
+  shortlet: ['Short-Let'],
+  construction: ['Construction'],
+};
+
+/** Nav groups visible to this actor, limited to the selected operator portal. */
+export function visibleNav(shell: Shell, actor: Actor, workspace?: WorkspaceId): NavGroup[] {
+  let groups = NAV_BY_SHELL[shell];
+  if (shell === 'ops') {
+    // No workspace means no mixed-module sidebar. The chooser is the entrypoint.
+    if (!workspace || !canEnterWorkspace(actor, workspace)) return [];
+    groups = groups.filter((group) => WORKSPACE_GROUPS[workspace].includes(group.label));
+    if (workspace === 'estate' || workspace === 'facility') {
+      const capabilities: Capability[] = workspace === 'estate'
+        ? ['announcements', 'charges_invoicing', 'security_sos']
+        : ['assets_ppm', 'work_orders'];
+      const capability = capabilities.find((candidate) => can(actor, candidate, 'read').allowed);
+      if (capability) {
+        groups = [{
+          label: 'Overview',
+          items: [{
+            id: `${workspace}-home`,
+            label: workspace === 'estate' ? 'Estate overview' : 'Facility overview',
+            href: `/${workspace}`,
+            icon: workspace === 'estate' ? 'building' : 'gauge',
+            capability,
+          }],
+        }, ...groups];
+      }
+    }
+  }
+
+  return groups
     .map((group) => ({
       label: group.label,
       items: group.items.filter((item) => {
-        if (effectiveLevel(actor, item.capability) === 'none') return false;
+        if (shell === 'ops') {
+          if (workspaceForPath(item.href) !== workspace || !can(actor, item.capability, 'read').allowed) return false;
+        } else if (effectiveLevel(actor, item.capability) === 'none') return false;
         // Where the capability does not separate personas, honour the role list.
         if (item.roles && !item.roles.some((r) => actor.roles.includes(r))) return false;
         return true;
@@ -235,6 +283,12 @@ export function visibleNav(shell: Shell, actor: Actor): NavGroup[] {
 
 /** Page title + subtitle per route. */
 export const PAGE_META: Record<string, { title: string; subtitle: string }> = {
+  '/estate': { title: 'Estate overview', subtitle: 'Residents, community and collections in one workspace' },
+  '/estate/work-orders': { title: 'Estate work orders', subtitle: 'Requests, assignments and resolution within Estate' },
+  '/estate/inspections': { title: 'Estate inspections', subtitle: 'Estate compliance obligations and inspection evidence' },
+  '/estate/copilot': { title: 'Estate Copilot', subtitle: 'Ask about scoped estate records and review the source' },
+  '/properties': { title: 'Properties', subtitle: 'Your estate properties, buildings and units' },
+  '/facility': { title: 'Facility overview', subtitle: 'Maintenance, assets and building operations in one workspace' },
   '/dashboard': { title: 'Dashboard', subtitle: 'Your operation at a glance' },
   '/control-center': { title: 'Control Center', subtitle: 'Live building operations at a glance' },
   '/energy': { title: 'Energy & Utilities', subtitle: 'Generators, diesel, grid and water' },
@@ -244,6 +298,7 @@ export const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   '/access': { title: 'Access & Visitors', subtitle: 'Gates, visitor passes and live access events' },
   '/sustainability': { title: 'Sustainability', subtitle: 'Carbon, energy mix and reduction pathways' },
   '/copilot': { title: 'AI Copilot', subtitle: 'Your facility, read across every signal' },
+  '/shortlet/copilot': { title: 'Shortlet Copilot', subtitle: 'Recorded stay operations, with decisions in your hands' },
   '/work-orders': { title: 'Work Orders', subtitle: 'Every maintenance job from request to close' },
   '/assets': { title: 'Assets', subtitle: 'The register of everything under management' },
   '/ppm': { title: 'Maintenance Plans', subtitle: 'Preventive maintenance, scheduled before failure' },
@@ -304,7 +359,7 @@ export const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   '/shortlet/analytics': { title: 'Analytics', subtitle: 'Revenue, occupancy and source performance' },
   '/shortlet/guests': { title: 'Guests', subtitle: 'Your guest CRM — repeat and VIP guests' },
   '/shortlet/reviews': { title: 'Reviews', subtitle: 'Guest feedback after their stay' },
-  '/shortlet/pricing': { title: 'Dynamic pricing', subtitle: 'Seasonal rate rules per apartment' },
+  '/shortlet/pricing': { title: 'Seasonal pricing', subtitle: 'Seasonal rate rules per apartment' },
   '/shortlet/maintenance': { title: 'Maintenance', subtitle: 'Issue tracker across your units' },
   '/shortlet/agents': { title: 'Agents', subtitle: 'Agent performance and commission' },
   '/shortlet/whatsapp': { title: 'WhatsApp', subtitle: 'Automated guest messaging' },

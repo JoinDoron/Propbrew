@@ -87,6 +87,9 @@ export type Resident = TenantScoped & {
   id: ResidentId;
   userId: UserId;
   name: string;
+  /** Contact record only; does not create an authentication account or invite. */
+  email?: string;
+  phone?: string;
   unitId: UnitId;
   siteId: SiteId;
   status: ResidentStatus;

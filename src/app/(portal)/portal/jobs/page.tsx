@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { can, type Role } from '@/lib/authz';
 import { repos, seed } from '@/server/data';
@@ -22,7 +23,7 @@ export default async function VendorJobsPage() {
           .map((e) => ({ event: e, ...JOB_ACTIONS[e] }))
       : [];
     return {
-      id: w.id, ref: w.ref, title: w.title, status: w.status, costMinor: w.cost?.minor ?? null,
+      id: w.id, ref: w.ref, title: w.title, status: w.status, costMinor: w.cost?.minor ?? null, costCurrency: w.cost?.currency ?? null,
       respondDueAt: w.respondDueAt, resolveDueAt: w.resolveDueAt,
       requesterName: w.requesterName, unitLabel: w.unitId ? unitById.get(w.unitId) ?? 'Estate' : 'Estate',
       actions,
@@ -30,8 +31,11 @@ export default async function VendorJobsPage() {
   });
 
   return (
-    <div className="max-w-[720px] mx-auto">
-      <VendorJobsWorkspace jobs={jobs} nowMs={NOW_MS} />
+    <div className="pb-page">
+      <PageHeader title="My jobs" subtitle="Assigned work, recorded service targets and work value." />
+      <div className="w-full min-w-0 flex flex-col gap-6">
+      <VendorJobsWorkspace jobs={jobs} nowMs={NOW_MS} canTransition={canTransition} />
+      </div>
     </div>
   );
 }

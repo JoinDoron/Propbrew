@@ -1,16 +1,24 @@
 import type { Metadata } from 'next';
 import Script from 'next/script';
-import { Inter_Tight, JetBrains_Mono } from 'next/font/google';
+import { Inter, JetBrains_Mono } from 'next/font/google';
 import { ThemeProvider, themeInitScript } from '@/components/theme-provider';
 import { brand } from '@/config/brand';
+import { ClerkProvider } from '@clerk/nextjs';
+import { clerkConfigured } from '@/server/onboarding/identity';
+import { websiteOnlyEnabled } from '@/lib/website-release';
+import { reviewModeEnabled } from '@/server/review-auth';
 import './globals.css';
+import './review.css';
+import '@/components/ui/application-foundations.css';
+import '@/components/ui/operational-surfaces.css';
 
-// The template's typeface pairing: Inter Tight for UI, JetBrains Mono for
-// refs, VINs, money and anything that benefits from tabular alignment.
-const interTight = Inter_Tight({
-  variable: '--font-inter-tight',
-  subsets: ['latin'],
+// Clinexa's application screens use Inter. Include extended Latin glyphs for
+// Nigerian names; keep the existing mono face for technical record references.
+const inter = Inter({
+  variable: '--font-inter',
+  subsets: ['latin', 'latin-ext'],
   weight: ['400', '500', '600', '700'],
+  display: 'swap',
 });
 
 const jetbrainsMono = JetBrains_Mono({
@@ -27,13 +35,16 @@ export const metadata: Metadata = {
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const review = reviewModeEnabled();
+  const authEnabled = !review && clerkConfigured() && !websiteOnlyEnabled(process.env.PROPBREW_WEBSITE_ONLY, process.env.NODE_ENV);
   return (
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${interTight.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
+      <body className="min-h-full flex flex-col" data-private-review={review ? 'true' : undefined}>
+        {review && <aside role="note" aria-label="Private review environment" className="propbrew-review-banner"><strong>Private review</strong><span>Sample data · Changes reset on restart · Do not enter customer information.</span></aside>}
         {/* Runs before paint so the persisted theme never flashes. `next/script`
             with beforeInteractive is injected by Next into the document head and
             avoids React's "script tag in component" warning. */}
@@ -42,7 +53,11 @@ export default function RootLayout({
         </Script>
         {/* AppShell now lives in each authenticated route group's layout, so the
             root layout carries only fonts, theme init and globals. */}
-        <ThemeProvider>{children}</ThemeProvider>
+        {authEnabled ? (
+          <ClerkProvider signInUrl="/login" signUpUrl="/sign-up" signInFallbackRedirectUrl="/auth/continue" signUpForceRedirectUrl="/onboarding">
+            <ThemeProvider>{children}</ThemeProvider>
+          </ClerkProvider>
+        ) : <ThemeProvider>{children}</ThemeProvider>}
       </body>
     </html>
   );

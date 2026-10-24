@@ -1,97 +1,44 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Inbox, Wallet, Clock, CheckCircle2, User } from 'lucide-react';
-import { formatMoney, DomainStatus } from '@/components/domain';
-import { toneVar, type Tone } from '@/lib/status-tones';
+import { Inbox, Wallet, Clock, CheckCircle2, X } from 'lucide-react';
+import { Button, CardHeader, EmptyState, IconButton } from '@/components/ui';
+import { PortalCard, PortalKpi, portalMoney } from './portal-patterns';
+import { PageTabs } from '@/components/ui/page-tabs';
+import { WorkspaceDecisionDialog, type WorkspaceDecision } from '@/components/ui/workspace-decision';
+import { DomainStatus } from '@/components/domain';
 import type { OrderStatus } from '@/domain/enums';
 import { orderEarnings } from '@/domain/vendor-portal';
 import { transition } from '@/server/actions/transitions';
+import layout from '@/components/ui/workspace-layout.module.css';
 
 export type OrderAction = { event: string; label: string; variant: 'primary' | 'default' | 'danger' };
 export type OrderView = { id: string; ref: string; listingTitle: string; residentName: string; status: OrderStatus; amountMinor: number; currency: string; placedAt: string; actions: OrderAction[] };
-
-const money = (m: number, c = 'NGN') => formatMoney({ minor: m, currency: c } as Parameters<typeof formatMoney>[0]);
-const NEW = ['placed'];
-const ACTIVE = ['accepted'];
 const DONE = ['fulfilled', 'closed', 'declined', 'refunded', 'expired'];
-const fmtWhen = (iso: string) => new Date(iso).toLocaleDateString('en-NG', { month: 'short', day: 'numeric' });
+const fmtWhen = (iso: string) => new Date(iso).toLocaleDateString('en-NG', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Africa/Lagos' });
 
-export function VendorOrdersWorkspace({ orders }: { orders: OrderView[] }) {
+export function VendorOrdersWorkspace({ orders, canTransition = false }: { orders: OrderView[]; canTransition?: boolean }) {
   const router = useRouter();
-  const [pending, start] = useTransition();
-  const [tab, setTab] = useState<'new' | 'active' | 'done'>('new');
-  const [toast, setToast] = useState<string | null>(null);
-  const flash = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3000); };
-
-  const fire = (id: string, event: string, label: string) => start(async () => {
-    const r = await transition('marketplace-order', id, event);
-    if (r.ok) { router.refresh(); flash(`${label} — order updated.`); } else flash('error' in r ? r.error : 'Could not update order.');
-  });
-
-  const earn = orderEarnings(orders.map((o) => ({ status: o.status, amountMinor: o.amountMinor })));
-  const groups = { new: orders.filter((o) => NEW.includes(o.status)), active: orders.filter((o) => ACTIVE.includes(o.status)), done: orders.filter((o) => DONE.includes(o.status)) };
-  const shown = groups[tab];
-
-  return (
-    <div className="flex flex-col gap-3.5">
-      <div className="grid grid-cols-2 min-[560px]:grid-cols-4 gap-2.5">
-        <Kpi label="New" value={String(groups.new.length)} note="to accept" tone={groups.new.length ? 'warn' : 'success'} icon={<Inbox size={17} />} />
-        <Kpi label="In progress" value={String(groups.active.length)} note="accepted" tone="progress" icon={<Clock size={17} />} />
-        <Kpi label="Pending value" value={money(earn.pendingMinor)} note="not yet paid" tone="info" icon={<Wallet size={17} />} />
-        <Kpi label="Earned" value={money(earn.earnedMinor)} note={`${earn.fulfilled} fulfilled`} tone="success" icon={<CheckCircle2 size={17} />} />
-      </div>
-
-      <div className="flex gap-1.5">
-        {([['new', 'New', groups.new.length], ['active', 'In progress', groups.active.length], ['done', 'History', groups.done.length]] as const).map(([k, label, n]) => (
-          <button key={k} onClick={() => setTab(k)} className={`h-8 px-3 rounded-full text-[12.5px] font-medium border ${tab === k ? 'border-primary bg-primary-weak text-primary' : 'border-border-2 bg-surface text-text-2'}`}>{label} · {n}</button>
-        ))}
-      </div>
-
-      {shown.length === 0 ? (
-        <div className="text-center py-12 border border-dashed border-border rounded-2xl">
-          <Inbox size={24} className="mx-auto text-text-3 mb-2" />
-          <p className="text-[13px] font-medium">{tab === 'new' ? 'No new orders' : 'Nothing here'}</p>
-          {tab === 'new' && <p className="text-[12px] text-text-3 mt-0.5">New resident orders land here to accept.</p>}
-        </div>
-      ) : (
-        <div className="flex flex-col gap-2.5">
-          {shown.map((o) => (
-            <div key={o.id} className={`rounded-2xl border shadow-card p-4 ${o.status === 'placed' ? 'border-primary/25 bg-primary/[0.03]' : 'border-border bg-surface'}`}>
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="text-[14px] font-semibold truncate">{o.listingTitle}</div>
-                  <div className="text-[11.5px] text-text-3 flex items-center gap-1"><User size={11} /> {o.residentName} · <span className="font-mono">{o.ref}</span> · {fmtWhen(o.placedAt)}</div>
-                </div>
-                <div className="text-right flex-none"><div className="text-[15px] font-bold font-mono">{money(o.amountMinor, o.currency)}</div><DomainStatus type="order" status={o.status} /></div>
-              </div>
-              {o.status === 'placed' && <div className="text-[11px] text-warning mt-2 flex items-center gap-1"><Clock size={11} /> Accept promptly — orders auto-expire if the accept window lapses.</div>}
-              {o.actions.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-3">
-                  {o.actions.map((a) => (
-                    <button key={a.event} disabled={pending} onClick={() => fire(o.id, a.event, a.label)} className={`text-[12px] px-3 h-8 rounded-lg font-medium disabled:opacity-50 ${a.variant === 'danger' ? 'text-negative border border-[color:var(--tone-danger)]/40' : a.variant === 'primary' ? 'bg-primary text-white' : 'border border-border-2 text-text-2'}`}>{a.label}</button>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      <p className="text-[11px] text-text-3">Payment is released to you on fulfilment (SC-02). Closed never means paid until settlement (Q3).</p>
-      {toast && <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[90] bg-text text-surface text-[13px] font-medium px-4 py-2.5 rounded-xl shadow-float animate-fade">{toast}</div>}
-    </div>
-  );
-}
-
-function Kpi({ label, value, note, tone, icon }: { label: string; value: string; note: string; tone: Tone; icon: React.ReactNode }) {
-  return (
-    <div className="bg-surface border border-border rounded-2xl shadow-card p-3.5">
-      <span className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `color-mix(in srgb, ${toneVar(tone)} 14%, transparent)`, color: toneVar(tone) }}>{icon}</span>
-      <div className="text-[12px] text-text-2 font-medium mt-2.5">{label}</div>
-      <div className="text-[17px] font-bold tracking-[-0.02em] leading-none mt-1">{value}</div>
-      <div className="text-[10.5px] mt-1" style={{ color: toneVar(tone) }}>{note}</div>
-    </div>
-  );
+  const [filter, setFilter] = useState<'new' | 'active' | 'done'>('new');
+  const currencies = [...new Set(orders.map((order) => order.currency).filter(Boolean))].sort();
+  const [currency, setCurrency] = useState(currencies.includes('NGN') ? 'NGN' : currencies[0] ?? 'NGN');
+  const [decision, setDecision] = useState<WorkspaceDecision | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const groups = { new: orders.filter((order) => order.status === 'placed'), active: orders.filter((order) => order.status === 'accepted'), done: orders.filter((order) => DONE.includes(order.status)) };
+  const shown = groups[filter];
+  const earnings = orderEarnings(orders.filter((order) => order.currency === currency).map((order) => ({ status: order.status, amountMinor: order.amountMinor })));
+  function review(order: OrderView, action: OrderAction) {
+    if (!canTransition) return;
+    setDecision({ title: `Review ${action.label.toLowerCase()}`, record: `${order.ref} · ${order.listingTitle}`, description: `Record “${action.label}” for ${order.residentName}'s order of ${portalMoney(order.amountMinor, order.currency)}. This changes the order workflow only; it does not verify settlement, charge a resident, transfer a payout or perform a bank refund.`, confirmLabel: `Confirm ${action.label.toLowerCase()}`, action: () => transition('marketplace-order', order.id, action.event), onSuccess: () => { router.refresh(); setMessage(`${order.ref} workflow updated. Settlement is not confirmed by this status.`); } });
+  }
+  return <div className={layout.layout}>
+    <PageTabs label="Vendor order sections" items={[
+      { id: 'orders', label: 'Order register', content: <div className={layout.layout}><div className={layout.filters}>{([['new', 'New', groups.new.length], ['active', 'In progress', groups.active.length], ['done', 'History', groups.done.length]] as const).map(([key, label, count]) => <Button key={key} aria-pressed={filter === key} variant={filter === key ? 'primary' : 'secondary'} onClick={() => setFilter(key)}>{label} · {count}</Button>)}</div>{shown.length ? shown.map((order) => <PortalCard key={order.id}><CardHeader title={order.listingTitle} subtitle={`${order.ref} · ${fmtWhen(order.placedAt)}`} action={<DomainStatus type="order" status={order.status} />} /><div className={layout.toolbar}><p className={layout.body}>Ordered by {order.residentName}</p><p className="text-lg font-medium tabular-nums">{portalMoney(order.amountMinor, order.currency)}</p></div><div className={`${layout.filters} mt-6`}>{order.actions.map((action) => <Button key={action.event} disabled={!canTransition} variant={action.variant === 'primary' ? 'primary' : 'secondary'} className={action.variant === 'danger' ? 'text-negative' : undefined} onClick={() => review(order, action)}>{action.label}</Button>)}</div></PortalCard>) : <PortalCard><EmptyState title={filter === 'new' ? 'No new orders' : 'No orders in this view'} description="Scoped resident order records appear in their workflow stage." /></PortalCard>}</div> },
+      { id: 'summary', label: 'Order summary', content: <div className={layout.layout}><div className={layout.toolbar}><p className={layout.body}>Values are grouped by their recorded currency. No FX conversion.</p><label className={layout.field}><span className={layout.label}>Summary currency</span><select value={currency} onChange={(event) => setCurrency(event.target.value)} className={layout.select}>{(currencies.length ? currencies : ['NGN']).map((value) => <option key={value}>{value}</option>)}</select></label></div><div className={layout.metrics}><PortalKpi label="New orders" value={String(groups.new.length)} note="All currencies · awaiting acceptance" tone="info" icon={<Inbox size={18} />} /><PortalKpi label="In progress" value={String(groups.active.length)} note="All currencies · accepted records" tone="progress" icon={<Clock size={18} />} /><PortalKpi label={`Pending order value · ${currency}`} value={portalMoney(earnings.pendingMinor, currency)} note="Not an account balance" tone="info" icon={<Wallet size={18} />} /><PortalKpi label={`Fulfilled order value · ${currency}`} value={portalMoney(earnings.earnedMinor, currency)} note={`${earnings.fulfilled} fulfilled/closed records · not settled cash`} tone="success" icon={<CheckCircle2 size={18} />} /></div></div> },
+    ]} />
+    <p className={layout.metadata}>Fulfilled or closed does not mean paid. Vendor payment requires verified settlement and the approved payout/KYC policy. This portal does not confirm a bank transfer or initiate one.</p>
+    {decision && <WorkspaceDecisionDialog decision={decision} onClose={() => setDecision(null)} />}
+    {message && <div className={layout.feedback} role="status"><span>{message}</span><IconButton aria-label="Dismiss order message" onClick={() => setMessage(null)}><X size={18} /></IconButton></div>}
+  </div>;
 }

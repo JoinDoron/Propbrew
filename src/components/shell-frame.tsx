@@ -1,10 +1,14 @@
-import { redirect } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { getSession, devIdentityEnabled } from '@/server/session';
 import { shellFor, homeRouteFor, type Shell } from '@/config/shells';
 import { visibleNav } from '@/config/nav';
 import { getNotifications, unreadNotificationCount, getThreads, unreadThreadCount } from '@/server/data/inbox';
 import { AppShell, type ShellIdentity } from '@/components/app-shell';
 import { RoleSwitcher } from '@/components/dev/role-switcher';
+import { getOwnerIdentity } from '@/server/onboarding/identity';
+import { requireOperatorSession } from '@/server/workspaces';
+import { canEnterWorkspace, workspaceById, type WorkspaceId } from '@/config/workspaces';
+import { can } from '@/lib/authz';
 
 /**
  * Server frame for an authenticated route group. Redirects to /login when there
@@ -13,23 +17,36 @@ import { RoleSwitcher } from '@/components/dev/role-switcher';
  * capability-gated nav and the inbox; and renders the client AppShell. The
  * per-page capability guard (`requireCapability`) is layered on top inside pages.
  */
-export async function ShellFrame({ expected, children }: { expected: Shell; children: React.ReactNode }) {
-  const session = await getSession();
-  if (!session) redirect('/login');
+export async function ShellFrame({ expected, workspace, children }: { expected: Shell; workspace?: WorkspaceId; children: React.ReactNode }) {
+  const session = expected === 'ops' ? await requireOperatorSession() : await getSession();
+  if (!session) {
+    if (await getOwnerIdentity()) redirect('/onboarding');
+    redirect('/login');
+  }
   const actor = session.actor;
 
   const shell = shellFor(actor);
   if (shell !== expected) redirect(homeRouteFor(actor));
+  if (expected === 'ops' && (!workspace || !canEnterWorkspace(actor, workspace))) notFound();
 
-  const groups = visibleNav(shell, actor);
+  const groups = visibleNav(shell, actor, workspace);
 
   const identity: ShellIdentity = {
-    name: session.label.split(' — ')[1] ?? session.label,
+    name: session.key === 'clerk' ? session.label : session.label.split(' — ')[0],
     roleSummary: session.roleSummary,
     tenantLabel: session.tenantLabel,
   };
 
-  const notifications = getNotifications(actor.userId, actor.roles);
+  const canReadWorkOrders = can(actor, 'work_orders', 'read').allowed;
+  // A shared notification may point at the legacy Facility route. Keep Estate
+  // maintenance in its own portal without changing the stored event or grants.
+  const notifications = getNotifications(actor.userId, actor.roles).map((notification) => {
+    if (workspace !== 'estate' || !notification.href || !/^\/work-orders(?:\/[^/?#]+)?(?:[?#].*)?$/.test(notification.href)) return notification;
+    return {
+      ...notification,
+      href: canReadWorkOrders ? notification.href.replace(/^\/work-orders/, '/estate/work-orders') : undefined,
+    };
+  });
   const unreadNotifications = unreadNotificationCount(actor.userId, actor.roles);
   const threads = getThreads(actor.userId, actor.roles);
   const unreadMessages = unreadThreadCount(actor.userId, actor.roles);
@@ -37,6 +54,7 @@ export async function ShellFrame({ expected, children }: { expected: Shell; chil
   return (
     <AppShell
       groups={groups}
+      workspace={workspaceById(workspace)}
       identity={identity}
       notifications={notifications}
       unreadNotifications={unreadNotifications}

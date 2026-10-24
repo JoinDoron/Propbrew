@@ -73,6 +73,6 @@ export async function raiseRequest(input: { title: string; description?: string 
     note: `${triage.category.label}${triage.escalated ? ' · flagged urgent' : ''}`,
   });
 
-  ['/portal/requests', '/portal', '/work-orders', '/dashboard'].forEach((p) => revalidatePath(p));
+  ['/portal/requests', '/portal', '/work-orders', '/estate/work-orders', '/people', '/facility', '/estate', '/dashboard'].forEach((p) => revalidatePath(p));
   return { ok: true, ref };
 }

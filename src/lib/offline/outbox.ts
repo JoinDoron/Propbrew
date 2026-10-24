@@ -195,7 +195,18 @@ export function useOutboxSync(): void {
         lastAttempt.current[op.id] = Date.now();
         let outcome: SyncOutcome;
         try {
-          outcome = await syncOperation({ id: op.id, kind: op.kind, capturedISO: op.capturedISO, payload: op.payload });
+          const blobs = await attachmentsFor(op.id);
+          const mediaRefs: string[] = [];
+          for (const stored of blobs) {
+            const form = new FormData();
+            form.append('file', stored.blob, stored.name);
+            form.append('purpose', `offline-${op.kind}`);
+            const upload = await fetch('/api/upload', { method: 'POST', body: form, headers: { 'idempotency-key': `${op.id}:${stored.id}` } });
+            if (!upload.ok) throw new Error(`Media upload failed (${upload.status}).`);
+            const uploaded = await upload.json() as { url?: string };
+            if (uploaded.url) mediaRefs.push(uploaded.url);
+          }
+          outcome = await syncOperation({ id: op.id, kind: op.kind, capturedISO: op.capturedISO, payload: { ...op.payload, mediaRefs } });
         } catch {
           // Network died mid-flight. The op stays queued; because the id is the
           // idempotency key, re-sending later is safe even if the server DID
@@ -204,11 +215,9 @@ export function useOutboxSync(): void {
         }
         const nowISO = new Date().toISOString();
         commit(snapshot().map((o) => (o.id === op.id ? applyOutcome(o, outcome, nowISO) : o)));
-        // NOTE: the photos are deliberately NOT deleted here. `syncOperation`
-        // only records a photo COUNT — the image bytes never leave this device,
-        // because no upload endpoint or blob storage exists yet. Deleting on
-        // acknowledgement destroyed the only copy of a site engineer's evidence.
-        // Re-enable this once the sync endpoint actually accepts the files.
+        // Uploaded media is deleted only after the operation receives a server
+        // outcome. Failed uploads remain in IndexedDB for retry.
+        if (outcome.ok && idbAvailable()) await idbDeleteBlobsFor(op.id);
       }
       // Housekeeping: drop long-since-synced receipts.
       const stale = prunable(snapshot(), Date.now());

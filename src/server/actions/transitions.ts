@@ -15,7 +15,7 @@
 import { revalidatePath } from 'next/cache';
 import { getActor } from '@/server/session';
 import { ForbiddenError, assertCan, ROLE_LABELS, type Capability } from '@/lib/authz';
-import { repos, seed } from '@/server/data';
+import { repos, scopedMutableGet, seed } from '@/server/data';
 import { db, recordHistory } from '@/server/data/store';
 import {
   bookingMachine,
@@ -35,8 +35,8 @@ const REGISTRY: Record<
   'booking' | 'sos-event' | 'marketplace-order',
   { machine: Machine<string>; rows: () => Row[]; capability: Capability; paths: string[] }
 > = {
-  booking: { machine: bookingMachine as Machine<string>, rows: () => db.bookings as unknown as Row[], capability: 'bookings_amenities', paths: ['/bookings', '/portal/bookings'] },
-  'sos-event': { machine: sosEventMachine as Machine<string>, rows: () => db.sosEvents as unknown as Row[], capability: 'security_sos', paths: ['/security', '/portal/security', '/dashboard'] },
+  booking: { machine: bookingMachine as Machine<string>, rows: () => db.bookings as unknown as Row[], capability: 'bookings_amenities', paths: ['/bookings', '/portal/bookings', '/estate'] },
+  'sos-event': { machine: sosEventMachine as Machine<string>, rows: () => db.sosEvents as unknown as Row[], capability: 'security_sos', paths: ['/security', '/portal/security', '/estate', '/dashboard'] },
   'marketplace-order': { machine: marketplaceOrderMachine as Machine<string>, rows: () => db.marketplaceOrders as unknown as Row[], capability: 'marketplace', paths: ['/marketplace', '/portal/marketplace', '/portal/listings'] },
 };
 
@@ -119,7 +119,7 @@ export async function issueInvoice(ref: string): Promise<TxResult> {
   if (!t) return { ok: false, error: `Cannot issue from “${live.status}”.` };
   live.status = t as typeof live.status;
   recordHistory('service-charge', live.id, hist('ISSUE', inv.status, t, actor.userId, firing(actor.roles as Role[], ['estate_manager'])));
-  ['/billing', '/dashboard'].forEach((p) => revalidatePath(p));
+  ['/billing', '/estate', '/dashboard'].forEach((p) => revalidatePath(p));
   return { ok: true, to: t };
 }
 
@@ -139,7 +139,9 @@ export async function raiseSos(): Promise<TxResult> {
     throw e;
   }
   const unitId = actor.unitIds[0];
-  const unit = seed.units.find((u) => u.id === unitId);
+  // Residents cannot read the assets/space catalogue. Resolve only their linked
+  // unit under the SOS create scope, including tenant and ownership predicates.
+  const unit = unitId ? scopedMutableGet(actor, 'security_sos', db.units.map((row) => ({ ...row, unitId: row.id })), unitId, 'create') : null;
   if (!unit) return { ok: false, error: 'No unit is linked to your account.' };
 
   const id = `sos-${db.sosEvents.length + 1}-${unitId}`;
@@ -168,7 +170,7 @@ export async function raiseSos(): Promise<TxResult> {
     actorName: displayName(actor.userId, 'resident'),
     actorRole: 'resident',
   });
-  ['/portal/security', '/security', '/dashboard'].forEach((p) => revalidatePath(p));
+  ['/portal/security', '/security', '/estate', '/dashboard'].forEach((p) => revalidatePath(p));
   return { ok: true, to: 'raised' };
 }
 

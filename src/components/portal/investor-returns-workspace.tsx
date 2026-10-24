@@ -1,110 +1,42 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { TrendingUp, Sparkles, RotateCcw } from 'lucide-react';
+import { useState } from 'react';
+import { RotateCcw, TrendingUp } from 'lucide-react';
+import { Button, CardHeader, EmptyState } from '@/components/ui';
+import { PortalCard, portalMoney } from './portal-patterns';
+import { PageTabs } from '@/components/ui/page-tabs';
 import type { InvestorProject } from '@/domain/entities';
 import { holdingOf, projectReturns } from '@/domain/investor-portal';
+import { investorCurrency } from './investor-portfolio-workspace';
 import { toneVar } from '@/lib/status-tones';
+import layout from '@/components/ui/workspace-layout.module.css';
 
-function naira(minor: number): string {
-  const n = minor / 100;
-  if (n >= 1e9) return `₦${(n / 1e9).toFixed(2)}B`;
-  if (n >= 1e6) return `₦${(n / 1e6).toFixed(1)}M`;
-  if (n >= 1e3) return `₦${Math.round(n / 1e3)}k`;
-  return `₦${Math.round(n)}`;
-}
-
-type Scenario = { key: string; label: string; appr: number; yield: number };
-const SCENARIOS: Scenario[] = [
-  { key: 'cons', label: 'Conservative', appr: 6, yield: 4 },
-  { key: 'base', label: 'Base case', appr: 12, yield: 6 },
-  { key: 'opt', label: 'Optimistic', appr: 18, yield: 8 },
-];
+type Scenario = { key: string; label: string; appreciation: number; yield: number };
+const SCENARIOS: Scenario[] = [{ key: 'cons', label: 'Conservative illustration', appreciation: 6, yield: 4 }, { key: 'base', label: 'Base illustration', appreciation: 12, yield: 6 }, { key: 'opt', label: 'Optimistic illustration', appreciation: 18, yield: 8 }];
 
 export function InvestorReturnsWorkspace({ projects }: { projects: InvestorProject[] }) {
-  const holdings = useMemo(() => projects.map((p) => ({ id: p.id, name: p.name.split(' (')[0], invested: holdingOf(p).investedMinor })), [projects]);
-  const portfolioInvested = holdings.reduce((n, h) => n + h.invested, 0);
-
-  const [sel, setSel] = useState('all');
+  const holdings = projects.map((project) => ({ id: project.id, name: project.name.split(' (')[0], invested: holdingOf(project).investedMinor, currency: investorCurrency(project) }));
+  const currencies = [...new Set(holdings.map((holding) => holding.currency))].sort();
+  const [currency, setCurrency] = useState<string>(currencies.includes('NGN') ? 'NGN' : currencies[0] ?? 'NGN');
+  const [selected, setSelected] = useState('all');
   const [years, setYears] = useState(5);
-  const [appr, setAppr] = useState(12);
-  const [yld, setYld] = useState(6);
-
-  const invested = sel === 'all' ? portfolioInvested : holdings.find((h) => h.id === sel)?.invested ?? 0;
-  const proj = projectReturns(invested, years, appr, yld);
-
-  const applyScenario = (s: Scenario) => { setAppr(s.appr); setYld(s.yield); };
-  const reset = () => { setYears(5); setAppr(12); setYld(6); };
-
-  // stacked bar widths
-  const total = proj.totalValueMinor || 1;
-  const w = (m: number) => `${(m / total) * 100}%`;
-
-  return (
-    <div className="flex flex-col gap-3.5">
-      <div className="rounded-2xl border border-primary/25 bg-primary/[0.04] p-3.5 flex items-start gap-2.5">
-        <Sparkles size={15} className="text-primary flex-none mt-0.5" />
-        <p className="text-[12px] text-text-2">Model your returns by adjusting the hold period and assumptions. Figures are <b>estimates</b> on the inputs below — not a forecast, guarantee or financial advice.</p>
-      </div>
-
-      {/* Project selector */}
-      <div className="flex gap-1.5 overflow-x-auto pb-0.5">
-        <button onClick={() => setSel('all')} className={`flex-none h-8 px-3 rounded-full text-[12.5px] font-medium border ${sel === 'all' ? 'border-primary bg-primary-weak text-primary' : 'border-border-2 bg-surface text-text-2'}`}>Whole portfolio</button>
-        {holdings.map((h) => (
-          <button key={h.id} onClick={() => setSel(h.id)} className={`flex-none h-8 px-3 rounded-full text-[12.5px] font-medium border ${sel === h.id ? 'border-primary bg-primary-weak text-primary' : 'border-border-2 bg-surface text-text-2'}`}>{h.name}</button>
-        ))}
-      </div>
-
-      {/* Result */}
-      <div className="bg-surface border border-border rounded-2xl shadow-card p-4">
-        <div className="flex items-end justify-between">
-          <div>
-            <div className="text-[12px] text-text-3">Projected value in {years} year{years === 1 ? '' : 's'}</div>
-            <div className="text-[30px] font-bold tracking-[-0.02em] leading-none mt-1">{naira(proj.totalValueMinor)}</div>
-            <div className="text-[12px] mt-1" style={{ color: toneVar('success') }}>+{naira(proj.capitalGainMinor + proj.rentalIncomeMinor)} · {proj.roiPct}% total return</div>
-          </div>
-          <div className="text-right"><div className="text-[11px] text-text-3">Invested</div><div className="text-[15px] font-semibold font-mono">{naira(invested)}</div></div>
-        </div>
-        {/* Stacked bar */}
-        <div className="mt-3.5 h-3 rounded-full overflow-hidden flex bg-surface-2">
-          <div className="h-full" title="Invested" style={{ width: w(invested), background: toneVar('info') }} />
-          <div className="h-full" title="Capital growth" style={{ width: w(proj.capitalGainMinor), background: toneVar('success') }} />
-          <div className="h-full" title="Rental income" style={{ width: w(proj.rentalIncomeMinor), background: toneVar('progress') }} />
-        </div>
-        <div className="flex flex-wrap gap-3 mt-2 text-[10.5px] text-text-3">
-          <Legend tone="info" label={`Invested ${naira(invested)}`} />
-          <Legend tone="success" label={`Capital growth ${naira(proj.capitalGainMinor)}`} />
-          <Legend tone="progress" label={`Rental income ${naira(proj.rentalIncomeMinor)}`} />
-        </div>
-      </div>
-
-      {/* Controls */}
-      <div className="bg-surface border border-border rounded-2xl shadow-card p-4 flex flex-col gap-4">
-        <div className="flex items-center justify-between"><span className="text-[12.5px] font-semibold flex items-center gap-1.5"><TrendingUp size={14} /> Assumptions</span><button onClick={reset} className="text-[11.5px] text-text-3 hover:text-text-2 inline-flex items-center gap-1"><RotateCcw size={12} /> Reset</button></div>
-        <Slider label="Hold period" value={years} min={1} max={10} step={1} suffix={years === 1 ? 'year' : 'years'} onChange={setYears} />
-        <Slider label="Annual appreciation" value={appr} min={0} max={25} step={1} suffix="%/yr" onChange={setAppr} />
-        <Slider label="Rental yield" value={yld} min={0} max={15} step={1} suffix="%/yr" onChange={setYld} />
-        <div className="flex gap-1.5 pt-1">
-          {SCENARIOS.map((s) => {
-            const on = appr === s.appr && yld === s.yield;
-            return <button key={s.key} onClick={() => applyScenario(s)} className={`flex-1 h-9 rounded-xl text-[12px] font-medium border ${on ? 'border-primary bg-primary-weak text-primary' : 'border-border-2 text-text-2'}`}>{s.label}</button>;
-          })}
-        </div>
-      </div>
-
-      <p className="text-[11px] text-text-3">Estimates compound appreciation on your invested capital and add simple rental income at the chosen yield. Real returns depend on the market, timing and costs.</p>
-    </div>
-  );
+  const [appreciation, setAppreciation] = useState(12);
+  const [rentalYield, setRentalYield] = useState(6);
+  const scoped = holdings.filter((holding) => holding.currency === currency);
+  const invested = selected === 'all' ? scoped.reduce((sum, holding) => sum + holding.invested, 0) : scoped.find((holding) => holding.id === selected)?.invested ?? 0;
+  const projection = projectReturns(invested, years, appreciation, rentalYield);
+  const width = (minor: number) => `${projection.totalValueMinor > 0 ? minor / projection.totalValueMinor * 100 : 0}%`;
+  const reset = () => { setYears(5); setAppreciation(12); setRentalYield(6); };
+  return <div className={layout.layout}>
+    <div className={layout.notice}><TrendingUp size={18} /><p>Interactive illustration, not an investment forecast<span>The initial stake is modelled from sample holdings, not verified ownership. Scenarios are user-adjustable arithmetic, not AI advice, a valuation or a guarantee. Currencies are never combined or converted.</span></p></div>
+    <div className={layout.toolbar}><label className={layout.field}><span className={layout.label}>Illustration currency</span><select className={layout.select} value={currency} onChange={(event) => { setCurrency(event.target.value); setSelected('all'); }}>{(currencies.length ? currencies : ['NGN']).map((value) => <option key={value}>{value}</option>)}</select></label><label className={layout.field}><span className={layout.label}>Project scope</span><select value={selected} onChange={(event) => setSelected(event.target.value)} className={layout.select}><option value="all">Whole {currency} portfolio</option>{scoped.map((holding) => <option key={holding.id} value={holding.id}>{holding.name}</option>)}</select></label></div>
+    <PageTabs label="Investment return sections" items={[
+      { id: 'forecast', label: 'Return illustration', content: <div className={layout.layout}>{holdings.length ? <PortalCard><CardHeader title={`Illustrative value after ${years} ${years === 1 ? 'year' : 'years'}`} subtitle={`Compound growth ${appreciation}% / year · simple rental yield ${rentalYield}% / year · ${currency}`} /><p className={layout.metric}>{portalMoney(projection.totalValueMinor, currency)}</p><p className={`${layout.body} mt-4`}>Modelled gain and rental income: {portalMoney(projection.capitalGainMinor + projection.rentalIncomeMinor, currency)} · {projection.roiPct}% total illustrative return.</p><div className="mt-6 h-3 flex rounded overflow-hidden bg-surface-2" role="img" aria-label={`Sample stake ${portalMoney(invested, currency)}, illustrative capital growth ${portalMoney(projection.capitalGainMinor, currency)}, illustrative rental income ${portalMoney(projection.rentalIncomeMinor, currency)}`}><span style={{ width: width(invested), background: toneVar('info') }} /><span style={{ width: width(projection.capitalGainMinor), background: toneVar('success') }} /><span style={{ width: width(projection.rentalIncomeMinor), background: toneVar('progress') }} /></div><dl className={`${layout.facts} mt-6`}><div><dt>Sample invested stake</dt><dd>{portalMoney(invested, currency)}</dd></div><div><dt>Illustrative capital growth</dt><dd>{portalMoney(projection.capitalGainMinor, currency)}</dd></div><div><dt>Illustrative rental income</dt><dd>{portalMoney(projection.rentalIncomeMinor, currency)}</dd></div></dl></PortalCard> : <PortalCard><EmptyState title="No holdings to model" description="An illustration becomes available when project records are linked to your investor scope." /></PortalCard>}</div> },
+      { id: 'assumptions', label: 'Scenario assumptions', content: <div className={layout.layout}><PortalCard><CardHeader title="Adjust the illustration" subtitle="Changes stay in this browser session" action={<Button icon={<RotateCcw size={16} />} onClick={reset}>Reset assumptions</Button>} /><div className={layout.stack}><Slider label="Hold period" value={years} min={1} max={10} suffix={years === 1 ? 'year' : 'years'} onChange={setYears} /><Slider label="Annual appreciation" value={appreciation} min={0} max={25} suffix="% per year" onChange={setAppreciation} /><Slider label="Rental yield" value={rentalYield} min={0} max={15} suffix="% per year" onChange={setRentalYield} /><div className={layout.filters}>{SCENARIOS.map((scenario) => <Button key={scenario.key} aria-pressed={appreciation === scenario.appreciation && rentalYield === scenario.yield} onClick={() => { setAppreciation(scenario.appreciation); setRentalYield(scenario.yield); }}>{scenario.label}</Button>)}</div></div></PortalCard><PortalCard><CardHeader title="Assumptions and exclusions" /><p className={layout.body}>This model compounds the selected appreciation rate on the sample stake and adds simple rental income at the chosen yield. It does not deduct tax, financing, vacancy, transaction costs, maintenance or inflation, and it does not simulate losses. The scenario names are illustrative labels, not risk assessments or recommendations.</p></PortalCard></div> },
+    ]} />
+  </div>;
 }
 
-function Slider({ label, value, min, max, step, suffix, onChange }: { label: string; value: number; min: number; max: number; step: number; suffix: string; onChange: (n: number) => void }) {
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-1.5"><span className="text-[12.5px] text-text-2">{label}</span><span className="text-[13px] font-semibold font-mono">{value} <span className="text-[11px] text-text-3 font-normal">{suffix}</span></span></div>
-      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} className="w-full accent-[color:var(--primary)]" aria-label={label} />
-    </div>
-  );
-}
-function Legend({ tone, label }: { tone: 'info' | 'success' | 'progress'; label: string }) {
-  return <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-[2px]" style={{ background: toneVar(tone) }} />{label}</span>;
+function Slider({ label, value, min, max, suffix, onChange }: { label: string; value: number; min: number; max: number; suffix: string; onChange: (value: number) => void }) {
+  return <label className={layout.field}><span className={layout.toolbar}><span className={layout.label}>{label}</span><span className="text-sm tabular-nums">{value} {suffix}</span></span><input type="range" min={min} max={max} step={1} value={value} onChange={(event) => onChange(Number(event.target.value))} aria-label={label} aria-valuetext={`${value} ${suffix}`} className="w-full min-h-11 accent-primary" /></label>;
 }

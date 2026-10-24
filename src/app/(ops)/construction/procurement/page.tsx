@@ -1,5 +1,5 @@
 import { requireCapability } from '@/server/guard';
-import { effectiveLevel } from '@/lib/authz';
+import { can } from '@/lib/authz';
 import { constructionWorld } from '@/server/reads/construction';
 import { repos } from '@/server/data';
 import { NOW_MS } from '@/domain/ppm';
@@ -13,8 +13,8 @@ const OPEN_PO = ['issued', 'acknowledged', 'part_delivered', 'approved'];
  *  with a recommendation a human must accept; awarding issues a real PO and
  *  commits budget, and receiving books both stock and actual cost. */
 export default async function ConstructionProcurementPage() {
-  const { actor } = await requireCapability('reports_analytics');
-  const canMutate = ['F', 'M'].includes(effectiveLevel(actor, 'reports_analytics'));
+  const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
+  const canMutate = can(actor, 'reports_analytics', 'update').allowed;
   const world = constructionWorld(actor);
   const vendors = repos.constructionVendors.list(actor).items;
 
@@ -44,7 +44,7 @@ export default async function ConstructionProcurementPage() {
   })).sort((a, b) => Number(b.late) - Number(a.late) || Date.parse(a.expectedISO) - Date.parse(b.expectedISO));
 
   return (
-    <div className="max-w-[1000px] mx-auto">
+    <div className="pb-page">
       <ProcurementWorkspace
         requests={requests}
         rfqs={rfqs}

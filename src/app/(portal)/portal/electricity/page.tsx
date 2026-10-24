@@ -1,74 +1,26 @@
+import { PageHeader } from '@/components/ui/page-header';
+import { PageTabs } from '@/components/ui/page-tabs';
 import { requireCapability } from '@/server/guard';
 import { getActiveUnitId } from '@/server/active-unit';
 import { seed } from '@/server/data';
-import { Button, Card, CardHeader, Mono, Table, Td, Th, TableRow } from '@/components/ui';
-import { Zap } from 'lucide-react';
+import { Button, Card, CardHeader, EmptyState, StatusPill } from '@/components/ui';
+import { PlugZap, ReceiptText, Zap } from 'lucide-react';
+import { portalMoney } from '@/components/portal/portal-patterns';
+import layout from '@/components/ui/workspace-layout.module.css';
 
-/** Electricity (resident-home PRD tile) — prepaid power for the active unit.
- *  A lightweight vend surface; live meter readings are out of scope (PRD §8). */
 export default async function ElectricityPage() {
   const { actor } = await requireCapability('charges_invoicing');
   const activeUnitId = await getActiveUnitId(actor.unitIds);
-  const unit = seed.units.find((u) => u.id === activeUnitId);
+  const unit = seed.units.find((record) => record.id === activeUnitId && record.tenantId === actor.tenantId && actor.unitIds.includes(record.id));
 
-  const recent = [
-    { date: 'Jul 22', amount: 5000, units: '38.4 kWh', token: '4471 8823 1094 5567' },
-    { date: 'Jul 14', amount: 10000, units: '77.1 kWh', token: '9021 4410 7788 2231' },
-    { date: 'Jul 03', amount: 5000, units: '38.9 kWh', token: '1120 9345 6612 4480' },
-  ];
-
-  return (
-    <div className="max-w-[560px] mx-auto flex flex-col gap-4">
-      <Card>
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-[12px] text-text-3">Prepaid meter · {unit?.label ?? 'your unit'}</div>
-            <div className="font-mono text-[15px] font-bold mt-0.5 text-text">04521 8890 233</div>
-          </div>
-          <span className="w-11 h-11 rounded-2xl grid place-items-center bg-[color:var(--tone-warn)]/15 text-[color:var(--tone-warn)]">
-            <Zap size={22} />
-          </span>
-        </div>
-        <div className="grid grid-cols-2 gap-3 mt-4">
-          <div className="rounded-xl bg-surface-2 px-3 py-2">
-            <div className="text-[11px] text-text-3">Estimated balance</div>
-            <div className="text-[16px] font-semibold text-text">21.6 kWh</div>
-          </div>
-          <div className="rounded-xl bg-surface-2 px-3 py-2">
-            <div className="text-[11px] text-text-3">Tariff</div>
-            <div className="text-[16px] font-semibold text-text">₦130 / kWh</div>
-          </div>
-        </div>
-      </Card>
-
-      <Card>
-        <CardHeader title="Buy power" subtitle="Vend to this unit's meter — token issued instantly" />
-        <div className="grid grid-cols-4 gap-2 mt-3">
-          {[2000, 5000, 10000, 20000].map((a) => (
-            <button key={a} className="h-11 rounded-xl border border-border text-[13px] font-semibold hover:bg-surface-2 transition">
-              ₦{(a / 1000).toFixed(0)}k
-            </button>
-          ))}
-        </div>
-        <Button variant="primary" className="w-full mt-3">Buy power</Button>
-      </Card>
-
-      <Card padded={false}>
-        <div className="p-4 sm:p-[18px] pb-0"><CardHeader title="Recent purchases" /></div>
-        <Table>
-          <thead><tr><Th>Date</Th><Th>Amount</Th><Th className="max-[480px]:hidden">Units</Th><Th>Token</Th></tr></thead>
-          <tbody>
-            {recent.map((r, i) => (
-              <TableRow key={i}>
-                <Td className="text-[13px]">{r.date}</Td>
-                <Td className="text-[13px]">₦{r.amount.toLocaleString()}</Td>
-                <Td className="max-[480px]:hidden text-[13px] text-text-2">{r.units}</Td>
-                <Td><Mono className="text-[11.5px]">{r.token}</Mono></Td>
-              </TableRow>
-            ))}
-          </tbody>
-        </Table>
-      </Card>
-    </div>
-  );
+  return <div className="pb-page">
+    <PageHeader title="Electricity" subtitle="Prepaid power for your selected unit, with clear provider and payment status." />
+    <PageTabs label="Electricity sections" items={[
+      { id: 'power', label: 'Meter & top-up', content: <div className={layout.analytics}>
+        <Card><CardHeader title={unit ? 'Meter · ' + unit.label : 'No authorised unit selected'} subtitle="Only provider-confirmed information will appear here" action={<Zap size={22} className="text-primary" aria-hidden="true" />} /><StatusPill status="Provider not connected" tone="warn" /><dl className={layout.facts + ' mt-6'}><div><dt>Meter number</dt><dd>Not connected</dd></div><div><dt>Energy balance</dt><dd>Unavailable</dd></div><div><dt>Current tariff</dt><dd>Not verified</dd></div><div><dt>Token vending</dt><dd>Not activated</dd></div></dl><p className={layout.footnote}>No sample meter number or balance has been substituted. Contact your estate’s approved electricity supplier for a verified meter reading, tariff or urgent power issue.</p></Card>
+        <Card><CardHeader title="Top-up options" subtitle="Preview only · purchase and token vending are unavailable" /><div className="grid grid-cols-2 gap-4">{[2000, 5000, 10000, 20000].map((amount) => <Button key={amount} disabled title="Electricity vending is not connected">{portalMoney(amount * 100)}</Button>)}</div><Button variant="primary" disabled className="w-full mt-6" icon={<PlugZap size={18} />}>Buy power · unavailable</Button><p className={layout.footnote}>No bank account or wallet will be charged. Payment verification, provider vending and token delivery must be connected before purchases are enabled.</p></Card>
+      </div> },
+      { id: 'history', label: 'Purchase history', content: <Card><CardHeader title="Purchase history" subtitle="Verified electricity purchases and tokens only" /><EmptyState icon={<ReceiptText size={26} />} title="No connected purchase history" description="No provider-confirmed electricity purchases are available. Sample tokens are not valid payment or vending evidence." /></Card> },
+    ]} />
+  </div>;
 }

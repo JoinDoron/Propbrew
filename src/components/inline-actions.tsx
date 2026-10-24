@@ -44,13 +44,13 @@ export function InlineActions({
           key={e.event}
           disabled={pending}
           onClick={() => fire(e.event)}
-          className={`h-7 px-2.5 rounded-lg text-[12px] font-medium border transition-colors disabled:opacity-50 ${
+          className={`pb-action ${`h-7 px-2.5 rounded-lg text-[12px] font-medium border transition-colors disabled:opacity-50 ${
             e.variant === 'primary'
               ? 'bg-primary text-white border-transparent hover:brightness-105'
               : e.variant === 'danger'
                 ? 'bg-surface border-border text-negative hover:bg-surface-2'
                 : 'bg-surface border-border text-text-2 hover:bg-surface-2'
-          }`}
+          }`}`}
         >
           {e.label}
         </button>

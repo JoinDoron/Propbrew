@@ -48,7 +48,7 @@ export async function topUpWallet(unitId: string, amountNaira: number): Promise<
   // Auto-deduct: new funds clear pending charges first (PRD open question #1).
   settleUnitFromWallet(unitId);
 
-  ['/portal', '/portal/bills', '/billing', '/dashboard'].forEach((p) => revalidatePath(p));
+  ['/portal', '/portal/bills', '/billing', '/estate', '/dashboard'].forEach((p) => revalidatePath(p));
   return { ok: true };
 }
 
@@ -104,6 +104,6 @@ export async function payChargeFromWallet(ref: string): Promise<TopUpResult> {
     actorRole: 'system_webhook',
   });
 
-  ['/portal/bills', '/portal', '/billing', '/dashboard'].forEach((p) => revalidatePath(p));
+  ['/portal/bills', '/portal', '/billing', '/estate', '/dashboard'].forEach((p) => revalidatePath(p));
   return { ok: true };
 }

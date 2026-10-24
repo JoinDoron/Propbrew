@@ -88,7 +88,7 @@ export function SlaBadge({ dueAt, breached }: { dueAt: string | null; breached: 
 
 export function ReadOnlyChip() {
   return (
-    <span className="inline-flex items-center gap-1.5 h-[22px] px-2.5 rounded-md text-[11px] font-semibold bg-surface-3 text-text-2">
+    <span className="inline-flex items-center gap-1.5 min-h-6 px-2.5 rounded-md text-[12px] font-medium bg-surface-3 text-text-2">
       <span className="w-1.5 h-1.5 rounded-full bg-text-3" />
       Read-only
     </span>
@@ -140,38 +140,38 @@ export function AiSuggestionCard({
   const pct = Math.round(confidence * 100);
   const tone: Tone = confidence >= 0.85 ? 'success' : confidence >= 0.6 ? 'warn' : 'danger';
   return (
-    <div className="rounded-[14px] border border-border bg-surface-2 p-3.5">
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <div className="flex items-center gap-2">
-          <span className="w-6 h-6 rounded-lg bg-primary-weak text-primary flex items-center justify-center text-[11px] font-bold">
+    <div className="rounded-[var(--radius-card)] border border-border bg-surface p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="w-7 h-7 rounded-lg bg-primary-weak text-primary flex items-center justify-center text-[12px] font-medium">
             AI
           </span>
-          <span className="text-[13px] font-semibold">{title}</span>
+          <span className="min-w-0 text-[16px] font-medium break-words">{title}</span>
         </div>
-        <span className="font-mono text-[10px] text-text-3">{featureId}</span>
+        <span className="font-mono text-[12px] text-text-3">{featureId}</span>
       </div>
 
-      {state === 'loading' && <div className="text-[13px] text-text-3 py-2">Generating suggestion…</div>}
+      {state === 'loading' && <div className="text-[14px] text-text-3 py-2">Generating suggestion…</div>}
       {state === 'error' && (
-        <div className="text-[13px] text-negative py-2">
+        <div className="text-[14px] text-negative py-2">
           AI is unavailable — falling back to the manual flow (§11.4).
         </div>
       )}
       {state === 'ready' && (
         <>
-          <div className="text-[13px] text-text-2">{children}</div>
-          <div className="flex items-center gap-2 mt-2.5">
+          <div className="text-[14px] leading-relaxed text-text-2">{children}</div>
+          <div className="flex flex-wrap items-center gap-2 mt-4">
             <StatusPill status={`${pct}% confidence`} tone={tone} />
             {sources.length > 0 && (
-              <span className="text-[11px] text-text-3">
+              <span className="min-w-0 text-[12px] text-text-3 [overflow-wrap:anywhere]">
                 Sources: {sources.join(', ')}
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2 mt-3">
+          <div className="flex flex-wrap items-center gap-3 mt-4">
             {onApprove}
             {onOverride}
-            <span className="text-[11px] text-text-3 ml-auto">Review · approve · override</span>
+            <span className="text-[12px] text-text-3 ml-auto">Review · approve · override</span>
           </div>
         </>
       )}

@@ -1,11 +1,16 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Sparkles, FileText, TriangleAlert, Check, Link2, ShieldCheck } from 'lucide-react';
-import { toneVar, type Tone } from '@/lib/status-tones';
+import { Check, FileText, Link2, ShieldCheck, Sparkles, TriangleAlert } from 'lucide-react';
+import { Button, CardHeader, EmptyState, StatusPill } from '@/components/ui';
+import { PageTabs } from '@/components/ui/page-tabs';
+import { PageHeader } from '@/components/ui/page-header';
+import { useConstructionReview, ConstructionFrame, ConstructionSummary, ConstructionPanel, ConstructionToast, ConstructionKpi } from './construction-ui';
 import { publishDigest } from '@/server/actions/construction';
+import { type Tone } from '@/lib/status-tones';
+import styles from './construction-insights-polish.module.css';
 
 export type DigestView = {
   projectId: string; projectName: string; code: string; weekOfISO: string;
@@ -13,91 +18,36 @@ export type DigestView = {
   coverageGaps: string[];
   deltas: { label: string; value: string; tone: Tone }[];
 };
+const date = (value: string) => {
+  const parsed = new Date(value.slice(0, 10) + 'T00:00:00Z');
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+};
 
 export function DigestWorkspace({ views, canMutate }: { views: DigestView[]; canMutate: boolean }) {
   const router = useRouter();
-  const [idx, setIdx] = useState(0);
-  const [pending, start] = useTransition();
-  const [confirmed, setConfirmed] = useState(false);
+  const [index, setIndex] = useState(0);
+  const [gapReview, setGapReview] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const v = views[idx];
-  const flash = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3000); };
-  if (!v) return <div className="text-[13px] text-text-3">No projects to report on.</div>;
+  const view = views[index] ?? views[0];
+  const reviewKey = view ? JSON.stringify([view.projectId, view.weekOfISO, view.coverageGaps]) : '';
+  const confirmed = gapReview === reviewKey;
+  const flash = (message: string) => { setToast(message); setTimeout(() => setToast(null), 3000); };
+  const { act, confirmation, pending } = useConstructionReview(() => router.refresh(), flash);
+  if (!view) return <ConstructionFrame><PageHeader title="Weekly digest" subtitle="Source-linked project summaries, reviewed before publication." /><PageTabs label="Weekly digest sections" items={[{ id: 'draft', label: 'Draft digest', content: <ConstructionPanel><EmptyState icon={<FileText size={26} />} title="No projects to report on." description="A digest can be prepared when a project and its source records are available in your current scope." /></ConstructionPanel> }]} /></ConstructionFrame>;
+  const publish = () => act(() => publishDigest(view.projectId), 'Review digest for ' + view.projectName, 'This demonstration checks the review action only. Publication storage, recipients and external delivery are not connected; nothing will be sent.');
 
-  const publish = () => start(async () => { const r = await publishDigest(v.projectId); if (r.ok) { router.refresh(); flash(`Digest published for ${r.ref}`); } else flash(r.error); });
-
-  return (
-    <div className="flex flex-col gap-3.5">
-      <div className="flex items-center gap-2 flex-wrap">
-        {views.map((x, i) => (
-          <button key={x.projectId} onClick={() => { setIdx(i); setConfirmed(false); }} className="text-[12px] px-3 h-9 rounded-xl border font-medium" style={i === idx ? { borderColor: 'transparent', background: `color-mix(in srgb, ${toneVar('progress')} 15%, transparent)`, color: toneVar('progress') } : { borderColor: 'var(--border-2)', background: 'var(--surface)' }}>{x.projectName}</button>
-        ))}
-      </div>
-
-      {/* Hero */}
-      <div className="relative overflow-hidden rounded-2xl p-5 text-white shadow-card" style={{ background: 'linear-gradient(135deg,#0d0a1f 0%,#1d1440 55%,#2c1e5c 100%)' }}>
-        <div className="relative flex items-center gap-2 flex-wrap">
-          <span className="w-12 h-12 rounded-2xl grid place-items-center flex-none" style={{ background: 'rgba(255,255,255,.1)' }}><Sparkles size={22} /></span>
-          <div className="min-w-0">
-            <div className="text-[11px] text-white/70">WEEKLY DIGEST · {v.code} · week of {v.weekOfISO}</div>
-            <div className="text-[20px] font-bold tracking-[-0.02em] leading-tight mt-0.5">{v.projectName}</div>
-            <div className="text-[12.5px] text-white/75 mt-0.5">Compiled from approved records only · every claim links to its source</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Week deltas */}
-      <div className="grid grid-cols-2 min-[720px]:grid-cols-4 gap-2.5">
-        {v.deltas.map((d) => (
-          <div key={d.label} className="bg-surface border border-border rounded-2xl shadow-card p-3.5">
-            <div className="text-[11px] text-text-3 font-medium">{d.label}</div>
-            <div className="text-[17px] font-bold tracking-[-0.02em] leading-none mt-1.5" style={{ color: toneVar(d.tone) }}>{d.value}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Missing-field guard */}
-      {v.coverageGaps.length > 0 && (
-        <div className="rounded-xl border px-4 py-3" style={{ borderColor: 'color-mix(in srgb, var(--tone-warn) 35%, transparent)', background: 'color-mix(in srgb, var(--tone-warn) 6%, transparent)' }}>
-          <div className="text-[12.5px] font-semibold mb-1 flex items-center gap-1.5" style={{ color: toneVar('warn') }}><TriangleAlert size={14} /> Confirm before publishing</div>
-          <p className="text-[11.5px] text-text-2">There is no approved site report for <span className="font-medium">{v.coverageGaps.join(', ')}</span>. The digest reports this as a gap rather than filling it in.</p>
-          {canMutate && !confirmed && <button onClick={() => setConfirmed(true)} className="mt-2 text-[11.5px] px-2.5 h-8 rounded-lg border border-border-2 bg-surface inline-flex items-center gap-1 font-medium"><Check size={12} /> I&apos;ve reviewed the gaps</button>}
-          {confirmed && <div className="mt-2 text-[11.5px] inline-flex items-center gap-1" style={{ color: toneVar('success') }}><Check size={12} /> Gaps acknowledged</div>}
-        </div>
-      )}
-
-      {/* Sections */}
-      <div className="flex flex-col gap-2.5">
-        {v.sections.map((s) => (
-          <section key={s.title} className="bg-surface border border-border rounded-2xl shadow-card p-4">
-            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-              <FileText size={14} className="text-text-3" />
-              <span className="text-[13px] font-semibold">{s.title}</span>
-              <span className="ml-auto text-[10px] font-semibold px-2 h-5 inline-flex items-center rounded-full" style={{ background: `color-mix(in srgb, ${toneVar(s.confidence >= 0.85 ? 'success' : s.confidence >= 0.6 ? 'warn' : 'muted')} 14%, transparent)`, color: toneVar(s.confidence >= 0.85 ? 'success' : s.confidence >= 0.6 ? 'warn' : 'muted') }}>{Math.round(s.confidence * 100)}% confidence</span>
-            </div>
-            <p className="text-[13px] text-text-2 leading-relaxed">{s.text}</p>
-            {s.sources.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mt-2.5">
-                {s.sources.map((src, i) => (
-                  <Link key={i} href={src.href} className="text-[10.5px] px-2 h-6 inline-flex items-center gap-1 rounded-full border border-border-2 text-text-3 hover:text-primary"><Link2 size={10} /> {src.label}</Link>
-                ))}
-              </div>
-            )}
-          </section>
-        ))}
-      </div>
-
-      {/* Publish */}
-      <div className="bg-surface border border-border rounded-2xl shadow-card p-4 flex items-center gap-3 flex-wrap">
-        <ShieldCheck size={16} style={{ color: toneVar('success') }} />
-        <div className="min-w-0 flex-1">
-          <div className="text-[12.5px] font-semibold">Human sign-off required</div>
-          <div className="text-[11px] text-text-3">Nothing is sent until you publish. The digest never auto-transacts and never writes prose it cannot source.</div>
-        </div>
-        {canMutate && <button disabled={pending || (v.coverageGaps.length > 0 && !confirmed)} onClick={publish} className="text-[12px] px-4 h-9 rounded-xl bg-primary text-white font-medium disabled:opacity-40 flex-none">{pending ? 'Publishing…' : 'Publish digest'}</button>}
-      </div>
-
-      {toast && <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[90] bg-text text-surface text-[13px] font-medium px-4 py-2.5 rounded-xl shadow-float animate-fade">{toast}</div>}
-    </div>
-  );
+  return <ConstructionFrame>
+    <PageHeader title="Weekly digest" subtitle="Source-linked project summaries, reviewed before publication." />
+    <div className={styles.actions + ' justify-start'} role="group" aria-label="Select digest project">{views.map((project, projectIndex) => <Button type="button" aria-pressed={project.projectId === view.projectId} key={project.projectId} onClick={() => { setIndex(projectIndex); setGapReview(null); }}>{project.projectName}</Button>)}</div>
+    <ConstructionSummary><CardHeader title={view.projectName} subtitle={view.code + ' · week of ' + date(view.weekOfISO)} action={<Sparkles size={20} className="text-primary" />} /><p className={styles.text}>Compiled from recorded project sources, with approved site-report narratives where available. Each section exposes its linked sources and a deterministic rule-match score, not calibrated certainty.</p></ConstructionSummary>
+    {view.coverageGaps.length ? <ConstructionPanel><div className={styles.header}><CardHeader title="Confirm the reporting gaps" subtitle="No approved site report was supplied for these operating dates" action={<StatusPill status={view.coverageGaps.length + ' gap(s)'} tone="warn" />} /></div><div className={styles.body}><div className={styles.stack}><p className={styles.text}>The digest reports missing approved reports as a gap rather than filling in work that has not been evidenced.</p><ul className={styles.list}>{view.coverageGaps.map((gap, gapIndex) => <li key={gap + '-' + gapIndex} className={styles.text}>{date(gap)}</li>)}</ul>{canMutate && !confirmed ? <div className={styles.actions}><Button type="button" icon={<Check size={16} />} onClick={() => setGapReview(reviewKey)}>I&apos;ve reviewed the gaps</Button></div> : null}{confirmed ? <StatusPill status="Gaps acknowledged for this preview" tone="info" /> : null}</div></div><p className={styles.footer}>Acknowledgement applies to this project, week and gap list in the current session. It does not approve missing site evidence or save a publication.</p></ConstructionPanel> : null}
+    <PageTabs label="Weekly digest sections" items={[
+      { id: 'overview', label: 'Overview', content: <div className={styles.stack}>{view.deltas.length ? <div className={styles.metrics}>{view.deltas.map((delta, deltaIndex) => <ConstructionKpi key={delta.label + '-' + deltaIndex} label={delta.label} value={delta.value} tone={delta.tone} />)}</div> : <ConstructionPanel><EmptyState title="No overview figures supplied" description="The current project digest has no recorded summary metrics." /></ConstructionPanel>}<ConstructionPanel><div className={styles.header}><CardHeader title="Source coverage" subtitle="Review missing fields and the linked evidence before interpreting the narrative" action={<ShieldCheck size={18} className="text-primary" />} /></div><div className={styles.body}><dl className={styles.facts}><div><dt>Digest week</dt><dd>{date(view.weekOfISO)}</dd></div><div><dt>Narrative sections</dt><dd>{view.sections.length}</dd></div><div><dt>Missing approved-report dates</dt><dd>{view.coverageGaps.length}</dd></div><div><dt>Publication and delivery</dt><dd>Not connected</dd></div></dl></div></ConstructionPanel></div> },
+      { id: 'draft', label: 'Draft digest', content: <div className={styles.stack}>{view.sections.length ? view.sections.map((section, sectionIndex) => <ConstructionPanel key={section.title + '-' + sectionIndex}><div className={styles.header}><CardHeader title={section.title} subtitle="Narrative generated from recorded project evidence and fixed rules" action={<StatusPill status={'Rule-match ' + Math.round(section.confidence * 100) + '%'} tone="info" />} /></div><div className={styles.body}><div className={styles.stack}><p className={styles.text + ' whitespace-pre-wrap'}>{section.text || 'No narrative text was supplied for this section.'}</p><p className={styles.metadata}>Rule-match score {Math.round(section.confidence * 100)}% · not calibrated certainty or independent verification.</p></div></div><div className={styles.footer}><h3 className={styles.rowTitle}>Source records</h3>{section.sources.length ? <div className={styles.actions + ' justify-start mt-3'}>{section.sources.map((source, sourceIndex) => <Link key={source.href + '-' + sourceIndex} href={source.href} className={styles.link}><Link2 size={16} aria-hidden="true" />{source.label}</Link>)}</div> : <p className={styles.text + ' mt-3'}>No source link was supplied for this section. Verify the underlying record before relying on this narrative.</p>}</div></ConstructionPanel>) : <ConstructionPanel><EmptyState icon={<FileText size={26} />} title="No draft sections supplied" description="No project narrative was supplied for the current digest week. Missing content is not filled in automatically." /></ConstructionPanel>}
+        <ConstructionPanel><div className={styles.header}><CardHeader title="Human sign-off required" subtitle="Review preview only · no publication storage or recipient delivery" action={<TriangleAlert size={18} className="text-warning" />} /></div><div className={styles.body}><div className={styles.stack}><p className={styles.text}>Review the cited records and coverage gaps. This demo does not save a publication or send messages; the review action is a preview only.</p>{canMutate ? <div className={styles.actions}><Button variant="primary" type="button" disabled={pending || (view.coverageGaps.length > 0 && !confirmed)} onClick={publish}>{pending ? 'Checking…' : 'Review publication preview'}</Button></div> : <p className={styles.metadata}>Read-only digest. An authorised operator is required to review the publication preview.</p>}</div></div><p className={styles.footer}>No claim is independently verified by the rule-match score. Check the source project and approval authority before finalising a real client communication.</p></ConstructionPanel>
+      </div> },
+    ]} />
+    {confirmation}
+    {toast ? <ConstructionToast>{toast}</ConstructionToast> : null}
+  </ConstructionFrame>;
 }

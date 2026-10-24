@@ -1,0 +1,18 @@
+.recordGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.record { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.identity { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 16px; }
+.identity > div { flex: 1; min-width: 180px; }
+.link { display: inline-flex; min-height: 40px; align-items: center; gap: 8px; color: var(--primary); font-size: 14px; line-height: 1.6; }
+.link:hover { text-decoration: underline; }
+.date { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.progress { height: 8px; border-radius: 4px; overflow: hidden; background: var(--surface-3); }
+.progress > span { display: block; height: 100%; background: var(--primary); }
+.level { display: flex; min-width: 0; flex-wrap: wrap; gap: 8px; }
+.form { display: flex; flex-direction: column; gap: 20px; }
+.health { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; }
+.feature { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 16px; padding: 24px 0; border-bottom: 1px solid var(--border); }
+.feature:last-child { border-bottom: 0; }
+.feature > div:first-child { flex: 1; min-width: 180px; }
+@media (max-width: 900px) { .recordGrid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 640px) { .recordGrid { gap: 16px; } .feature { padding: 16px 0; } }
+@media (pointer: coarse) { .link { min-height: 44px; } }

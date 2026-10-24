@@ -1,5 +1,5 @@
 import { requireCapability } from '@/server/guard';
-import { effectiveLevel } from '@/lib/authz';
+import { can } from '@/lib/authz';
 import { constructionWorld } from '@/server/reads/construction';
 import { NOW_MS } from '@/domain/ppm';
 import {
@@ -11,8 +11,9 @@ import { ScheduleWorkspace, type GanttTask, type MilestoneRow } from '@/componen
  *  earliest/latest times, total float, the zero-float critical chain, and a
  *  hover cascade showing exactly what slips when a task slips. */
 export default async function ConstructionSchedulePage() {
-  const { actor } = await requireCapability('reports_analytics');
-  const canMutate = ['F', 'M'].includes(effectiveLevel(actor, 'reports_analytics'));
+  const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
+  const canMutate = can(actor, 'reports_analytics', 'update').allowed;
+  const canCreate = can(actor, 'reports_analytics', 'create').allowed;
   const world = constructionWorld(actor);
 
   // The flagship build: the project with the most scheduled work.
@@ -46,7 +47,7 @@ export default async function ConstructionSchedulePage() {
   const ff = project && evm ? forecastFinishISO(project, evm.spi) : { iso: '—', slipDays: 0 };
 
   return (
-    <div className="max-w-[1080px] mx-auto">
+    <div className="pb-page">
       <ScheduleWorkspace
         projectName={project?.name ?? 'Project'}
         tasks={rows}
@@ -60,6 +61,7 @@ export default async function ConstructionSchedulePage() {
           plannedFinishISO: project?.plannedFinishISO ?? '—',
         }}
         canMutate={canMutate}
+        canCreate={canCreate}
       />
     </div>
   );

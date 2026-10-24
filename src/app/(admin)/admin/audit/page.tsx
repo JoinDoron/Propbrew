@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { getAllHistory } from '@/server/data/store';
 import { ROLE_LABELS, type Role } from '@/lib/authz';
@@ -18,7 +19,8 @@ export default async function AuditPage() {
   }));
 
   return (
-    <div className="max-w-[1100px] mx-auto">
+    <div className="pb-page">
+      <PageHeader title="Audit log" subtitle="Search attributable activity and export the visible records." />
       <AuditWorkspace entries={entries} />
     </div>
   );

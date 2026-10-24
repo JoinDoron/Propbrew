@@ -1,5 +1,5 @@
 import { requireCapability } from '@/server/guard';
-import { effectiveLevel } from '@/lib/authz';
+import { can } from '@/lib/authz';
 import { constructionWorld } from '@/server/reads/construction';
 import { costTimesheets, labourPosture, labourByCostCode } from '@/domain/construction';
 import { TimesheetsWorkspace, type SheetRow, type CodeRow } from '@/components/construction/timesheets-workspace';
@@ -9,8 +9,8 @@ import { TimesheetsWorkspace, type SheetRow, type CodeRow } from '@/components/c
  *  asks for: until a sheet is approved its cost is invisible to earned value,
  *  so the page shows exactly how much real spend CPI cannot yet see. */
 export default async function ConstructionTimesheetsPage() {
-  const { actor } = await requireCapability('reports_analytics');
-  const canMutate = ['F', 'M'].includes(effectiveLevel(actor, 'reports_analytics'));
+  const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
+  const canMutate = can(actor, 'reports_analytics', 'update').allowed;
   const world = constructionWorld(actor);
 
   const views = costTimesheets(world.timesheets, world.workers);
@@ -36,7 +36,7 @@ export default async function ConstructionTimesheetsPage() {
   });
 
   return (
-    <div className="max-w-[980px] mx-auto">
+    <div className="pb-page">
       <TimesheetsWorkspace sheets={sheets} byCode={byCode} posture={posture} projectName={project?.name ?? 'Project'} canMutate={canMutate} />
     </div>
   );

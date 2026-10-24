@@ -24,7 +24,7 @@
 .pb-site :where(section[id]) { scroll-margin-top: 100px; }
 .pb-container, .pb-header-inner, .pb-footer-inner { max-width: 1384px; padding-inline: 32px; margin-inline: auto; }
 .pb-content-container { max-width: 1184px; padding-inline: 32px; margin-inline: auto; }
-.pb-section { padding-block: 112px; }
+.pb-site .pb-section { padding-block: 112px; }
 .pb-site h2 { font-size: clamp(32px, 3.4vw, 48px); font-weight: 600; line-height: 1.13; letter-spacing: -.055em; }
 .pb-site h2 span { color: var(--pb-muted); }
 .pb-eyebrow { color: var(--pb-cobalt); font-size: 11px; font-weight: 700; letter-spacing: .13em; }
@@ -347,7 +347,7 @@
 }
 @media (max-width: 760px) {
   .pb-container, .pb-header-inner, .pb-content-container, .pb-footer-inner { padding-inline: 24px; }
-  .pb-section { padding-block: 70px; }
+  .pb-site .pb-section { padding-block: 70px; }
   .pb-header-inner { height: 72px; }
   .pb-logo-mark { width: 31px; height: 31px; }
   .pb-wordmark { font-size: 25px; }

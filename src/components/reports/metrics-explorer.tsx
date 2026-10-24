@@ -1,152 +1,81 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Download, BookmarkPlus, Bookmark, BarChart3 } from 'lucide-react';
-import { formatMoney } from '@/components/domain';
-import { toneVar } from '@/lib/status-tones';
-import { METRICS, weeklyThroughput, modelledTrend, breakdownCsv, type Dataset, type Metric, type Unit } from '@/domain/reports';
+import { Bookmark, BookmarkPlus, Download, X } from 'lucide-react';
+import { Button, Card, CardHeader, EmptyState, IconButton, KpiCard, StatusPill } from '@/components/ui';
+import { METRICS, weeklyThroughput, breakdownCsv, type Dataset, type Metric, type Unit } from '@/domain/reports';
+import type { CurrencyCode } from '@/domain/primitives';
+import { NOW } from '@/domain/ppm';
+import common from '@/components/ui/workspace-layout.module.css';
+import styles from './reports-workspace.module.css';
 
-const RANGES = [{ w: 6, label: '6 wk' }, { w: 10, label: '10 wk' }, { w: 12, label: '12 wk' }];
-
-function fmt(unit: Unit, v: number): string {
-  if (unit === 'money') return formatMoney({ minor: v, currency: 'NGN' } as Parameters<typeof formatMoney>[0]);
-  if (unit === 'percent') return `${v}%`;
-  return v.toLocaleString();
+const RANGES = [{ w: 6, label: '6 weeks' }, { w: 10, label: '10 weeks' }, { w: 12, label: '12 weeks' }];
+export function reportValue(unit: Unit, value: number, currency: CurrencyCode = 'NGN'): string {
+  if (unit === 'money') return new Intl.NumberFormat('en-NG', { style: 'currency', currency, minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(value / 100);
+  return unit === 'percent' ? `${value}%` : value.toLocaleString('en-NG');
 }
 
-type View = { name: string; metricId: string; dim: string };
+/** Keep counts across the entire scope, but never add one currency to another. */
+export function reportCurrencyDataset(dataset: Dataset, currency: CurrencyCode): Dataset {
+  return { workOrders: dataset.workOrders.map((w) => w.cost && w.cost.currency !== currency ? { ...w, cost: null } : w), invoices: dataset.invoices.filter((i) => i.amount.currency === currency && i.paid.currency === currency) };
+}
+type View = { name: string; metricId: string; dim: string; currency: CurrencyCode };
 
 export function MetricsExplorer({ dataset, seesInvoices }: { dataset: Dataset; seesInvoices: boolean }) {
   const available = useMemo(() => METRICS.filter((m) => !m.needsInvoices || seesInvoices), [seesInvoices]);
+  const currencies = useMemo(() => Array.from(new Set<CurrencyCode>([...dataset.workOrders.flatMap((w) => w.cost ? [w.cost.currency] : []), ...(seesInvoices ? dataset.invoices.map((i) => i.amount.currency) : [])])).sort(), [dataset, seesInvoices]);
+  const [currency, setCurrency] = useState<CurrencyCode>(() => currencies.includes('NGN') ? 'NGN' : currencies[0] ?? 'NGN');
+  const currencyDataset = useMemo(() => reportCurrencyDataset(dataset, currency), [dataset, currency]);
   const [metricId, setMetricId] = useState(available[0].id);
   const [dim, setDim] = useState(available[0].dims[0].id);
   const [weeks, setWeeks] = useState(10);
   const [views, setViews] = useState<View[]>([]);
-  const [toast, setToast] = useState<string | null>(null);
-
+  const [feedback, setFeedback] = useState<string | null>(null);
   const metric = available.find((m) => m.id === metricId) ?? available[0];
-  const bars = metric.breakdown(dataset, metric.dims.some((d) => d.id === dim) ? dim : metric.dims[0].id);
-  const maxBar = Math.max(...bars.map((b) => b.value), 1);
   const activeDim = metric.dims.some((d) => d.id === dim) ? dim : metric.dims[0].id;
+  const bars = metric.breakdown(currencyDataset, activeDim);
+  const maxBar = Math.max(...bars.map((b) => b.value), 1);
+  const breakdownUnit: Unit = metric.id === 'collection_rate' ? 'money' : metric.id === 'ppm_share' ? 'count' : metric.unit;
+  const points = metric.realTrend ? weeklyThroughput(currencyDataset.workOrders, weeks, metric.id === 'spend' ? (w) => w.cost?.minor ?? 0 : undefined) : [];
+  const chartUnit: Unit = metric.id === 'spend' ? 'money' : 'count';
 
-  function selectMetric(m: Metric) {
-    setMetricId(m.id);
-    if (!m.dims.some((d) => d.id === dim)) setDim(m.dims[0].id);
-  }
+  function selectMetric(m: Metric) { setMetricId(m.id); if (!m.dims.some((d) => d.id === dim)) setDim(m.dims[0].id); }
   function saveView() {
-    const name = `${metric.label} · ${activeDim}`;
-    if (!views.some((v) => v.name === name)) setViews((p) => [{ name, metricId, dim: activeDim }, ...p]);
-    flash('View saved');
+    const name = `${metric.label} · ${activeDim} · ${currency}`;
+    if (!views.some((v) => v.name === name)) setViews((p) => [{ name, metricId: metric.id, dim: activeDim, currency }, ...p]);
+    setFeedback('View saved for this session. It will not persist after leaving or reloading this page.');
   }
-  function flash(msg: string) { setToast(msg); setTimeout(() => setToast(null), 2600); }
   function exportCsv() {
-    const csv = breakdownCsv(metric, activeDim, bars);
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `${metric.id}-by-${activeDim}.csv`; a.click();
-    URL.revokeObjectURL(url);
-    flash('Exported CSV');
+    const label = metric.id === 'collection_rate' ? 'Collected payments' : metric.id === 'ppm_share' ? 'Work orders' : metric.label;
+    const csv = breakdownCsv({ ...metric, label: `${label} (${breakdownUnit === 'money' ? `${currency} minor units` : breakdownUnit})` }, activeDim, bars);
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const a = document.createElement('a'); a.href = url; a.download = `${metric.id}-by-${activeDim}-${currency}.csv`; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setFeedback('CSV prepared from this scoped breakdown. Monetary values are labelled in minor units; no currency conversion is applied.');
   }
-
-  return (
-    <div className="flex flex-col gap-3.5">
-      {/* KPI gallery */}
-      <div className="grid grid-cols-2 min-[900px]:grid-cols-3 gap-3">
-        {available.map((m) => {
-          const v = m.value(dataset);
-          const real = Boolean(m.realTrend);
-          const pts = real ? weeklyThroughput(dataset.workOrders, 10, m.id === 'spend' ? (w) => w.cost?.minor ?? 0 : undefined) : modelledTrend(m.id, v);
-          const selected = m.id === metricId;
-          return (
-            <button key={m.id} onClick={() => selectMetric(m)} className={`text-left rounded-2xl border p-3.5 transition-all ${selected ? 'border-primary bg-primary/[0.04] shadow-float' : 'border-border bg-surface shadow-card hover:border-primary/40'}`}>
-              <div className="flex items-start justify-between gap-2">
-                <span className="text-[12.5px] text-text-2 font-medium">{m.label}</span>
-                <Sparkline points={pts} color={selected ? 'var(--primary)' : 'var(--text-3)'} />
-              </div>
-              <div className="text-[22px] font-bold tracking-[-0.02em] mt-1.5">{fmt(m.unit, v)}</div>
-              <div className="flex flex-wrap gap-1 mt-2">
-                {m.requirementIds.map((r) => <span key={r} className="text-[9.5px] font-semibold text-text-3 bg-surface-2 border border-border-2 rounded px-1 py-0.5">{r}</span>)}
-              </div>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Explorer */}
-      <div className="bg-surface border border-border rounded-2xl shadow-card overflow-hidden">
-        <div className="px-4 py-3 border-b border-border flex items-center gap-2 flex-wrap">
-          <BarChart3 size={15} className="text-primary" />
-          <span className="text-[13px] font-semibold">{metric.label}</span>
-          <span className="text-[12px] text-text-3">by</span>
-          <div className="flex gap-1">
-            {metric.dims.map((d) => (
-              <button key={d.id} onClick={() => setDim(d.id)} className={`text-[11.5px] px-2 h-7 rounded-lg border ${activeDim === d.id ? 'border-primary text-primary bg-primary-weak font-medium' : 'border-border-2 text-text-3'}`}>{d.label}</button>
-            ))}
-          </div>
-          <div className="ml-auto flex items-center gap-1.5">
-            <div className="flex rounded-lg border border-border-2 overflow-hidden">
-              {RANGES.map((r) => <button key={r.w} onClick={() => setWeeks(r.w)} className={`text-[11px] px-2 h-7 ${weeks === r.w ? 'bg-primary text-white' : 'text-text-3'}`}>{r.label}</button>)}
-            </div>
-            <button onClick={saveView} className="inline-flex items-center gap-1 h-7 px-2.5 rounded-lg border border-border-2 text-[11.5px] text-text-2 hover:border-primary"><BookmarkPlus size={13} /> Save</button>
-            <button onClick={exportCsv} className="inline-flex items-center gap-1 h-7 px-2.5 rounded-lg bg-primary text-white text-[11.5px] font-medium"><Download size={13} /> Export</button>
-          </div>
+  return <div className={common.layout}>
+    <div className={common.context}><p className={common.metadata}>Recorded snapshot · {NOW.slice(0, 10)} · Native currency only, no FX conversion</p><label className={styles.currency}><span className={common.label}>Report currency</span><select className={common.select} value={currency} onChange={(e) => setCurrency(e.target.value as CurrencyCode)}>{(currencies.length ? currencies : ['NGN']).map((c) => <option key={c}>{c}</option>)}</select></label></div>
+    <div className={styles.metricGrid} aria-label="Choose a reporting metric">{available.map((m) => <button key={m.id} type="button" className={styles.metricChoice} aria-pressed={m.id === metric.id} onClick={() => selectMetric(m)}><KpiCard label={m.label} value={reportValue(m.unit, m.value(currencyDataset), currency)} /><span className={styles.requirements}>{m.requirementIds.join(' · ')}</span></button>)}</div>
+    <Card className={common.panel}>
+      <CardHeader title={metric.label} subtitle={metric.id === 'collection_rate' ? `Breakdown shows collected payment amounts in ${currency}, not percentages.` : metric.id === 'ppm_share' ? 'Breakdown shows work-order counts by origin, not percentage values.' : `Break down the records in your authorised scope${metric.unit === 'money' ? ` · ${currency}` : ''}.`} action={<div className={common.filters}><Button type="button" icon={<BookmarkPlus size={16} />} onClick={saveView}>Save view</Button><Button type="button" variant="primary" icon={<Download size={16} />} onClick={exportCsv}>Export CSV</Button></div>} />
+      <div className={common.stack}>
+        <div className={common.filters} aria-label="Breakdown dimension"><span className={common.label}>Group by</span>{metric.dims.map((d) => <Button type="button" key={d.id} aria-pressed={activeDim === d.id} onClick={() => setDim(d.id)}>{d.label}</Button>)}</div>
+        <div className={styles.explorer}>
+          <div className={common.stack}>{bars.length ? bars.map((b) => <div key={b.key} className={styles.barRow}><div className={styles.barLabels}><span>{b.label}</span><strong>{reportValue(breakdownUnit, b.value, currency)}</strong></div><div className={styles.barTrack} aria-hidden="true"><div className={styles.barFill} style={{ width: `${Math.max(0, b.value / maxBar * 100)}%` }} /></div></div>) : <EmptyState title="No data for this breakdown." description="Choose another metric or currency to inspect its recorded values." />}</div>
+          <section className={styles.trend} aria-label="Metric history"><h3 className={common.sectionTitle}>{metric.realTrend ? 'Weekly recorded activity' : 'Snapshot metric'}</h3>
+            {metric.realTrend ? <><div className={common.filters} aria-label="Trend date range">{RANGES.map((r) => <Button type="button" key={r.w} aria-pressed={weeks === r.w} onClick={() => setWeeks(r.w)}>{r.label}</Button>)}</div><Trend points={points} label={metric.id === 'spend' ? `Weekly recorded work-order cost in ${currency}` : 'Weekly work orders created'} /><p className={common.metadata}>{metric.id === 'spend' ? 'Cost grouped by work-order creation date, not payment date.' : 'Work orders created each week, not a historical count of open work orders.'} Ending {NOW.slice(0, 10)}.</p><details><summary className={styles.summary}>View weekly values</summary><ol className={styles.weeklyValues}>{points.map((p, i) => <li key={i}>Week {i + 1} of {weeks}<span>{reportValue(chartUnit, p, currency)}</span></li>)}</ol></details></> : <><p className={common.metric}>{reportValue(metric.unit, metric.value(currencyDataset), currency)}</p><StatusPill status="No historical series" tone="muted" /><p className={common.body}>This metric is calculated from the current record snapshot. No illustrative trend is presented as measured history.</p></>}
+          </section>
         </div>
-
-        <div className="p-4 grid grid-cols-1 min-[720px]:grid-cols-[1fr_260px] gap-4">
-          {/* Breakdown bars */}
-          <div className="flex flex-col gap-2.5">
-            {bars.length === 0 && <p className="text-[12.5px] text-text-3">No data for this breakdown.</p>}
-            {bars.map((b) => (
-              <div key={b.key} className="flex items-center gap-3">
-                <span className="w-28 text-[12px] text-text-2 flex-none truncate capitalize">{b.label}</span>
-                <div className="flex-1 h-6 rounded-md bg-surface-2 overflow-hidden">
-                  <div className="h-full rounded-md flex items-center justify-end px-2" style={{ width: `${Math.max((b.value / maxBar) * 100, 8)}%`, background: toneVar('info') }}>
-                    <span className="text-[11px] font-bold text-white">{fmt(metric.unit, b.value)}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Trend */}
-          <div className="rounded-xl border border-border bg-surface-2 p-3">
-            <div className="flex items-center justify-between mb-2"><span className="text-[11.5px] font-semibold text-text-2">Trend</span><span className="text-[10px] text-text-3">{metric.realTrend ? `throughput · ${weeks} wk` : 'indicative'}</span></div>
-            <Sparkline
-              points={metric.realTrend ? weeklyThroughput(dataset.workOrders, weeks, metric.id === 'spend' ? (w) => w.cost?.minor ?? 0 : undefined) : modelledTrend(metric.id, metric.value(dataset), weeks)}
-              color="var(--primary)" big
-            />
-            <div className="text-[10.5px] text-text-3 mt-2 flex flex-wrap gap-1">Serves {metric.requirementIds.join(' · ')}</div>
-          </div>
-        </div>
-
-        {views.length > 0 && (
-          <div className="px-4 py-2.5 border-t border-border flex items-center gap-2 flex-wrap">
-            <span className="text-[11px] text-text-3">Saved views:</span>
-            {views.map((v) => (
-              <button key={v.name} onClick={() => { setMetricId(v.metricId); setDim(v.dim); }} className="inline-flex items-center gap-1 text-[11px] px-2 h-6 rounded-full border border-border-2 text-text-2 hover:border-primary"><Bookmark size={11} /> {v.name}</button>
-            ))}
-          </div>
-        )}
+        {!!views.length && <div className={styles.saved}><span className={common.metadata}>Saved in this session</span><div className={common.filters}>{views.map((v) => <Button type="button" key={v.name} icon={<Bookmark size={16} />} onClick={() => { setMetricId(v.metricId); setDim(v.dim); setCurrency(v.currency); }}>{v.name}</Button>)}</div></div>}
       </div>
-
-      {toast && <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[90] bg-text text-surface text-[13px] font-medium px-4 py-2.5 rounded-xl shadow-float animate-fade">{toast}</div>}
-    </div>
-  );
+    </Card>
+    {feedback && <div className={common.feedback} role="status"><span>{feedback}</span><IconButton type="button" aria-label="Dismiss report feedback" onClick={() => setFeedback(null)}><X size={18} /></IconButton></div>}
+  </div>;
 }
 
-function Sparkline({ points, color, big = false }: { points: number[]; color: string; big?: boolean }) {
-  const w = big ? 232 : 60;
-  const h = big ? 56 : 22;
-  const max = Math.max(...points, 1);
-  const min = Math.min(...points, 0);
-  const span = max - min || 1;
-  const step = points.length > 1 ? w / (points.length - 1) : w;
-  const d = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${(i * step).toFixed(1)} ${(h - ((p - min) / span) * (h - 4) - 2).toFixed(1)}`).join(' ');
-  return (
-    <svg width={w} height={h} className="flex-none overflow-visible">
-      <path d={d} fill="none" stroke={color} strokeWidth={big ? 2 : 1.5} strokeLinecap="round" strokeLinejoin="round" />
-      {big && points.map((p, i) => <circle key={i} cx={i * step} cy={h - ((p - min) / span) * (h - 4) - 2} r={1.6} fill={color} />)}
-    </svg>
-  );
+function Trend({ points, label }: { points: number[]; label: string }) {
+  const width = 320, height = 100, max = Math.max(...points, 1);
+  const step = points.length > 1 ? width / (points.length - 1) : width;
+  const path = points.map((p, i) => `${i ? 'L' : 'M'} ${i * step} ${height - (p / max) * (height - 8) - 4}`).join(' ');
+  return <svg className={styles.chart} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={label}><title>{label}</title><path d={path} fill="none" stroke="var(--primary)" strokeWidth={2} strokeLinejoin="round" /><line x1="0" y1={height - 2} x2={width} y2={height - 2} stroke="var(--border)" /></svg>;
 }

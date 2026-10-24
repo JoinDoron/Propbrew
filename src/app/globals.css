@@ -1,78 +1,89 @@
 @import 'tailwindcss';
 
 /* ==========================================================================
-   Reeve design system
-   Tokens originate from a commercial dashboard template; every surface, border and
-   text colour in the app resolves through these variables, so the light and
-   dark themes stay in lockstep and re-branding is a one-line change.
+   Propbrew application design foundations — adapted from Clinexa.
+   Reference: Figma QFmUQaznBI0924N8XILHYA · palette 4:2527,
+   navigation 174:18818, overview card 174:18828, table header 174:18916.
+   Keep the public website's independently scoped .pb-site identity intact.
    ========================================================================== */
 
 :root {
   /* Surfaces */
-  --app: #f4f5f7;
+  --app: #f8fafc;
   --surface: #ffffff;
-  --surface-2: #f7f7f9;
-  --surface-3: #f0f0f3;
+  --surface-2: #f8fafc;
+  --surface-3: #f1f5f9;
 
   /* Lines */
-  --border: #ececef;
-  --border-2: #e2e2e7;
+  --border: #e2e8f0;
+  --border-2: #cbd5e1;
 
   /* Type */
-  --text: #16182a;
-  --text-2: #5f636b;
-  --text-3: #9aa1ad;
+  --text: #020817;
+  --text-2: #475569;
+  /* Adaptation: readable small text, rather than the reference's faint 400. */
+  --text-3: #64748b;
 
   /* Brand */
-  --primary: #2563eb;
-  --primary-weak: rgb(37 99 235 / 0.1);
-  --primary-weak-2: rgb(37 99 235 / 0.16);
+  --primary: #4242ee;
+  --primary-hover: #3737c6;
+  --primary-weak: #f0f0ff;
+  --primary-weak-2: #d9d9fc;
   --on-primary: #ffffff;
+  /* Saturated identity tiles keep white ink in both light and dark modes. */
+  --brand-solid: #4242ee;
+  --on-brand-solid: #ffffff;
 
   /* Elevation */
-  --shadow: 0 1px 2px rgb(16 18 32 / 0.04), 0 4px 16px rgb(16 18 32 / 0.05);
-  --shadow-lg: 0 8px 40px rgb(16 18 32 / 0.14);
+  --shadow: 0 1px 2px rgb(2 8 23 / 0.06);
+  --shadow-lg: 0 12px 36px rgb(2 8 23 / 0.12), 0 2px 6px rgb(2 8 23 / 0.04);
+  --space-unit: 4px;
+  --radius-card: 12px;
+  --radius-control: 10px;
+  --radius-overlay: 16px;
+  --control-height: 40px;
 
   /* Semantic tones (light). Domain status → tone in src/lib/status-tones.ts. */
-  --tone-neutral: #64748b; /* draft, placed, requested */
-  --tone-info: #3b82f6; /* issued, assigned, acknowledged */
-  --tone-progress: #8b5cf6; /* in progress, triaged, responding */
-  --tone-warn: #f59e0b; /* overdue, on hold, partially paid */
-  --tone-danger: #ef4444; /* in arrears, escalated, raised (SOS) */
-  --tone-success: #10b981; /* paid, resolved, verified, delivered */
-  --tone-muted: #6b7280; /* closed, cancelled, rejected, expired */
+  --tone-neutral: #475569; /* draft, placed, requested */
+  --tone-info: #4242ee; /* issued, assigned, acknowledged */
+  --tone-progress: #3737c6; /* in progress, triaged, responding */
+  --tone-warn: #854d0e; /* readable amber; yellow is reserved for backgrounds */
+  --tone-danger: #b91c1c; /* readable 200 shade: arrears, escalated, raised (SOS) */
+  --tone-success: #166534; /* readable 300 shade from Clinexa's success scale */
+  --tone-muted: #475569; /* closed, cancelled, rejected, expired */
 }
 
 [data-theme='dark'] {
-  --app: #0e0f18;
-  --surface: #171826;
-  --surface-2: #1d1f30;
-  --surface-3: #242741;
+  --app: #0b1120;
+  --surface: #111827;
+  --surface-2: #172033;
+  --surface-3: #202b40;
 
-  --border: #2a2c42;
-  --border-2: #333653;
+  --border: #29364a;
+  --border-2: #3b4a61;
 
-  --text: #eef0f6;
-  --text-2: #a3acb9;
-  --text-3: #6b7180;
+  --text: #f8fafc;
+  --text-2: #cbd5e1;
+  --text-3: #a6b4c8;
 
   /* Brand lifts slightly in dark so it keeps contrast against deep surfaces. */
-  --primary: #5b8def;
-  --primary-weak: rgb(91 141 239 / 0.14);
-  --primary-weak-2: rgb(91 141 239 / 0.22);
-  --on-primary: #ffffff;
+  --primary: #a0a0ff;
+  --primary-hover: #c0c0f9;
+  --primary-weak: #222344;
+  --primary-weak-2: #32345b;
+  --on-primary: #0b1120;
 
   --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 6px 20px rgb(0 0 0 / 0.35);
   --shadow-lg: 0 12px 48px rgb(0 0 0 / 0.5);
 
   /* Semantic tones (dark) — lifted for contrast against deep surfaces. */
   --tone-neutral: #94a3b8;
-  --tone-info: #60a5fa;
-  --tone-progress: #a78bfa;
+  --tone-info: #a0a0ff;
+  --tone-progress: #b8a8ff;
   --tone-warn: #fbbf24;
-  --tone-danger: #f87171;
-  --tone-success: #34d399;
-  --tone-muted: #9ca3af;
+  --tone-danger: #fca5a5;
+  --tone-success: #86efac;
+  --tone-muted: #a6b4c8;
 }
 
 /* Expose the tokens to Tailwind so `bg-surface`, `text-text-2`,
@@ -113,11 +124,10 @@
   --shadow-card: var(--shadow);
   --shadow-float: var(--shadow-lg);
 
-  --font-sans: 'Inter Tight', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --font-sans: var(--font-inter), 'Inter', system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), 'JetBrains Mono', ui-monospace, monospace;
 
-  /* The template's signature 16px card radius. */
-  --radius-card: 16px;
+  --radius-card: 12px;
   --radius-control: 10px;
 }
 
@@ -129,7 +139,7 @@
   body {
     background: var(--app);
     color: var(--text);
-    font-family: var(--font-sans);
+    font-family: var(--font-inter), 'Inter', system-ui, sans-serif;
     font-size: 14px;
     -webkit-font-smoothing: antialiased;
   }

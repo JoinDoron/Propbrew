@@ -1,0 +1,9 @@
+.env*
+!.env.example
+.git
+.next
+node_modules
+.propbrew-local
+test-results
+playwright-report
+coverage

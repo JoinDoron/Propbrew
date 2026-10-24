@@ -90,7 +90,12 @@ export async function fireWoTransition(
 
   revalidatePath('/work-orders');
   revalidatePath(`/work-orders/${ref}`);
+  revalidatePath('/estate/work-orders');
+  revalidatePath(`/estate/work-orders/${ref}`);
+  revalidatePath('/people');
   revalidatePath('/dashboard');
+  revalidatePath('/facility');
+  revalidatePath('/estate');
   revalidatePath('/portal');
   revalidatePath('/portal/requests');
   return { ok: true, to: transition.to };

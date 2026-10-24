@@ -12,14 +12,14 @@ export const brand = {
   /** Small caps label under the wordmark in the sidebar. */
   tagline: 'REAL ESTATE OPERATING SYSTEM',
   /** Primary brand colour. Drives --primary and every accent in the UI. */
-  primaryColor: '#2346F0',
+  primaryColor: '#4242EE',
   /** The organisation this deployment is built for. */
   client: '7 Fifteen Capital',
 } as const;
 
 /** Palette options offered to tenants for per-tenant branding. */
 export const PRIMARY_PRESETS = [
-  { label: 'Cobalt', value: '#2346F0' },
+  { label: 'Indigo', value: '#4242EE' },
   { label: 'Violet', value: '#8442ff' },
   { label: 'Green', value: '#0e9f6e' },
   { label: 'Red', value: '#e0533d' },

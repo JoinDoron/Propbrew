@@ -1,4 +1,6 @@
 import type { NextConfig } from 'next';
+import { contentSecurityPolicy } from './src/lib/security-headers';
+import { websiteOnlyEnabled } from './src/lib/website-release';
 
 /**
  * Security response headers.
@@ -12,21 +14,15 @@ import type { NextConfig } from 'next';
  * is restricted to self; 'unsafe-inline' is required for Next's bootstrap and
  * the pre-paint theme script, which runs before hydration to avoid a flash.
  */
-const csp = [
-  "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src 'self' https://fonts.gstatic.com data:",
-  "img-src 'self' data: blob:",
-  "connect-src 'self'",
-  "frame-ancestors 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "object-src 'none'",
-].join('; ');
+const clerkEnabled = Boolean(process.env.CLERK_SECRET_KEY && process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY)
+  && !websiteOnlyEnabled(process.env.PROPBREW_WEBSITE_ONLY, process.env.NODE_ENV);
+const csp = contentSecurityPolicy(clerkEnabled ? process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY : undefined);
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // Next's development action tracing includes arguments (property addresses).
+  // Keep normal request/error logs, but never print raw form payloads.
+  logging: { serverFunctions: false },
   headers() {
     return Promise.resolve([
       {

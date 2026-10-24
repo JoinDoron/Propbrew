@@ -14,7 +14,7 @@ import { db, recordProxyReturnNotice } from '@/server/data/store';
 import { NOW } from '@/domain/ppm';
 import { nextDunningStage, nextTenancyStage, motionOutcome, motionTally, isEventFull, tierFor, EARN_POINTS, electionWinner, cascadeRevokeUpstream, type VoteChoice, type EarnReason } from '@/domain/estate';
 
-const PATHS = ['/community', '/collections', '/tenancy', '/parcels', '/governance', '/events', '/rewards', '/billing', '/people', '/dashboard'];
+const PATHS = ['/community', '/collections', '/tenancy', '/parcels', '/governance', '/events', '/rewards', '/billing', '/people', '/estate', '/dashboard'];
 const revalidate = () => PATHS.forEach((p) => revalidatePath(p));
 
 export type Res = { ok: true; ref?: string } | { ok: false; error: string };

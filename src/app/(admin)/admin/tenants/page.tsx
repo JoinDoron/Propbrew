@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { seed } from '@/server/data';
 import { planFor, tenantHealth, tenantLabel } from '@/domain/platform-admin';
@@ -30,7 +31,8 @@ export default async function TenantsPage() {
     .sort((a, b) => b.mrrMinor - a.mrrMinor);
 
   return (
-    <div className="max-w-[1000px] mx-auto">
+    <div className="pb-page">
+      <PageHeader title="Organisations" subtitle="Review tenant health, plans and account controls." />
       <TenantsWorkspace tenants={tenants} />
     </div>
   );

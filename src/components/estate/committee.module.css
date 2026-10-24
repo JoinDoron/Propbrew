@@ -1,0 +1,30 @@
+.motionCard { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.recordHeader { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+.recordIntro { min-width: 0; flex: 1 1 240px; display: flex; flex-direction: column; gap: 8px; }
+.badges { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.meterGroup { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.meterLabels { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.meter { position: relative; height: 8px; border-radius: 999px; background: var(--surface-2); }
+.meter > span { display: block; height: 100%; border-radius: inherit; }
+.meter > i { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--text-2); }
+.ballotBar { display: flex; height: 10px; overflow: hidden; border-radius: 999px; background: var(--surface-2); }
+.legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 12px; font-size: 12px; color: var(--text-2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { height: 8px; width: 8px; border-radius: 999px; }
+.recordActions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding-top: 16px; border-top: 1px solid var(--border); }
+.pipeline { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; }
+.pipelineItem { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); }
+.tableName { min-width: 220px; white-space: normal; }
+.form { display: flex; flex-direction: column; gap: 24px; padding: 24px; }
+.dialogActions { padding: 16px 24px; border-top: 1px solid var(--border); }
+.form textarea { min-height: 112px; height: auto; padding-block: 12px; resize: vertical; }
+.formGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.formFields { display: contents; border: 0; padding: 0; margin: 0; }
+.error { font-size: 14px; color: var(--tone-danger); background: color-mix(in srgb, var(--tone-danger) 7%, var(--surface)); padding: 12px 16px; border-radius: 10px; }
+.candidate { display: flex; align-items: flex-start; gap: 16px; min-width: 0; padding-block: 16px; border-top: 1px solid var(--border); }
+.candidateBody { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 8px; }
+.candidateRank { display: grid; place-items: center; width: 32px; height: 32px; flex: none; border: 1px solid var(--border); border-radius: 10px; color: var(--text-3); font-size: 14px; }
+.proxyProjection { display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px; }
+.turnout { color: var(--primary); font-weight: 500; font-variant-numeric: tabular-nums; }
+@media (max-width: 900px) { .pipeline { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .motionCard { gap: 16px; } .form { gap: 16px; padding: 16px; } .formGrid { grid-template-columns: 1fr; } .pipeline { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; } .recordActions button { flex: 1 1 auto; } }

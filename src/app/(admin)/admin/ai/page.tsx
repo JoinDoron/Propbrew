@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { AI_REQUIREMENTS } from '@/domain';
 import { AiWorkspace, type AiFeature } from '@/components/admin/ai-workspace';
@@ -14,7 +15,8 @@ export default async function AiAdminPage() {
   }));
 
   return (
-    <div className="max-w-[1100px] mx-auto">
+    <div className="pb-page">
+      <PageHeader title="AI controls" subtitle="Feature modes, guardrails and usage across the platform." />
       <AiWorkspace features={features} />
     </div>
   );

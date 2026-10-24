@@ -69,5 +69,6 @@ export async function sendAnnouncement(input: SendInput): Promise<SendResult> {
   } as (typeof db.announcements)[number]);
 
   revalidatePath('/announcements');
+  revalidatePath('/estate');
   return { ok: true, reach, scheduled };
 }

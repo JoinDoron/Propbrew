@@ -1,9 +1,12 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import layout from '@/components/ui/workspace-layout.module.css';
 import Link from 'next/link';
-import { AlertTriangle, CalendarDays, Gauge, LayoutList, Radar, Sparkles, Wrench, Zap } from 'lucide-react';
-import { KpiCard } from '@/components/ui';
+import { AlertTriangle, CalendarDays, Radar, Sparkles, Wrench } from 'lucide-react';
+import { KpiCard, Button, Card, CardHeader, StatusPill } from '@/components/ui';
+import styles from './maintenance-clinexa.module.css';
+import { PageTabs } from '@/components/ui/page-tabs';
 import { addDays } from '@/domain/ppm';
 import type { PpmData } from './types';
 import { MaintenanceCalendar } from './calendar';
@@ -12,11 +15,9 @@ import { RiskPanel } from './risk-panel';
 import { PpmList } from './list-view';
 import { PlanDrawer } from './plan-drawer';
 
-type View = 'calendar' | 'runtime' | 'risk' | 'list';
 const OPEN = ['scheduled', 'overdue', 'wo_generated', 'in_progress'];
 
 export function MaintenanceWorkspace(data: PpmData) {
-  const [view, setView] = useState<View>('calendar');
   const [selected, setSelected] = useState<string | null>(null);
 
   const now = data.now;
@@ -24,91 +25,68 @@ export function MaintenanceWorkspace(data: PpmData) {
   const dueThisMonth = data.occurrences.filter((o) => OPEN.includes(o.status) && o.dueDate >= now && o.dueDate <= addDays(now, 31)).length;
   const autoGenerating = data.occurrences.filter((o) => o.status === 'scheduled' && !o.workOrderRef && o.generateDate <= addDays(now, 7)).length;
   const critical = data.assessments.filter((a) => a.band === 'critical');
-  const anyShadow = data.assessments.some((a) => a.shadow);
 
   const selOcc = useMemo(() => data.occurrences.find((o) => o.id === selected) ?? null, [data.occurrences, selected]);
   const selPlan = selOcc ? data.plans.find((p) => p.id === selOcc.planId) ?? null : null;
   const selRisk = selOcc ? data.assessments.find((a) => String(a.assetId) === String(selOcc.assetId)) ?? null : null;
 
   return (
-    <div className="flex flex-col gap-3.5">
+    <div className={layout.layout}>
+      <p className={layout.metadata}>Recorded schedule snapshot · {data.now}. AI-F-01 uses deterministic risk rules and signal completeness; it is advisory, not a calibrated failure forecast.</p>
       {/* KPIs */}
-      <div className="grid grid-cols-2 min-[900px]:grid-cols-4 gap-3">
+      <div className={layout.metrics}>
         <KpiCard label="Due this month" value={String(dueThisMonth)} icon={<CalendarDays size={18} />} />
-        <KpiCard label="Overdue" value={String(overdue.length)} delta={overdue.length ? 'act now' : 'all clear'} positive={overdue.length === 0} icon={<AlertTriangle size={18} />} iconBg="rgba(239,68,68,.12)" iconColor="#ef4444" />
-        <KpiCard label="Auto-generating this week" value={String(autoGenerating)} delta="lead-time queue" positive icon={<Wrench size={18} />} iconBg="rgba(245,159,11,.15)" iconColor="#f59e0b" />
-        <KpiCard label="Predicted at-risk" value={String(critical.length)} delta={anyShadow ? 'AI · some shadow' : 'AI-F-01'} positive={critical.length === 0} icon={<Sparkles size={18} />} iconBg="rgba(37,99,235,.12)" iconColor="#2563eb" />
+        <KpiCard label="Overdue" value={String(overdue.length)} icon={<AlertTriangle size={18} />} iconColor="var(--tone-danger)" />
+        <KpiCard label="Lead-time queue this week" value={String(autoGenerating)} icon={<Wrench size={18} />} iconColor="var(--tone-warn)" />
+        <KpiCard label="Critical risk signals" value={String(critical.length)} icon={<Sparkles size={18} />} />
       </div>
 
       {/* Coverage-gap radar */}
       {data.gaps.length > 0 && (
-        <div className="rounded-xl border border-[color:var(--tone-warn)]/40 bg-[color:var(--tone-warn)]/[0.07] px-4 py-2.5 flex items-center gap-2.5 flex-wrap">
-          <Radar size={16} className="text-warning flex-none" />
-          <span className="text-[12.5px] text-text-2">
-            <strong className="text-text">{data.gaps.length} operational asset{data.gaps.length > 1 ? 's have' : ' has'} no maintenance plan</strong> — a blind spot a due-date table can’t show:
-          </span>
-          {data.gaps.map((g) => (
-            <span key={g.id} className="inline-flex items-center gap-1.5 h-6 px-2 rounded-md bg-surface border border-border text-[11.5px]">
-              {g.name}
-              {data.canMutate && <button className="text-primary hover:underline">+ plan</button>}
-            </span>
-          ))}
-        </div>
+        <Card padded={false}>
+          <div className={styles.header}><CardHeader title="Maintenance coverage gaps" subtitle={`${data.gaps.length} operational asset${data.gaps.length > 1 ? 's have' : ' has'} no maintenance plan. Review these assets before relying on the due-date schedule.`} action={<Radar size={20} className="text-warning" />} /></div>
+          <div className={`${styles.body} ${styles.gapList}`}>
+            {data.gaps.map((g) => (
+              <div key={g.id} className={styles.gapItem}>
+                <div><p className={layout.title}>{g.name}</p><p className={styles.metadata}>{g.category} · {g.locationLabel}</p></div>
+                {data.canMutate && <Button disabled title="New plan creation is not connected">Add plan · unavailable</Button>}
+              </div>
+            ))}
+          </div>
+        </Card>
       )}
 
       {/* Overdue rail */}
       {overdue.length > 0 && (
-        <div className="rounded-2xl border border-[color:var(--tone-danger)]/40 bg-[color:var(--tone-danger)]/[0.06] p-3">
-          <div className="flex items-center gap-2 mb-2">
-            <AlertTriangle size={15} className="text-negative" />
-            <span className="text-[12.5px] font-semibold text-negative">Overdue — {overdue.length}</span>
-            <span className="text-[11.5px] text-text-3">oldest first · never scrolls away</span>
-          </div>
-          <div className="flex gap-2 overflow-x-auto pb-1">
+        <Card padded={false}>
+          <div className={styles.header}><CardHeader title={`Overdue maintenance · ${overdue.length}`} subtitle="Oldest due dates first. Open a plan to review the service and work-order details." action={<AlertTriangle size={20} className="text-negative" />} /></div>
+          <div className={styles.overdueRail} role="region" aria-label="Overdue maintenance plans, scroll horizontally" tabIndex={0}>
             {[...overdue].sort((a, b) => (a.dueDate < b.dueDate ? -1 : 1)).map((o) => (
-              <div key={o.id} className="flex-none w-[240px] bg-surface border border-border rounded-xl p-2.5">
-                <button onClick={() => setSelected(o.id)} className="block text-left w-full">
-                  <div className="text-[12.5px] font-semibold truncate">{o.assetName}</div>
-                  <div className="text-[11px] text-negative">{daysLate(o.dueDate, now)} days overdue · {o.frequency}</div>
-                </button>
+              <Card key={o.id} className={styles.overdueCard}>
+                <div><p className={layout.title}>{o.assetName}</p><p className={styles.metadata}>{o.frequency} · due {o.dueDate}</p></div>
+                <div><StatusPill status={`${daysLate(o.dueDate, now)} days overdue`} tone="danger" /></div>
                 {o.workOrderRef ? (
-                  <Link href={`/work-orders/${o.workOrderRef}`} className="text-[11.5px] text-primary hover:underline mt-1 inline-block">WO {o.workOrderRef} →</Link>
+                  <div className={styles.stack}><Button onClick={() => setSelected(o.id)} aria-label={`View maintenance plan for ${o.assetName}`}>View plan</Button><Link href={`/work-orders/${o.workOrderRef}`} className={styles.link}>WO {o.workOrderRef} →</Link></div>
                 ) : (
-                  <button onClick={() => setSelected(o.id)} className="text-[11.5px] text-primary hover:underline mt-1">{data.canMutate ? 'Generate WO now →' : 'View →'}</button>
+                  <Button onClick={() => setSelected(o.id)} aria-label={`${data.canMutate ? 'Review work order for' : 'View maintenance plan for'} ${o.assetName}`}>{data.canMutate ? 'Review work order →' : 'View plan →'}</Button>
                 )}
-              </div>
+              </Card>
             ))}
           </div>
-        </div>
+        </Card>
       )}
 
-      {/* View toggle */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="inline-flex rounded-lg border border-border-2 bg-surface p-0.5">
-          <Toggle active={view === 'calendar'} onClick={() => setView('calendar')} icon={<CalendarDays size={15} />} label="Calendar" />
-          <Toggle active={view === 'runtime'} onClick={() => setView('runtime')} icon={<Zap size={15} />} label="Runtime" />
-          <Toggle active={view === 'risk'} onClick={() => setView('risk')} icon={<Gauge size={15} />} label="Risk" />
-          <Toggle active={view === 'list'} onClick={() => setView('list')} icon={<LayoutList size={15} />} label="List" />
-        </div>
-      </div>
-
-      {view === 'calendar' && <MaintenanceCalendar data={data} onSelect={setSelected} />}
-      {view === 'runtime' && <RuntimeView data={data} onSelect={setSelected} />}
-      {view === 'risk' && <RiskPanel data={data} />}
-      {view === 'list' && <PpmList data={data} onSelect={setSelected} />}
+      <PageTabs label="Maintenance sections" items={[
+        { id: 'calendar', label: 'Calendar', content: <MaintenanceCalendar data={data} onSelect={setSelected} /> },
+        { id: 'runtime', label: 'Runtime', content: <RuntimeView data={data} onSelect={setSelected} /> },
+        { id: 'risk', label: 'AI risk', content: <RiskPanel data={data} /> },
+        { id: 'list', label: 'Plan register', content: <PpmList data={data} onSelect={setSelected} /> },
+      ]} />
 
       {selOcc && selPlan && (
         <PlanDrawer occ={selOcc} plan={selPlan} risk={selRisk} canMutate={data.canMutate} onClose={() => setSelected(null)} />
       )}
     </div>
-  );
-}
-
-function Toggle({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
-  return (
-    <button onClick={onClick} className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-[12px] font-medium transition-colors ${active ? 'bg-primary text-white' : 'text-text-2 hover:bg-surface-2'}`}>
-      {icon}{label}
-    </button>
   );
 }
 

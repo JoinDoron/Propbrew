@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
 import { NOW_MS } from '@/domain/ppm';
@@ -9,7 +10,7 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 /** FR-AN (Short-Let PMS) — analytics: revenue-vs-expense, profit by property,
  *  occupancy per apartment, booking-source performance, CSV export. */
 export default async function ShortletAnalyticsPage() {
-  const { actor } = await requireCapability('bookings_amenities');
+  const { actor } = await requireCapability('bookings_amenities', 'read', 'shortlet');
   const bookings = repos.shortletBookings.list(actor).items;
   const expenses = repos.shortletExpenses.list(actor).items;
   const apts = repos.shortletApartments.list(actor).items;
@@ -26,7 +27,8 @@ export default async function ShortletAnalyticsPage() {
   const sources = sourcePerformance(bookings).map((s) => ({ label: s.label, bookings: s.bookings, revenueMinor: s.revenueMinor, nights: s.nights }));
 
   return (
-    <div className="max-w-[1000px] mx-auto">
+    <div className="pb-page">
+      <PageHeader title="Shortlet analytics" subtitle="Revenue, expenses, occupancy and booking-source performance." />
       <ShortletAnalytics revExp={revExp} propProfit={propProfit} occupancy={occupancy} sources={sources} />
     </div>
   );

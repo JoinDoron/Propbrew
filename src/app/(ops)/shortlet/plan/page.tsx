@@ -1,3 +1,5 @@
+import { can } from '@/lib/authz';
+import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
 import { db } from '@/server/data/store';
@@ -10,7 +12,7 @@ const ORDER: PlanKey[] = ['lite', 'starter', 'growth', 'pro', 'enterprise'];
  *  apartment count + premium capabilities; current plan, usage vs cap, a smart
  *  recommendation, monthly/annual pricing, and self-serve upgrade/downgrade. */
 export default async function ShortletPlanPage() {
-  const { actor } = await requireCapability('bookings_amenities');
+  const { actor } = await requireCapability('bookings_amenities', 'read', 'shortlet');
   const apts = repos.shortletApartments.list(actor).items;
   const currentKey = db.shortletPlanKey as PlanKey;
 
@@ -21,8 +23,9 @@ export default async function ShortletPlanPage() {
   const plans: PlanCard[] = PLANS.map((p) => ({ key: p.key, name: p.name, priceMonthlyMinor: p.priceMonthlyMinor, apartmentCap: p.apartmentCap, badge: p.badge, entitlements: entitlements(p.key) }));
 
   return (
-    <div className="max-w-[1050px] mx-auto">
-      <PlanWorkspace plans={plans} currentKey={currentKey} apartmentCount={apts.length} recommendation={rec} order={ORDER} />
+    <div className="pb-page">
+      <PageHeader title="Subscription plan" subtitle="Review apartment limits, features and naira billing options." />
+      <PlanWorkspace canUpdate={can(actor, 'bookings_amenities', 'update').allowed} plans={plans} currentKey={currentKey} apartmentCount={apts.length} recommendation={rec} order={ORDER} />
     </div>
   );
 }

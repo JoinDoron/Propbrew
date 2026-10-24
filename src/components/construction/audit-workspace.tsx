@@ -1,127 +1,37 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ScrollText, Search, ShieldAlert, Banknote, BarChart3, Lock, Info } from 'lucide-react';
-import { toneVar, type Tone } from '@/lib/status-tones';
-import { AUDIT_ACTION_LABEL, AUDIT_TONE, REASON_DOMAIN_LABEL, fmtM, type AuditAction, type ReasonDomain } from '@/domain/construction';
+import { Banknote, BarChart3, Lock, ScrollText, ShieldAlert } from 'lucide-react';
+import { Button, CardHeader, EmptyState, StatusPill } from '@/components/ui';
+import { PageTabs } from '@/components/ui/page-tabs';
+import { PageHeader } from '@/components/ui/page-header';
+import { ConstructionPanel, ConstructionKpi as Kpi, constructionNaira as naira, ConstructionFrame, ConstructionSearch } from './construction-ui';
+import { toneVar } from '@/lib/status-tones';
+import { AUDIT_ACTION_LABEL, AUDIT_TONE, REASON_DOMAIN_LABEL, type AuditAction, type ReasonDomain } from '@/domain/construction';
+import styles from './construction-insights-polish.module.css';
 
-export type AuditRow = {
-  id: string; seq: number; atISO: string; actorName: string; actorRole: string;
-  action: AuditAction; entity: string; entityRef: string; summary: string;
-  amountMinor?: number; before?: string; after?: string; reasonLabel?: string; note?: string; sensitive: boolean;
-};
+export type AuditRow = { id: string; seq: number; atISO: string; actorName: string; actorRole: string; action: AuditAction; entity: string; entityRef: string; summary: string; amountMinor?: number; before?: string; after?: string; reasonLabel?: string; note?: string; sensitive: boolean };
 export type ParetoRow = { code: string; label: string; category: string; count: number; sharePct: number; cumulativePct: number; impactMinor: number; impactDays: number; vital: boolean };
+const date = (value: string) => {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString('en-NG', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Lagos' }) + ' WAT';
+};
 
-const naira = (m: number) => `₦${fmtM(m)}`;
-
-export function AuditWorkspace({ entries, pareto, domains, summary }: {
-  entries: AuditRow[];
-  pareto: Record<string, ParetoRow[]>;
-  domains: ReasonDomain[];
-  summary: { total: number; sensitive: number; overrides: number; valueMovedMinor: number; actors: number };
-}) {
+export function AuditWorkspace({ entries, pareto, domains, summary }: { entries: AuditRow[]; pareto: Record<string, ParetoRow[]>; domains: ReasonDomain[]; summary: { total: number; sensitive: number; overrides: number; valueMovedMinor: number; actors: number } }) {
   const [q, setQ] = useState('');
   const [action, setAction] = useState<'all' | AuditAction>('all');
   const [onlySensitive, setOnlySensitive] = useState(false);
   const [domain, setDomain] = useState<ReasonDomain>(domains[0] ?? 'delay');
-
-  const shown = useMemo(() => entries.filter((e) =>
-    (action === 'all' || e.action === action) &&
-    (!onlySensitive || e.sensitive) &&
-    (!q.trim() || `${e.summary} ${e.entityRef} ${e.actorName} ${e.entity}`.toLowerCase().includes(q.toLowerCase()))
-  ), [entries, action, onlySensitive, q]);
-
+  const shown = useMemo(() => entries.filter((entry) => (action === 'all' || entry.action === action) && (!onlySensitive || entry.sensitive) && (!q.trim() || (entry.summary + ' ' + entry.entityRef + ' ' + entry.actorName + ' ' + entry.entity + ' ' + (entry.reasonLabel ?? '') + ' ' + (entry.note ?? '') + ' ' + (entry.before ?? '') + ' ' + (entry.after ?? '')).toLowerCase().includes(q.trim().toLowerCase()))), [entries, action, onlySensitive, q]);
   const rows = pareto[domain] ?? [];
-  const maxCount = Math.max(1, ...rows.map((r) => r.count));
+  const maxCount = Math.max(1, ...rows.map((row) => row.count));
 
-  return (
-    <div className="flex flex-col gap-3.5">
-      <div className="grid grid-cols-2 min-[720px]:grid-cols-4 gap-2.5">
-        <Kpi label="Audit entries" value={String(summary.total)} tone="info" icon={<ScrollText size={16} />} />
-        <Kpi label="Sensitive actions" value={String(summary.sensitive)} tone={summary.sensitive ? 'warn' : 'success'} icon={<ShieldAlert size={16} />} />
-        <Kpi label="Overrides" value={String(summary.overrides)} tone={summary.overrides ? 'danger' : 'success'} icon={<Lock size={16} />} />
-        <Kpi label="Value touched" value={naira(summary.valueMovedMinor)} tone="progress" icon={<Banknote size={16} />} />
-      </div>
-
-      {/* Reason Pareto — why things actually go wrong */}
-      <section className="bg-surface border border-border rounded-2xl shadow-card p-4">
-        <div className="flex items-center gap-2 mb-1 flex-wrap">
-          <BarChart3 size={14} className="text-text-3" />
-          <span className="text-[12.5px] font-semibold">Why it happens · Pareto</span>
-          <select value={domain} onChange={(e) => setDomain(e.target.value as ReasonDomain)} className="ml-auto h-8 px-2 rounded-lg border border-border-2 bg-surface text-[12px]">
-            {domains.map((d) => <option key={d} value={d}>{REASON_DOMAIN_LABEL[d]}</option>)}
-          </select>
-        </div>
-        <p className="text-[10.5px] text-text-3 mb-3">Coded reasons, ranked. The highlighted few account for the first 80% — those are the ones worth fixing.</p>
-        <div className="flex flex-col gap-2">
-          {rows.map((r) => (
-            <div key={r.code}>
-              <div className="flex justify-between text-[11px] mb-0.5">
-                <span className="text-text-2 truncate">
-                  <span className="font-mono text-[10px] text-text-3">{r.code}</span> {r.label}
-                  {r.vital && <span className="ml-1.5 text-[9px] font-semibold px-1.5 h-4 inline-flex items-center rounded-full" style={{ background: `color-mix(in srgb, ${toneVar('danger')} 14%, transparent)`, color: toneVar('danger') }}>vital few</span>}
-                </span>
-                <span className="font-mono text-text-3 flex-none ml-2">
-                  {r.count} · {r.sharePct}%
-                  {r.impactDays > 0 && <span style={{ color: toneVar('warn') }}> · {r.impactDays}d</span>}
-                  {r.impactMinor > 0 && <span style={{ color: toneVar('warn') }}> · {naira(r.impactMinor)}</span>}
-                </span>
-              </div>
-              <div className="h-2 rounded-full bg-surface-2 overflow-hidden relative">
-                <div className="h-full rounded-full" style={{ width: `${(r.count / maxCount) * 100}%`, background: toneVar(r.vital ? 'danger' : 'muted') }} />
-                <span className="absolute top-0 bottom-0 w-px bg-text-3 opacity-50" style={{ left: `${r.cumulativePct}%` }} title={`${r.cumulativePct}% cumulative`} />
-              </div>
-            </div>
-          ))}
-          {rows.length === 0 && <p className="text-[12px] text-text-3">Nothing coded in this domain yet.</p>}
-        </div>
-      </section>
-
-      {/* Audit trail */}
-      <section className="bg-surface border border-border rounded-2xl shadow-card overflow-hidden">
-        <div className="px-4 py-2.5 border-b border-border flex items-center gap-2 flex-wrap">
-          <ScrollText size={14} className="text-text-3" />
-          <span className="text-[12.5px] font-semibold">Audit trail</span>
-          <span className="text-[10.5px] text-text-3">· append-only</span>
-          <div className="ml-auto flex items-center gap-2 flex-wrap">
-            <button onClick={() => setOnlySensitive((v) => !v)} className="text-[11px] px-2.5 h-8 rounded-lg border font-medium" style={onlySensitive ? { borderColor: 'transparent', background: `color-mix(in srgb, ${toneVar('warn')} 14%, transparent)`, color: toneVar('warn') } : { borderColor: 'var(--border-2)' }}>Sensitive only</button>
-            <select value={action} onChange={(e) => setAction(e.target.value as typeof action)} className="h-8 px-2 rounded-lg border border-border-2 bg-surface text-[12px]">
-              <option value="all">All actions</option>
-              {(Object.keys(AUDIT_ACTION_LABEL) as AuditAction[]).map((a) => <option key={a} value={a}>{AUDIT_ACTION_LABEL[a]}</option>)}
-            </select>
-            <div className="flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-border-2"><Search size={13} className="text-text-3" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search…" className="bg-transparent outline-none text-[12px] w-28" aria-label="Search the audit trail" /></div>
-          </div>
-        </div>
-        <div className="divide-y divide-border max-h-[520px] overflow-y-auto">
-          {shown.map((e) => (
-            <div key={e.id} className="px-4 py-3" style={e.action === 'override' ? { background: 'color-mix(in srgb, var(--tone-danger) 5%, transparent)' } : undefined}>
-              <div className="flex items-start gap-2.5">
-                <span className="text-[9.5px] font-semibold px-1.5 h-5 inline-flex items-center rounded-full flex-none mt-0.5" style={{ background: `color-mix(in srgb, ${toneVar(AUDIT_TONE[e.action])} 14%, transparent)`, color: toneVar(AUDIT_TONE[e.action]) }}>{AUDIT_ACTION_LABEL[e.action]}</span>
-                <div className="min-w-0 flex-1">
-                  <div className="text-[12.5px] font-medium">{e.summary}</div>
-                  <div className="text-[10.5px] text-text-3 mt-0.5">
-                    <span className="font-mono">#{e.seq}</span> · {e.entity} <span className="font-mono">{e.entityRef}</span> · {e.actorName} <span className="opacity-70">({e.actorRole.replace('_', ' ')})</span> · {new Date(e.atISO).toLocaleString('en-NG', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                  </div>
-                  {(e.before || e.after) && <div className="text-[10.5px] text-text-3 mt-0.5 font-mono">{e.before} → {e.after}</div>}
-                  {e.reasonLabel && <div className="text-[11px] mt-0.5" style={{ color: toneVar('info') }}>Reason: {e.reasonLabel}</div>}
-                  {e.note && <div className="text-[11px] text-text-3 mt-0.5">{e.note}</div>}
-                </div>
-                {e.amountMinor ? <span className="text-[12px] font-mono font-semibold flex-none">{naira(e.amountMinor)}</span> : null}
-              </div>
-            </div>
-          ))}
-          {shown.length === 0 && <div className="px-4 py-8 text-center text-[13px] text-text-3">No entries match.</div>}
-        </div>
-      </section>
-
-      <div className="text-[11px] text-text-3 flex items-start gap-1.5">
-        <Info size={12} className="mt-0.5 flex-none" />
-        Entries are appended by the actions themselves and are never edited or deleted — {summary.actors} distinct actors are represented here. Sequence numbers are contiguous, so a gap would itself be evidence of tampering.
-      </div>
-    </div>
-  );
-}
-
-function Kpi({ label, value, tone, icon }: { label: string; value: string; tone: Tone; icon: React.ReactNode }) {
-  return <div className="bg-surface border border-border rounded-2xl shadow-card p-3.5"><span className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `color-mix(in srgb, ${toneVar(tone)} 14%, transparent)`, color: toneVar(tone) }}>{icon}</span><div className="text-[12px] text-text-2 font-medium mt-2.5">{label}</div><div className="text-[17px] font-bold tracking-[-0.02em] leading-none mt-1">{value}</div></div>;
+  return <ConstructionFrame>
+    <PageHeader title="Construction audit" subtitle="Trace recorded actions, sensitive changes and the reasons behind them." />
+    <PageTabs label="Construction audit sections" items={[
+      { id: 'trail', label: 'Audit trail', content: <div className={styles.stack}><ConstructionPanel><div className={styles.header}><div className={styles.stack}><CardHeader title="Audit trail" subtitle="Application event records · complete source fields remain available in every matching entry" action={<StatusPill status={shown.length + ' matching'} tone="info" />} /><ConstructionSearch label="Search the audit trail" value={q} onChange={setQ} count={shown.length} /><div className={styles.toolbar}><Button type="button" aria-pressed={onlySensitive} icon={<ShieldAlert size={16} />} onClick={() => setOnlySensitive((value) => !value)}>Sensitive only</Button><label className={styles.field}>Audit action<select aria-label="Filter by audit action" value={action} onChange={(event) => setAction(event.target.value as typeof action)} className="pb-form-control"><option value="all">All actions</option>{(Object.keys(AUDIT_ACTION_LABEL) as AuditAction[]).map((value) => <option key={value} value={value}>{AUDIT_ACTION_LABEL[value]}</option>)}</select></label></div></div></div><div role="region" tabIndex={0} aria-label="Construction audit records" className={styles.auditScroll}>{shown.length ? <ol className={styles.list}>{shown.map((entry) => <li key={entry.id} className={styles.row}><div className={styles.rowContent}><div className={styles.toolbar}><h3 className={styles.title}>{entry.summary}</h3><div className={styles.actions}><StatusPill status={AUDIT_ACTION_LABEL[entry.action]} tone={AUDIT_TONE[entry.action]} />{entry.sensitive ? <StatusPill status="Sensitive record" tone="warn" /> : null}</div></div><dl className={styles.facts}><div><dt>Sequence / entity</dt><dd>#{entry.seq} · {entry.entity} · {entry.entityRef}</dd></div><div><dt>Attributed actor</dt><dd>{entry.actorName} · {entry.actorRole.replaceAll('_', ' ')}</dd></div><div><dt>Recorded timestamp</dt><dd><time dateTime={entry.atISO}>{date(entry.atISO)}</time></dd></div><div><dt>Recorded amount · NGN</dt><dd>{entry.amountMinor !== undefined ? naira(entry.amountMinor) : 'No amount recorded'}</dd></div></dl>{entry.before !== undefined || entry.after !== undefined ? <dl className={styles.beforeAfter}><div><dt>Before</dt><dd>{entry.before === undefined ? 'Not supplied' : entry.before === '' ? '(empty value)' : entry.before}</dd></div><div><dt>After</dt><dd>{entry.after === undefined ? 'Not supplied' : entry.after === '' ? '(empty value)' : entry.after}</dd></div></dl> : null}<div className={styles.notice}><h4 className={styles.rowTitle}>Recorded reason</h4><p className={styles.text + ' mt-2'}>{entry.reasonLabel || 'No coded reason was supplied for this event.'}</p>{entry.note ? <p className={styles.text + ' whitespace-pre-wrap'}>{entry.note}</p> : null}</div></div></li>)}</ol> : <div className={styles.empty}><EmptyState icon={<ScrollText size={26} />} title="No entries match." description="Change the action, sensitivity or search filters to inspect the records in your current scope." /></div>}</div><p className={styles.footer}>Showing all {shown.length} matching record(s) from {entries.length} supplied events. Recorded amounts are not proof of a bank movement or payment settlement.</p></ConstructionPanel><p className={styles.notice}>{summary.actors} distinct actors are represented in this recorded snapshot. Actions append entries in the demonstration store; this view is not a certified immutable or independently tamper-evident audit archive. Sequence gaps alone do not prove tampering, especially in a scoped view.</p></div> },
+      { id: 'overview', label: 'Overview', content: <div className={styles.stack}><div className={styles.metrics}><Kpi label="Audit entries" value={String(summary.total)} tone="info" icon={<ScrollText size={18} />} /><Kpi label="Sensitive actions" value={String(summary.sensitive)} tone={summary.sensitive ? 'warn' : 'success'} icon={<ShieldAlert size={18} />} /><Kpi label="Overrides" value={String(summary.overrides)} tone={summary.overrides ? 'danger' : 'success'} icon={<Lock size={18} />} /><Kpi label="Value touched · NGN" value={naira(summary.valueMovedMinor)} tone="progress" icon={<Banknote size={18} />} /></div><ConstructionPanel><div className={styles.header}><CardHeader title="Interpret the audit totals" subtitle="Recorded actions, not an independent assurance or payment reconciliation" /></div><div className={styles.body}><p className={styles.text}>Value touched summarises amounts referenced by the supplied events. An approval, override, quantity change or document action can create an audit record without moving money. Inspect the attributed actor, timestamp, before/after values and recorded reason before drawing a conclusion.</p></div></ConstructionPanel></div> },
+      { id: 'reasons', label: 'Reason analysis', content: <ConstructionPanel><div className={styles.header}><CardHeader title="Why it happens · Pareto" subtitle="Coded reasons ranked by occurrence count in the selected domain" action={<BarChart3 size={18} className="text-primary" />} /></div><div className={styles.body}><div className={styles.stack}><label className={styles.field}>Reason analysis domain<select aria-label="Reason analysis domain" disabled={!domains.length} value={domains.length ? domain : ''} onChange={(event) => setDomain(event.target.value as ReasonDomain)} className="pb-form-control">{domains.length ? domains.map((value) => <option key={value} value={value}>{REASON_DOMAIN_LABEL[value]}</option>) : <option value="">No reason domains supplied</option>}</select></label><p className={styles.text}>The highlighted reasons form the supplied “vital few” group around the first 80% of recorded occurrences. This is a prioritisation aid, not proof of causation or a calibrated forecast.</p></div></div>{rows.length ? <ul className={styles.list}>{rows.map((row) => <li key={row.code} className={styles.row}><div className={styles.rowContent}><div className={styles.toolbar}><h3 className={styles.title}>{row.label}</h3>{row.vital ? <StatusPill status="Vital few" tone="warn" /> : <StatusPill status="Recorded reason" tone="neutral" />}</div><p className={styles.metadata}>{row.code} · {row.category}</p><div className={styles.paretoBar} role="img" aria-label={row.label + ': ' + row.count + ' occurrences, ' + row.sharePct + ' percent share, ' + row.cumulativePct + ' percent cumulative share'}><div style={{ width: Math.max(0, row.count / maxCount * 100) + '%', background: toneVar(row.vital ? 'warn' : 'info') }} /><span style={{ left: Math.max(0, Math.min(100, row.cumulativePct)) + '%' }} /></div><dl className={styles.facts}><div><dt>Recorded occurrences</dt><dd>{row.count}</dd></div><div><dt>Share / cumulative share</dt><dd>{row.sharePct}% / {row.cumulativePct}%</dd></div><div><dt>Recorded time impact</dt><dd>{row.impactDays} days</dd></div><div><dt>Recorded value impact · NGN</dt><dd>{naira(row.impactMinor)}</dd></div></dl></div></li>)}</ul> : <div className={styles.empty}><EmptyState icon={<BarChart3 size={26} />} title="Nothing coded in this domain yet." description="No coded reason events were supplied for the selected domain. Missing codes do not establish an absence of operational issues." /></div>}<p className={styles.footer}>Bar length is count relative to the largest count; the dark marker is cumulative percentage on a 0–100 scale. Recorded impact is not independently verified loss or payment.</p></ConstructionPanel> },
+    ]} />
+  </ConstructionFrame>;
 }

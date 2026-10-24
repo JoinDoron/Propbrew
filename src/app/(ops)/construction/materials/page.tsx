@@ -1,5 +1,5 @@
 import { requireCapability } from '@/server/guard';
-import { effectiveLevel } from '@/lib/authz';
+import { can } from '@/lib/authz';
 import { constructionWorld } from '@/server/reads/construction';
 import { stockSignal, materialLeakage, moneyTrail } from '@/domain/construction';
 import { MaterialsWorkspace, type MaterialRow, type TrailNodeRow, type MovementRow } from '@/components/construction/materials-workspace';
@@ -8,8 +8,8 @@ import { MaterialsWorkspace, type MaterialRow, type TrailNodeRow, type MovementR
  *  trail from approved budget through to booked cost, and leakage forensics
  *  (received − issued − on-hand) surfaced as an advisory variance to investigate. */
 export default async function ConstructionMaterialsPage() {
-  const { actor } = await requireCapability('reports_analytics');
-  const canMutate = ['F', 'M'].includes(effectiveLevel(actor, 'reports_analytics'));
+  const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
+  const canMutate = can(actor, 'reports_analytics', 'update').allowed;
   const world = constructionWorld(actor);
 
   const onHandOf = (materialId: string) => world.stock.filter((s) => s.materialId === materialId).reduce((n, s) => n + s.onHand, 0);
@@ -41,11 +41,11 @@ export default async function ConstructionMaterialsPage() {
     .sort((a, b) => Date.parse(b.atISO) - Date.parse(a.atISO))
     .map((mv) => {
       const mat = world.materials.find((m) => m.id === mv.materialId);
-      return { id: mv.id, materialName: mat?.name ?? mv.materialId, kind: mv.kind, qty: mv.qty, unit: mat?.unit ?? '', atISO: mv.atISO.slice(0, 10), ref: mv.ref, by: mv.by };
+      return { id: mv.id, materialName: mat?.name ?? mv.materialId, kind: mv.kind, qty: mv.qty, unit: mat?.unit ?? '', atISO: mv.atISO, ref: mv.ref, by: mv.by };
     });
 
   return (
-    <div className="max-w-[1000px] mx-auto">
+    <div className="pb-page">
       <MaterialsWorkspace
         materials={materials}
         trail={trail}

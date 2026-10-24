@@ -1,7 +1,8 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
 import { marketplaceOrderMachine } from '@/domain/workflows';
-import { type Role } from '@/lib/authz';
+import { can, type Role } from '@/lib/authz';
 import { ORDER_ACTIONS } from '@/domain/vendor-portal';
 import { VendorOrdersWorkspace, type OrderView } from '@/components/portal/vendor-orders-workspace';
 
@@ -15,14 +16,17 @@ export default async function VendorOrdersPage() {
   const orders: OrderView[] = repos.marketplaceOrders.list(actor).items.map((o) => ({
     id: o.id, ref: o.ref, listingTitle: o.listingTitle, residentName: o.residentName,
     status: o.status, amountMinor: o.amount.minor, currency: o.amount.currency, placedAt: o.placedAt,
-    actions: Array.from(new Set(marketplaceOrderMachine.transitions.filter((t) => t.from === o.status && t.actors.includes('vendor' as Role)).map((t) => t.event)))
+    actions: can(actor, 'marketplace', 'transition').allowed ? Array.from(new Set(marketplaceOrderMachine.transitions.filter((t) => t.from === o.status && t.actors.includes('vendor' as Role)).map((t) => t.event)))
       .filter((e) => ORDER_ACTIONS[e])
-      .map((e) => ({ event: e, ...ORDER_ACTIONS[e] })),
+      .map((e) => ({ event: e, ...ORDER_ACTIONS[e] })) : [],
   }));
 
   return (
-    <div className="max-w-[720px] mx-auto">
-      <VendorOrdersWorkspace orders={orders} />
+    <div className="pb-page">
+      <PageHeader title="Incoming orders" subtitle="Review resident orders and manage fulfilment." />
+      <div className="w-full min-w-0 flex flex-col gap-6">
+      <VendorOrdersWorkspace orders={orders} canTransition={can(actor, 'marketplace', 'transition').allowed} />
+      </div>
     </div>
   );
 }

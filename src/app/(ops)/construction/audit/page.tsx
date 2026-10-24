@@ -9,7 +9,7 @@ const DOMAINS: ReasonDomain[] = ['delay', 'rejection', 'variance', 'stock_adjust
  *  paired with a Pareto over the coded reasons. Together they answer both
  *  "who did what, when" and "what actually keeps going wrong". */
 export default async function ConstructionAuditPage() {
-  const { actor } = await requireCapability('reports_analytics');
+  const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const world = constructionWorld(actor);
 
   const sensitiveIds = new Set(sensitiveEntries(world.audit).map((e) => e.id));
@@ -37,7 +37,7 @@ export default async function ConstructionAuditPage() {
   }
 
   return (
-    <div className="max-w-[1000px] mx-auto">
+    <div className="pb-page">
       <AuditWorkspace entries={entries} pareto={pareto} domains={DOMAINS} summary={auditSummary(world.audit)} />
     </div>
   );

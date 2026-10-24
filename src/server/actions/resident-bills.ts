@@ -60,7 +60,7 @@ export async function payAllOutstanding(): Promise<PayAllResult> {
     totalMinor += owed;
   }
 
-  ['/portal/bills', '/portal', '/billing', '/dashboard'].forEach((p) => revalidatePath(p));
+  ['/portal/bills', '/portal', '/billing', '/estate', '/dashboard'].forEach((p) => revalidatePath(p));
   if (count > 0) return { ok: true, count, totalMinor, skipped };
   return {
     ok: false,

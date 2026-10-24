@@ -1,0 +1,34 @@
+-- Daily AI request reservations and exact minor-unit usage audit.
+-- Functions hold a short tenant transaction lock; no provider call runs under it.
+create table if not exists ai_copilot_usage (
+  tenant_id uuid not null references tenants(id), request_id uuid not null,
+  actor_id text not null, feature text not null, model text not null,
+  budget_day date not null, reserved_cost_minor_ngn bigint not null check (reserved_cost_minor_ngn >= 0),
+  cost_minor_ngn bigint not null default 0 check (cost_minor_ngn >= 0),
+  input_tokens bigint not null default 0 check (input_tokens >= 0), output_tokens bigint not null default 0 check (output_tokens >= 0),
+  status text not null check (status in ('reserved', 'complete', 'error', 'stopped', 'expired')),
+  reserved_at timestamptz not null default now(), expires_at timestamptz not null, finished_at timestamptz,
+  primary key (tenant_id, request_id)
+);
+create index if not exists ai_copilot_usage_daily_idx on ai_copilot_usage(tenant_id, budget_day, feature);
+create index if not exists ai_copilot_usage_expiry_idx on ai_copilot_usage(tenant_id, expires_at) where status = 'reserved';
+alter table ai_copilot_usage enable row level security;
+alter table ai_copilot_usage force row level security;
+drop policy if exists ai_copilot_usage_tenant_policy on ai_copilot_usage;
+create policy ai_copilot_usage_tenant_policy on ai_copilot_usage using (tenant_id::text = (select current_setting('app.tenant_id', true))) with check (tenant_id::text = (select current_setting('app.tenant_id', true)));
+alter table ai_interactions enable row level security;
+alter table ai_interactions force row level security;
+drop policy if exists ai_interactions_tenant_policy on ai_interactions;
+create policy ai_interactions_tenant_policy on ai_interactions using (tenant_id::text = (select current_setting('app.tenant_id', true))) with check (tenant_id::text = (select current_setting('app.tenant_id', true)));
+alter table ai_feature_controls enable row level security;
+alter table ai_feature_controls force row level security;
+drop policy if exists ai_feature_controls_tenant_policy on ai_feature_controls;
+create policy ai_feature_controls_tenant_policy on ai_feature_controls using (tenant_id::text = (select current_setting('app.tenant_id', true))) with check (tenant_id::text = (select current_setting('app.tenant_id', true)));
+
+-- Body statements stay on one line for the repository's current migration splitter.
+-- Invoker rights and an explicit tenant check apply even if the caller owns the tables.
+create or replace function reserve_copilot_budget(p_tenant uuid, p_request uuid, p_actor text, p_feature text, p_model text, p_reserved bigint, p_tenant_cap bigint, p_feature_cap bigint) returns table(allowed boolean, reason text) language plpgsql volatile security invoker set search_path = pg_catalog, public as $copilot$
+declare v_day date := (now() at time zone 'UTC')::date; v_tenant_used numeric; v_feature_used numeric; v_enabled boolean; v_db_cap bigint; v_cap bigint; begin if p_tenant::text is distinct from current_setting('app.tenant_id', true) then raise exception 'Tenant context mismatch'; end if; if p_reserved < 0 or p_tenant_cap < 0 or p_feature_cap < 0 then raise exception 'Invalid budget'; end if; perform pg_advisory_xact_lock(hashtextextended(p_tenant::text, 714231)); update public.ai_copilot_usage set status = 'expired', cost_minor_ngn = reserved_cost_minor_ngn, finished_at = now() where tenant_id = p_tenant and status = 'reserved' and expires_at <= now(); if exists(select 1 from public.ai_copilot_usage where tenant_id = p_tenant and request_id = p_request) then return query select false, 'request_already_reserved'::text; return; end if; select enabled, daily_cap_minor_ngn into v_enabled, v_db_cap from public.ai_feature_controls where tenant_id = p_tenant and feature = p_feature for share; if found and not v_enabled then return query select false, 'feature_disabled'::text; return; end if; v_cap := case when p_feature_cap is null then v_db_cap when v_db_cap is null then p_feature_cap else least(p_feature_cap, v_db_cap) end; select coalesce(sum(case when status = 'reserved' then reserved_cost_minor_ngn else cost_minor_ngn end), 0), coalesce(sum(case when feature = p_feature then case when status = 'reserved' then reserved_cost_minor_ngn else cost_minor_ngn end else 0 end), 0) into v_tenant_used, v_feature_used from public.ai_copilot_usage where tenant_id = p_tenant and budget_day = v_day; if p_tenant_cap is not null and v_tenant_used + p_reserved > p_tenant_cap then return query select false, 'tenant_daily_budget_exceeded'::text; return; end if; if v_cap is not null and v_feature_used + p_reserved > v_cap then return query select false, 'feature_daily_budget_exceeded'::text; return; end if; insert into public.ai_copilot_usage(tenant_id, request_id, actor_id, feature, model, budget_day, reserved_cost_minor_ngn, status, expires_at) values(p_tenant, p_request, p_actor, p_feature, p_model, v_day, p_reserved, 'reserved', now() + interval '5 minutes'); return query select true, null::text; end; $copilot$;
+
+create or replace function finish_copilot_budget(p_tenant uuid, p_request uuid, p_input bigint, p_output bigint, p_cost bigint, p_status text, p_prompt_redacted text, p_output_redacted text, p_context_summary text) returns boolean language plpgsql volatile security invoker set search_path = pg_catalog, public as $copilot$
+declare v_row public.ai_copilot_usage%rowtype; v_cost bigint; begin if p_tenant::text is distinct from current_setting('app.tenant_id', true) then raise exception 'Tenant context mismatch'; end if; if p_input < 0 or p_output < 0 or p_cost < 0 or p_status not in ('complete', 'error', 'stopped') then raise exception 'Invalid usage'; end if; perform pg_advisory_xact_lock(hashtextextended(p_tenant::text, 714231)); select * into v_row from public.ai_copilot_usage where tenant_id = p_tenant and request_id = p_request for update; if not found then return false; end if; if v_row.status not in ('reserved', 'expired') then return true; end if; v_cost := case when p_status = 'stopped' and p_input = 0 and p_output = 0 and p_cost = 0 then v_row.reserved_cost_minor_ngn else p_cost end; update public.ai_copilot_usage set input_tokens = p_input, output_tokens = p_output, cost_minor_ngn = v_cost, status = p_status, finished_at = now() where tenant_id = p_tenant and request_id = p_request; insert into public.ai_interactions(id, tenant_id, actor_id, feature, model, source, prompt_redacted, grounding_redacted, output_redacted) values(p_request, p_tenant, v_row.actor_id, v_row.feature, v_row.model, case when p_status = 'complete' or p_input > 0 or p_output > 0 then 'llm' else 'provider_unconfirmed' end, left(p_prompt_redacted, 6000), left(p_context_summary, 2000), left(p_output_redacted, 24000)) on conflict(id) do nothing; return true; end; $copilot$;

@@ -1,3 +1,5 @@
+import { can } from '@/lib/authz';
+import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
 import { agentPerformance } from '@/domain/shortlet';
@@ -7,7 +9,7 @@ import { AgentsWorkspace, type AgentRow } from '@/components/shortlet/agents-wor
  *  Bookings recorded against an agent name roll up into their revenue + what you
  *  owe. Invite agents by WhatsApp. */
 export default async function ShortletAgentsPage() {
-  const { actor } = await requireCapability('bookings_amenities');
+  const { actor } = await requireCapability('bookings_amenities', 'read', 'shortlet');
   const agents = repos.shortletAgents.list(actor).items;
   const bookings = repos.shortletBookings.list(actor).items;
 
@@ -17,8 +19,9 @@ export default async function ShortletAgentsPage() {
   }));
 
   return (
-    <div className="max-w-[820px] mx-auto">
-      <AgentsWorkspace agents={rows} />
+    <div className="pb-page">
+      <PageHeader title="Booking agents" subtitle="Track bookings, revenue and commission owed to your agents." />
+      <AgentsWorkspace canCreate={can(actor, 'bookings_amenities', 'create').allowed} agents={rows} />
     </div>
   );
 }

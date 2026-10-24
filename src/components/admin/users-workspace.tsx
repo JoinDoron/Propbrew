@@ -1,96 +1,50 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, UserPlus, Users, ShieldOff, ShieldCheck } from 'lucide-react';
-import { Avatar } from '@/components/ui';
-import { toneVar, type Tone } from '@/lib/status-tones';
+import { Search, UserPlus, Users, ShieldOff, ShieldCheck, X } from 'lucide-react';
+import { Avatar, Button, Card, CardHeader, EmptyState, IconButton, KpiCard, StatusPill } from '@/components/ui';
+import type { Tone } from '@/lib/status-tones';
 import { setUserStatus } from '@/server/actions/admin-users';
+import { PageTabs } from '@/components/ui/page-tabs';
+import { WorkspaceDecisionDialog, type WorkspaceDecision } from '@/components/ui/workspace-decision';
+import common from '@/components/ui/workspace-layout.module.css';
+import styles from './admin-workspaces.module.css';
 
 export type UserRow = { id: string; name: string; email: string; tenantLabel: string; roles: { key: string; label: string }[]; status: string; lastActive: string };
-
 const STATUS_TONE: Record<string, Tone> = { active: 'success', invited: 'info', suspended: 'danger' };
 
-export function UsersWorkspace({ users }: { users: UserRow[] }) {
+export function UsersWorkspace({ users, canMutate = false }: { users: UserRow[]; canMutate?: boolean }) {
   const router = useRouter();
-  const [pending, start] = useTransition();
-  const [q, setQ] = useState('');
+  const [query, setQuery] = useState('');
   const [role, setRole] = useState('all');
   const [status, setStatus] = useState('all');
-  const [toast, setToast] = useState<string | null>(null);
-  const flash = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3000); };
-
-  const roles = useMemo(() => ['all', ...Array.from(new Set(users.flatMap((u) => u.roles.map((r) => r.label))))], [users]);
-  const filtered = useMemo(() => users.filter((u) =>
-    (role === 'all' || u.roles.some((r) => r.label === role)) &&
-    (status === 'all' || u.status === status) &&
-    (!q.trim() || `${u.name} ${u.email} ${u.tenantLabel}`.toLowerCase().includes(q.toLowerCase())),
-  ), [users, role, status, q]);
-
-  const counts = { active: users.filter((u) => u.status === 'active').length, invited: users.filter((u) => u.status === 'invited').length, suspended: users.filter((u) => u.status === 'suspended').length };
-  const toggle = (u: UserRow) => start(async () => {
-    const next = u.status === 'suspended' ? 'active' : 'suspended';
-    const r = await setUserStatus(u.id, next);
-    if (r.ok) { router.refresh(); flash(`${u.name} ${next === 'suspended' ? 'suspended' : 'reactivated'}.`); } else flash(r.error);
-  });
-
-  return (
-    <div className="flex flex-col gap-3.5">
-      <div className="grid grid-cols-3 gap-2.5">
-        <Kpi label="Active" value={String(counts.active)} tone="success" icon={<Users size={16} />} />
-        <Kpi label="Invited" value={String(counts.invited)} tone="info" icon={<UserPlus size={16} />} />
-        <Kpi label="Suspended" value={String(counts.suspended)} tone={counts.suspended ? 'danger' : 'neutral'} icon={<ShieldOff size={16} />} />
-      </div>
-
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="flex items-center gap-2 h-9 px-3 rounded-xl border border-border-2 bg-surface flex-1 min-w-[160px]">
-          <Search size={15} className="text-text-3" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search users…" className="flex-1 bg-transparent outline-none text-[13px]" aria-label="Search users" />
+  const [decision, setDecision] = useState<WorkspaceDecision | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const roles = [...new Set(users.flatMap((u) => u.roles.map((r) => r.label)))];
+  const filtered = users.filter((u) => (role === 'all' || u.roles.some((r) => r.label === role)) && (status === 'all' || u.status === status) && `${u.name} ${u.email} ${u.tenantLabel}`.toLowerCase().includes(query.trim().toLowerCase()));
+  function review(user: UserRow) {
+    if (!canMutate) return;
+    const next = user.status === 'suspended' ? 'active' : 'suspended';
+    setDecision({ title: next === 'active' ? 'Review account reactivation' : 'Review account suspension', record: `${user.name} · ${user.tenantLabel}`, description: `Record this account’s status as ${next}. This demonstration changes the application record only; it does not revoke or restore Clerk sessions, enforce sign-in access or change roles. Use the approved identity-provider procedure for actual access changes.`, confirmLabel: `Confirm recorded ${next} status`, action: () => setUserStatus(user.id, next), onSuccess: () => { setFeedback(`${user.name}: status recorded as ${next}. Identity-provider access has not been changed.`); router.refresh(); } });
+  }
+  return <div className={common.layout}>
+    <PageTabs label="Platform user sections" items={[
+      { id: 'users', label: 'User register', content: <Card padded={false} className={common.panel}>
+        <div className={common.registerHeader}><CardHeader title="Users & roles" subtitle="Review identities, assigned roles and the account state recorded for each organisation." action={!canMutate ? <StatusPill status="Read-only" tone="muted" /> : undefined} />
+          <div className={`${common.toolbar} pb-register-toolbar`}><label className={common.search}><Search size={16} /><input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search users or organisations…" aria-label="Search users" /></label><div className={common.filters}>
+            <select className={common.select} value={role} onChange={(e) => setRole(e.target.value)} aria-label="Role"><option value="all">All roles</option>{roles.map((r) => <option key={r}>{r}</option>)}</select>
+            <select className={common.select} value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Status">{['all', 'active', 'invited', 'suspended'].map((s) => <option key={s} value={s}>{s === 'all' ? 'All statuses' : s}</option>)}</select>
+          </div></div>
         </div>
-        <select value={role} onChange={(e) => setRole(e.target.value)} aria-label="Role" className="h-9 px-2 rounded-xl border border-border-2 bg-surface text-[12.5px] outline-none focus:border-primary">
-          {roles.map((r) => <option key={r} value={r}>{r === 'all' ? 'All roles' : r}</option>)}
-        </select>
-        <select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Status" className="h-9 px-2 rounded-xl border border-border-2 bg-surface text-[12.5px] outline-none focus:border-primary">
-          {['all', 'active', 'invited', 'suspended'].map((s) => <option key={s} value={s}>{s === 'all' ? 'All statuses' : s}</option>)}
-        </select>
-      </div>
-
-      <div className="bg-surface border border-border rounded-2xl shadow-card overflow-hidden">
-        <div className="w-full overflow-x-auto">
-          <table className="w-full border-collapse text-sm">
-            <thead><tr>{['User', 'Tenant', 'Roles', 'Status', 'Last active', ''].map((h, i) => <th key={h || i} className={`text-left text-[10.5px] font-semibold tracking-[0.06em] uppercase text-text-3 px-4 py-2.5 border-b border-border whitespace-nowrap ${i === 4 ? 'max-[720px]:hidden' : ''}`}>{h}</th>)}</tr></thead>
-            <tbody>
-              {filtered.map((u) => (
-                <tr key={u.id} className="hover:bg-surface-2 transition-colors">
-                  <td className="px-4 py-2.5 border-b border-border"><div className="flex items-center gap-2.5"><Avatar name={u.name} size={30} /><div><div className="text-[13px] font-medium">{u.name}</div><div className="text-[11.5px] text-text-3">{u.email}</div></div></div></td>
-                  <td className="px-4 py-2.5 border-b border-border text-[13px]">{u.tenantLabel}</td>
-                  <td className="px-4 py-2.5 border-b border-border"><div className="flex flex-wrap gap-1">{u.roles.map((r) => <span key={r.key} className="text-[11px] px-1.5 py-0.5 rounded bg-surface-3 text-text-2">{r.label}</span>)}</div></td>
-                  <td className="px-4 py-2.5 border-b border-border"><span className="text-[11px] font-semibold px-2 h-6 inline-flex items-center rounded-full capitalize" style={{ background: `color-mix(in srgb, ${toneVar(STATUS_TONE[u.status] ?? 'neutral')} 14%, transparent)`, color: toneVar(STATUS_TONE[u.status] ?? 'neutral') }}>{u.status}</span></td>
-                  <td className="px-4 py-2.5 border-b border-border text-[12.5px] text-text-3 max-[720px]:hidden">{u.lastActive}</td>
-                  <td className="px-4 py-2.5 border-b border-border text-right">
-                    <button disabled={pending} onClick={() => toggle(u)} className={`text-[11.5px] px-2.5 h-7 rounded-lg font-medium disabled:opacity-50 inline-flex items-center gap-1 ${u.status === 'suspended' ? 'text-positive border border-[color:var(--tone-success)]/40' : 'text-negative border border-[color:var(--tone-danger)]/40'}`}>
-                      {u.status === 'suspended' ? <><ShieldCheck size={12} /> Reactivate</> : <><ShieldOff size={12} /> Suspend</>}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {filtered.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-[13px] text-text-3">No users match.</td></tr>}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {toast && <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[90] bg-text text-surface text-[13px] font-medium px-4 py-2.5 rounded-xl shadow-float animate-fade">{toast}</div>}
-    </div>
-  );
-}
-
-function Kpi({ label, value, tone, icon }: { label: string; value: string; tone: Tone; icon: React.ReactNode }) {
-  return (
-    <div className="bg-surface border border-border rounded-2xl shadow-card p-3.5">
-      <span className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `color-mix(in srgb, ${toneVar(tone)} 14%, transparent)`, color: toneVar(tone) }}>{icon}</span>
-      <div className="text-[12px] text-text-2 font-medium mt-2.5">{label}</div>
-      <div className="text-[19px] font-bold tracking-[-0.02em] leading-none mt-1">{value}</div>
-    </div>
-  );
+        {filtered.length ? <div className="pb-table-scroll" role="region" aria-label="Platform user register" tabIndex={0}><table className={`pb-data-table ${common.table}`}><thead><tr>{['User', 'Organisation', 'Roles', 'Status', 'Last active', 'Account action'].map((h) => <th scope="col" key={h}>{h}</th>)}</tr></thead><tbody>{filtered.map((u) => <tr key={u.id}>
+          <td><div className={common.person}><Avatar name={u.name} size={36} /><div><span className={common.title}>{u.name}</span><span className={common.metadata}>{u.email}</span></div></div></td><td>{u.tenantLabel}</td><td><div className={styles.level}>{u.roles.map((r) => <StatusPill key={r.key} status={r.label} tone="neutral" />)}</div></td><td><StatusPill status={u.status} tone={STATUS_TONE[u.status] ?? 'neutral'} /></td><td>{u.lastActive || 'Not recorded'}</td><td>{canMutate ? <Button type="button" onClick={() => review(u)} icon={u.status === 'suspended' ? <ShieldCheck size={16} /> : <ShieldOff size={16} />} aria-label={`Review ${u.status === 'suspended' ? 'reactivation' : 'suspension'} for ${u.name}`}>{u.status === 'suspended' ? 'Reactivate' : 'Suspend'}</Button> : <span className={common.metadata}>Read-only</span>}</td>
+        </tr>)}</tbody></table></div> : <EmptyState title="No users match." description="Try another name, role or account status." />}
+        <p className={common.registerFooter}>Showing {filtered.length} of {users.length} accounts. Changing a status does not change role assignments.</p>
+      </Card> },
+      { id: 'overview', label: 'Overview', content: <div className={common.layout}><div className={common.grid}><KpiCard label="Active" value={String(users.filter((u) => u.status === 'active').length)} icon={<Users size={18} />} /><KpiCard label="Invited" value={String(users.filter((u) => u.status === 'invited').length)} icon={<UserPlus size={18} />} /><KpiCard label="Suspended" value={String(users.filter((u) => u.status === 'suspended').length)} icon={<ShieldOff size={18} />} /></div><Card><CardHeader title="Access policy" subtitle="Assigned roles and record scope are checked independently." /><p className={common.body}>Review the organisation and existing roles before reactivating an account. This register does not grant new roles or provision an identity-provider account.</p></Card></div> },
+    ]} />
+    {feedback && <div role="status" className={common.feedback}><span>{feedback}</span><IconButton type="button" aria-label="Dismiss account update" onClick={() => setFeedback(null)}><X size={18} /></IconButton></div>}
+    {decision && <WorkspaceDecisionDialog decision={decision} onClose={() => setDecision(null)} />}
+  </div>;
 }

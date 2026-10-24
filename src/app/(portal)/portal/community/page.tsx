@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
 import { NOW_MS } from '@/domain/ppm';
@@ -50,8 +51,11 @@ export default async function ResidentCommunityPage() {
   const notices: PNotice[] = proxyNotices.map((n) => ({ id: n.id, motionRef: n.motionRef, motionTitle: n.motionTitle, reason: n.reason }));
 
   return (
-    <div className="max-w-[640px] mx-auto">
+    <div className="pb-page">
+      <PageHeader title="Community" subtitle="Participate in estate life, events and decisions." />
+      <div className="w-full min-w-0 flex flex-col gap-6">
       <CommunityHub firstName={(myName ?? 'there').split(' ')[0]} motions={motionRows} events={eventRows} rewards={rewards} perks={perkRows} election={election} parcels={myParcels} notices={notices} />
+      </div>
     </div>
   );
 }

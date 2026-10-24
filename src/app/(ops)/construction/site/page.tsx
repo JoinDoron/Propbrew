@@ -1,5 +1,5 @@
 import { requireCapability } from '@/server/guard';
-import { effectiveLevel } from '@/lib/authz';
+import { can } from '@/lib/authz';
 import { constructionWorld } from '@/server/reads/construction';
 import { NOW_MS } from '@/domain/ppm';
 import { reportBand, reportCompleteness, coverageGaps } from '@/domain/construction';
@@ -10,8 +10,8 @@ import { SiteWorkspace, type ReportRow } from '@/components/construction/site-wo
  *  nudges, cross-source consistency checks against geofenced attendance, and an
  *  immutable site diary compiled only from approved records. */
 export default async function ConstructionSitePage() {
-  const { actor } = await requireCapability('reports_analytics');
-  const canMutate = ['F', 'M'].includes(effectiveLevel(actor, 'reports_analytics'));
+  const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
+  const canMutate = can(actor, 'reports_analytics', 'update').allowed;
   const world = constructionWorld(actor);
 
   const nameOf = (id: string) => world.projects.find((p) => p.id === id)?.name ?? id;
@@ -38,7 +38,7 @@ export default async function ConstructionSitePage() {
   const gaps = coverageGaps(world.reports, busiest, NOW_MS, 7);
 
   return (
-    <div className="max-w-[980px] mx-auto">
+    <div className="pb-page">
       <SiteWorkspace
         reports={reports}
         gaps={gaps}

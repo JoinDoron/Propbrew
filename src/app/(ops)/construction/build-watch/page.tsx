@@ -14,7 +14,7 @@ import { BuildWatch, type WatchProject } from '@/components/construction/build-w
  *  floor-by-floor structure and site updates drawn only from APPROVED reports.
  *  Commercial detail is withheld from view-only stakeholders. */
 export default async function ConstructionBuildWatchPage() {
-  const { actor } = await requireCapability('reports_analytics');
+  const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const showCommercials = ['F', 'M'].includes(effectiveLevel(actor, 'reports_analytics'));
   const world = constructionWorld(actor);
 
@@ -49,15 +49,14 @@ export default async function ConstructionBuildWatchPage() {
         updates: world.reports
           .filter((r) => r.projectId === p.id && r.status === 'approved')
           .sort((a, b) => Date.parse(b.dateISO) - Date.parse(a.dateISO))
-          .slice(0, 4)
-          .map((r) => ({ dateISO: r.dateISO, text: [...r.completed, ...r.ongoing].join('; ') || 'Work progressing on site', photos: r.photos })),
+          .map((r) => ({ dateISO: r.dateISO, text: [...r.completed, ...r.ongoing].join('; ') || 'No completed or ongoing work description recorded.', photos: r.photos })),
         unitsSold: sales?.unitsSold, unitsTotal: sales?.unitsTotal,
         investorHref: sales ? '/investors' : undefined,
       };
     });
 
   return (
-    <div className="max-w-[920px] mx-auto">
+    <div className="pb-page">
       <BuildWatch projects={projects} showCommercials={showCommercials} />
     </div>
   );

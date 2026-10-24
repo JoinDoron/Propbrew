@@ -1,3 +1,5 @@
+import { can } from '@/lib/authz';
+import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
 import { PricingWorkspace, type AptRow } from '@/components/shortlet/pricing-workspace';
@@ -7,7 +9,7 @@ import { PricingWorkspace, type AptRow } from '@/components/shortlet/pricing-wor
  *  for those dates; a 30-night strip shows where they bite. Operator-controlled,
  *  not algorithmic. */
 export default async function ShortletPricingPage() {
-  const { actor } = await requireCapability('bookings_amenities');
+  const { actor } = await requireCapability('bookings_amenities', 'read', 'shortlet');
   const apts = repos.shortletApartments.list(actor).items;
   const props = new Map(repos.shortletProperties.list(actor).items.map((p) => [p.id, p.name]));
   const rules = repos.shortletPricingRules.list(actor).items;
@@ -18,8 +20,9 @@ export default async function ShortletPricingPage() {
   }));
 
   return (
-    <div className="max-w-[820px] mx-auto">
-      <PricingWorkspace apartments={apartments} />
+    <div className="pb-page">
+      <PageHeader title="Seasonal pricing" subtitle="Set date-based rates and keep every pricing decision in your control." />
+      <PricingWorkspace canCreate={can(actor, 'bookings_amenities', 'create').allowed} canUpdate={can(actor, 'bookings_amenities', 'update').allowed} apartments={apartments} />
     </div>
   );
 }

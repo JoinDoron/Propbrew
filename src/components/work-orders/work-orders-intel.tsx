@@ -1,135 +1,44 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
-import { Timer, Sparkles, Users, Wallet, AlertTriangle, ArrowUpRight } from 'lucide-react';
-import { formatMoney } from '@/components/domain';
+import { Timer, Users, Wallet, AlertTriangle, ArrowUpRight } from 'lucide-react';
+import { Button, Card, CardHeader, EmptyState, StatusPill } from '@/components/ui';
+import { FacilityKpi } from '@/components/facility/facility-ui';
+import { facilityMoney } from '@/components/facility/facility-format';
 import { toneVar, type Tone } from '@/lib/status-tones';
 import { slaState, workload, triageSuggestions, costRollup, isOpen, type Sla } from '@/domain/work-orders';
 import type { WorkOrder } from '@/domain/entities';
+import layout from '@/components/ui/workspace-layout.module.css';
+import polish from '@/components/facility/facility-registers-polish.module.css';
 
 const PRIORITY_TONE: Record<string, Tone> = { emergency: 'danger', high: 'danger', routine: 'warn', low: 'neutral' };
+function fmtRemaining(milliseconds: number) { const past = milliseconds < 0, amount = Math.abs(milliseconds); const hours = Math.floor(amount / 3600000), minutes = Math.floor(amount % 3600000 / 60000); return `${hours ? `${hours}h ` : ''}${minutes}m ${past ? 'overdue' : 'remaining'}`; }
 
-function fmtRemaining(ms: number): string {
-  const past = ms < 0;
-  const a = Math.abs(ms);
-  const h = Math.floor(a / 3_600_000);
-  const m = Math.floor((a % 3_600_000) / 60_000);
-  const s = Math.floor((a % 60_000) / 1000);
-  const core = h >= 1 ? `${h}h ${m}m` : m >= 1 ? `${m}m ${String(s).padStart(2, '0')}s` : `${s}s`;
-  return past ? `${core} over` : core;
-}
-
-export function WorkOrdersIntel({ wos, nowMs, canMutate }: { wos: WorkOrder[]; nowMs: number; canMutate: boolean }) {
-  const [now, setNow] = useState(nowMs);
+export function WorkOrdersIntel({ wos, nowMs, canMutate, basePath = '/work-orders' }: { wos: WorkOrder[]; nowMs: number; canMutate: boolean; basePath?: string }) {
+  const [currency, setCurrency] = useState<string>(wos.some((row) => row.cost?.currency === 'NGN') ? 'NGN' : wos.find((row) => row.cost)?.cost?.currency ?? 'NGN');
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
-  useEffect(() => {
-    const t = setInterval(() => setNow((n) => n + 1000), 1000);
-    return () => clearInterval(t);
-  }, []);
-
   const open = wos.filter(isOpen);
-  const withSla = open.map((w) => ({ w, sla: slaState(w, now) })).filter((x) => x.sla.state !== 'none');
-  const breaching = withSla.filter((x) => x.sla.state !== 'ok');
-  const unassigned = open.filter((w) => !w.assigneeName || w.assigneeName === 'Unassigned' || w.assigneeName === '—').length;
+  const withSla = open.map((row) => ({ row, sla: slaState(row, nowMs) })).filter((item) => item.sla.state !== 'none');
+  const breaching = withSla.filter((item) => item.sla.state !== 'ok');
+  const unassigned = open.filter((row) => !row.assigneeName || ['Unassigned', '—'].includes(row.assigneeName)).length;
   const loads = workload(wos);
-  const maxLoad = Math.max(...loads.map((l) => l.open), 1);
-  const triage = triageSuggestions(wos).filter((t) => !dismissed.has(t.id));
-  const cost = costRollup(wos);
-  const money = (minor: number) => formatMoney({ minor, currency: 'NGN' } as Parameters<typeof formatMoney>[0]);
-
+  const maxLoad = Math.max(...loads.map((load) => load.open), 1);
+  const triage = triageSuggestions(wos).filter((suggestion) => !dismissed.has(suggestion.id));
+  const cost = costRollup(wos.filter((row) => row.cost?.currency === currency));
+  const currencies = Array.from(new Set(wos.flatMap((row) => row.cost ? [row.cost.currency] : [])));
+  const money = (minor: number) => facilityMoney(minor, currency);
   const watch = [...withSla].sort((a, b) => (a.sla.msRemaining ?? 0) - (b.sla.msRemaining ?? 0)).slice(0, 5);
-
-  return (
-    <div className="flex flex-col gap-3.5">
-      <div className="grid grid-cols-2 min-[900px]:grid-cols-4 gap-3">
-        <Kpi label="Open" value={String(open.length)} note={`${wos.length} total`} tone="info" icon={<Timer size={18} />} />
-        <Kpi label="SLA breaching" value={String(breaching.length)} note="live · respond/resolve" tone={breaching.length ? 'danger' : 'success'} icon={<AlertTriangle size={18} />} />
-        <Kpi label="Unassigned" value={String(unassigned)} note={unassigned ? 'needs an owner' : 'all assigned'} tone={unassigned ? 'warn' : 'success'} icon={<Users size={18} />} />
-        <Kpi label="Spend" value={money(cost.totalMinor)} note={`${cost.withCost} costed · avg ${money(cost.avgMinor)}`} tone="progress" icon={<Wallet size={18} />} />
-      </div>
-
-      <div className="grid grid-cols-1 min-[900px]:grid-cols-[1fr_320px] gap-3.5 items-start">
-        {/* AI triage queue */}
-        <div className="bg-surface border border-border rounded-2xl shadow-card overflow-hidden">
-          <div className="px-4 py-2.5 border-b border-border flex items-center gap-2"><Sparkles size={14} className="text-primary" /><span className="text-[12.5px] font-semibold">AI triage suggestions</span><span className="text-[10.5px] text-text-3 ml-auto">AI-F-02 · advisory, you decide</span></div>
-          {triage.length === 0 ? (
-            <p className="text-[12.5px] text-text-3 px-4 py-4">Every open job is triaged and assigned. Nothing waiting.</p>
-          ) : (
-            <div className="divide-y divide-border">
-              {triage.map((t) => (
-                <div key={t.id} className="px-4 py-3">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Link href={`/work-orders/${t.ref}`} className="font-mono text-[12.5px] font-bold hover:text-primary">{t.ref}</Link>
-                    <span className="text-[13px] font-medium truncate">{t.title}</span>
-                  </div>
-                  <div className="flex items-center gap-2 mt-2 flex-wrap text-[11.5px]">
-                    <span className="text-text-3">Suggest:</span>
-                    <span className="px-1.5 h-[20px] inline-flex items-center rounded-md font-semibold capitalize" style={{ background: `color-mix(in srgb, ${toneVar(PRIORITY_TONE[t.suggestedPriority])} 14%, transparent)`, color: toneVar(PRIORITY_TONE[t.suggestedPriority]) }}>{t.suggestedPriority}{t.escalate && ' ↑'}</span>
-                    <span className="text-text-2">→ {t.suggestedAssignee}</span>
-                    <span className="text-text-3">· {t.reason}</span>
-                  </div>
-                  {canMutate && (
-                    <div className="flex gap-2 mt-2">
-                      <Link href={`/work-orders/${t.ref}`} className="text-[11.5px] text-primary hover:underline inline-flex items-center gap-1">Open to assign <ArrowUpRight size={12} /></Link>
-                      <button onClick={() => setDismissed((s) => new Set(s).add(t.id))} className="text-[11.5px] text-text-3 hover:text-text-2">Dismiss</button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="flex flex-col gap-3.5">
-          {/* SLA watch — live countdown */}
-          <div className="bg-surface border border-border rounded-2xl shadow-card p-4">
-            <div className="flex items-center gap-2 mb-3"><Timer size={14} className="text-text-3" /><span className="text-[12.5px] font-semibold">SLA watch</span><span className="ml-auto text-[10px] text-text-3 tabular-nums">live</span></div>
-            <div className="flex flex-col gap-2">
-              {watch.length === 0 && <p className="text-[12px] text-text-3">No open SLAs.</p>}
-              {watch.map(({ w, sla }) => (
-                <SlaRow key={w.id} ref_={w.ref} title={w.title} sla={sla} />
-              ))}
-            </div>
-          </div>
-
-          {/* Workload balancer */}
-          <div className="bg-surface border border-border rounded-2xl shadow-card p-4">
-            <div className="flex items-center gap-2 mb-3"><Users size={14} className="text-text-3" /><span className="text-[12.5px] font-semibold">Workload</span></div>
-            <div className="flex flex-col gap-2.5">
-              {loads.length === 0 && <p className="text-[12px] text-text-3">No assigned open jobs.</p>}
-              {loads.map((l) => (
-                <div key={l.assignee}>
-                  <div className="flex items-center justify-between text-[11.5px] mb-0.5"><span className="text-text-2 truncate">{l.assignee}</span><span className="font-mono text-text-3">{l.open}{l.critical ? ` · ${l.critical}⚠` : ''}</span></div>
-                  <div className="h-1.5 rounded-full bg-surface-2 overflow-hidden"><div className="h-full rounded-full" style={{ width: `${(l.open / maxLoad) * 100}%`, background: toneVar(l.tone) }} /></div>
-                </div>
-              ))}
-              {loads.some((l) => l.tone === 'danger') && <p className="text-[10.5px] text-warning mt-1">Rebalance: someone is carrying 4+ open jobs.</p>}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  return <div className={layout.layout}>
+    <div className={layout.toolbar}><p className={layout.metadata}>Recorded snapshot: {new Date(nowMs).toLocaleString('en-NG', { timeZone: 'Africa/Lagos' })} WAT · advisory rules, not a live forecast.</p><label className={layout.field}><span className={layout.label}>Recorded cost currency</span><select className={layout.select} value={currency} onChange={(event) => setCurrency(event.target.value)}>{(currencies.length ? currencies : ['NGN']).map((value) => <option key={value}>{value}</option>)}</select></label></div>
+    <div className={layout.metrics}><FacilityKpi label="Open work orders" value={String(open.length)} note={`${wos.length} total scoped records`} tone="info" icon={<Timer size={18} />} /><FacilityKpi label="SLA attention" value={String(breaching.length)} note="Soon or overdue at recorded snapshot" tone={breaching.length ? 'danger' : 'success'} icon={<AlertTriangle size={18} />} /><FacilityKpi label="Unassigned" value={String(unassigned)} note={unassigned ? 'An operator should assign an owner' : 'No unassigned open records'} tone={unassigned ? 'warn' : 'success'} icon={<Users size={18} />} /><FacilityKpi label={`Recorded cost · ${currency}`} value={money(cost.totalMinor)} note={`${cost.withCost} costed records · average ${money(cost.avgMinor)}`} tone="progress" icon={<Wallet size={18} />} /></div>
+    <div className={polish.insights}>
+      <Card padded={false}><div className={polish.registerHeader}><CardHeader title="Triage suggestions" subtitle="AI-F-02 · advisory, you decide · rules-based review queue · no automatic assignment" /></div>{triage.length ? <ul className="m-0 p-0 list-none divide-y divide-border">{triage.map((suggestion) => <li key={suggestion.id} className="p-6 max-[640px]:p-4"><div className={layout.toolbar}><Link href={`${basePath}/${suggestion.ref}`} className={polish.link}>{suggestion.ref}</Link><StatusPill status={`Suggested ${suggestion.suggestedPriority}${suggestion.escalate ? ' · escalation' : ''}`} tone={PRIORITY_TONE[suggestion.suggestedPriority] ?? 'neutral'} /></div><h4 className={layout.title}>{suggestion.title}</h4><p className={`${polish.body} mt-4`}>Suggested assignee: {suggestion.suggestedAssignee}</p><p className={`${polish.body} mt-2`}>{suggestion.reason}</p><p className={`${polish.metadata} mt-3`}>Keyword and workload rules support review; this is not a calibrated model recommendation.</p>{canMutate ? <div className={`${layout.filters} mt-6`}><Link href={`${basePath}/${suggestion.ref}`} className={polish.link}>Open to assign <ArrowUpRight size={16} /></Link><Button variant="ghost" onClick={() => setDismissed((previous) => new Set(previous).add(suggestion.id))}>Dismiss for this session</Button></div> : null}</li>)}</ul> : <EmptyState title="No triage suggestions in this view" description={dismissed.size ? `${dismissed.size} suggestions are hidden in this session. No work orders were changed.` : 'The current rules did not produce a triage suggestion for these records.'} />}{canMutate && dismissed.size ? <div className="p-6 max-[640px]:p-4 border-t border-border"><Button onClick={() => setDismissed(new Set())}>Restore dismissed suggestions</Button></div> : null}</Card>
+      <div className={layout.layout}><Card><CardHeader title="SLA watch" subtitle="Nearest recorded response / resolution targets · snapshot only" /><div className={layout.stack}>{watch.length ? watch.map(({ row, sla }) => <SlaRow key={row.id} ref_={row.ref} title={row.title} sla={sla} basePath={basePath} />) : <p className={polish.body}>No open SLA deadlines recorded.</p>}</div></Card><Card><CardHeader title="Assigned workload" subtitle="Open jobs per recorded assignee" /><ul className="m-0 p-0 list-none space-y-6">{loads.map((load) => <li key={load.assignee}><div className={layout.toolbar}><span className={polish.body}>{load.assignee}</span><span className={polish.metadata}>{load.open} open{load.critical ? ` · ${load.critical} high / emergency` : ''}</span></div><div role="img" aria-label={`${load.assignee}: ${load.open} open work orders`} className="mt-3 h-2 rounded bg-surface-2 overflow-hidden"><div className="h-full rounded" style={{ width: `${load.open / maxLoad * 100}%`, background: toneVar(load.tone) }} /></div></li>)}</ul>{!loads.length && <p className={polish.body}>No assigned open jobs.</p>}{loads.some((load) => load.tone === 'danger') && <p className="text-sm text-warning mt-6">Review capacity: an assignee has at least four open jobs. Reassignment still requires an authorised operator.</p>}</Card></div>
+    </div><p className={layout.metadata}>Recorded costs are currency-separated with no FX conversion. They are not verified invoices, bank payments or vendor settlements.</p>
+  </div>;
 }
 
-function SlaRow({ ref_, title, sla }: { ref_: string; title: string; sla: Sla }) {
-  return (
-    <Link href={`/work-orders/${ref_}`} className="flex items-center gap-2.5 group">
-      <span className="w-1.5 h-1.5 rounded-full flex-none" style={{ background: toneVar(sla.tone) }} />
-      <div className="min-w-0 flex-1"><div className="text-[12.5px] font-medium truncate group-hover:text-primary">{ref_}</div><div className="text-[10.5px] text-text-3 truncate">{title}</div></div>
-      <span className="font-mono text-[12px] font-semibold tabular-nums flex-none" style={{ color: toneVar(sla.tone) }}>{sla.msRemaining === null ? '—' : fmtRemaining(sla.msRemaining)}</span>
-    </Link>
-  );
-}
-
-function Kpi({ label, value, note, tone, icon }: { label: string; value: string; note: string; tone: Tone; icon: React.ReactNode }) {
-  return (
-    <div className="bg-surface border border-border rounded-2xl shadow-card p-4">
-      <span className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: `color-mix(in srgb, ${toneVar(tone)} 14%, transparent)`, color: toneVar(tone) }}>{icon}</span>
-      <div className="text-[13px] text-text-2 font-medium mt-3">{label}</div>
-      <div className="text-[21px] font-bold tracking-[-0.02em] leading-none mt-1">{value}</div>
-      <div className="text-[11px] mt-1" style={{ color: toneVar(tone) }}>{note}</div>
-    </div>
-  );
+function SlaRow({ ref_, title, sla, basePath }: { ref_: string; title: string; sla: Sla; basePath: string }) {
+  return <Link href={`${basePath}/${ref_}`} className={polish.row}><span aria-hidden="true" className="w-2 h-2 rounded-full" style={{ background: toneVar(sla.tone) }} /><div><span className="text-sm font-medium text-primary">{ref_}</span><p className={polish.metadata}>{title}</p></div><span className="text-sm tabular-nums" style={{ color: toneVar(sla.tone) }}>{sla.msRemaining == null ? 'No target' : fmtRemaining(sla.msRemaining)}</span></Link>;
 }

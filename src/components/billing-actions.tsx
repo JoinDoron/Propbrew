@@ -48,7 +48,7 @@ export function IssueButton({ invoiceRef }: { invoiceRef: string }) {
         await issueInvoice(invoiceRef);
         router.refresh();
       })}
-      className="h-7 px-2.5 rounded-lg text-[12px] font-medium border border-border bg-surface text-primary hover:bg-surface-2 transition-colors disabled:opacity-50"
+      className="pb-action h-7 px-2.5 rounded-lg text-[12px] font-medium border border-border bg-surface text-primary hover:bg-surface-2 transition-colors disabled:opacity-50"
     >
       {pending ? 'Issuing…' : 'Issue'}
     </button>

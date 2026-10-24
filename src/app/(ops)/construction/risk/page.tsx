@@ -1,5 +1,5 @@
 import { requireCapability } from '@/server/guard';
-import { effectiveLevel } from '@/lib/authz';
+import { can } from '@/lib/authz';
 import { constructionWorld, signalStates } from '@/server/reads/construction';
 import { NOW_MS } from '@/domain/ppm';
 import { scanRisks } from '@/domain/construction';
@@ -10,8 +10,9 @@ import { RiskRadar, type RadarSignal } from '@/components/construction/risk-rada
  *  cert expiry, critical issues) each emitting evidence, confidence and ₦-at-risk.
  *  Advisory only: acknowledge, snooze, dismiss, or escalate into a real Issue. */
 export default async function ConstructionRiskPage() {
-  const { actor } = await requireCapability('reports_analytics');
-  const canMutate = ['F', 'M'].includes(effectiveLevel(actor, 'reports_analytics'));
+  const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
+  const canMutate = can(actor, 'reports_analytics', 'update').allowed;
+  const canCreate = can(actor, 'reports_analytics', 'create').allowed;
 
   const world = constructionWorld(actor);
 
@@ -23,8 +24,8 @@ export default async function ConstructionRiskPage() {
   }));
 
   return (
-    <div className="max-w-[1000px] mx-auto">
-      <RiskRadar signals={signals} canMutate={canMutate} />
+    <div className="pb-page">
+      <RiskRadar signals={signals} canMutate={canMutate} canCreate={canCreate} />
     </div>
   );
 }

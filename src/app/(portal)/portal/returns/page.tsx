@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
 import { InvestorReturnsWorkspace } from '@/components/portal/investor-returns-workspace';
@@ -12,8 +13,11 @@ export default async function InvestorReturnsPage() {
   const projects = [...repos.investorProjects.list(actor).items];
 
   return (
-    <div className="max-w-[640px] mx-auto">
+    <div className="pb-page">
+      <PageHeader title="Returns projector" subtitle="Explore scenarios using clearly stated investment assumptions." />
+      <div className="w-full min-w-0 flex flex-col gap-6">
       <InvestorReturnsWorkspace projects={projects} />
+      </div>
     </div>
   );
 }

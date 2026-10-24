@@ -1,5 +1,7 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
+import { can } from '@/lib/authz';
 import { RequestsWorkspace, type RequestRow } from '@/components/portal/requests-workspace';
 
 /** EM-03 (resident view) — My Requests. A resident may raise a request (create)
@@ -13,8 +15,11 @@ export default async function MyRequestsPage() {
   }));
 
   return (
-    <div className="max-w-[720px] mx-auto">
-      <RequestsWorkspace requests={requests} />
+    <div className="pb-page">
+      <PageHeader title="My requests" subtitle="Raise an issue and follow it through to resolution." />
+      <div className="w-full min-w-0 flex flex-col gap-6">
+      <RequestsWorkspace requests={requests} canCreate={can(actor, 'work_orders', 'create').allowed} />
+      </div>
     </div>
   );
 }

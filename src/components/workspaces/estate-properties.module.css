@@ -1,0 +1,127 @@
+.workspace { max-width: none; margin: 0; width: 100%; display: flex; flex-direction: column; gap: 24px; }
+.header { display: flex; justify-content: space-between; align-items: center; gap: 24px; flex-wrap: wrap; padding-bottom: 4px; }
+.eyebrow { font-size: 12px; color: var(--primary); font-weight: 500; line-height: 1.5; margin: 0 0 6px; }
+.header h2 { font-size: 20px; font-weight: 500; letter-spacing: -.6px; line-height: 1.3; margin: 0; }
+.header > div > p:last-child { font-size: 14px; color: var(--text-2); line-height: 1.6; margin-top: 6px; }
+.scope { display: flex; gap: 7px; align-items: flex-start; font-size: 12px; line-height: 1.7; color: var(--text-2); margin-top: -8px; }
+.scope svg { flex: none; color: var(--text-2); margin-top: 3px; }
+.sectionStack { display: flex; flex-direction: column; gap: 24px; }
+.metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.metric { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card, 12px); min-width: 0; overflow: hidden; box-shadow: var(--shadow); }
+.metricHeader { display: flex; gap: 6px; align-items: center; padding: 16px; background: var(--surface-2); border-bottom: 1px solid var(--border); min-height: 54px; }
+.metricHeader h3 { font-size: 14px; font-weight: 500; line-height: 1.5; letter-spacing: -.42px; }
+.metricHeader > span { display: grid; place-items: center; color: var(--primary); flex: none; }
+.metricBody { padding: 14px 16px 12px; }
+.metricBody > strong { display: block; font-size: 40px; line-height: 1.2; letter-spacing: -1.2px; font-weight: 400; font-variant-numeric: tabular-nums; }
+.metricBody > p { font-size: 12px; line-height: 1.7; color: var(--text-2); border-top: 1px solid var(--border); padding-top: 9px; margin-top: 12px; }
+.register { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card, 12px); box-shadow: var(--shadow); padding: 24px; min-width: 0; }
+.registerHeading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+.registerHeading h2 { font-size: 18px; line-height: 1.5; letter-spacing: -.54px; font-weight: 500; }
+.registerHeading p { font-size: 12px; line-height: 1.7; color: var(--text-2); margin-top: 3px; }
+.views { display: inline-flex; padding: 3px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-control, 10px); gap: 3px; }
+.views button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 8px 12px; border-radius: var(--radius-control, 10px); font-size: 13px; font-weight: 500; color: var(--text-2); cursor: pointer; }
+.views button[aria-pressed='true'] { background: var(--surface); color: var(--primary); box-shadow: var(--shadow); }
+.views button:hover { color: var(--text); }
+.filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-top: 24px; }
+.search { display: flex; align-items: center; gap: 8px; min-width: 200px; flex: 1 1 250px; min-height: 42px; border: 1px solid var(--border); border-radius: var(--radius-control, 10px); padding: 0 12px; color: var(--text-2); background: var(--surface); }
+.search > svg { flex: none; }
+.search input { width: 100%; min-width: 0; outline: 0; font-size: 13px; height: 40px; background: transparent; color: var(--text); }
+.search input::placeholder { color: var(--text-2); }
+.search:focus-within { outline: 2px solid var(--primary); outline-offset: 2px; }
+.filter { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--text-2); min-width: 140px; flex: 0 1 165px; }
+.filter select { font-size: 13px; border: 1px solid var(--border); padding: 0 12px; border-radius: var(--radius-control, 10px); min-height: 42px; background: var(--surface); color: var(--text); max-width: 100%; }
+.resultBar { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--text-2); line-height: 1.7; margin: 16px 0; min-height: 24px; }
+.resultBar button { display: inline-flex; align-items: center; gap: 5px; border-radius: var(--radius-control, 10px); font-size: 13px; font-weight: 500; color: var(--text); cursor: pointer; min-height: 40px; }
+.tableScroll { position: relative; overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-control, 10px); }
+.table { border-collapse: collapse; width: 100%; text-align: left; min-width: 780px; }
+.table thead { background: var(--surface-2); color: var(--text-2); font-size: 12px; }
+.table thead th { height: 40px; padding: 8px 16px; font-weight: 500; line-height: 1.6; white-space: nowrap; }
+.table tbody th, .table tbody td { border-top: 1px solid var(--border); padding: 14px 16px; font-size: 14px; vertical-align: middle; font-weight: 400; height: 64px; }
+.table tbody tr:hover { background: var(--surface-2); }
+.propertyCell { display: flex; align-items: center; gap: 12px; min-width: 220px; max-width: 370px; }
+.propertyIcon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 10px; flex: none; background: var(--primary-weak); color: var(--primary); border: 1px solid color-mix(in srgb, var(--primary) 12%, var(--border)); }
+.propertyName { color: var(--text); font-size: 14px; font-weight: 500; cursor: pointer; border-radius: 4px; text-align: left; line-height: 1.6; }
+.propertyName:hover { color: var(--primary); text-decoration: underline; text-underline-offset: 3px; }
+.address { display: block; font-size: 12px; color: var(--text-2); font-weight: 400; line-height: 1.7; margin-top: 3px; overflow-wrap: anywhere; }
+.typeChip { display: inline-block; font-size: 12px; line-height: 1.5; color: var(--text-2); border: 1px solid var(--border); border-radius: 6px; padding: 3px 7px; max-width: 175px; background: var(--surface-2); }
+.unitNumber { font-size: 14px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.occupancy { min-width: 112px; }
+.occupancy > span { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 8px; }
+.occupancy strong { font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.occupancy small { font-size: 12px; color: var(--text-2); }
+.occupancy > div { height: 5px; border-radius: 6px; background: var(--surface-3); overflow: hidden; }
+.occupancy > div > span { display: block; height: 100%; border-radius: inherit; background: var(--primary); }
+.status { display: inline-flex; align-items: center; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-2); font-size: 12px; font-weight: 400; white-space: nowrap; }
+.status[data-tone='success'] { background: color-mix(in srgb, var(--tone-success) 7%, var(--surface)); border-color: color-mix(in srgb, var(--tone-success) 20%, var(--border)); color: var(--text); }
+.detailButton { display: inline-flex; gap: 5px; align-items: center; justify-content: center; min-height: 40px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-control, 10px); background: var(--surface); color: var(--text); font-size: 13px; font-weight: 500; white-space: nowrap; cursor: pointer; box-shadow: var(--shadow); }
+.detailButton:hover { background: var(--surface-2); border-color: var(--primary); color: var(--primary); }
+.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.card { border: 1px solid var(--border); border-radius: var(--radius-card, 12px); background: var(--surface); overflow: hidden; min-width: 0; box-shadow: var(--shadow); }
+.cardVisual { position: relative; background: color-mix(in srgb, var(--primary) 3%, var(--surface-2)); height: 140px; display: flex; align-items: center; justify-content: center; color: var(--primary); border-bottom: 1px solid var(--border); overflow: hidden; }
+.visualLines { position: absolute; inset: 0; opacity: .45; background-image: linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px); background-size: 24px 24px; mask-image: linear-gradient(90deg, transparent, black, transparent); }
+.cardVisual > svg { position: relative; }
+.cardVisual > span { position: absolute; bottom: 12px; right: 12px; font-size: 12px; color: var(--text-2); border: 1px solid var(--border); background: var(--surface); padding: 4px 8px; border-radius: 6px; }
+.cardBody { padding: 20px; }
+.cardTitle { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.cardTitle h3 { font-size: 16px; font-weight: 500; line-height: 1.5; letter-spacing: -.3px; min-width: 0; }
+.cardTitle h3 button { text-align: left; border-radius: 4px; cursor: pointer; }
+.cardTitle h3 button:hover { color: var(--primary); text-decoration: underline; text-underline-offset: 3px; }
+.cardTitle > .typeChip { font-size: 12px; max-width: 115px; flex: none; }
+.cardAddress { display: flex; gap: 5px; align-items: flex-start; color: var(--text-2); font-size: 12px; line-height: 1.7; min-height: 42px; margin: 8px 0 20px; overflow-wrap: anywhere; }
+.cardAddress > svg { flex: none; margin-top: 4px; }
+.cardNumbers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 20px 0; }
+.cardNumbers span { font-size: 12px; color: var(--text-2); line-height: 1.7; }
+.cardNumbers strong { display: block; font-size: 22px; font-weight: 400; color: var(--text); letter-spacing: -.6px; }
+.cardFooter { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding-top: 16px; border-top: 1px solid var(--border); }
+.registerFooter { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; border-top: 1px solid var(--border); padding-top: 16px; margin-top: 24px; }
+.registerFooter > p { display: flex; gap: 6px; align-items: flex-start; color: var(--text-2); font-size: 12px; line-height: 1.8; }
+.registerFooter > p svg { flex: none; margin-top: 4px; }
+.pagination { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--text-2); }
+.pagination button { width: 40px; height: 40px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: var(--radius-control, 10px); color: var(--text); cursor: pointer; }
+.pagination button:hover:not(:disabled) { color: var(--primary); border-color: var(--primary); }
+.pagination button:disabled { opacity: .4; cursor: default; }
+.empty { min-height: 260px; border: 1px dashed var(--border); background: var(--surface-2); border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 32px; }
+.empty > svg { color: var(--primary); margin-bottom: 16px; }
+.empty h3 { font-size: 18px; font-weight: 500; letter-spacing: -.5px; }
+.empty p { font-size: 13px; color: var(--text-2); line-height: 1.8; max-width: 460px; margin: 8px 0 16px; }
+.availabilityPanel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card, 12px); padding: 24px; box-shadow: var(--shadow); }
+.availabilityPanel > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.availabilityPanel h2 { font-size: 18px; line-height: 1.5; font-weight: 500; letter-spacing: -.54px; }
+.availabilityPanel header p { font-size: 12px; line-height: 1.7; color: var(--text-2); margin-top: 3px; }
+.availabilityBody { display: flex; align-items: center; flex-wrap: wrap; gap: 40px; padding-top: 28px; margin-top: 20px; border-top: 1px solid var(--border); }
+.availabilityHeadline { display: flex; align-items: center; gap: 16px; }
+.availabilityHeadline > p { font-size: 40px; font-weight: 400; letter-spacing: -1.2px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.availabilityHeadline > span { font-size: 13px; line-height: 1.6; color: var(--text); }
+.availabilityHeadline small { font-size: 12px; color: var(--text-2); }
+.availabilityChart { flex: 1; min-width: 260px; }
+.availabilityTrack { display: flex; height: 14px; background: var(--surface-3); border-radius: 5px; overflow: hidden; gap: 2px; }
+.availabilityTrack > span { min-width: 0; }
+.availabilityLegend { display: flex; gap: 16px; flex-wrap: wrap; justify-content: space-between; margin-top: 16px; }
+.availabilityLegend > div { display: flex; gap: 8px; align-items: center; }
+.availabilityLegend dt { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--text-2); }
+.availabilityLegend dt > span { width: 8px; height: 8px; border-radius: 2px; }
+.availabilityLegend dd { font-size: 12px; color: var(--text); font-variant-numeric: tabular-nums; }
+.availabilityPanel [data-tone='occupied'] { background: var(--primary); }
+.availabilityPanel [data-tone='vacant'] { background: var(--tone-success); }
+.availabilityPanel [data-tone='reserved'] { background: var(--tone-warn); }
+.availabilityPanel [data-tone='unavailable'] { background: var(--text-3); }
+.dialog { width: min(800px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); margin: auto; padding: 0; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-card, 12px); box-shadow: var(--shadow-lg); }
+.dialog::backdrop { background: rgb(2 8 23 / .5); backdrop-filter: blur(3px); }
+.dialogHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 24px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+.dialogHeader h2 { font-size: 20px; font-weight: 500; letter-spacing: -.72px; line-height: 1.4; }
+.dialogHeader > div > p:last-child { font-size: 12px; color: var(--text-2); margin-top: 6px; line-height: 1.7; }
+.dialogHeader > button { width: 40px; height: 40px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: var(--radius-control, 10px); cursor: pointer; flex: none; background: var(--surface); }
+.dialogHeader > button:hover { color: var(--primary); }
+.dialogBody { padding: 24px; }
+.detailStats { display: flex; gap: 24px; flex-wrap: wrap; margin-bottom: 24px; color: var(--text-2); font-size: 12px; }
+.detailStats strong { color: var(--text); font-size: 22px; font-weight: 400; letter-spacing: -.6px; margin-right: 5px; }
+.dialog .table { min-width: 500px; }
+.detailNote, .noUnits { margin-top: 20px; font-size: 12px; line-height: 1.8; color: var(--text-2); }
+.dialogFooter { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; }
+.workspace :is(a, button, select):focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+@media (max-width: 1220px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .metrics { gap: 12px; } .metricHeader, .metricBody { padding-left: 12px; padding-right: 12px; } .metricHeader h3 { font-size: 12px; } }
+@media (max-width: 1000px) { .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .filter { flex: 1 1 150px; } .search { flex-basis: 100%; } .metricHeader h3 { font-size: 14px; } }
+@media (max-width: 650px) { .header h2 { font-size: 20px; } .header > div > p:last-child { font-size: 13px; } .grid { grid-template-columns: 1fr; } .sectionStack { gap: 16px; } .register, .availabilityPanel { padding: 16px; } .metricBody > strong { font-size: 34px; } .metricHeader { padding: 12px; } .metricHeader h3 { font-size: 12px; } .metricBody { padding: 12px; } .metricBody > p { font-size: 12px; } .filter { min-width: 120px; } .dialogHeader, .dialogBody { padding: 18px; } .cardTitle > .typeChip { max-width: 140px; } .availabilityBody { gap: 24px; padding-top: 20px; } .availabilityChart { min-width: 100%; } .availabilityLegend { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); } .availabilityLegend > div { justify-content: space-between; } .detailStats { gap: 16px; } }
+@media (max-width: 390px) { .metrics { grid-template-columns: 1fr; } .registerHeading { align-items: flex-start; } }
+
+@media (pointer: coarse) { .views button, .detailButton, .resultBar button, .filter select { min-height: 44px; } .search { min-height: 44px; } .search input { min-height: 42px; } .pagination button, .dialogHeader > button { width: 44px; height: 44px; } }

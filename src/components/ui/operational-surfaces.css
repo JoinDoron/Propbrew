@@ -1,0 +1,165 @@
+/* Operational adaptations of the Clinexa panel, type and spacing system.
+   Explicit opt-in classes keep emergency, payment and status colours semantic. */
+.pb-app .pb-hero {
+  position: relative;
+  overflow: hidden;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgb(2 8 23 / 6%);
+}
+
+.pb-app .pb-hero::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--primary);
+  content: '';
+}
+
+.pb-app .pb-hero-title {
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.035em;
+  line-height: 1.3;
+}
+
+.pb-app .pb-hero-number {
+  font-size: clamp(32px, 3vw, 40px);
+  font-weight: 400;
+  letter-spacing: -0.045em;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.pb-app .pb-hero-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--primary) 15%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--primary) 7%, var(--surface));
+  color: var(--primary);
+}
+
+.pb-app .pb-hero [class~='text-right'] {
+  padding-inline-start: 20px;
+  border-inline-start: 1px solid var(--border);
+}
+
+.pb-app .pb-hero [class~='text-right'] > :last-child {
+  font-weight: 500;
+}
+
+.pb-app .pb-hero[data-emergency='true'] {
+  border-color: color-mix(in srgb, var(--tone-danger) 45%, var(--border));
+  background: color-mix(in srgb, var(--tone-danger) 7%, var(--surface));
+}
+
+.pb-app .pb-hero[data-emergency='true']::before {
+  background: var(--tone-danger);
+}
+
+.pb-app .pb-stat {
+  display: grid;
+  position: relative;
+  isolation: isolate;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(28px, auto) auto;
+  align-content: start;
+  align-items: center;
+  gap: 16px 8px;
+  overflow: hidden;
+  padding: 12px 16px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgb(2 8 23 / 6%);
+}
+
+.pb-app .pb-stat::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0 0 auto;
+  height: 52px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  content: '';
+}
+
+.pb-app .pb-stat-label {
+  min-width: 0;
+  grid-column: 1;
+  grid-row: 1;
+  margin: 0;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+  line-height: 1.4;
+}
+
+.pb-app .pb-stat-icon {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  grid-column: 2;
+  grid-row: 1;
+  place-items: center;
+  border-radius: 7px;
+}
+
+.pb-app .pb-stat-value {
+  min-width: 0;
+  grid-column: 1 / -1;
+  grid-row: 2;
+  margin: 8px 0 0;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: clamp(26px, 2.3vw, 40px);
+  font-weight: 400;
+  letter-spacing: -0.045em;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.pb-app .pb-stat-value--text {
+  font-size: 22px;
+  line-height: 1.3;
+}
+
+.pb-app .pb-stat-note {
+  min-width: 0;
+  grid-column: 1 / -1;
+  margin-top: -6px;
+  color: var(--text-3);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+@media (max-width: 640px) {
+  .pb-app .pb-hero {
+    padding: 18px;
+  }
+
+  .pb-app .pb-hero-title {
+    font-size: 20px;
+  }
+
+  .pb-app .pb-stat {
+    padding-inline: 12px;
+  }
+
+  .pb-app .pb-stat-label {
+    font-size: 12px;
+  }
+
+  .pb-app .pb-hero [class~='text-right'] {
+    padding-inline-start: 12px;
+  }
+}

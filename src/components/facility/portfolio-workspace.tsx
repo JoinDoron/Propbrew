@@ -1,114 +1,100 @@
 'use client';
 
 import { useState } from 'react';
-import { Building2, TriangleAlert, Fuel, Banknote, Wrench, HeartPulse, ArrowDownWideNarrow, ShieldAlert } from 'lucide-react';
-import { toneVar, type Tone } from '@/lib/status-tones';
+import { ArrowUpRight, Banknote, Building2, Fuel, Info, Search, TriangleAlert, Wrench, X } from 'lucide-react';
+import { Button, Card, CardHeader, EmptyState, IconButton, KpiCard, StatusPill } from '@/components/ui';
+import { PageTabs } from '@/components/ui/page-tabs';
+import { PortalDialog } from '@/components/portal/portal-dialog';
 import { estateIndex, type EstateVitals } from '@/domain/facility';
+import styles from '@/components/ui/workspace-layout.module.css';
+import local from './portfolio-workspace.module.css';
 
-const moneyK = (m: number) => { const n = m / 100; return n >= 1_000_000 ? `₦${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `₦${Math.round(n / 1000)}k` : `₦${Math.round(n)}`; };
-
+const money = (minor: number) => new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 2 }).format(minor / 100);
+const shortMoney = (minor: number) => new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', notation: 'compact', maximumFractionDigits: 1 }).format(minor / 100);
 type SortKey = 'index' | 'diesel' | 'arrears' | 'overdue';
-const SORTS: { key: SortKey; label: string }[] = [{ key: 'index', label: 'Attention' }, { key: 'diesel', label: 'Diesel spend' }, { key: 'arrears', label: 'Arrears' }, { key: 'overdue', label: 'Overdue work' }];
+const SORTS: { key: SortKey; label: string }[] = [{ key: 'index', label: 'Attention first' }, { key: 'diesel', label: 'Diesel estimate' }, { key: 'arrears', label: 'Arrears' }, { key: 'overdue', label: 'Overdue work' }];
 
-export function PortfolioWorkspace({ estates, totals, canSeeMoney }: {
-  estates: EstateVitals[];
+export type PortfolioEstateVitals = EstateVitals & { systemCount?: number };
+type LoadedRecordCounts = { estates: number; systems: number; alarms: number; generators: number; contracts: number; workOrders: number; invoices?: number };
+const hasMeasuredHealth = (estate: PortfolioEstateVitals) => (estate.systemCount ?? 0) > 0;
+
+export function PortfolioWorkspace({ estates, totals, canSeeMoney, excludedCurrencyInvoices = 0, loadedRecordCounts }: {
+  estates: PortfolioEstateVitals[];
   totals: { avgIndex: number; openWos: number; overdueWos: number; openAlarms: number; dieselSpendMinor: number; arrearsMinor: number };
   canSeeMoney: boolean;
+  excludedCurrencyInvoices?: number;
+  loadedRecordCounts?: LoadedRecordCounts;
 }) {
   const [sort, setSort] = useState<SortKey>('index');
-  const sorted = [...estates].sort((a, b) => {
+  const [query, setQuery] = useState('');
+  const [openId, setOpenId] = useState<string | null>(null);
+  const sorted = estates.filter((estate) => estate.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())).sort((a, b) => {
     if (sort === 'diesel') return b.dieselSpendMinor - a.dieselSpendMinor;
-    if (sort === 'arrears') return (b.arrearsMinor ?? 0) - (a.arrearsMinor ?? 0);
+    if (sort === 'arrears' && canSeeMoney) return (b.arrearsMinor ?? 0) - (a.arrearsMinor ?? 0);
     if (sort === 'overdue') return b.overdueWos - a.overdueWos;
-    return estateIndex(a).score - estateIndex(b).score; // worst-first
+    if (hasMeasuredHealth(a) !== hasMeasuredHealth(b)) return hasMeasuredHealth(a) ? 1 : -1;
+    return estateIndex(a).score - estateIndex(b).score;
   });
-  const worst = [...estates].sort((a, b) => estateIndex(a).score - estateIndex(b).score)[0];
-  const portfolioBand: Tone = totals.avgIndex >= 85 ? 'success' : totals.avgIndex >= 65 ? 'warn' : 'danger';
+  const selected = estates.find((estate) => estate.siteId === openId) ?? null;
+  const measured = estates.filter(hasMeasuredHealth);
+  const worst = [...measured].sort((a, b) => estateIndex(a).score - estateIndex(b).score)[0];
+  const measuredAverage = measured.length ? Math.round(measured.reduce((sum, estate) => sum + estateIndex(estate).score, 0) / measured.length) : null;
 
-  return (
-    <div className="flex flex-col gap-3.5">
-      {/* Hero */}
-      <div className="relative overflow-hidden rounded-2xl p-5 text-white shadow-card" style={{ background: 'linear-gradient(135deg,#0b1220 0%,#141c3d 55%,#241b53 100%)' }}>
-        <div className="absolute -right-10 -top-10 w-56 h-56 rounded-full opacity-20" style={{ background: `radial-gradient(circle, ${toneVar(portfolioBand)}, transparent 70%)` }} />
-        <div className="relative flex items-center gap-5 flex-wrap">
-          <Ring score={totals.avgIndex} band={portfolioBand} label="index" />
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5 text-[11px] text-white/70"><Building2 size={12} /> PORTFOLIO · {estates.length} estate{estates.length === 1 ? '' : 's'}</div>
-            <div className="text-[21px] font-bold tracking-[-0.02em] leading-tight mt-1">Estate portfolio · <span style={{ color: toneVar(portfolioBand) }}>{portfolioBand === 'success' ? 'Healthy' : portfolioBand === 'warn' ? 'Watch' : 'At risk'}</span></div>
-            {worst && <div className="text-[12.5px] text-white/75 mt-0.5">{totals.overdueWos} overdue jobs · {totals.openAlarms} open alarms · <span className="text-white/90 font-medium">{worst.name}</span> needs the most attention</div>}
-          </div>
+  return <div className={styles.layout}>
+    <div className={styles.context}><p className={styles.metadata}>{estates.length} recorded estate{estates.length === 1 ? '' : 's'} · Authorised scope only</p><StatusPill status="Rules-based snapshot" tone="info" /></div>
+    <PageTabs label="Estate portfolio sections" items={[
+      { id: 'estates', label: 'Estate scorecards', content: <div className={styles.layout}>
+        <div className={styles.toolbar}><label className={styles.search}><Search size={17} aria-hidden="true" /><span className="sr-only">Search estates</span><input type="search" placeholder="Search estates…" value={query} onChange={(event) => setQuery(event.target.value)} /></label><label className={local.sort}><span className={styles.label}>Sort by</span><select className={styles.select} aria-label="Sort estates" value={sort} onChange={(event) => setSort(event.target.value as SortKey)}>{SORTS.filter((option) => canSeeMoney || option.key !== 'arrears').map((option) => <option value={option.key} key={option.key}>{option.label}</option>)}</select></label></div>
+        {sorted.length ? <div className={styles.analytics}>{sorted.map((estate) => <Card key={estate.siteId} className={styles.panel}>
+          <CardHeader title={estate.name} subtitle={estate.kind} action={<EstateIndex estate={estate} />} />
+          <dl className={local.metrics}>
+            <Fact label="Systems health index" value={hasMeasuredHealth(estate) ? `${estate.healthScore}/100` : 'Health not measured'} /><Fact label="Loaded system records" value={estate.systemCount === undefined ? 'Coverage not supplied' : String(estate.systemCount)} />
+            <Fact label="Open work orders" value={String(estate.openWos)} />
+            <Fact label="Overdue work orders" value={String(estate.overdueWos)} /><Fact label="Open alarms" value={String(estate.openAlarms)} />
+            <Fact label="Monthly diesel estimate" value={money(estate.dieselSpendMinor)} /><Fact label="Genset reliance" value={`${estate.gensetPct}%`} />
+            <Fact label="Contracts needing review" value={String(estate.contractsAtRisk)} />{canSeeMoney && <Fact label="Recorded arrears · NGN only" value={estate.arrearsMinor === null ? 'Not available' : money(estate.arrearsMinor)} />}
+          </dl>
+          <div className={local.cardFooter}><span className={styles.metadata}>Composite indicators support human review.</span><Button variant="ghost" onClick={() => setOpenId(estate.siteId)} aria-label={`View portfolio metrics for ${estate.name}`}>View details <ArrowUpRight size={15} aria-hidden="true" /></Button></div>
+        </Card>)}</div> : <Card><EmptyState icon={<Building2 size={22} />} title={estates.length ? 'No matching estates' : 'No estates in your scope'} description={estates.length ? 'Try another estate name.' : 'Authorised estate metrics will appear here.'} action={estates.length ? <Button onClick={() => setQuery('')}>Clear search</Button> : undefined} /></Card>}
+      </div> },
+      { id: 'overview', label: 'Portfolio summary', content: <div className={styles.layout}>
+        <div className={styles.metrics}><KpiCard label="Open work orders" value={String(totals.openWos)} icon={<Wrench size={18} />} /><KpiCard label="Open alarms" value={String(totals.openAlarms)} icon={<TriangleAlert size={18} />} /><KpiCard label="Monthly diesel estimate" value={shortMoney(totals.dieselSpendMinor)} icon={<Fuel size={18} />} />{canSeeMoney && <KpiCard label="Recorded arrears · NGN only" value={shortMoney(totals.arrearsMinor)} icon={<Banknote size={18} />} />}</div>
+        <Card className={styles.panel}><CardHeader title="Portfolio review" subtitle="A composite view of the available estate records" /><dl className={styles.facts}><div><dt>Average index · measured estates only</dt><dd>{measuredAverage === null ? 'Health not measured' : `${measuredAverage}/100`}</dd></div><div><dt>Health coverage</dt><dd>{measured.length} of {estates.length} estates have loaded system records</dd></div><div><dt>Overdue work orders</dt><dd>{totals.overdueWos}</dd></div><div><dt>Lowest index among measured estates</dt><dd>{worst?.name ?? 'No measured estates'}</dd></div></dl><p className={styles.footnote}>The index is a deterministic summary of recorded health, work, alarms and contract signals. Only estates with loaded system records contribute to the average and index ranking. Missing data is not evidence of healthy systems. It is not a provider-backed AI prediction or a live safety assessment.</p></Card>
+      </div> },
+    ]} />
+    <div className={styles.notice}><Info size={18} aria-hidden="true" /><p>Recorded indicators, not a live control feed.<span>Diesel cost is modelled from recorded generator runtime. Arrears are shown only when your billing permission allows it.</span></p></div>
+    {canSeeMoney && <div className={styles.notice}><Banknote size={18} aria-hidden="true" /><p>Arrears coverage: NGN invoices only.<span>Both the charge and paid amount must be in NGN. {excludedCurrencyInvoices} loaded invoice{excludedCurrencyInvoices === 1 ? ' is' : 's are'} excluded because another currency is recorded. No FX conversion or cross-currency netting is applied.</span></p></div>}
+    <Card className={styles.panel}><CardHeader title="Loaded-record snapshot" subtitle="Source reads are capped, so these figures may undercount your complete portfolio." />
+      {loadedRecordCounts && <dl className={local.coverage}>
+        {Object.entries(loadedRecordCounts).filter(([key, count]) => count !== undefined && (canSeeMoney || key !== 'invoices')).map(([key, count]) => <div key={key}><dt>{({ estates: 'Estates', systems: 'Systems', alarms: 'Alarms', generators: 'Generators', contracts: 'Contracts', workOrders: 'Work orders', invoices: 'Invoices' } as Record<string, string>)[key]}</dt><dd>{count} loaded</dd></div>)}
+      </dl>}
+      <p className={styles.metadata}>This view loads at most 100 estates and 100 records per systems, alarms, generators and contracts source, plus 500 work orders and 500 invoices. It does not fetch subsequent pages. Counts and estimates describe loaded records, not an exhaustive estate audit.</p>
+    </Card>
+    {selected && <PortalDialog label={`Portfolio metrics for ${selected.name}`} drawer width={560} onClose={() => setOpenId(null)}>
+      <div className={styles.drawer}>
+        <header className={styles.dialogHeader}><div><h2 className={styles.dialogTitle}>{selected.name}</h2><p className={styles.metadata}>Recorded estate indicators</p></div><IconButton aria-label="Close estate metrics" onClick={() => setOpenId(null)}><X size={18} /></IconButton></header>
+        <div className={styles.dialogBody}>
+          <EstateIndex estate={selected} />
+          <dl className={styles.facts}>
+            <Fact label="Systems health index" value={hasMeasuredHealth(selected) ? `${selected.healthScore}/100` : 'Health not measured'} />
+            <Fact label="Loaded system records" value={selected.systemCount === undefined ? 'Coverage not supplied' : String(selected.systemCount)} />
+            <Fact label="Open work orders" value={String(selected.openWos)} /><Fact label="Overdue work orders" value={String(selected.overdueWos)} />
+            <Fact label="Open alarms" value={String(selected.openAlarms)} /><Fact label="Monthly diesel estimate" value={money(selected.dieselSpendMinor)} />
+            <Fact label="Genset reliance" value={`${selected.gensetPct}%`} /><Fact label="Contract review signals" value={String(selected.contractsAtRisk)} />
+            {canSeeMoney && <Fact label="Recorded arrears · NGN only" value={selected.arrearsMinor === null ? 'Not available' : money(selected.arrearsMinor)} />}
+          </dl>
+          {!hasMeasuredHealth(selected) && <p className={styles.metadata}>System health and the composite index are not measured for this estate because no system coverage was supplied.</p>}
+          <p className={styles.metadata}>These loaded-record indicators do not trigger penalties, dispatch maintenance or make financial decisions.</p>
         </div>
       </div>
-
-      {/* Portfolio KPIs */}
-      <div className={`grid grid-cols-2 ${canSeeMoney ? 'min-[720px]:grid-cols-4' : 'min-[720px]:grid-cols-3'} gap-2.5`}>
-        <Kpi label="Open work" value={String(totals.openWos)} sub={`${totals.overdueWos} overdue`} tone={totals.overdueWos ? 'warn' : 'success'} icon={<Wrench size={16} />} />
-        <Kpi label="Open alarms" value={String(totals.openAlarms)} sub="across estates" tone={totals.openAlarms ? 'danger' : 'success'} icon={<TriangleAlert size={16} />} />
-        <Kpi label="Diesel spend" value={moneyK(totals.dieselSpendMinor)} sub="per month" tone="progress" icon={<Fuel size={16} />} />
-        {canSeeMoney && <Kpi label="Arrears" value={moneyK(totals.arrearsMinor)} sub="outstanding" tone={totals.arrearsMinor ? 'warn' : 'success'} icon={<Banknote size={16} />} />}
-      </div>
-
-      {/* Sort */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-[11px] text-text-3 inline-flex items-center gap-1"><ArrowDownWideNarrow size={13} /> Sort</span>
-        {SORTS.filter((s) => canSeeMoney || s.key !== 'arrears').map((s) => (
-          <button key={s.key} onClick={() => setSort(s.key)} className={`text-[11.5px] px-2.5 h-7 rounded-full border ${sort === s.key ? 'bg-primary text-white border-primary' : 'border-border-2 text-text-2'}`}>{s.label}</button>
-        ))}
-      </div>
-
-      {/* Estate scorecards */}
-      <div className="grid grid-cols-1 min-[720px]:grid-cols-2 gap-2.5">
-        {sorted.map((e) => {
-          const idx = estateIndex(e);
-          return (
-            <div key={e.siteId} className="bg-surface border border-border rounded-2xl shadow-card p-4">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="text-[14px] font-semibold truncate">{e.name}</div>
-                  <div className="text-[11px] text-text-3 capitalize">{e.kind}</div>
-                </div>
-                <div className="flex items-center gap-2 flex-none">
-                  <span className="text-[10.5px] font-semibold px-2 h-6 inline-flex items-center rounded-full" style={{ background: `color-mix(in srgb, ${toneVar(idx.band)} 14%, transparent)`, color: toneVar(idx.band) }}>{idx.label}</span>
-                  <div className="relative" style={{ width: 44, height: 44 }}>
-                    <svg width={44} height={44} viewBox="0 0 36 36" className="-rotate-90"><circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--surface-2)" strokeWidth="4" /><circle cx="18" cy="18" r="15.5" fill="none" stroke={toneVar(idx.band)} strokeWidth="4" strokeLinecap="round" strokeDasharray={`${(idx.score / 100) * 97.4} 97.4`} /></svg>
-                    <div className="absolute inset-0 grid place-items-center text-[12px] font-bold" style={{ color: toneVar(idx.band) }}>{idx.score}</div>
-                  </div>
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-2 mt-3">
-                <Metric icon={<HeartPulse size={13} />} value={`${e.healthScore}`} label="systems" tone={e.healthScore >= 90 ? 'success' : e.healthScore >= 70 ? 'warn' : 'danger'} />
-                <Metric icon={<Wrench size={13} />} value={`${e.openWos}`} label={`${e.overdueWos} overdue`} tone={e.overdueWos ? 'warn' : 'neutral'} />
-                <Metric icon={<TriangleAlert size={13} />} value={`${e.openAlarms}`} label="alarms" tone={e.openAlarms ? 'danger' : 'neutral'} />
-                <Metric icon={<Fuel size={13} />} value={moneyK(e.dieselSpendMinor)} label={`${e.gensetPct}% genset`} tone="progress" />
-                <Metric icon={<ShieldAlert size={13} />} value={`${e.contractsAtRisk}`} label="SLA risk" tone={e.contractsAtRisk ? 'warn' : 'neutral'} />
-                {canSeeMoney && <Metric icon={<Banknote size={13} />} value={e.arrearsMinor !== null ? moneyK(e.arrearsMinor) : '—'} label="arrears" tone={e.arrearsMinor ? 'warn' : 'neutral'} />}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
+    </PortalDialog>}
+  </div>;
 }
 
-function Metric({ icon, value, label, tone }: { icon: React.ReactNode; value: string; label: string; tone: Tone }) {
-  return (
-    <div className="rounded-xl bg-surface-2 p-2.5">
-      <span className="inline-flex items-center gap-1 text-[10px] text-text-3" style={{ color: tone !== 'neutral' ? toneVar(tone) : undefined }}>{icon}</span>
-      <div className="text-[14px] font-bold tracking-[-0.02em] leading-none mt-1 tabular-nums">{value}</div>
-      <div className="text-[9.5px] text-text-3 mt-0.5 truncate">{label}</div>
-    </div>
-  );
-}
-function Ring({ score, band, label }: { score: number; band: Tone; label: string }) {
-  const color = toneVar(band);
-  return (
-    <div className="relative flex-none" style={{ width: 84, height: 84 }}>
-      <svg width={84} height={84} viewBox="0 0 36 36" className="-rotate-90"><circle cx="18" cy="18" r="15.5" fill="none" stroke="rgba(255,255,255,.12)" strokeWidth="3" /><circle cx="18" cy="18" r="15.5" fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeDasharray={`${(score / 100) * 97.4} 97.4`} /></svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center"><span className="text-[22px] font-bold leading-none" style={{ color }}>{score}</span><span className="text-[8px] text-white/60 uppercase tracking-wide">{label}</span></div>
-    </div>
-  );
-}
-function Kpi({ label, value, sub, tone, icon }: { label: string; value: string; sub: string; tone: Tone; icon: React.ReactNode }) {
-  return <div className="bg-surface border border-border rounded-2xl shadow-card p-3.5"><span className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `color-mix(in srgb, ${toneVar(tone)} 14%, transparent)`, color: toneVar(tone) }}>{icon}</span><div className="text-[12px] text-text-2 font-medium mt-2.5">{label}</div><div className="text-[17px] font-bold tracking-[-0.02em] leading-none mt-1">{value}</div><div className="text-[10px] text-text-3 mt-0.5">{sub}</div></div>;
+function Fact({ label, value }: { label: string; value: string }) { return <div><dt>{label}</dt><dd>{value}</dd></div>; }
+
+function EstateIndex({ estate }: { estate: PortfolioEstateVitals }) {
+  if (!hasMeasuredHealth(estate)) return <StatusPill status="Index not measured" tone="muted" />;
+  const index = estateIndex(estate);
+  return <StatusPill status={`${index.label} · ${index.score}/100`} tone={index.band} />;
 }

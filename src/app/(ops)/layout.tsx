@@ -1,4 +1,4 @@
-import { ShellFrame } from '@/components/shell-frame';
 export default function OpsLayout({ children }: { children: React.ReactNode }) {
-  return <ShellFrame expected="ops">{children}</ShellFrame>;
+  // Each module owns its own server-gated shell. The chooser has no sidebar.
+  return children;
 }

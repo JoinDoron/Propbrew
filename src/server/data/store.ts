@@ -18,12 +18,33 @@ import { pushNotification } from './inbox';
 import { findTransition, workOrderMachine, type MachineKey } from '@/domain/workflows';
 import { money } from '@/domain/primitives';
 import type { Role } from '@/domain/enums';
+import type { Resident } from '@/domain/entities';
 import type { SystemActor } from '@/domain/workflows';
 
 const clone = <T>(arr: readonly T[]): T[] => arr.map((x) => ({ ...x }));
 
 /** Mutable working set, cloned from the immutable seed. */
 export const db = {
+  sites: clone(seed.sites),
+  buildings: clone(seed.buildings),
+  units: clone(seed.units),
+  residents: seed.residents.map((resident): Resident => ({
+    ...resident,
+    email: resident.email ?? seed.users.find((user) => user.id === resident.userId && user.tenantId === resident.tenantId)?.email,
+  })),
+  /** Demo-only trusted assignments, created atomically with a property receipt. */
+  estateCreatorAssignments: [] as {
+    tenantId: string; userId: string; siteId: string; source: 'estate_property_registration'; createdAt: string;
+  }[],
+  estateRegistrationReceipts: [] as {
+    tenantId: string; actorId: string; key: string; kind: 'property' | 'tenant';
+    payloadHash: string; result: { id: string; name: string }; createdAt: string;
+  }[],
+  /** Attributed record-creation events; contains no contact details. */
+  estateRegistrationAudit: [] as {
+    tenantId: string; actorId: string; action: 'property.created' | 'resident.created';
+    entityId: string; siteId: string; unitId?: string; at: string;
+  }[],
   workOrders: clone(seed.workOrders),
   invoices: clone(seed.invoices),
   bookings: clone(seed.bookings),
@@ -67,7 +88,7 @@ export const db = {
   emissionMonths: clone(seed.emissionMonths),
   // Copilot per-tenant model choice + a running usage meter (seeded with some
   // prior usage so the meter isn't empty on first view).
-  copilotSettings: [{ tenantId: 't-lekki', model: 'claude-sonnet-5' }] as { tenantId: string; model: string }[],
+  copilotSettings: [{ tenantId: 't-lekki', model: 'gpt-6.1-sol' }] as { tenantId: string; model: string }[],
   copilotUsage: [{ tenantId: 't-lekki', requests: 24, inputTokens: 18000, outputTokens: 5200, costMinorNgn: 21120 }] as { tenantId: string; requests: number; inputTokens: number; outputTokens: number; costMinorNgn: number }[],
   residentFeedback: clone(seed.residentFeedback),
   engagementSnapshot: clone(seed.engagementSnapshot),
@@ -129,7 +150,7 @@ export const db = {
   constructionAudit: clone(seed.constructionAudit),
   constructionFxRates: clone(seed.constructionFxRates),
   /** Physical stock counts awaiting reconciliation. */
-  constructionStockCounts: [] as { tenantId: unknown; id: string; ref: string; warehouseId: string; materialId: string; systemQty: number; countedQty: number; countedBy: string; countedISO: string; status: 'open' | 'reconciled'; reasonCodeId?: string; note?: string; approvedBy?: string }[],
+  constructionStockCounts: [] as { tenantId: string; id: string; ref: string; warehouseId: string; materialId: string; systemQty: number; countedQty: number; countedBy: string; countedISO: string; status: 'open' | 'reconciled'; reasonCodeId?: string; note?: string; approvedBy?: string }[],
   // Advisory risk-signal lifecycle (ack/snooze/escalate/dismiss), keyed by deterministic signal id.
   constructionSignalStates: [] as { signalId: string; state: 'ack' | 'snoozed' | 'escalated' | 'dismissed'; atISO: string }[],
   /** Idempotency ledger for offline-captured mutations. The client's op id is

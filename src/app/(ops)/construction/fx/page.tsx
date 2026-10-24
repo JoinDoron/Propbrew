@@ -1,5 +1,5 @@
 import { requireCapability } from '@/server/guard';
-import { effectiveLevel } from '@/lib/authz';
+import { can } from '@/lib/authz';
 import { constructionWorld } from '@/server/reads/construction';
 import { fxTable, fxExposure, fxPositions, fxUnrealizedMinor, fxMovementPct, type FxRate } from '@/domain/construction';
 import { FxWorkspace, type RatePanelRow } from '@/components/construction/fx-workspace';
@@ -9,8 +9,8 @@ import { FxWorkspace, type RatePanelRow } from '@/components/construction/fx-wor
  *  the naira moves, with a reporting-currency lens, sensitivity, and a repricing
  *  action that lands in the audit log + reason Pareto. */
 export default async function ConstructionFxPage() {
-  const { actor } = await requireCapability('reports_analytics');
-  const canMutate = ['F', 'M'].includes(effectiveLevel(actor, 'reports_analytics'));
+  const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
+  const canMutate = can(actor, 'reports_analytics', 'update').allowed;
   const world = constructionWorld(actor);
 
   const table = fxTable(world.fxRates);
@@ -27,7 +27,7 @@ export default async function ConstructionFxPage() {
     .sort((a, b) => Number(b.hasExposure) - Number(a.hasExposure) || a.currency.localeCompare(b.currency));
 
   return (
-    <div className="max-w-[1000px] mx-auto">
+    <div className="pb-page">
       <FxWorkspace
         rows={rows}
         positions={positions}

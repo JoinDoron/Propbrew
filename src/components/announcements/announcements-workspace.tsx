@@ -1,92 +1,62 @@
 'use client';
 
-import { useRef, useState, useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Megaphone, Sparkles, Check, Send, CalendarClock, ShieldCheck, X, Languages, Users } from 'lucide-react';
+import { Check, Eye, Languages, Megaphone, Search, Send, ShieldCheck, Sparkles, Users, X } from 'lucide-react';
+import { Card, CardHeader, KpiCard, StatusPill, Button, IconButton, EmptyState } from '@/components/ui';
+import { PageTabs } from '@/components/ui/page-tabs';
+import { PortalDialog } from '@/components/portal/portal-dialog';
 import type { Announcement } from '@/domain/entities';
 import type { AnnouncementScope } from '@/domain/enums';
-import {
-  CHANNELS, BLOCKS, composeDraft, estimateReach, targetSize, analytics, readRate, engagementTone,
-  type Channel, type Composed,
-} from '@/domain/announcements';
+import { CHANNELS, BLOCKS, composeDraft, estimateReach, targetSize, analytics, readRate, engagementTone, type Channel, type Composed } from '@/domain/announcements';
 import { sendAnnouncement } from '@/server/actions/announcements';
-import { toneVar, type Tone } from '@/lib/status-tones';
+import { toneVar } from '@/lib/status-tones';
+import layout from '@/components/ui/workspace-layout.module.css';
+import styles from './announcements-workspace.module.css';
 
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const SCOPES: AnnouncementScope[] = ['broadcast', 'estate', 'building'];
 const AUDIENCES = ['All residents', 'Owners', 'Tenants', 'Committee'];
 
 export function AnnouncementsWorkspace({ rows, canMutate }: { rows: readonly Announcement[]; canMutate: boolean }) {
   const [composing, setComposing] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Announcement | null>(null);
+  const [query, setQuery] = useState('');
+  const [message, setMessage] = useState<string | null>(null);
   const a = analytics(rows);
-
-  return (
-    <div className="flex flex-col gap-3.5">
-      <div className="grid grid-cols-2 min-[900px]:grid-cols-4 gap-3">
-        <Kpi label="Sent" value={String(a.sent)} note={`${a.drafts} in draft`} tone="info" icon={<Megaphone size={18} />} />
-        <Kpi label="Delivered" value={a.totalDelivered.toLocaleString()} note="all channels" tone="progress" icon={<Send size={18} />} />
-        <Kpi label="Avg read rate" value={`${a.avgReadRate}%`} note="across sent" tone={engagementTone(a.avgReadRate)} icon={<Users size={18} />} />
-        <Kpi label="Reached" value={a.totalRead.toLocaleString()} note="opened / read" tone="success" icon={<Check size={18} />} />
-      </div>
-
-      <div className="flex items-center justify-between">
-        <h2 className="text-[14px] font-semibold">Recent announcements</h2>
-        {canMutate && (
-          <button onClick={() => setComposing(true)} className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl bg-primary text-white text-[13px] font-medium shadow-sm hover:brightness-105">
-            <Sparkles size={15} /> Compose
-          </button>
-        )}
-      </div>
-
-      <div className="grid grid-cols-1 min-[720px]:grid-cols-2 gap-3.5">
-        {rows.map((an) => {
+  const filtered = rows.filter((row) => `${row.title} ${row.body} ${row.audience}`.toLowerCase().includes(query.trim().toLowerCase()));
+  return <div className={layout.layout}>
+    <div className={layout.toolbar}><div><h2 className={layout.sectionTitle}>Resident communications</h2><p className={layout.metadata}>Notices, audience targeting and recorded engagement in one place.</p></div>{canMutate ? <Button variant="primary" icon={<Sparkles size={16} />} onClick={() => setComposing(true)}>Compose announcement</Button> : <StatusPill status="Read-only access" tone="muted" />}</div>
+    <PageTabs label="Announcement sections" items={[
+      { id: 'announcements', label: 'Announcements', content: <div className={layout.layout}>
+        <Card><CardHeader title="Announcement register" subtitle="Read the full notice or prepare a manager-reviewed message." /><label className={layout.search}><Search size={16} aria-hidden="true" /><input type="search" aria-label="Search announcements" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search notices, audience or message…" /></label><p className={layout.metadata}>Showing {filtered.length} of {rows.length} announcements</p></Card>
+        {filtered.length ? <div className={layout.analytics}>{filtered.map((an) => {
           const rate = readRate(an);
-          const sent = Boolean(an.sentAt);
-          return (
-            <div key={an.id} className="bg-surface border border-border rounded-2xl shadow-card p-4">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded-full capitalize bg-surface-2 text-text-2">{an.scope}</span>
-                  {an.aiDrafted && <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary bg-primary-weak px-1.5 h-[20px] rounded-md"><Sparkles size={10} /> AI-drafted</span>}
-                </div>
-                <span className={`text-[11px] font-medium ${sent ? 'text-text-3' : 'text-warning'}`}>{sent ? 'Sent' : 'Scheduled'}</span>
-              </div>
-              <h3 className="text-[14.5px] font-semibold mt-2.5 tracking-[-0.01em]">{an.title}</h3>
-              <p className="text-[13px] text-text-2 mt-1 line-clamp-2">{an.body}</p>
-              <div className="mt-3 pt-3 border-t border-border">
-                <div className="flex items-center justify-between text-[11.5px] text-text-3 mb-1.5">
-                  <span>Audience · {an.audience}</span>
-                  {sent && <span className="font-mono">{an.read}/{an.delivered} · {rate}%</span>}
-                </div>
-                {sent && (
-                  <div className="h-1.5 rounded-full bg-surface-2 overflow-hidden"><div className="h-full rounded-full" style={{ width: `${rate}%`, background: toneVar(engagementTone(rate)) }} /></div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {composing && <Composer onClose={() => setComposing(false)} onSent={(msg) => { setComposing(false); setToast(msg); setTimeout(() => setToast(null), 4000); }} />}
-      {toast && <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[90] bg-text text-surface text-[13px] font-medium px-4 py-2.5 rounded-xl shadow-float animate-fade">{toast}</div>}
-    </div>
-  );
+          return <Card key={an.id} className={styles.noticeCard}>
+            <div className={styles.noticeMeta}><StatusPill status={an.sentAt ? 'Recorded as sent' : 'Not sent'} tone={an.sentAt ? 'success' : 'warn'} /><span className={layout.metadata}>{an.scope} · {an.audience}</span>{an.aiDrafted && <StatusPill status="AI-drafted" tone="progress" />}</div>
+            <h3 className={layout.sectionTitle}>{an.title}</h3><p className={styles.excerpt}>{an.body}</p>
+            <div className={styles.readSummary}><div className={styles.noticeMeta}><span className={layout.metadata}>Recorded reads</span><span className={styles.count}>{an.read.toLocaleString()} / {an.delivered.toLocaleString()} · {rate}%</span></div><div className={styles.meter} role="img" aria-label={`${rate}% recorded read rate; ${an.read} reads from ${an.delivered} deliveries`}><span style={{ width: `${rate}%`, background: toneVar(engagementTone(rate)) }} /></div></div>
+            <Button icon={<Eye size={16} />} onClick={() => setSelected(an)} aria-label={`View announcement ${an.title}`}>View notice</Button>
+          </Card>;
+        })}</div> : <Card><EmptyState icon={<Megaphone size={24} />} title={rows.length ? 'No announcements match your search' : 'No announcements in your scope yet'} description={rows.length ? 'Try another title, audience or message.' : canMutate ? 'Compose your first notice and review it before publishing.' : 'Published notices will appear here when available.'} /></Card>}
+      </div> },
+      { id: 'delivery', label: 'Delivery overview', content: <div className={layout.layout}>
+        <div className={layout.metrics}><KpiCard label="Recorded as sent" value={String(a.sent)} icon={<Megaphone size={18} />} /><KpiCard label="Recorded deliveries" value={a.totalDelivered.toLocaleString()} icon={<Send size={18} />} /><KpiCard label="Average read rate" value={`${a.avgReadRate}%`} icon={<Users size={18} />} /><KpiCard label="Recorded reads" value={a.totalRead.toLocaleString()} icon={<Check size={18} />} /></div>
+        <Card><CardHeader title="Delivery and engagement" subtitle="A snapshot of the notice records currently in your scope." /><div className="pb-table-scroll" role="region" aria-label="Announcement delivery register" tabIndex={0}><table className={`pb-data-table ${layout.table}`}><thead><tr>{['Announcement', 'Audience', 'Delivery record', 'Read rate', 'Details'].map((label) => <th scope="col" key={label}>{label}</th>)}</tr></thead><tbody>{rows.map((an) => <tr key={an.id}><td><span className={styles.tableTitle}>{an.title}</span></td><td>{an.audience}</td><td>{an.delivered.toLocaleString()} deliveries · {an.read.toLocaleString()} reads</td><td>{readRate(an)}%</td><td><Button onClick={() => setSelected(an)} aria-label={`Review delivery record for ${an.title}`}>Review</Button></td></tr>)}</tbody></table></div>{!rows.length && <EmptyState icon={<Send size={24} />} title="No delivery records yet" description="Recorded engagement will appear when notices are available." />}<p className={layout.notice}>{a.drafts} notice(s) are not marked as sent. These are application records, not independently verified provider callbacks. Audience estimates use demonstration assumptions.</p></Card>
+      </div> },
+    ]} />
+    {canMutate && composing && <Composer onClose={() => setComposing(false)} onSent={(text) => { setComposing(false); setMessage(text); }} />}
+    {selected && <PortalDialog label="Announcement details" onClose={() => setSelected(null)} drawer width={600}><div className={layout.drawer}><div className={layout.dialogHeader}><div><h2 className={layout.dialogTitle}>{selected.title}</h2><p className={layout.metadata}>{selected.scope} · {selected.audience}</p></div><IconButton aria-label="Close announcement details" onClick={() => setSelected(null)}><X size={18} /></IconButton></div><div className={layout.dialogBody}><StatusPill status={selected.sentAt ? 'Recorded as sent' : 'Not sent'} tone={selected.sentAt ? 'success' : 'warn'} /><p className={styles.fullMessage}>{selected.body}</p><div className={layout.notice}>{selected.read.toLocaleString()} recorded reads · {selected.delivered.toLocaleString()} recorded deliveries. Provider delivery is not verified by this screen.</div></div></div></PortalDialog>}
+    {message && <div className={layout.feedback} role="status"><span>{message}</span><IconButton aria-label="Dismiss announcement notification" onClick={() => setMessage(null)}><X size={18} /></IconButton></div>}
+  </div>;
 }
 
-type Phase = 'idle' | 'thinking' | 'streaming' | 'ready';
-
-function Composer({ onClose, onSent }: { onClose: () => void; onSent: (msg: string) => void }) {
+export function Composer({ onClose, onSent }: { onClose: () => void; onSent: (message: string) => void }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [topic, setTopic] = useState('');
-  const [phase, setPhase] = useState<Phase>('idle');
-  const [thoughts, setThoughts] = useState<string[]>([]);
-  const [active, setActive] = useState('');
   const [composed, setComposed] = useState<Composed | null>(null);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
-  const [streamed, setStreamed] = useState('');
   const [lang, setLang] = useState<'en' | 'pcm'>('en');
   const [aiDrafted, setAiDrafted] = useState(false);
   const [approved, setApproved] = useState(false);
@@ -95,176 +65,37 @@ function Composer({ onClose, onSent }: { onClose: () => void; onSent: (msg: stri
   const [block, setBlock] = useState('Block C');
   const [channels, setChannels] = useState<Channel[]>(['in_app', 'push']);
   const [schedule, setSchedule] = useState(false);
+  const [scheduleAt, setScheduleAt] = useState('');
+  const [reviewing, setReviewing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const runRef = useRef(0);
-
   const size = targetSize(scope, audience, block);
   const reach = estimateReach(size, channels);
-
-  async function draft() {
-    const text = topic.trim();
-    if (!text) return;
-    const run = ++runRef.current;
-    const alive = () => runRef.current === run;
-    setPhase('thinking'); setThoughts([]); setActive(''); setStreamed(''); setComposed(null);
-
-    const c = composeDraft(text);
-    for (const s of c.thoughts) {
-      if (!alive()) return;
-      setActive(s);
-      await sleep(430 + Math.floor(Math.random() * 320));
-      if (!alive()) return;
-      setThoughts((p) => [...p, s]); setActive('');
-    }
-    setComposed(c); setAiDrafted(true); setApproved(false); setLang('en');
-    setTitle(c.draft.title); setPhase('streaming');
-
-    const tokens = c.draft.body.split(/(\s+)/);
-    let acc = '';
-    for (const tk of tokens) {
-      if (!alive()) return;
-      acc += tk; setStreamed(acc);
-      if (tk.trim()) await sleep(/[.,;:—?!]$/.test(tk.trim()) ? 90 : 20 + Math.floor(Math.random() * 20));
-    }
-    if (!alive()) return;
-    setBody(c.draft.body); setPhase('ready');
-  }
-
-  function switchLang(next: 'en' | 'pcm') {
-    if (!composed) return;
-    setLang(next);
-    const d = next === 'en' ? composed.draft : composed.pidgin;
-    setTitle(d.title); setBody(d.body);
-  }
-
-  function toggleChannel(c: Channel) {
-    setChannels((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
-  }
-
-  function submit() {
-    setError(null);
-    start(async () => {
-      const res = await sendAnnouncement({ title, body, scope, audience, block, channels, aiDrafted, approved, scheduleAt: schedule ? '2026-07-30T09:00:00Z' : null });
-      if (!res.ok) { setError(res.error); return; }
-      router.refresh();
-      onSent(res.scheduled ? `Scheduled — ~${res.reach.toLocaleString()} residents will be reached.` : `Sent to ~${res.reach.toLocaleString()} residents.`);
-    });
-  }
-
   const needsApproval = aiDrafted && !approved;
-  const bodyText = phase === 'streaming' ? streamed : body;
-
-  return (
-    <div className="fixed inset-0 z-[80] flex justify-end">
-      <div className="absolute inset-0 bg-[rgba(10,12,20,.45)] animate-fade" onClick={onClose} />
-      <div className="relative w-full max-w-[540px] h-full bg-surface border-l border-border shadow-float overflow-y-auto animate-[tms-slidein_.22s_ease]">
-        <div className="sticky top-0 z-10 bg-surface/95 backdrop-blur border-b border-border px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2"><Sparkles size={16} className="text-primary" /><h2 className="text-[15px] font-semibold">Compose announcement</h2></div>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg grid place-items-center hover:bg-surface-2"><X size={17} /></button>
-        </div>
-
-        <div className="p-4 flex flex-col gap-4">
-          {/* AI draft */}
-          <div className="rounded-xl border border-primary/25 bg-primary/[0.04] p-3.5">
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-primary mb-2"><Sparkles size={13} /> AI draft · say the topic, I’ll write it</div>
-            <div className="flex gap-2">
-              <input value={topic} onChange={(e) => setTopic(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && draft()} placeholder="e.g. water supply cut Saturday morning" className="flex-1 h-9 px-2.5 rounded-lg border border-border-2 bg-surface text-[13px] outline-none focus:border-primary" />
-              <button onClick={draft} disabled={phase === 'thinking' || phase === 'streaming'} className="h-9 px-3 rounded-lg bg-primary text-white text-[12.5px] font-medium disabled:opacity-60 inline-flex items-center gap-1.5">{phase === 'thinking' || phase === 'streaming' ? <><Dots /> Writing</> : 'Draft'}</button>
-            </div>
-            {(phase === 'thinking' || thoughts.length > 0) && (
-              <div className="mt-2.5 flex flex-col gap-1">
-                {thoughts.map((t, i) => <div key={i} className="flex items-center gap-2 text-[11.5px] text-text-3 animate-fade"><Check size={11} className="text-success flex-none" />{t}</div>)}
-                {active && <div className="flex items-center gap-2 text-[12px] text-text-2"><Dots /> {active}</div>}
-              </div>
-            )}
-            {composed && phase === 'ready' && (
-              <div className="flex items-center gap-1.5 mt-2.5">
-                <Languages size={12} className="text-text-3" />
-                {(['en', 'pcm'] as const).map((l) => (
-                  <button key={l} onClick={() => switchLang(l)} className={`text-[11px] px-2 h-6 rounded-full border ${lang === l ? 'border-primary text-primary bg-primary-weak' : 'border-border-2 text-text-3'}`}>{l === 'en' ? 'English' : 'Pidgin'}</button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Title + body */}
-          <Field label="Title">
-            <input value={title} onChange={(e) => { setTitle(e.target.value); setAiDrafted(false); }} placeholder="Announcement title" className="w-full h-9 px-2.5 rounded-lg border border-border-2 bg-surface text-[13.5px] font-medium outline-none focus:border-primary" />
-          </Field>
-          <Field label="Message">
-            <div className="relative">
-              <textarea value={bodyText} onChange={(e) => { setBody(e.target.value); setAiDrafted(false); }} rows={5} placeholder="Write the message, or draft it with AI above" className="w-full px-2.5 py-2 rounded-lg border border-border-2 bg-surface text-[13px] leading-relaxed outline-none focus:border-primary resize-none" />
-              {phase === 'streaming' && <span className="absolute bottom-3 right-3 inline-block w-[2px] h-[15px] bg-primary animate-pulse" />}
-            </div>
-          </Field>
-
-          {/* Targeting */}
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Scope">
-              <select value={scope} onChange={(e) => setScope(e.target.value as AnnouncementScope)} className="w-full h-9 px-2 rounded-lg border border-border-2 bg-surface text-[13px] outline-none focus:border-primary capitalize">
-                {SCOPES.map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </Field>
-            <Field label={scope === 'building' ? 'Block' : 'Audience'}>
-              {scope === 'building' ? (
-                <select value={block} onChange={(e) => setBlock(e.target.value)} className="w-full h-9 px-2 rounded-lg border border-border-2 bg-surface text-[13px] outline-none focus:border-primary">{Object.keys(BLOCKS).map((b) => <option key={b}>{b}</option>)}</select>
-              ) : (
-                <select value={audience} onChange={(e) => setAudience(e.target.value)} className="w-full h-9 px-2 rounded-lg border border-border-2 bg-surface text-[13px] outline-none focus:border-primary">{AUDIENCES.map((x) => <option key={x}>{x}</option>)}</select>
-              )}
-            </Field>
-          </div>
-
-          {/* Channels + audience estimate */}
-          <Field label="Delivery channels">
-            <div className="flex flex-wrap gap-1.5">
-              {CHANNELS.map((c) => {
-                const on = channels.includes(c.key);
-                return <button key={c.key} onClick={() => toggleChannel(c.key)} className={`text-[12px] px-2.5 h-8 rounded-lg border transition-colors ${on ? 'border-primary bg-primary-weak text-primary font-medium' : 'border-border-2 text-text-3'}`}>{c.label}</button>;
-              })}
-            </div>
-          </Field>
-          <div className="flex items-center gap-2 rounded-xl bg-surface-2 border border-border p-3">
-            <Users size={16} className="text-primary" />
-            <div className="text-[12.5px]"><span className="font-semibold">~{reach.toLocaleString()}</span> of {size.toLocaleString()} targeted will be reached</div>
-            <span className="ml-auto text-[10.5px] text-text-3">estimate</span>
-          </div>
-
-          {/* Approval + schedule */}
-          {aiDrafted && (
-            <label className={`flex items-start gap-2.5 rounded-xl p-3 border cursor-pointer ${approved ? 'border-success/40 bg-success/[0.05]' : 'border-warning/40 bg-warning/[0.05]'}`}>
-              <input type="checkbox" checked={approved} onChange={(e) => setApproved(e.target.checked)} className="mt-0.5" />
-              <div><div className="text-[12.5px] font-semibold flex items-center gap-1.5"><ShieldCheck size={13} /> Manager approval (AI-E-04)</div><div className="text-[11.5px] text-text-3 mt-0.5">This message was AI-drafted. It cannot be sent until a manager approves it.</div></div>
-            </label>
-          )}
-          <label className="flex items-center gap-2.5 text-[12.5px]"><input type="checkbox" checked={schedule} onChange={(e) => setSchedule(e.target.checked)} /><CalendarClock size={14} className="text-text-3" /> Schedule for later instead of sending now</label>
-
-          {error && <div className="text-[12.5px] text-negative bg-[color:var(--tone-danger)]/[0.08] rounded-lg px-3 py-2">{error}</div>}
-        </div>
-
-        <div className="sticky bottom-0 bg-surface/95 backdrop-blur border-t border-border px-4 py-3 flex items-center justify-end gap-2">
-          <button onClick={onClose} className="h-9 px-3.5 rounded-lg border border-border-2 text-[13px]">Cancel</button>
-          <button onClick={submit} disabled={pending || needsApproval || !title.trim() || !body.trim()} className="h-9 px-4 rounded-lg bg-primary text-white text-[13px] font-medium disabled:opacity-50 inline-flex items-center gap-1.5">
-            {schedule ? <CalendarClock size={15} /> : <Send size={15} />}{schedule ? 'Schedule' : 'Send now'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div><div className="text-[11px] font-semibold text-text-3 uppercase tracking-[0.04em] mb-1.5">{label}</div>{children}</div>;
-}
-function Dots() {
-  return <span className="inline-flex items-end gap-0.5 h-3">{[0, 1, 2].map((i) => <span key={i} className="w-1 h-1 rounded-full bg-current animate-bounce" style={{ animationDelay: `${i * 130}ms`, animationDuration: '900ms' }} />)}</span>;
-}
-function Kpi({ label, value, note, tone, icon }: { label: string; value: string; note: string; tone: Tone; icon: React.ReactNode }) {
-  return (
-    <div className="bg-surface border border-border rounded-2xl shadow-card p-4">
-      <span className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: `color-mix(in srgb, ${toneVar(tone)} 14%, transparent)`, color: toneVar(tone) }}>{icon}</span>
-      <div className="text-[13px] text-text-2 font-medium mt-3">{label}</div>
-      <div className="text-[23px] font-bold tracking-[-0.02em] leading-none mt-1">{value}</div>
-      <div className="text-[11px] mt-1" style={{ color: toneVar(tone) }}>{note}</div>
-    </div>
-  );
+  const valid = Boolean(title.trim() && body.trim() && channels.length && !needsApproval && (!schedule || scheduleAt));
+  function draft() { if (!topic.trim() || pending) return; const next = composeDraft(topic.trim()); setComposed(next); setTitle(next.draft.title); setBody(next.draft.body); setAiDrafted(true); setApproved(false); setLang('en'); setError(null); }
+  function switchLang(next: 'en' | 'pcm') { if (!composed || pending) return; const translated = next === 'en' ? composed.draft : composed.pidgin; setLang(next); setTitle(translated.title); setBody(translated.body); setAiDrafted(true); setApproved(false); }
+  function submit() {
+    if (pending || !valid || !reviewing) return;
+    const when = schedule ? new Date(scheduleAt) : null;
+    if (when && (!Number.isFinite(when.getTime()) || when.getTime() <= Date.now())) { setError('Choose a future date and time for this scheduled record.'); return; }
+    setError(null);
+    start(async () => { try { const result = await sendAnnouncement({ title, body, scope, audience, block, channels, aiDrafted, approved, scheduleAt: when?.toISOString() ?? null }); if (!result.ok) { setError(result.error); return; } router.refresh(); onSent(result.scheduled ? 'Scheduled announcement record saved. Delivery scheduling is not connected here.' : 'Announcement record saved. External channel delivery is not verified here.'); } catch { setError('The announcement could not be saved. Please try again.'); } });
+  }
+  return <PortalDialog label="Compose announcement" onClose={onClose} width={640} drawer canClose={!pending}><div className={layout.drawer}>
+    <div className={layout.dialogHeader}><div><h2 className={layout.dialogTitle}>{reviewing ? 'Review announcement' : 'Compose announcement'}</h2><p className={layout.metadata}>A clear message, with a human decision before publishing.</p></div><IconButton aria-label="Close announcement composer" disabled={pending} onClick={onClose}><X size={18} /></IconButton></div>
+    <form onSubmit={(event) => { event.preventDefault(); if (reviewing) submit(); else if (valid) setReviewing(true); }} aria-busy={pending}>
+      <fieldset disabled={pending} className={styles.fields}>{!reviewing ? <>
+        <section className={styles.draftPanel}><h3 className={layout.sectionTitle}><Sparkles size={16} aria-hidden="true" /> Assisted draft preview</h3><p className={layout.metadata}>Uses local message templates, not a connected AI provider. Review names, dates and translations.</p><label className="pb-form-label" htmlFor="announcement-topic">What is the notice about?</label><div className={styles.draftInput}><input id="announcement-topic" className="pb-form-control" value={topic} onChange={(event) => setTopic(event.target.value)} placeholder="e.g. water supply cut Saturday morning" /><Button type="button" onClick={draft} disabled={!topic.trim()} icon={<Sparkles size={16} />}>Draft preview</Button></div>{composed && <div className={styles.noticeMeta}><Languages size={16} aria-hidden="true" />{(['en', 'pcm'] as const).map((value) => <Button key={value} type="button" aria-pressed={lang === value} variant={lang === value ? 'primary' : 'secondary'} onClick={() => switchLang(value)}>{value === 'en' ? 'English' : 'Pidgin'}</Button>)}</div>}</section>
+        <div><label className="pb-form-label" htmlFor="announcement-title">Title</label><input id="announcement-title" className="pb-form-control" value={title} onChange={(event) => { setTitle(event.target.value); setApproved(false); }} required placeholder="Announcement title" /></div>
+        <div><label className="pb-form-label" htmlFor="announcement-message">Message</label><textarea id="announcement-message" className="pb-form-control" rows={6} value={body} onChange={(event) => { setBody(event.target.value); setApproved(false); }} required placeholder="Write a clear message for residents" /></div>
+        <div className={styles.formGrid}><div><label className="pb-form-label" htmlFor="announcement-scope">Scope</label><select id="announcement-scope" className="pb-form-control" value={scope} onChange={(event) => setScope(event.target.value as AnnouncementScope)}>{SCOPES.map((value) => <option key={value}>{value}</option>)}</select></div><div><label className="pb-form-label" htmlFor="announcement-audience">{scope === 'building' ? 'Block' : 'Audience'}</label><select id="announcement-audience" className="pb-form-control" value={scope === 'building' ? block : audience} onChange={(event) => scope === 'building' ? setBlock(event.target.value) : setAudience(event.target.value)}>{(scope === 'building' ? Object.keys(BLOCKS) : AUDIENCES).map((value) => <option key={value}>{value}</option>)}</select></div></div>
+        <fieldset className={styles.channelGroup}><legend className="pb-form-label">Delivery channels</legend><div className={styles.noticeMeta}>{CHANNELS.map((channel) => <label key={channel.key} className={styles.channel}><input type="checkbox" checked={channels.includes(channel.key)} onChange={() => setChannels((current) => current.includes(channel.key) ? current.filter((value) => value !== channel.key) : [...current, channel.key])} />{channel.label}</label>)}</div></fieldset>
+        <p className={layout.notice}>Demonstration estimate: ~{reach.toLocaleString()} of {size.toLocaleString()} assumed recipients. This is not a verified recipient list or delivery guarantee.</p>
+        {aiDrafted && <label className={styles.approval}><input type="checkbox" checked={approved} onChange={(event) => setApproved(event.target.checked)} /><span><strong><ShieldCheck size={16} aria-hidden="true" /> Manager approval</strong><span className={layout.metadata}>I have reviewed this assisted draft and approve it for the selected audience. Editing the text requires approval again.</span></span></label>}
+        <label className={styles.channel}><input type="checkbox" checked={schedule} onChange={(event) => setSchedule(event.target.checked)} />Save as a scheduled announcement record</label>
+        {schedule && <div><label className="pb-form-label" htmlFor="announcement-schedule">Scheduled date and time (your local time)</label><input id="announcement-schedule" type="datetime-local" className="pb-form-control" value={scheduleAt} onChange={(event) => setScheduleAt(event.target.value)} required /><p className={layout.metadata}>Saves the requested schedule; no background delivery worker is connected here.</p></div>}
+      </> : <><StatusPill status={schedule ? 'Scheduled record' : 'Publish record'} tone="progress" /><h3 className={layout.sectionTitle}>{title}</h3><p className={styles.fullMessage}>{body}</p><div className={layout.notice}>{scope === 'building' ? block : audience} · {scope}<br />Channels requested: {channels.map((value) => CHANNELS.find((item) => item.key === value)?.label ?? value).join(', ')}{schedule && <><br />Requested local time: {scheduleAt.replace('T', ' ')}</>}</div><p className={layout.metadata}>Confirming saves this notice in Propbrew. It does not verify SMS, email or push delivery. Assisted drafts require manager approval.</p></>}{error && <p role="alert" className={styles.error}>{error}</p>}</fieldset>
+      <div className={`${layout.actions} ${styles.dialogActions}`}><Button type="button" disabled={pending} onClick={reviewing ? () => { setReviewing(false); setError(null); } : onClose}>{reviewing ? 'Back to edit' : 'Cancel'}</Button><Button variant="primary" type="submit" disabled={pending || !valid} icon={reviewing ? <Send size={16} /> : <Eye size={16} />}>{pending ? 'Saving…' : reviewing ? 'Confirm and save notice' : 'Review announcement'}</Button></div>
+    </form>
+  </div></PortalDialog>;
 }

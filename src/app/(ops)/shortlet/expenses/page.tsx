@@ -1,3 +1,5 @@
+import { can } from '@/lib/authz';
+import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
 import { expenseInsights } from '@/domain/shortlet';
@@ -9,7 +11,7 @@ const REVENUE = ['confirmed', 'checked_in', 'checked_out', 'closed'];
  *  (diesel-era categories) per property; the module computes profit and surfaces
  *  diesel as a share of revenue and cost per occupied night. */
 export default async function ShortletExpensesPage() {
-  const { actor } = await requireCapability('bookings_amenities');
+  const { actor } = await requireCapability('bookings_amenities', 'read', 'shortlet');
   const bookings = repos.shortletBookings.list(actor).items;
   const expenses = repos.shortletExpenses.list(actor).items;
   const props = repos.shortletProperties.list(actor).items;
@@ -22,8 +24,9 @@ export default async function ShortletExpensesPage() {
   const revenueMinor = bookings.filter((b) => REVENUE.includes(b.status)).reduce((n, b) => n + b.total.minor, 0);
 
   return (
-    <div className="max-w-[920px] mx-auto">
-      <ExpensesWorkspace expenses={rows} properties={props.map((p) => ({ id: p.id, name: p.name }))} insight={expenseInsights(bookings, expenses)} revenueMinor={revenueMinor} />
+    <div className="pb-page">
+      <PageHeader title="Expenses" subtitle="Track property spending and the costs that affect your margin." />
+      <ExpensesWorkspace canCreate={can(actor, 'bookings_amenities', 'create').allowed} expenses={rows} properties={props.map((p) => ({ id: p.id, name: p.name }))} insight={expenseInsights(bookings, expenses)} revenueMinor={revenueMinor} />
     </div>
   );
 }

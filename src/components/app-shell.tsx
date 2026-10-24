@@ -3,30 +3,45 @@
 /**
  * Application shell — collapsible sidebar, sticky header, mobile drawer.
  *
- * A 248px sidebar that collapses to a 72px icon rail, a 64px header, and a fixed
+ * A 248px sidebar that collapses to a 72px icon rail, a 72px header, and a fixed
  * off-canvas drawer below 880px. Nav and identity are computed on the server
  * (getActor → visibleNav) and passed in as serializable data; this component
  * only renders and handles interactivity.
  */
 
-import { useCallback, useEffect, useState, useTransition, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, useTransition, type ReactNode, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { ChevronLeft, LogOut, Menu, Moon, Search, Sun, Building2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, LogOut, Menu, Moon, Search, Sun, Building2, X } from 'lucide-react';
 import { brand } from '@/config/brand';
-import { PAGE_META, type NavGroup } from '@/config/nav';
+import { activeNavHref, PAGE_META, type NavGroup } from '@/config/nav';
 import { useTheme } from '@/components/theme-provider';
 import { Icon } from '@/components/icon';
 import { Avatar, IconButton } from '@/components/ui';
+import { PageTabsHeaderContext } from '@/components/ui/page-tabs-header';
 import { NotificationsMenu } from '@/components/inbox/notifications-menu';
 import { MessagesMenu } from '@/components/inbox/messages-menu';
 import { SyncIndicator } from '@/components/sync/sync-indicator';
 import { ProfileMenu } from '@/components/inbox/profile-menu';
 import { signOut } from '@/server/actions/auth';
 import type { Notification, Thread } from '@/server/data/inbox';
+import type { Workspace } from '@/config/workspaces';
+import styles from './app-shell.module.css';
 
 const SIDEBAR_WIDTH = 248;
 const SIDEBAR_COLLAPSED = 72;
+const DRAWER_FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/** Return only the wrapping target; normal Tab movement stays browser-native. */
+export function drawerBoundaryTarget<T>(controls: readonly T[], active: T | null, backwards: boolean): T | undefined {
+  const first = controls[0];
+  const last = controls[controls.length - 1];
+  if (first === undefined || last === undefined) return undefined;
+  const outside = active === null || !controls.includes(active);
+  if (backwards && (active === first || outside)) return last;
+  if (!backwards && (active === last || outside)) return first;
+  return undefined;
+}
 
 export type ShellIdentity = {
   name: string;
@@ -36,6 +51,7 @@ export type ShellIdentity = {
 
 export function AppShell({
   groups,
+  workspace,
   identity,
   notifications,
   unreadNotifications,
@@ -45,6 +61,7 @@ export function AppShell({
   children,
 }: {
   groups: NavGroup[];
+  workspace?: Workspace;
   identity: ShellIdentity;
   notifications: Notification[];
   unreadNotifications: number;
@@ -57,121 +74,236 @@ export function AppShell({
   const { theme, toggleTheme } = useTheme();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
+  const [headerTabTarget, setHeaderTabTarget] = useState<HTMLDivElement | null>(null);
   // Page search. The header input used to be a decorative control with no value
   // and no handler on every page in the product; it now searches the nav the
   // actor can actually see and jumps to the page.
   const router = useRouter();
   const [query, setQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchIndex, setSearchIndex] = useState(0);
+  const searchInput = useRef<HTMLInputElement>(null);
+  const sidebar = useRef<HTMLElement>(null);
+  const menuTrigger = useRef<HTMLElement | null>(null);
+  const searchReturnFocus = useRef<HTMLElement | null>(null);
   const matches = query.trim()
     ? groups
         .flatMap((g) => g.items.map((i) => ({ ...i, group: g.label })))
         .filter((i) => `${i.label} ${i.group}`.toLowerCase().includes(query.trim().toLowerCase()))
         .slice(0, 7)
     : [];
-  const goTo = (href: string) => { setQuery(''); router.push(href); };
+  const goTo = (href: string) => { setQuery(''); setSearchOpen(false); router.push(href); };
   const [signingOut, startSignOut] = useTransition();
 
-  const meta = PAGE_META[pathname] ?? { title: brand.name, subtitle: '' };
-  const showLabels = !collapsed;
+  const activeHref = activeNavHref(groups, pathname);
+  const meta = PAGE_META[pathname] ?? PAGE_META[activeHref ?? ''] ?? { title: workspace ? `${workspace.name} portal` : brand.name, subtitle: '' };
+  const workspaceStyle = workspace ? {
+    '--workspace-accent': workspace.accent,
+    '--workspace-accent-weak': `color-mix(in srgb, ${workspace.accent} 9%, var(--surface))`,
+  } as CSSProperties : undefined;
+
+  const closeNavigation = useCallback((restoreFocus = true) => {
+    setMobileNav(false);
+    if (restoreFocus) requestAnimationFrame(() => menuTrigger.current?.focus());
+  }, []);
+
+  const closeSearch = useCallback((restoreFocus = true) => {
+    setQuery('');
+    setSearchOpen(false);
+    if (restoreFocus) requestAnimationFrame(() => searchReturnFocus.current?.focus());
+  }, []);
+
+  const openSearch = useCallback((returnFocus?: HTMLElement | null) => {
+    searchReturnFocus.current = returnFocus ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    setSearchOpen(true);
+    searchInput.current?.focus();
+  }, []);
 
   const handleKey = useCallback((e: KeyboardEvent) => {
+    if (e.defaultPrevented) return;
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
       e.preventDefault();
-      document.getElementById('global-search')?.focus();
+      if (mobileNav) closeNavigation(false);
+      openSearch(mobileNav ? menuTrigger.current : undefined);
     }
-    if (e.key === 'Escape') setMobileNav(false);
-  }, []);
+    if (e.key === 'Escape') {
+      if (mobileNav) closeNavigation();
+      else if (searchOpen) closeSearch();
+    }
+  }, [mobileNav, searchOpen, closeNavigation, closeSearch, openSearch]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [handleKey]);
 
+  useEffect(() => {
+    if (searchOpen) searchInput.current?.focus();
+  }, [searchOpen]);
+
+  useEffect(() => {
+    if (mobileNav) sidebar.current?.querySelector<HTMLButtonElement>('[aria-label="Close navigation menu"]')?.focus();
+  }, [mobileNav]);
+
+  useEffect(() => {
+    const mobileViewport = window.matchMedia('(max-width: 879px)');
+    const handleViewport = (event: MediaQueryListEvent) => { if (!event.matches) closeNavigation(false); };
+    mobileViewport.addEventListener('change', handleViewport);
+    return () => mobileViewport.removeEventListener('change', handleViewport);
+  }, [closeNavigation]);
+
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-app text-text">
-      <a href="#main-content" className="skip-link">Skip to content</a>
+    <PageTabsHeaderContext.Provider value={headerTabTarget}>
+    <div className={`pb-app ${styles.shell}`} data-app-shell="true" data-workspace={workspace?.id} data-collapsed={collapsed} style={{ ...workspaceStyle, '--sidebar-width': `${collapsed ? SIDEBAR_COLLAPSED : SIDEBAR_WIDTH}px` } as CSSProperties}>
+      <a href="#main-content" className="skip-link" tabIndex={mobileNav ? -1 : undefined}>Skip to content</a>
+      <header className={styles.header} inert={mobileNav} data-unified-header="true">
+        <IconButton
+          onClick={(event) => { menuTrigger.current = event.currentTarget; closeSearch(false); setMobileNav(true); }}
+          title="Menu"
+          aria-label="Open menu"
+          aria-controls="application-sidebar"
+          aria-expanded={mobileNav}
+          className={styles.menuButton}
+        >
+          <Menu size={18} />
+        </IconButton>
+
+        <Link href={workspace?.home ?? groups[0]?.items[0]?.href ?? pathname} aria-label={`${brand.name} home`} className={styles.headerBrand}>
+          <span className={styles.brandMark} aria-hidden="true"><Building2 size={22} strokeWidth={1.8} /></span>
+          <span className={styles.brandName}>{brand.name}</span>
+        </Link>
+
+        <div ref={setHeaderTabTarget} className={styles.headerTabs} data-page-tabs-outlet="true" />
+
+        <div className={styles.headerControls}>
+        <IconButton title="Search pages" aria-label="Open page search" aria-expanded={searchOpen} aria-controls="global-search-container" onClick={(event) => searchOpen ? closeSearch() : openSearch(event.currentTarget)} className={styles.searchTrigger}><Search size={18} /></IconButton>
+        <div id="global-search-container" className={`${styles.searchBox} ${searchOpen ? styles.searchOpen : ''}`}>
+          <label htmlFor="global-search" className="sr-only">Search</label>
+          <Search size={16} aria-hidden="true" className={styles.inputSearchIcon} />
+          <input
+            ref={searchInput}
+            id="global-search"
+            value={query}
+            onChange={(e) => { setQuery(e.target.value); setSearchIndex(0); }}
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowDown' && matches.length) { e.preventDefault(); setSearchIndex((index) => (index + 1) % matches.length); }
+              if (e.key === 'ArrowUp' && matches.length) { e.preventDefault(); setSearchIndex((index) => (index - 1 + matches.length) % matches.length); }
+              if (e.key === 'Enter' && matches[searchIndex]) goTo(matches[searchIndex].href);
+              if (e.key === 'Escape') { e.preventDefault(); closeSearch(); }
+            }}
+            placeholder="Search pages…"
+            autoComplete="off"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={matches.length > 0}
+            aria-controls="global-search-results"
+            aria-activedescendant={matches[searchIndex] ? `global-search-option-${matches[searchIndex].id}` : undefined}
+            className={styles.searchInput}
+          />
+          <kbd className={styles.inputShortcut}>⌘ K</kbd>
+          {searchOpen && <button type="button" onClick={() => closeSearch()} aria-label="Close page search" className={styles.searchClose}><X size={15} /></button>}
+          {matches.length > 0 && (
+            <ul
+              id="global-search-results"
+              role="listbox"
+              aria-label="Pages"
+              className={styles.searchResults}
+            >
+              {matches.map((m, index) => (
+                <li key={m.id} role="presentation">
+                  <button
+                    type="button"
+                    role="option"
+                    id={`global-search-option-${m.id}`}
+                    aria-selected={index === searchIndex}
+                    tabIndex={-1}
+                    onClick={() => goTo(m.href)}
+                    className={styles.searchResult}
+                  >
+                    <Icon name={m.icon} aria-hidden="true" />
+                    <span><span className={styles.resultLabel}>{m.label}</span><span className={styles.resultGroup}>{m.group}</span></span>
+                    <ChevronRight size={14} aria-hidden="true" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className={styles.headerActions}>
+          <SyncIndicator workspace={workspace?.id} />
+          <IconButton onClick={toggleTheme} title="Toggle theme" aria-label="Toggle theme" className={styles.themeButton}>
+            {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
+          </IconButton>
+          <div className={styles.messages}>
+            <MessagesMenu threads={threads} unread={unreadMessages} />
+          </div>
+          <NotificationsMenu notifications={notifications} unread={unreadNotifications} />
+          <span className={styles.headerDivider} aria-hidden="true" />
+          <ProfileMenu name={identity.name} roleSummary={identity.roleSummary} tenantLabel={identity.tenantLabel}
+            workspace={workspace ? { id: workspace.id, name: workspace.name, icon: workspace.icon } : undefined} />
+        </div>
+        </div>
+      </header>
+
       {mobileNav && (
-        <div
-          onClick={() => setMobileNav(false)}
-          className="fixed inset-0 bg-[rgba(10,12,20,.5)] z-[55] min-[880px]:hidden animate-fade"
+        <button
+          type="button"
+          aria-label="Close menu"
+          tabIndex={-1}
+          onClick={() => closeNavigation()}
+          className={styles.backdrop}
         />
       )}
 
       <aside
+        ref={sidebar}
+        id="application-sidebar"
+        role={mobileNav ? 'dialog' : undefined}
+        aria-modal={mobileNav || undefined}
+        aria-label={mobileNav ? `${workspace?.name ?? brand.name} navigation menu` : undefined}
+        onKeyDown={(event) => {
+          if (!mobileNav || event.key !== 'Tab') return;
+          const controls = Array.from(sidebar.current?.querySelectorAll<HTMLElement>(DRAWER_FOCUSABLE) ?? []).filter((control) => control.getClientRects().length > 0);
+          const target = drawerBoundaryTarget(controls, document.activeElement instanceof HTMLElement ? document.activeElement : null, event.shiftKey);
+          if (target) { event.preventDefault(); target.focus(); }
+        }}
         style={{ width: collapsed ? SIDEBAR_COLLAPSED : SIDEBAR_WIDTH }}
-        className={`flex-none flex flex-col bg-surface border-r border-border transition-[width] duration-200
-          max-[879px]:fixed max-[879px]:top-0 max-[879px]:left-0 max-[879px]:h-full max-[879px]:z-[60]
-          max-[879px]:!w-[264px] max-[879px]:shadow-float
-          max-[879px]:transition-transform max-[879px]:duration-200
-          ${mobileNav ? 'max-[879px]:translate-x-0' : 'max-[879px]:-translate-x-[102%]'}`}
+        className={`${styles.sidebar} ${mobileNav ? styles.sidebarOpen : ''}`}
       >
-        {/* Brand */}
-        <div className="flex items-center gap-2.5 px-4 h-16 flex-none">
-          <span
-            className="w-[34px] h-[34px] rounded-[10px] flex items-center justify-center flex-none text-white bg-primary"
-            style={{ boxShadow: '0 4px 12px var(--primary-weak-2)' }}
-          >
-            <Building2 size={18} />
-          </span>
-          {showLabels && (
-            <div className="flex flex-col leading-none min-w-0">
-              <span className="font-bold text-base tracking-[-0.02em] truncate">{brand.name}</span>
-              <span className="text-[10px] text-text-3 font-medium tracking-[0.04em] mt-[3px]">
-                {brand.tagline}
-              </span>
-            </div>
-          )}
-          <IconButton
-            bordered={false}
-            onClick={() => setCollapsed((c) => !c)}
-            title={collapsed ? 'Expand' : 'Collapse'}
-            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            className="ml-auto !w-[26px] !h-[26px] max-[879px]:hidden"
-          >
-            <ChevronLeft size={16} className={`transition-transform duration-200 ${collapsed ? 'rotate-180' : ''}`} />
+        {/* The desktop logo lives in the full-width header; this copy is drawer-only. */}
+        <div className={styles.drawerBrandRow}>
+          <span className={styles.brandMark} aria-hidden="true"><Building2 size={22} strokeWidth={1.8} /></span>
+          <span className={styles.brandName}>{brand.name}</span>
+          <IconButton bordered={false} onClick={() => closeNavigation()} title="Close menu" aria-label="Close navigation menu" className={styles.mobileClose}><X size={18} /></IconButton>
+        </div>
+        <div className={styles.sidebarToggleRow}>
+          <IconButton bordered={false} onClick={() => setCollapsed((c) => !c)}
+            title={collapsed ? 'Expand' : 'Collapse'} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            className={styles.collapseButton}>
+            <ChevronLeft size={15} className={collapsed ? styles.rotated : undefined} />
           </IconButton>
         </div>
 
-        {/* Search */}
-        <div className="px-3 pb-3">
-          <button
-            onClick={() => document.getElementById('global-search')?.focus()}
-            className="w-full flex items-center gap-2.5 h-[38px] px-[11px] border border-border rounded-[10px] bg-surface-2 text-text-3 text-[13px] cursor-pointer hover:bg-surface-3 transition-colors"
-          >
-            <Search size={15} className="flex-none" />
-            {showLabels && (
-              <>
-                <span className="flex-1 text-left truncate">Search…</span>
-                <span className="text-[11px] border border-border-2 rounded-[5px] px-1.5 py-px">⌘K</span>
-              </>
-            )}
-          </button>
-        </div>
-
         {/* Nav */}
-        <nav className="flex-1 overflow-y-auto overflow-x-hidden px-3">
+        <nav aria-label={workspace ? `${workspace.name} navigation` : 'Main navigation'} className={styles.navigation}>
           {groups.map((group) => (
-            <div key={group.label}>
-              {showLabels && (
-                <div className="text-[10.5px] font-semibold tracking-[0.06em] text-text-3 uppercase px-2.5 pt-3.5 pb-1.5">
-                  {group.label}
-                </div>
-              )}
+            <div key={group.label} className={styles.navGroup}>
+              <div className={`${styles.groupLabel} ${styles.collapsible}`}>{group.label}</div>
               {group.items.map((item) => {
-                const active = pathname === item.href;
+                const active = activeHref === item.href;
                 return (
                   <Link
                     key={item.id}
                     href={item.href}
                     title={item.label}
                     aria-current={active ? 'page' : undefined}
-                    onClick={() => setMobileNav(false)}
-                    className={`w-full flex items-center gap-[11px] h-10 px-2.5 mb-0.5 rounded-[10px] text-[13.5px] font-medium transition-colors duration-150 ${
-                      active ? 'bg-primary-weak text-primary' : 'text-text-2 hover:bg-surface-2'
-                    }`}
+                    onClick={() => closeNavigation(false)}
+                    className={`${styles.navLink} ${active ? styles.navActive : ''}`}
                   >
-                    <Icon name={item.icon} className={`flex-none ${active ? 'text-primary' : 'text-text-3'}`} />
-                    {showLabels && <span className="flex-1 truncate">{item.label}</span>}
+                    <Icon name={item.icon} className={styles.navIcon} />
+                    <span className={`${styles.navLabel} ${styles.collapsible}`}>{item.label}</span>
+                    {active && <span className={`${styles.activeDot} ${styles.collapsible}`} aria-hidden="true" />}
                   </Link>
                 );
               })}
@@ -180,104 +312,24 @@ export function AppShell({
         </nav>
 
         {/* Identity footer */}
-        <div className="p-3 border-t border-border mt-1">
-          {devSwitcher}
-          <div className="flex items-center gap-2.5 p-1.5 rounded-[10px]">
+        <div className={styles.sidebarFooter}>
+          <div className={styles.collapsible}>{devSwitcher}</div>
+          <div className={styles.identity}>
             <Avatar name={identity.name} />
-            {showLabels && (
-              <>
-                <div className="flex-1 min-w-0 leading-tight">
-                  <div className="font-semibold text-[13px] truncate">{identity.name}</div>
-                  <div className="text-[11px] text-text-3 truncate">{identity.roleSummary}</div>
-                </div>
-                <IconButton
-                  bordered={false}
-                  title="Sign out"
-                  aria-label="Sign out"
-                  disabled={signingOut}
-                  onClick={() => startSignOut(async () => { await signOut(); })}
-                  className="!w-8 !h-8 flex-none hover:!text-negative"
-                >
-                  <LogOut size={16} />
-                </IconButton>
-              </>
-            )}
+            <div className={`${styles.identityCopy} ${styles.collapsible}`}><span className={styles.identityName}>{identity.name}</span><span className={styles.identityRole}>{identity.roleSummary}</span></div>
+            <IconButton bordered={false} title="Sign out" aria-label="Sign out" disabled={signingOut} onClick={() => startSignOut(async () => { await signOut(); })} className={`${styles.signOut} ${styles.collapsible}`}><LogOut size={16} /></IconButton>
           </div>
         </div>
       </aside>
 
       {/* Main column */}
-      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
-        <header className="h-16 flex-none border-b border-border bg-surface flex items-center px-4 sm:px-6 gap-2 sm:gap-4">
-          <IconButton
-            onClick={() => setMobileNav(true)}
-            title="Menu"
-            aria-label="Open menu"
-            className="min-[880px]:!hidden"
-          >
-            <Menu size={18} />
-          </IconButton>
-
-          <div className="flex-1 min-w-0">
-            <h1 className="text-[16px] sm:text-[18px] font-semibold tracking-[-0.02em] leading-tight truncate">
-              {meta.title}
-            </h1>
-            <p className="text-[12.5px] text-text-3 mt-0.5 truncate max-[879px]:hidden">{meta.subtitle}</p>
-          </div>
-
-          <label htmlFor="global-search" className="sr-only">
-            Search
-          </label>
-          <div className="hidden lg:block relative">
-            <input
-              id="global-search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && matches[0]) goTo(matches[0].href);
-                if (e.key === 'Escape') setQuery('');
-              }}
-              placeholder="Search pages…"
-              autoComplete="off"
-              role="combobox"
-              aria-expanded={matches.length > 0}
-              aria-controls="global-search-results"
-              className="w-56 h-[38px] px-3 rounded-[10px] border border-border bg-surface-2 text-[13px] outline-none focus:border-primary transition-colors"
-            />
-            {matches.length > 0 && (
-              <ul
-                id="global-search-results"
-                className="absolute right-0 top-[42px] w-72 bg-surface border border-border rounded-[10px] shadow-float overflow-hidden z-50 py-1"
-              >
-                {matches.map((m) => (
-                  <li key={m.id}>
-                    <button
-                      onClick={() => goTo(m.href)}
-                      className="w-full text-left px-3 py-2 hover:bg-surface-2 transition-colors"
-                    >
-                      <span className="text-[13px] font-medium block truncate">{m.label}</span>
-                      <span className="text-[11px] text-text-3">{m.group}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          <SyncIndicator />
-
-          <IconButton onClick={toggleTheme} title="Toggle theme" aria-label="Toggle theme">
-            {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
-          </IconButton>
-          <div className="max-[560px]:hidden">
-            <MessagesMenu threads={threads} unread={unreadMessages} />
-          </div>
-          <NotificationsMenu notifications={notifications} unread={unreadNotifications} />
-          <ProfileMenu name={identity.name} roleSummary={identity.roleSummary} tenantLabel={identity.tenantLabel} />
-        </header>
-
-        <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto overflow-x-hidden px-4 sm:px-6 pt-[22px] pb-10">{children}</main>
+      <div className={styles.mainColumn} inert={mobileNav}>
+        <main id="main-content" tabIndex={-1} className={styles.content} aria-labelledby="application-page-title">
+          <h1 id="application-page-title" className="sr-only">{meta.title}</h1>
+          {children}
+        </main>
       </div>
     </div>
+    </PageTabsHeaderContext.Provider>
   );
 }

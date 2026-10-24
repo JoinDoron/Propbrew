@@ -14,10 +14,10 @@ export function UnitSelector({ units, activeId }: { units: UnitOption[]; activeI
   const single = units.length <= 1;
 
   return (
-    <div className={`inline-flex items-center gap-2 h-10 pl-3 pr-2 rounded-xl border border-border bg-surface ${pending ? 'opacity-60' : ''}`}>
+    <div className={`inline-flex items-center gap-2 min-h-10 pl-3 pr-2 rounded-[10px] border border-border bg-surface ${pending ? 'opacity-60' : ''}`}>
       <Home size={15} className="text-primary flex-none" />
       {single ? (
-        <span className="text-[13px] font-semibold">{units[0]?.label ?? '—'}</span>
+        <span className="text-[14px] font-semibold">{units[0]?.label ?? '—'}</span>
       ) : (
         <div className="relative inline-flex items-center">
           <select
@@ -25,7 +25,7 @@ export function UnitSelector({ units, activeId }: { units: UnitOption[]; activeI
             value={activeId}
             disabled={pending}
             onChange={(e) => start(() => setActiveUnit(e.target.value))}
-            className="appearance-none bg-transparent pr-5 text-[13px] font-semibold outline-none cursor-pointer"
+            className="appearance-none bg-transparent pr-5 text-[14px] font-medium outline-none cursor-pointer"
           >
             {units.map((u) => (
               <option key={u.id} value={u.id}>{u.label}</option>

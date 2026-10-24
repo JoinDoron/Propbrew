@@ -1,4 +1,5 @@
 import { requireCapability } from '@/server/guard';
+import { can } from '@/lib/authz';
 import { constructionWorld } from '@/server/reads/construction';
 import { NOW } from '@/domain/ppm';
 import { FieldCapture, type FieldProject, type FieldTask, type FieldWorker } from '@/components/construction/field-capture';
@@ -9,7 +10,7 @@ import { FieldCapture, type FieldProject, type FieldTask, type FieldWorker } fro
  *  written to a durable device outbox FIRST and drain themselves when signal
  *  returns; every op carries an idempotency key so a retry can't double-apply. */
 export default async function ConstructionFieldPage() {
-  const { actor } = await requireCapability('reports_analytics');
+  const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const world = constructionWorld(actor);
 
   const active = world.projects.filter((p) => p.status === 'active' || p.status === 'closing');
@@ -25,8 +26,8 @@ export default async function ConstructionFieldPage() {
     .map((w) => ({ id: w.id, name: w.name, trade: w.trade }));
 
   return (
-    <div className="max-w-[880px] mx-auto">
-      <FieldCapture projects={projects} tasks={tasks} workers={workers} todayISO={NOW.slice(0, 10)} />
+    <div className="pb-page">
+      <FieldCapture projects={projects} tasks={tasks} workers={workers} todayISO={NOW.slice(0, 10)} canCapture={can(actor, 'reports_analytics', 'create').allowed} />
     </div>
   );
 }

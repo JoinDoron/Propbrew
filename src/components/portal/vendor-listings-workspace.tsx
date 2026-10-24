@@ -1,130 +1,69 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, X, Store, Wallet, Package, ShoppingBag } from 'lucide-react';
-import { formatMoney } from '@/components/domain';
-import { toneVar, type Tone } from '@/lib/status-tones';
+import { Button, CardHeader, EmptyState, IconButton, StatusPill } from '@/components/ui';
+import { PortalCard, PortalKpi, portalMoney } from './portal-patterns';
+import { PortalDialog } from './portal-dialog';
+import { PageTabs } from '@/components/ui/page-tabs';
+import { WorkspaceDecisionDialog, type WorkspaceDecision } from '@/components/ui/workspace-decision';
 import { listingStats, perListing } from '@/domain/vendor-portal';
 import { createListing, toggleListing } from '@/server/actions/vendor-listings';
+import layout from '@/components/ui/workspace-layout.module.css';
 
 export type ListingCard = { id: string; title: string; category: string; status: string; priceMinor: number; currency: string };
-export type OrderLite = { listingTitle: string; amountMinor: number; status: string };
-
-const money = (m: number, c = 'NGN') => formatMoney({ minor: m, currency: c } as Parameters<typeof formatMoney>[0]);
+export type OrderLite = { listingTitle: string; amountMinor: number; status: string; currency?: string };
 const CATEGORIES = ['HVAC', 'Plumbing', 'Electrical', 'Cleaning', 'Refrigeration', 'Security', 'General'];
 
-export function VendorListingsWorkspace({ listings, orders }: { listings: ListingCard[]; orders: OrderLite[] }) {
+export function VendorListingsWorkspace({ listings, orders, canCreate = false, canUpdate = false }: { listings: ListingCard[]; orders: OrderLite[]; canCreate?: boolean; canUpdate?: boolean }) {
   const router = useRouter();
-  const [pending, start] = useTransition();
   const [creating, setCreating] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
-  const flash = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3000); };
-
-  const stats = listingStats(listings.map((l) => ({ id: l.id, status: l.status, priceMinor: l.priceMinor })), orders);
-  const toggle = (id: string) => start(async () => { const r = await toggleListing(id); if (r.ok) { router.refresh(); flash('Listing updated'); } else flash(r.error); });
-
-  return (
-    <div className="flex flex-col gap-3.5">
-      <div className="grid grid-cols-3 gap-2.5">
-        <Kpi label="Live" value={`${stats.live}`} note={`${stats.paused} paused`} tone="success" icon={<Package size={16} />} />
-        <Kpi label="Orders" value={`${stats.orders}`} note="all-time" tone="info" icon={<ShoppingBag size={16} />} />
-        <Kpi label="Revenue" value={money(stats.revenueMinor)} note="fulfilled" tone="progress" icon={<Wallet size={16} />} />
-      </div>
-
-      <div className="flex items-center justify-between">
-        <h2 className="text-[14px] font-semibold">My services</h2>
-        <button onClick={() => setCreating(true)} className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl bg-primary text-white text-[13px] font-medium shadow-sm hover:brightness-105"><Plus size={16} /> New listing</button>
-      </div>
-
-      {listings.length === 0 ? (
-        <div className="text-center py-12 border border-dashed border-border rounded-2xl">
-          <Store size={24} className="mx-auto text-text-3 mb-2" />
-          <p className="text-[13px] font-medium">No listings yet</p>
-          <p className="text-[12px] text-text-3 mt-0.5">List a service and residents can order it.</p>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-2.5">
-          {listings.map((l) => {
-            const perf = perListing(l.title, orders);
-            const live = l.status === 'active';
-            return (
-              <div key={l.id} className="bg-surface border border-border rounded-2xl shadow-card p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="text-[14px] font-semibold truncate">{l.title}</div>
-                    <div className="text-[11.5px] text-text-3">{l.category} · {perf.orders} order{perf.orders === 1 ? '' : 's'} · {money(perf.revenueMinor)} earned</div>
-                  </div>
-                  <span className="text-[15px] font-bold font-mono flex-none">{money(l.priceMinor, l.currency)}</span>
-                </div>
-                <div className="flex items-center gap-2 mt-3">
-                  <span className="text-[11px] font-semibold px-2 h-6 inline-flex items-center rounded-full" style={{ background: `color-mix(in srgb, ${toneVar(live ? 'success' : 'neutral')} 14%, transparent)`, color: toneVar(live ? 'success' : 'neutral') }}>{live ? 'Active' : 'Paused'}</span>
-                  <button onClick={() => toggle(l.id)} disabled={pending} className="ml-auto text-[12px] px-3 h-8 rounded-lg border border-border-2 text-text-2 disabled:opacity-50">{live ? 'Pause' : 'Activate'}</button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {creating && <CreateDialog onClose={() => setCreating(false)} onDone={() => { setCreating(false); flash('Listing published'); }} />}
-      {toast && <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[90] bg-text text-surface text-[13px] font-medium px-4 py-2.5 rounded-xl shadow-float animate-fade">{toast}</div>}
-    </div>
-  );
+  const [decision, setDecision] = useState<WorkspaceDecision | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const currencies = [...new Set([...listings.map((listing) => listing.currency), ...orders.map((order) => order.currency).filter((currency): currency is string => Boolean(currency))])].sort();
+  const [currency, setCurrency] = useState(currencies.includes('NGN') ? 'NGN' : currencies[0] ?? 'NGN');
+  const stats = listingStats(listings.map((listing) => ({ id: listing.id, status: listing.status, priceMinor: listing.priceMinor })), orders.filter((order) => order.currency === currency));
+  function review(listing: ListingCard) {
+    if (!canUpdate) return;
+    const active = listing.status === 'active';
+    setDecision({ title: active ? 'Pause service listing' : 'Activate service listing', record: `${listing.title} · ${portalMoney(listing.priceMinor, listing.currency)}`, description: active ? 'Pause this marketplace listing so residents cannot place new orders against it. Existing orders remain unchanged.' : 'Activate this service for residents in its marketplace scope. Review the service, recorded price and your ability to fulfil it before making it orderable. This does not verify KYC or a payout account.', confirmLabel: active ? 'Confirm pause' : 'Confirm activation', action: () => toggleListing(listing.id), onSuccess: () => { router.refresh(); setMessage(active ? 'Service listing paused.' : 'Service listing activated in the marketplace record.'); } });
+  }
+  return <div className={layout.layout}>
+    <div className={layout.toolbar}><p className={layout.body}>Your service catalogue and recorded order performance.</p><Button variant="primary" icon={<Plus size={18} />} disabled={!canCreate} onClick={() => setCreating(true)}>New listing</Button></div>
+    <PageTabs label="Vendor service sections" items={[
+      { id: 'services', label: 'My services', content: <div className={layout.layout}>{listings.length ? listings.map((listing) => { const performance = perListing(listing.title, orders.filter((order) => order.currency === listing.currency)); const active = listing.status === 'active'; return <PortalCard key={listing.id}><CardHeader title={listing.title} subtitle={listing.category} action={<StatusPill status={active ? 'Active' : 'Paused'} tone={active ? 'success' : 'neutral'} />} /><p className="text-xl font-medium tabular-nums">{portalMoney(listing.priceMinor, listing.currency)}</p><p className={`${layout.body} mt-4`}>{performance.orders} title-matched {listing.currency} orders · {portalMoney(performance.revenueMinor, listing.currency)} fulfilled/closed value, not confirmed cash.</p><div className={`${layout.actions} mt-6`}><Button disabled={!canUpdate} onClick={() => review(listing)}>{active ? 'Pause' : 'Activate'}</Button></div></PortalCard>; }) : <PortalCard><EmptyState title="No listings yet" description="An authorized vendor can publish a service for residents in the current marketplace scope." /></PortalCard>}</div> },
+      { id: 'performance', label: 'Service performance', content: <div className={layout.layout}><div className={layout.toolbar}><p className={layout.body}>Currency-separated values · no FX conversion</p><label className={layout.field}><span className={layout.label}>Performance currency</span><select value={currency} onChange={(event) => setCurrency(event.target.value)} className={layout.select}>{(currencies.length ? currencies : ['NGN']).map((value) => <option key={value}>{value}</option>)}</select></label></div><div className={layout.metrics}><PortalKpi label="Active listings" value={String(stats.live)} note={`${stats.paused} paused · all listing currencies`} tone="success" icon={<Package size={18} />} /><PortalKpi label={`Recorded orders · ${currency}`} value={String(stats.orders)} note="Selected currency only" tone="info" icon={<ShoppingBag size={18} />} /><PortalKpi label={`Fulfilled value · ${currency}`} value={portalMoney(stats.revenueMinor, currency)} note="Not verified vendor settlement" tone="progress" icon={<Wallet size={18} />} /></div><PortalCard><CardHeader title="How performance is calculated" /><p className={layout.body}>Per-service attribution currently matches the recorded service title. Values only combine records with the same currency. A fulfilled or closed order does not prove a bank settlement, and records without a currency are excluded from financial totals.</p></PortalCard></div> },
+    ]} />
+    {canCreate && creating && <CreateDialog onClose={() => setCreating(false)} onDone={() => { setCreating(false); setMessage('Listing activated in the marketplace record. No payment or KYC verification was performed.'); }} />}
+    {decision && <WorkspaceDecisionDialog decision={decision} onClose={() => setDecision(null)} />}
+    {message && <div className={layout.feedback} role="status"><span>{message}</span><IconButton aria-label="Dismiss listing message" onClick={() => setMessage(null)}><X size={18} /></IconButton></div>}
+  </div>;
 }
 
 function CreateDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  const inFlight = useRef(false);
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState(CATEGORIES[0]);
   const [price, setPrice] = useState('');
   const [error, setError] = useState<string | null>(null);
-
   function submit() {
-    setError(null);
+    if (inFlight.current) return;
+    inFlight.current = true; setError(null);
     start(async () => {
-      const r = await createListing({ title, category, priceNaira: Number(price) });
-      if (!r.ok) { setError(r.error); return; }
-      router.refresh();
-      onDone();
+      try { const result = await createListing({ title, category, priceNaira: Number(price) }); if (!result.ok) { setError(result.error); return; } router.refresh(); onDone(); }
+      catch { setError('The service listing could not be published. Please try again.'); }
+      finally { inFlight.current = false; }
     });
   }
-
-  return (
-    <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center p-3 sm:p-4">
-      <div className="absolute inset-0 bg-[rgba(10,12,20,.45)] animate-fade" onClick={onClose} />
-      <div className="relative w-full max-w-[420px] bg-surface border border-border rounded-2xl shadow-float p-4 animate-[tms-slideup_.2s_ease]">
-        <div className="flex items-center justify-between mb-3"><h3 className="text-[15px] font-semibold">New listing</h3><button onClick={onClose} className="w-8 h-8 rounded-lg grid place-items-center hover:bg-surface-2"><X size={17} /></button></div>
-        <label className="text-[11px] font-semibold text-text-3 uppercase tracking-wide">Service</label>
-        <input value={title} onChange={(e) => setTitle(e.target.value)} autoFocus placeholder="e.g. AC deep-clean & servicing" className="w-full h-9 px-2.5 rounded-lg border border-border-2 bg-surface text-[13.5px] outline-none focus:border-primary mt-1 mb-3" />
-        <div className="grid grid-cols-2 gap-2.5">
-          <div>
-            <label className="text-[11px] font-semibold text-text-3 uppercase tracking-wide">Category</label>
-            <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full h-9 px-2 rounded-lg border border-border-2 bg-surface text-[13px] outline-none focus:border-primary mt-1">{CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select>
-          </div>
-          <div>
-            <label className="text-[11px] font-semibold text-text-3 uppercase tracking-wide">Price (₦)</label>
-            <input value={price} onChange={(e) => setPrice(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" placeholder="25000" className="w-full h-9 px-2.5 rounded-lg border border-border-2 bg-surface text-[13.5px] outline-none focus:border-primary mt-1" />
-          </div>
-        </div>
-        {error && <div className="text-[12px] text-negative mt-2">{error}</div>}
-        <div className="flex justify-end gap-2 mt-4">
-          <button onClick={onClose} className="h-9 px-3.5 rounded-lg border border-border-2 text-[13px]">Cancel</button>
-          <button onClick={submit} disabled={pending || !title.trim() || !price} className="h-9 px-4 rounded-lg bg-primary text-white text-[13px] font-medium disabled:opacity-50">{pending ? 'Publishing…' : 'Publish'}</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Kpi({ label, value, note, tone, icon }: { label: string; value: string; note: string; tone: Tone; icon: React.ReactNode }) {
-  return (
-    <div className="bg-surface border border-border rounded-2xl shadow-card p-3.5">
-      <span className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `color-mix(in srgb, ${toneVar(tone)} 14%, transparent)`, color: toneVar(tone) }}>{icon}</span>
-      <div className="text-[12px] text-text-2 font-medium mt-2.5">{label}</div>
-      <div className="text-[17px] font-bold tracking-[-0.02em] leading-none mt-1">{value}</div>
-      <div className="text-[10.5px] mt-1" style={{ color: toneVar(tone) }}>{note}</div>
-    </div>
-  );
+  return <PortalDialog label="New service listing" onClose={onClose} width={600} canClose={!pending}><div className={layout.modal}><header className={layout.dialogHeader}><h2 className={layout.dialogTitle}>Publish a service listing</h2><IconButton type="button" aria-label="Close dialog" disabled={pending} onClick={onClose}><X size={18} /></IconButton></header><form className={layout.dialogBody} onSubmit={(event) => { event.preventDefault(); submit(); }}><fieldset disabled={pending} className="border-0 p-0 m-0 min-w-0 flex flex-col gap-6">
+    <label className={layout.field}><span className={layout.label}>Service title</span><input required maxLength={160} autoFocus value={title} onChange={(event) => setTitle(event.target.value)} placeholder="e.g. AC deep-clean and servicing" className={layout.control} /></label>
+    <label className={layout.field}><span className={layout.label}>Category</span><select value={category} onChange={(event) => setCategory(event.target.value)} className={layout.control}>{CATEGORIES.map((value) => <option key={value}>{value}</option>)}</select></label>
+    <label className={layout.field}><span className={layout.label}>Price in NGN</span><input required type="number" min="0.01" step="0.01" inputMode="decimal" value={price} onChange={(event) => setPrice(event.target.value)} placeholder="25000.00" className={layout.control} /></label>
+    <div className={layout.notice}><Store size={18} /><p>Publishing makes this service active<span>Residents in the current marketplace scope can order it. Review the title, category and exact NGN price before confirming. No KYC or settlement account is verified by publishing.</span></p></div>
+    {error && <p role="alert" className="text-sm text-negative">{error}</p>}
+    <div className={layout.actions}><Button type="button" onClick={onClose} disabled={pending}>Cancel</Button><Button type="submit" variant="primary" disabled={pending || !title.trim() || !Number.isFinite(Number(price)) || Number(price) <= 0}>{pending ? 'Publishing…' : 'Confirm and publish'}</Button></div>
+  </fieldset></form></div></PortalDialog>;
 }

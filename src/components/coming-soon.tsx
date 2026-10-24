@@ -7,7 +7,7 @@ import { EmptyState } from '@/components/ui';
  */
 export function ComingSoon({ requirementIds }: { requirementIds: readonly string[] }) {
   return (
-    <div className="max-w-[1200px] mx-auto">
+    <div className="pb-page">
       <EmptyState
         title="Scaffolded — screen lands next"
         description={`This route is wired and access-controlled. The Phase-1 screen for ${requirementIds.join(', ')} is built in the next pass.`}

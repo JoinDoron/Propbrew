@@ -1,8 +1,11 @@
 'use client';
 
-import { Trophy, TrendingUp, ShieldCheck, Hammer, Medal, Info } from 'lucide-react';
-import { toneVar, type Tone } from '@/lib/status-tones';
-import { fmtM } from '@/domain/construction';
+import { Hammer, Medal, ShieldCheck, TrendingUp, Trophy } from 'lucide-react';
+import { CardHeader, EmptyState, StatusPill } from '@/components/ui';
+import { PageTabs } from '@/components/ui/page-tabs';
+import { ConstructionSummary, ConstructionPanel, ConstructionKpi as Kpi, constructionNaira as naira, ConstructionFrame } from './construction-ui';
+import { type Tone } from '@/lib/status-tones';
+import styles from './construction-insights-polish.module.css';
 
 export type LeagueRow = {
   id: string; name: string; trade: string; rank: number; score: number; band: Tone;
@@ -11,80 +14,19 @@ export type LeagueRow = {
   safetyIncidents: number; crewSize: number; valueMinor: number; projects: string[];
 };
 
-const naira = (m: number) => `₦${fmtM(m)}`;
-const MEDAL = ['#fbbf24', '#cbd5e1', '#d97757'];
-
-export function LeagueWorkspace({ rows, kpis }: {
-  rows: LeagueRow[];
-  kpis: { subs: number; avgScore: number; totalValueMinor: number; reworkMinor: number };
-}) {
+export function LeagueWorkspace({ rows, kpis }: { rows: LeagueRow[]; kpis: { subs: number; avgScore: number; totalValueMinor: number; reworkMinor: number } }) {
   const top = rows[0];
-
-  return (
-    <div className="flex flex-col gap-3.5">
-      <div className="relative overflow-hidden rounded-2xl p-5 text-white shadow-card" style={{ background: 'linear-gradient(135deg,#1a1405 0%,#33280b 55%,#4d3c11 100%)' }}>
-        <div className="relative flex items-center gap-2 flex-wrap">
-          <span className="w-12 h-12 rounded-2xl grid place-items-center flex-none" style={{ background: 'rgba(255,255,255,.1)' }}><Trophy size={22} /></span>
-          <div className="min-w-0">
-            <div className="text-[11px] text-white/70">SUBCONTRACTOR LEAGUE</div>
-            <div className="text-[20px] font-bold tracking-[-0.02em] leading-tight mt-0.5">{top ? `${top.name} leads on ${top.score}` : 'No subcontractors yet'}</div>
-            <div className="text-[12.5px] text-white/75 mt-0.5">{kpis.subs} firms · {naira(kpis.totalValueMinor)} of subcontracted work · {naira(kpis.reworkMinor)} lost to rework</div>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 min-[720px]:grid-cols-4 gap-2.5">
-        <Kpi label="Subcontractors" value={String(kpis.subs)} tone="info" icon={<Hammer size={16} />} />
-        <Kpi label="Average score" value={String(kpis.avgScore)} tone={kpis.avgScore >= 80 ? 'success' : 'warn'} icon={<TrendingUp size={16} />} />
-        <Kpi label="Work let" value={naira(kpis.totalValueMinor)} tone="progress" icon={<Trophy size={16} />} />
-        <Kpi label="Rework cost" value={naira(kpis.reworkMinor)} tone={kpis.reworkMinor > 0 ? 'danger' : 'success'} icon={<ShieldCheck size={16} />} />
-      </div>
-
-      <div className="px-1 text-[11px] text-text-3 flex items-start gap-1.5">
-        <Info size={12} className="mt-0.5 flex-none" /> Score = delivery 45% (tasks finished on time) + quality 30% (defects per task) + safety 25% (recorded incidents). Same formula for every trade, so a firm can audit its own number.
-      </div>
-
-      <div className="flex flex-col gap-2.5">
-        {rows.map((r) => (
-          <section key={r.id} className="bg-surface border rounded-2xl shadow-card p-4" style={{ borderColor: r.rank <= 3 ? `color-mix(in srgb, ${MEDAL[r.rank - 1]} 40%, transparent)` : 'var(--border)' }}>
-            <div className="flex items-start justify-between gap-2 flex-wrap">
-              <div className="min-w-0 flex items-start gap-3">
-                <span className="w-9 h-9 rounded-xl grid place-items-center flex-none font-bold text-[14px]" style={{ background: r.rank <= 3 ? `color-mix(in srgb, ${MEDAL[r.rank - 1]} 18%, transparent)` : 'var(--surface-2)', color: r.rank <= 3 ? MEDAL[r.rank - 1] : 'var(--text-3)' }}>
-                  {r.rank <= 3 ? <Medal size={17} /> : r.rank}
-                </span>
-                <div className="min-w-0">
-                  <div className="text-[14px] font-semibold truncate">{r.name}</div>
-                  <div className="text-[11px] text-text-3">{r.trade} · {r.crewSize} crew · {naira(r.valueMinor)} let · {r.projects.join(', ')}</div>
-                </div>
-              </div>
-              <div className="text-right flex-none">
-                <div className="text-[22px] font-bold tracking-[-0.02em] leading-none" style={{ color: toneVar(r.band) }}>{r.score}</div>
-                <div className="text-[9.5px] text-text-3 mt-0.5">composite</div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-3 mt-3">
-              <Metric label="Delivery" value={`${r.deliveryPct}%`} detail={`${r.tasksOnTime}/${r.tasksCompleted} on time`} score={r.deliveryPct} />
-              <Metric label="Quality" value={String(r.qualityScore)} detail={r.defects ? `${r.defects} defects · ${naira(r.reworkMinor)} rework` : 'no defects'} score={r.qualityScore} />
-              <Metric label="Safety" value={String(r.safetyScore)} detail={r.safetyIncidents ? `${r.safetyIncidents} incident${r.safetyIncidents === 1 ? '' : 's'}` : 'clean record'} score={r.safetyScore} />
-            </div>
-          </section>
-        ))}
-      </div>
-    </div>
-  );
+  return <ConstructionFrame>
+    <ConstructionSummary><CardHeader title="Subcontractor league" subtitle="A transparent, rules-based comparison of the recorded delivery, quality and safety data" action={<Trophy size={20} className="text-primary" />} /><div className={styles.stack}><h2 className={styles.title}>{top ? top.name + ' leads the supplied ranking on ' + top.score : 'No subcontractor ranking available'}</h2><dl className={styles.facts}><div><dt>Firms represented</dt><dd>{kpis.subs}</dd></div><div><dt>Recorded work value · NGN</dt><dd>{naira(kpis.totalValueMinor)}</dd></div><div><dt>Recorded rework cost · NGN</dt><dd>{naira(kpis.reworkMinor)}</dd></div><div><dt>Decision policy</dt><dd>Human review · no automatic contract award</dd></div></dl><p className={styles.metadata}>A high composite score is not an independent qualification, proof of compliance or permission to award work.</p></div></ConstructionSummary>
+    <PageTabs label="Subcontractor performance sections" items={[
+      { id: 'scorecards', label: 'Scorecards', content: <div className={styles.stack}>{rows.length ? rows.map((row) => <ConstructionPanel key={row.id}><div className={styles.header}><CardHeader title={row.name} subtitle={row.trade + ' · ' + row.crewSize + ' recorded crew'} action={<StatusPill status={'Rank ' + row.rank + ' · score ' + row.score + '/100'} tone={row.band} />} /></div><div className={styles.body}><div className={styles.stack}><div className={styles.threeColumns}><Metric label="Delivery" value={row.deliveryPct + '%'} detail={row.tasksOnTime + ' / ' + row.tasksCompleted + ' completed tasks on time'} score={row.deliveryPct} /><Metric label="Quality" value={String(row.qualityScore)} detail={row.defects + ' recorded defects · ' + naira(row.reworkMinor) + ' recorded rework'} score={row.qualityScore} /><Metric label="Safety" value={String(row.safetyScore)} detail={row.safetyIncidents + ' recorded incident(s) · not a safety certificate'} score={row.safetyScore} /></div><dl className={styles.facts}><div><dt>Recorded work value · NGN</dt><dd>{naira(row.valueMinor)}</dd></div><div><dt>Recorded rework cost · NGN</dt><dd>{naira(row.reworkMinor)}</dd></div><div><dt>Completed tasks</dt><dd>{row.tasksCompleted}</dd></div><div><dt>Completed on time</dt><dd>{row.tasksOnTime}</dd></div><div><dt>Defect count</dt><dd>{row.defects}</dd></div><div><dt>Safety incident count</dt><dd>{row.safetyIncidents}</dd></div></dl><div><h3 className={styles.rowTitle}>Recorded project coverage</h3><p className={styles.text + ' mt-2'}>{row.projects.length ? row.projects.join(' · ') : 'No project names were supplied.'}</p></div>{!row.tasksCompleted ? <p className={styles.notice}>No completed-task baseline is recorded for this firm. Quality and safety scores are outputs of the current formula, not evidence of a proven delivery history.</p> : null}</div></div><p className={styles.footer}>Composite: delivery 45% + quality 30% + safety 25%. Values are recorded work and rework amounts, not verified invoice payments or vendor settlements.</p></ConstructionPanel>) : <ConstructionPanel><EmptyState icon={<Medal size={26} />} title="No subcontractor scorecards" description="Recorded task, defect and safety data are needed before comparing subcontractor performance." /></ConstructionPanel>}</div> },
+      { id: 'overview', label: 'Overview', content: <div className={styles.stack}><div className={styles.metrics}><Kpi label="Subcontractors" value={String(kpis.subs)} tone="info" icon={<Hammer size={18} />} /><Kpi label="Average score" value={String(kpis.avgScore)} tone={kpis.avgScore >= 80 ? 'success' : 'warn'} icon={<TrendingUp size={18} />} /><Kpi label="Work let · NGN" value={naira(kpis.totalValueMinor)} tone="progress" icon={<Trophy size={18} />} /><Kpi label="Rework cost · NGN" value={naira(kpis.reworkMinor)} tone={kpis.reworkMinor > 0 ? 'danger' : 'success'} icon={<ShieldCheck size={18} />} /></div><ConstructionPanel><div className={styles.header}><CardHeader title="Compare the records, not just the ranking" subtitle="Use trade, scope, completed tasks and underlying incidents alongside the composite score" /></div><div className={styles.body}><p className={styles.text}>These portfolio figures summarise the supplied subcontractor records. A firm with little completed work can still have a high quality or safety score because the formula starts from a no-recorded-incident baseline. Review the full scorecard before a commercial decision.</p></div></ConstructionPanel></div> },
+      { id: 'methodology', label: 'Scoring method', content: <ConstructionPanel><div className={styles.header}><CardHeader title="One auditable scoring method" subtitle="Fixed weights across trades · not a calibrated AI ranking" /></div><div className={styles.body}><div className={styles.stack}><p className={styles.text}>Score = delivery 45% (tasks finished on time) + quality 30% (defects per task) + safety 25% (recorded incidents). The same formula is applied to every trade, so each firm can audit its own number.</p><dl className={styles.facts}><div><dt>Delivery · 45%</dt><dd>Completed tasks finished on time</dd></div><div><dt>Quality · 30%</dt><dd>Defects per completed task, using the current domain formula</dd></div><div><dt>Safety · 25%</dt><dd>Recorded incident deductions</dd></div><div><dt>Limitations</dt><dd>Dependent on the completeness and accuracy of the source records</dd></div></dl><p className={styles.notice}>No provider model is invoked and no award is made automatically. A score is not proof of verified competency, current insurance, safe work or payment settlement.</p></div></div></ConstructionPanel> },
+    ]} />
+  </ConstructionFrame>;
 }
 
 function Metric({ label, value, detail, score }: { label: string; value: string; detail: string; score: number }) {
   const tone: Tone = score >= 85 ? 'success' : score >= 70 ? 'warn' : 'danger';
-  return (
-    <div>
-      <div className="flex justify-between text-[10px] uppercase tracking-wide text-text-3 mb-1"><span>{label}</span><span className="font-mono font-semibold" style={{ color: toneVar(tone) }}>{value}</span></div>
-      <div className="h-1.5 rounded-full bg-surface-2 overflow-hidden"><div className="h-full rounded-full" style={{ width: `${Math.min(100, score)}%`, background: toneVar(tone) }} /></div>
-      <div className="text-[10px] text-text-3 mt-1 truncate">{detail}</div>
-    </div>
-  );
-}
-function Kpi({ label, value, tone, icon }: { label: string; value: string; tone: Tone; icon: React.ReactNode }) {
-  return <div className="bg-surface border border-border rounded-2xl shadow-card p-3.5"><span className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `color-mix(in srgb, ${toneVar(tone)} 14%, transparent)`, color: toneVar(tone) }}>{icon}</span><div className="text-[12px] text-text-2 font-medium mt-2.5">{label}</div><div className="text-[17px] font-bold tracking-[-0.02em] leading-none mt-1">{value}</div></div>;
+  return <section className={styles.scoreMetric} aria-label={label + ' score'}><div className={styles.toolbar}><h3 className={styles.rowTitle}>{label}</h3><StatusPill status={value} tone={tone} /></div><progress className={styles.progress} max={100} value={Math.max(0, Math.min(100, score))} aria-label={label + ' recorded score ' + score + ' out of 100'} /><p className={styles.text}>{detail}</p></section>;
 }

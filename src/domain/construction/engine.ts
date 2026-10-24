@@ -1081,10 +1081,11 @@ export function buildConfidence(evm: EVM, openCritical: number, reportCoveragePc
 
 export type ConAnswer = { answer: string; sources: { label: string; href: string }[]; grounded: boolean };
 
-/** Deterministic, permission-aware Q&A over the world. This is both the offline
- *  answer AND the grounding an LLM is restricted to — so the numbers are the
- *  same either way and nothing can be invented. */
-export function askConstruction(question: string, w: ConWorld, nowMs: number): ConAnswer {
+/** Deterministic Q&A over an already scoped world. The caller must derive
+ *  commercial access from the authenticated actor, never from request input.
+ *  The default preserves existing trusted commercial callers. Limited readers
+ *  receive non-financial answers only, without an LLM rewriting this boundary. */
+export function askConstruction(question: string, w: ConWorld, nowMs: number, canSeeCommercials = true): ConAnswer {
   const q = question.toLowerCase();
   const src = (label: string, href: string) => ({ label, href });
   const active = w.projects.filter((p) => p.status === 'active' || p.status === 'closing');
@@ -1098,6 +1099,7 @@ export function askConstruction(question: string, w: ConWorld, nowMs: number): C
     return { answer: `${rows.length} project${rows.length === 1 ? ' is' : 's are'} behind: ${lines.join('; ')}.`, sources: [src('Critical Path', '/construction/schedule'), src('Earned Value', '/construction/evm')], grounded: true };
   }
   if (has('cost', 'budget', 'overrun', 'eac', 'over')) {
+    if (!canSeeCommercials) return { answer: 'Commercial cost, budget and forecast amounts are restricted for your access level. Ask about schedule, materials, deliveries, workforce or non-financial risk instead.', sources: [src('Earned Value', '/construction/evm')], grounded: true };
     const rows = active.map((p) => ({ p, e: projectEVMOf(p, w.costCodes) }));
     const over = rows.filter((r) => r.e.vac < 0);
     if (over.length === 0) return { answer: 'Every active project is forecast within budget on current performance.', sources: [src('Earned Value', '/construction/evm')], grounded: true };
@@ -1117,9 +1119,9 @@ export function askConstruction(question: string, w: ConWorld, nowMs: number): C
     return { answer: `${late.length} order${late.length === 1 ? ' is' : 's are'} late: ${late.map((p) => `${p.ref} (${p.item}) from ${p.vendorName}, promised ${p.expectedISO}, ${p.deliveredQty}/${p.qty} ${p.unit} delivered`).join('; ')}.`, sources: late.slice(0, 3).map((p) => src(p.ref, '/construction/procurement')), grounded: true };
   }
   if (has('risk', 'worry', 'attention', 'problem', 'wrong')) {
-    const top = scanRisks(w, nowMs).slice(0, 3);
+    const top = scanRisks(w, nowMs).filter((risk) => canSeeCommercials || risk.kind !== 'cost_overrun').slice(0, 3);
     if (top.length === 0) return { answer: 'The radar is quiet — no detector is flagging anything right now.', sources: [src('Risk Radar', '/construction/risk')], grounded: true };
-    return { answer: `Top ${top.length}: ${top.map((r) => `${r.title} (${RISK_LABEL[r.kind]}, ${Math.round(r.confidence * 100)}% confidence${r.nairaAtRiskMinor ? `, ₦${fmtM(r.nairaAtRiskMinor)} at risk` : ''})`).join('; ')}.`, sources: [src('Risk Radar', '/construction/risk')], grounded: true };
+    return { answer: `Top ${top.length}: ${top.map((r) => `${r.title} (${RISK_LABEL[r.kind]}, ${Math.round(r.confidence * 100)}% confidence${canSeeCommercials && r.nairaAtRiskMinor ? `, ₦${fmtM(r.nairaAtRiskMinor)} at risk` : ''})`).join('; ')}.`, sources: [src('Risk Radar', '/construction/risk')], grounded: true };
   }
   if (has('crew', 'worker', 'labour', 'labor', 'attendance', 'on site')) {
     const today = new Date(nowMs).toISOString().slice(0, 10);
@@ -1131,7 +1133,7 @@ export function askConstruction(question: string, w: ConWorld, nowMs: number): C
   }
   if (has('progress', 'status', 'how are', 'summary', 'overall')) {
     const conf = portfolioConfidence(w.projects, w.costCodes, scanRisks(w, nowMs));
-    return { answer: `Portfolio delivery confidence is ${conf.score}/100 (${conf.label}). ${active.map((p) => `${p.name} ${p.percentComplete}%`).join(', ')}. ₦${fmtM(conf.nairaAtRiskMinor)} is flagged at risk across open signals.`, sources: [src('Command Center', '/construction'), src('Weekly Digest', '/construction/digest')], grounded: true };
+    return { answer: `Portfolio delivery confidence is ${conf.score}/100 (${conf.label}). ${active.map((p) => `${p.name} ${p.percentComplete}%`).join(', ')}.${canSeeCommercials ? ` ₦${fmtM(conf.nairaAtRiskMinor)} is flagged at risk across open signals.` : ''}`, sources: [src('Command Center', '/construction'), src('Weekly Digest', '/construction/digest')], grounded: true };
   }
   return {
     answer: 'I can answer from the construction records on schedule and slippage, cost and forecast out-turn, materials and stock variance, procurement and late deliveries, workforce and certificates, and the risk radar. Ask about any of those and I will cite the records.',

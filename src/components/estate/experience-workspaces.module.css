@@ -1,0 +1,66 @@
+.context { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.body { color: var(--text-2); font-size: 14px; line-height: 1.65; overflow-wrap: anywhere; }
+.dialogTitle, .sectionTitle { color: var(--text); font-size: 16px; line-height: 1.5; font-weight: 500; letter-spacing: -.025em; overflow-wrap: anywhere; }
+.dialogTitle { font-size: 18px; }
+.record { color: var(--text); font-size: 14px; line-height: 1.5; font-weight: 500; overflow-wrap: anywhere; }
+.numeric { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rewardTable { min-width: 850px; }
+.bookingTable { min-width: 980px; }
+.selected td { background: var(--primary-weak); }
+.rank { color: var(--text-3); font-size: 14px; font-variant-numeric: tabular-nums; }
+.progress { height: 6px; margin-top: 10px; overflow: hidden; border-radius: 100px; background: var(--surface-3); }
+.progress > span { display: block; height: 100%; border-radius: inherit; background: var(--primary); }
+.memberProgress { min-width: 150px; }
+.selection { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; padding: 24px; border-top: 1px solid var(--border); background: var(--surface-2); }
+.actionRow { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.catalog { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.perk { display: flex; min-width: 0; flex-direction: column; gap: 16px; }
+.perk > :last-child { margin-top: auto; }
+.perkHeader { display: flex; align-items: flex-start; gap: 12px; }
+.softIcon { display: inline-flex; width: 40px; height: 40px; align-items: center; justify-content: center; flex: none; border: 1px solid var(--border); border-radius: 10px; background: var(--primary-weak); color: var(--primary); }
+.points { color: var(--text); font-size: 28px; line-height: 1.3; font-weight: 400; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.tierGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.tierItem { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 16px; border: 1px solid var(--border); border-radius: 10px; }
+.facts { display: flex; flex-direction: column; gap: 16px; padding: 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
+.facts > div { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; font-size: 14px; line-height: 1.5; }
+.facts dt { color: var(--text-3); }
+.facts dd { color: var(--text); font-weight: 500; text-align: right; overflow-wrap: anywhere; }
+.feedback { display: flex; align-items: center; gap: 12px; }
+.feedback > span { flex: 1; min-width: 0; }
+.feedback[data-error='true'] { color: var(--tone-danger); }
+.form { display: flex; flex-direction: column; gap: 20px; }
+.formGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.field { display: flex; min-width: 0; flex-direction: column; gap: 8px; }
+.eventGroup { display: flex; flex-direction: column; gap: 16px; }
+.eventGroup > h3 { font-size: 16px; font-weight: 500; line-height: 1.5; }
+.event { display: flex; align-items: flex-start; gap: 16px; }
+.eventContent { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 8px; }
+.eventMeta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; color: var(--text-3); font-size: 12px; line-height: 1.6; }
+.eventMeta > span { display: inline-flex; align-items: center; gap: 6px; }
+.eventActions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-left: auto; }
+.eventFill { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 4px; }
+.eventFill .progress { flex: 1; min-width: 120px; max-width: 260px; margin: 0; }
+.demand { display: flex; flex-direction: column; gap: 24px; }
+.demandLabel { display: flex; align-items: center; justify-content: space-between; gap: 16px; font-size: 14px; line-height: 1.5; }
+.utilList { display: flex; flex-direction: column; gap: 12px; }
+.utilButton { min-height: 64px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); text-align: left; }
+.utilButton:hover, .utilButton[aria-pressed='true'] { background: var(--primary-weak); border-color: var(--primary); }
+.heatmap { width: 100%; min-width: 440px; border-collapse: separate; border-spacing: 6px; }
+.heatmap th { padding: 8px; color: var(--text-3); font-size: 12px; font-weight: 500; text-align: center; }
+.heatmap th:first-child { text-align: left; }
+.heatmap td { height: 38px; border-radius: 6px; color: var(--text); font-size: 12px; font-variant-numeric: tabular-nums; text-align: center; }
+.heatmapLegend { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding-top: 16px; color: var(--text-3); font-size: 12px; line-height: 1.6; }
+.legendItem { display: inline-flex; align-items: center; gap: 8px; }
+.legendDot { width: 10px; height: 10px; border-radius: 3px; }
+.approvalList { display: flex; flex-direction: column; }
+.approval { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 16px; padding: 24px; border-top: 1px solid var(--border); }
+.approval:first-child { border-top: 0; }
+.approvalIdentity { flex: 1; min-width: 180px; }
+.rule { display: flex; align-items: flex-start; gap: 8px; margin-top: 12px; color: var(--text-2); font-size: 13px; line-height: 1.6; }
+.rule svg { flex: none; margin-top: 2px; color: var(--primary); }
+.footer { padding: 16px 24px; border-top: 1px solid var(--border); color: var(--text-3); font-size: 12px; line-height: 1.6; }
+.registerSummary { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; color: var(--text-3); font-size: 12px; }
+@media (max-width: 1100px) { .catalog { grid-template-columns: minmax(0, 1fr); } .tierGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .event { flex-wrap: wrap; } .eventActions { width: 100%; margin-left: 56px; } }
+@media (max-width: 640px) { .catalog { gap: 16px; } .selection, .approval, .footer { padding: 16px; } .eventActions { margin-left: 0; } .formGrid { grid-template-columns: minmax(0, 1fr); } .event > .softIcon { display: none; } .eventFill .progress { max-width: none; } }
+@media (max-width: 420px) { .tierGrid { grid-template-columns: minmax(0, 1fr); } .eventActions > button { flex: 1; } }
+@media (pointer: coarse) { .heatmap td { height: 44px; } }

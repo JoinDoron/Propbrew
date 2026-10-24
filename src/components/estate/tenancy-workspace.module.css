@@ -1,0 +1,98 @@
+/* Clinexa surfaces and register rhythm, adapted to tenancy operations. */
+.context { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.metadata { color: var(--text-3); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.metrics { display: grid; min-width: 0; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; }
+.analytics { display: grid; min-width: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; gap: 24px; }
+.panel { min-width: 0; }
+.panel > div:first-child { flex-wrap: wrap; }
+.registerHeader { padding: 24px; border-bottom: 1px solid var(--border); }
+.registerHeader > :first-child { flex-wrap: wrap; }
+.toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.search { display: flex; align-items: center; gap: 10px; min-width: 180px; max-width: 420px; min-height: 40px; flex: 1; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface); color: var(--text-3); }
+.search:focus-within { outline: 2px solid var(--primary); outline-offset: 2px; }
+.search input { min-height: 38px; min-width: 0; width: 100%; padding: 0; border: 0; outline: none; background: transparent; color: var(--text); font: inherit; font-size: 14px; }
+.search input:focus-visible { outline: none; }
+.search input::placeholder { color: var(--text-3); opacity: 1; }
+.stageFilter select { min-height: 40px; max-width: 100%; padding: 8px 32px 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface); color: var(--text); font: inherit; font-size: 13px; }
+.tenancyTable { min-width: 960px; width: 100%; border-collapse: collapse; text-align: left; }
+.tenancyTable .numeric { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tenancyTable .recordTitle { display: block; }
+.tenancyTable .person { min-width: 155px; }
+.person { display: flex; align-items: center; gap: 12px; min-width: 0; color: var(--text); font-size: 14px; line-height: 1.5; }
+.person > div { min-width: 0; }
+.recordTitle { color: var(--text); font-size: 14px; line-height: 1.5; font-weight: 500; overflow-wrap: anywhere; }
+.rowAction { width: 100px; text-align: right; white-space: nowrap; }
+.rowAction button, .renewalList button { color: var(--primary); }
+.signal { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.renewalWarning { color: var(--tone-warn); font-size: 12px; line-height: 1.6; font-weight: 500; }
+.registerFooter { padding: 16px 24px; border-top: 1px solid var(--border); color: var(--text-3); font-size: 12px; line-height: 1.6; }
+.notice { display: flex; align-items: flex-start; gap: 12px; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface); color: var(--text); font-size: 14px; line-height: 1.6; }
+.notice > svg { flex: none; margin-top: 2px; color: var(--primary); }
+.notice p { font-weight: 500; }
+.notice p > span { display: block; margin-top: 4px; color: var(--text-3); font-size: 13px; font-weight: 400; }
+.stageGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.stageGrid > div { min-width: 0; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface); }
+.stageGrid dd, .depositStatuses dd { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-top: 12px; color: var(--text); font-size: 24px; line-height: 1.3; font-weight: 400; font-variant-numeric: tabular-nums; }
+.renewalList { display: flex; flex-direction: column; gap: 0; margin: 0; padding: 0; list-style: none; }
+.renewalList li { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 16px 0; border-bottom: 1px solid var(--border); }
+.renewalList li:first-child { padding-top: 8px; }
+.renewalList li:last-child { padding-bottom: 0; border-bottom: 0; }
+.renewalDetail { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; margin-left: auto; }
+.depositAmounts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; padding: 8px 0 24px; }
+.depositAmounts dt { color: var(--text-3); font-size: 13px; line-height: 1.6; }
+.depositAmounts dd { margin-top: 8px; color: var(--text); font-size: 28px; line-height: 1.3; font-weight: 400; letter-spacing: -.03em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.depositStatuses { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; padding-top: 24px; border-top: 1px solid var(--border); }
+.depositStatuses > div { min-width: 0; }
+.footnote { margin-top: 20px; color: var(--text-3); font-size: 12px; line-height: 1.7; }
+.drawer { min-height: 100%; border-left: 1px solid var(--border); background: var(--surface); }
+.modal { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); box-shadow: var(--shadow); }
+.dialogHeader { position: sticky; z-index: 1; top: 0; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 24px; border-bottom: 1px solid var(--border); background: var(--surface); }
+.dialogTitle { color: var(--text); font-size: 18px; line-height: 1.5; font-weight: 500; letter-spacing: -.03em; overflow-wrap: anywhere; }
+.dialogBody { display: flex; min-width: 0; flex-direction: column; gap: 24px; padding: 24px; }
+.identitySummary { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 20px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface-2); }
+.rentValue { color: var(--text); font-size: 32px; line-height: 1.3; font-weight: 400; letter-spacing: -.04em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.sectionTitle { margin-bottom: 16px; color: var(--text); font-size: 16px; line-height: 1.5; font-weight: 500; }
+.facts { display: flex; flex-direction: column; gap: 16px; padding-top: 20px; border-top: 1px solid var(--border); }
+.facts > div { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; font-size: 14px; line-height: 1.5; }
+.facts dt { color: var(--text-3); }
+.facts dd { color: var(--text); font-weight: 500; text-align: right; overflow-wrap: anywhere; }
+.leaseNote { display: flex; align-items: flex-start; gap: 8px; margin-top: 20px; color: var(--text-2); font-size: 13px; line-height: 1.6; }
+.leaseNote > svg { flex: none; margin-top: 2px; color: var(--primary); }
+.lifecycleList { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.lifecycleItem { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-control); color: var(--text-2); font-size: 14px; line-height: 1.5; }
+.lifecycleItem[data-current='true'] { border-color: var(--primary); background: var(--primary-weak); color: var(--primary); }
+.stageNumber { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 26px; height: 26px; border: 1px solid var(--border); border-radius: 50%; background: var(--surface); font-size: 12px; }
+.currentLabel { flex-basis: 100%; margin-left: 34px; color: var(--primary); font-size: 12px; line-height: 1.5; }
+.sectionHeader { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+.sectionHeader .sectionTitle { margin-bottom: 0; }
+.depositPanel { display: flex; flex-direction: column; gap: 8px; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface-2); }
+.depositValue { color: var(--text); font-size: 24px; line-height: 1.3; font-weight: 400; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.recordActions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding-top: 20px; border-top: 1px solid var(--border); }
+.safetyNote { display: flex; align-items: flex-start; gap: 8px; color: var(--text-3); font-size: 12px; line-height: 1.6; }
+.safetyNote > svg { flex: none; margin-top: 2px; color: var(--primary); }
+.bodySecondary { color: var(--text-2); font-size: 14px; line-height: 1.6; }
+.stageChange { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.stageChange > svg { color: var(--text-3); }
+.dialogActions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 12px; padding-top: 20px; border-top: 1px solid var(--border); }
+.feedback, .toast { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface-2); color: var(--text); font-size: 14px; line-height: 1.6; }
+.feedback > svg, .toast > svg { flex: none; color: var(--primary); }
+.feedback > span, .toast > span { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+.toast { position: fixed; z-index: 90; bottom: 24px; left: 50%; width: max-content; max-width: calc(100vw - 32px); transform: translateX(-50%); background: var(--surface); box-shadow: var(--shadow); }
+@media (max-width: 1100px) { .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .analytics { grid-template-columns: minmax(0, 1fr); } .depositStatuses { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 640px) {
+  .metrics, .analytics { gap: 16px; }
+  .toolbar, .search { width: 100%; }
+  .registerHeader, .registerFooter, .dialogHeader, .dialogBody { padding: 16px; }
+  .dialogBody { gap: 20px; }
+  .stageGrid { gap: 8px; }
+  .stageGrid > div { padding: 12px; }
+  .renewalList .person { width: 100%; }
+  .renewalDetail { margin-left: 48px; align-items: flex-start; }
+  .renewalList button { margin-left: auto; }
+  .depositAmounts { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .depositStatuses { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .recordActions { align-items: stretch; flex-direction: column; }
+  .dialogActions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 420px) { .metrics, .lifecycleList { grid-template-columns: minmax(0, 1fr); } }
+@media (pointer: coarse) { .search, .search input, .stageFilter select { min-height: 44px; } }

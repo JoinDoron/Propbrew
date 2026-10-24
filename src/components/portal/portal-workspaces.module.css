@@ -1,0 +1,13 @@
+.kpi { display: flex; min-width: 0; flex-direction: column; gap: 8px; }
+.kpi > div { width: 100%; }
+.kpi > p { color: var(--text-3); font-size: 12px; line-height: 1.6; padding: 0 4px; }
+.row { display: flex; min-width: 0; align-items: flex-start; flex-wrap: wrap; gap: 16px; }
+.row > div:first-child { min-width: 180px; flex: 1; }
+.softIcon { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 40px; height: 40px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--primary-weak); color: var(--primary); }
+.cardGrid { display: grid; min-width: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.progress { display: flex; min-width: 460px; align-items: center; padding: 16px 0; }
+.scroll { max-width: 100%; overflow-x: auto; }
+.notice { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 12px; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-control); font-size: 14px; line-height: 1.7; }
+.summary { display: flex; min-height: 44px; cursor: pointer; align-items: center; color: var(--primary); }
+.formGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+@media (max-width: 640px) { .cardGrid, .formGrid { grid-template-columns: minmax(0, 1fr); gap: 16px; } }

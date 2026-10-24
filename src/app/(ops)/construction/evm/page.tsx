@@ -9,7 +9,7 @@ const OPEN_PO = ['issued', 'acknowledged', 'part_delivered', 'approved'];
  *  CPI/SPI/CV/SV/EAC/ETC/VAC/TCPI), an S-curve with a forecast tail, budget vs
  *  committed vs actual by cost code, and the cash finance must fund. */
 export default async function ConstructionEvmPage() {
-  const { actor } = await requireCapability('reports_analytics');
+  const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const projects = repos.constructionProjects.list(actor).items;
   const costCodes = repos.constructionCostCodes.list(actor).items;
   const pos = repos.constructionOrders.list(actor).items;
@@ -42,7 +42,7 @@ export default async function ConstructionEvmPage() {
     });
 
   return (
-    <div className="max-w-[1080px] mx-auto">
+    <div className="pb-page">
       <EvmCockpit views={views} />
     </div>
   );

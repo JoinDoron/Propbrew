@@ -70,7 +70,7 @@ export async function syncOperation(input: SyncInput): Promise<SyncOutcome> {
         workforceCount: n('workforceCount'),
         completed: arr('completed'), ongoing: arr('ongoing'), delayed: arr('delayed'), plannedNext: arr('plannedNext'),
         deliveries: arr('deliveries'), incidents: arr('incidents'), constraints: arr('constraints'),
-        photos: n('photos'), status: 'submitted',
+        photos: n('photos'), mediaRefs: arr('mediaRefs'), status: 'submitted',
       } as unknown as (typeof db.constructionReports)[number];
       if (existing) Object.assign(existing, row, { id: existing.id });
       else db.constructionReports.unshift(row);

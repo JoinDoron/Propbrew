@@ -1,0 +1,67 @@
+.metrics { display: grid; min-width: 0; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; }
+.analytics { display: grid; min-width: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; gap: 24px; }
+.panel { min-width: 0; }
+.panelBody { color: var(--text); font-size: 14px; line-height: 1.6; }
+.secondary { margin-top: 6px; color: var(--text-3); }
+.metadata { color: var(--text-3); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.healthSummary { display: flex; align-items: center; gap: 24px; padding: 8px 0 24px; }
+.healthSummary .metadata { margin-top: 12px; }
+.summaryTitle { font-size: 16px; font-weight: 500; line-height: 1.5; }
+.ring { position: relative; width: 128px; height: 128px; flex: none; }
+.ringValue { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+.ringValue > :first-child { color: var(--text); font-size: 36px; line-height: 1; font-weight: 400; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+.ringValue > :last-child { color: var(--text-3); font-size: 12px; }
+.sentimentHeader { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 20px; border-top: 1px solid var(--border); }
+.recordTitle { margin: 0; color: var(--text); font-size: 14px; line-height: 1.5; font-weight: 500; overflow-wrap: anywhere; }
+.sentimentBar { display: flex; height: 10px; margin: 16px 0; overflow: hidden; border-radius: 8px; background: var(--surface-2); }
+.sentimentBar > span { height: 100%; }
+.sentimentLegend { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.sentimentItem { display: flex; flex-direction: column; gap: 6px; }
+.sentimentItem .metadata { display: inline-flex; align-items: center; gap: 6px; text-transform: capitalize; }
+.dot { display: inline-block; width: 7px; height: 7px; flex: none; border-radius: 50%; }
+.sentimentCount { color: var(--text); font-size: 22px; line-height: 1.3; font-variant-numeric: tabular-nums; }
+.activeSummary { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface-2); }
+.activeSummary strong { font-weight: 500; }
+.summaryIcon { display: inline-flex; flex: none; color: var(--primary); }
+.engagementBars { display: flex; flex-direction: column; gap: 24px; }
+.barLabel { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 10px; color: var(--text-2); font-size: 14px; line-height: 1.5; }
+.barLabel > :last-child { flex: none; color: var(--text); font-weight: 500; font-variant-numeric: tabular-nums; }
+.track, .hotspotTrack { height: 8px; overflow: hidden; border-radius: 8px; background: var(--surface-3); }
+.fill { display: block; height: 100%; border-radius: inherit; background: var(--primary); }
+.panelFootnote { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border); color: var(--text-3); font-size: 12px; line-height: 1.6; }
+.contextNote { display: flex; align-items: flex-start; gap: 8px; color: var(--text-3); font-size: 12px; line-height: 1.6; }
+.contextNote svg { flex: none; margin-top: 2px; color: var(--primary); }
+.hotspotList { display: flex; flex-direction: column; gap: 24px; padding-top: 8px; }
+.hotspot { min-width: 0; }
+.hotspotTrack { height: 12px; margin-bottom: 8px; }
+.riskList, .feedbackList { list-style: none; margin: 0; padding: 0; }
+.riskRow { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 16px 0; border-bottom: 1px solid var(--border); }
+.riskRow:first-child { padding-top: 8px; }
+.riskRow:last-child { padding-bottom: 0; border-bottom: 0; }
+.recordContent { flex: 1; min-width: 160px; }
+.registerHeader { padding: 24px; border-bottom: 1px solid var(--border); }
+.registerHeader > div { flex-wrap: wrap; margin-bottom: 0; }
+.record { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 16px; padding: 24px; border-bottom: 1px solid var(--border); }
+.record:last-child { border-bottom: 0; }
+.recordHeading { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 10px; }
+.unit { display: inline-block; margin-left: 6px; color: var(--text-3); font-size: 12px; font-weight: 400; }
+.recordText { margin-bottom: 8px; color: var(--text-2); font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
+.recordAction { display: flex; align-items: center; min-height: 40px; }
+.complaintsTable { min-width: 760px; }
+.complaintTitle { font-weight: 500; text-align: left; }
+.tableAction { text-align: right; }
+.emptyCopy { margin-top: 16px; color: var(--text-3); font-size: 14px; line-height: 1.6; }
+.toast { position: fixed; bottom: 24px; left: 50%; z-index: 90; max-width: calc(100vw - 32px); transform: translateX(-50%); padding: 12px 16px; border-radius: var(--radius-control); background: var(--text); color: var(--surface); box-shadow: var(--shadow); font-size: 14px; line-height: 1.5; }
+@media (max-width: 1100px) { .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .analytics { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 640px) {
+  .metrics, .analytics { gap: 16px; }
+  .healthSummary { gap: 16px; }
+  .ring { width: 104px; height: 104px; }
+  .ring svg { width: 104px; height: 104px; }
+  .ringValue > :first-child { font-size: 30px; }
+  .summaryTitle { font-size: 14px; }
+  .registerHeader, .record { padding: 16px; }
+  .record { gap: 12px; }
+  .recordAction { width: 100%; padding-left: 48px; }
+}
+@media (max-width: 420px) { .metrics { grid-template-columns: minmax(0, 1fr); } .healthSummary { flex-direction: column; align-items: flex-start; } }

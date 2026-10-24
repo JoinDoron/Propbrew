@@ -1,85 +1,32 @@
-import { Card, KpiCard, StatusPill } from '@/components/ui';
-import { formatMoney } from '@/components/domain';
+import { Card, CardHeader, EmptyState, KpiCard, StatusPill } from '@/components/ui';
 import { humanizeStatus, type Tone } from '@/lib/status-tones';
 import type { InvestorProject } from '@/domain/entities';
 import { Building2, TrendingUp } from 'lucide-react';
+import common from '@/components/ui/workspace-layout.module.css';
 
 const STATUS_TONE: Record<string, Tone> = { planning: 'neutral', selling: 'info', construction: 'warn', completed: 'success' };
+const money = (minor: number, currency: string) => new Intl.NumberFormat('en-NG', { style: 'currency', currency, maximumFractionDigits: 2 }).format(minor / 100);
 
-/** SC-08 investor dashboard, shared by the ops, admin and investor-portal
- *  routes (each passes rows already scoped for the caller). AI-S-04 projections
- *  are always labelled as estimates with their basis shown. */
+/** Callers supply already scoped rows. Recorded projections are never guarantees. */
 export function InvestorProjectsView({ projects, showTotals = true }: { projects: readonly InvestorProject[]; showTotals?: boolean }) {
   const totalUnits = projects.reduce((a, p) => a + p.unitsTotal, 0);
   const soldUnits = projects.reduce((a, p) => a + p.unitsSold, 0);
-  const salesToDate = projects.reduce((a, p) => a + p.salesToDate.minor, 0);
-
-  return (
-    <div className="flex flex-col gap-3.5">
-      {showTotals && (
-        <div className="grid grid-cols-1 min-[560px]:grid-cols-3 gap-3.5">
-          <KpiCard label="Projects" value={String(projects.length)} icon={<Building2 size={18} />} />
-          <KpiCard label="Units sold" value={`${soldUnits} / ${totalUnits}`} delta={`${totalUnits ? Math.round((soldUnits / totalUnits) * 100) : 0}% of inventory`} positive icon={<TrendingUp size={18} />} iconBg="rgba(16,185,129,.12)" iconColor="#10b981" />
-          <KpiCard label="Sales to date" value={shortNaira(salesToDate)} icon={<TrendingUp size={18} />} iconBg="rgba(37,99,235,.12)" iconColor="#2563eb" />
+  const currencies = [...new Set(projects.map((p) => p.salesToDate.currency))];
+  const salesByCurrency = currencies.map((currency) => ({ currency, minor: projects.filter((p) => p.salesToDate.currency === currency).reduce((n, p) => n + p.salesToDate.minor, 0) }));
+  return <div className={common.layout}>
+    {showTotals && <div className={common.layout}><div className={common.grid}>
+      <KpiCard label="Projects" value={String(projects.length)} icon={<Building2 size={18} />} />
+      <KpiCard label="Units sold / inventory" value={`${soldUnits} / ${totalUnits}`} icon={<Building2 size={18} />} />
+      <KpiCard label="Recorded sales to date" value={salesByCurrency.length > 1 ? 'By currency' : money(salesByCurrency[0]?.minor ?? 0, salesByCurrency[0]?.currency ?? 'NGN')} icon={<TrendingUp size={18} />} />
+    </div>{salesByCurrency.length > 1 && <Card><CardHeader title="Recorded sales by currency" subtitle="Native amounts remain separate; no exchange rate is applied." /><dl className={common.facts}>{salesByCurrency.map((amount) => <div key={amount.currency}><dt>{amount.currency}</dt><dd>{money(amount.minor, amount.currency)}</dd></div>)}</dl></Card>}</div>}
+    {projects.length ? <div className={common.analytics}>{projects.map((p) => {
+      const soldPct = p.unitsTotal ? Math.round((p.unitsSold / p.unitsTotal) * 100) : 0;
+      return <Card key={p.id} className={common.panel}><CardHeader title={p.name} subtitle={p.location} action={<StatusPill status={humanizeStatus(p.status)} tone={STATUS_TONE[p.status] ?? 'neutral'} />} />
+        <div className={common.stack}><div><p className={common.body}>Sales · {p.unitsSold}/{p.unitsTotal} units · {soldPct}% of inventory</p><progress className="mt-3 w-full h-2 accent-primary" max={100} value={Math.max(0, Math.min(100, soldPct))} aria-label={`${p.name} inventory sold`} /></div>
+          <dl className={common.facts}><div><dt>Recorded sales to date</dt><dd>{money(p.salesToDate.minor, p.salesToDate.currency)}</dd></div><div><dt>Occupancy</dt><dd>{p.occupancyPct}%</dd></div><div><dt>Recorded handover date</dt><dd>{p.handoverDate.slice(0, 10)}</dd></div><div><dt>Projected ROI · estimate</dt><dd>{p.projectedRoiPct}%</dd></div></dl>
+          <p className={common.footnote}>AI-S-04 · Recorded projection, not a calibrated AI valuation or a guaranteed return. Review source assumptions, costs and timing before relying on this estimate.</p>
         </div>
-      )}
-
-      <div className="grid grid-cols-1 min-[720px]:grid-cols-2 gap-3.5">
-        {projects.map((p) => {
-          const soldPct = p.unitsTotal ? Math.round((p.unitsSold / p.unitsTotal) * 100) : 0;
-          return (
-            <Card key={p.id}>
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <h3 className="text-[15px] font-semibold tracking-[-0.01em]">{p.name}</h3>
-                  <p className="text-[12px] text-text-3 mt-0.5">{p.location}</p>
-                </div>
-                <StatusPill status={humanizeStatus(p.status)} tone={STATUS_TONE[p.status] ?? 'neutral'} />
-              </div>
-
-              <div className="mt-3.5">
-                <div className="flex items-center justify-between text-[12px] mb-1.5">
-                  <span className="text-text-2">Sales · {p.unitsSold}/{p.unitsTotal} units</span>
-                  <span className="font-mono text-text-3">{soldPct}%</span>
-                </div>
-                <div className="h-2 rounded-full bg-surface-3 overflow-hidden">
-                  <div className="h-full rounded-full bg-primary" style={{ width: `${soldPct}%` }} />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2 mt-3.5 pt-3.5 border-t border-border">
-                <Metric label="Sales to date" value={formatMoney(p.salesToDate)} />
-                <Metric label="Occupancy" value={`${p.occupancyPct}%`} />
-                <Metric label="Handover" value={p.handoverDate.slice(0, 7)} />
-              </div>
-
-              <div className="mt-3 flex items-center gap-2 rounded-lg bg-primary-weak px-2.5 py-2">
-                <span className="text-[10px] font-bold text-primary bg-surface rounded px-1.5 py-0.5">AI-S-04</span>
-                <span className="text-[12px] text-text-2">
-                  Projected ROI <strong>{p.projectedRoiPct}%</strong>
-                </span>
-                <span className="text-[11px] text-text-3 ml-auto">Estimate · sales pace + comparable handovers</span>
-              </div>
-            </Card>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div className="text-[10.5px] text-text-3 uppercase tracking-wide">{label}</div>
-      <div className="text-[13px] font-semibold mt-0.5 font-mono">{value}</div>
-    </div>
-  );
-}
-
-function shortNaira(minor: number): string {
-  const major = minor / 100;
-  if (major >= 1_000_000_000) return `₦${(major / 1_000_000_000).toFixed(1)}B`;
-  if (major >= 1_000_000) return `₦${(major / 1_000_000).toFixed(0)}M`;
-  return `₦${major.toLocaleString()}`;
+      </Card>;
+    })}</div> : <Card><EmptyState title="No investor projects in your scope." description="Authorised project records will appear here." /></Card>}
+  </div>;
 }

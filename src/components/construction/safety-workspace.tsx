@@ -1,8 +1,13 @@
 'use client';
 
+import { ConstructionSummary, ConstructionPanel, ConstructionKpi as Kpi, ConstructionFrame, ConstructionEmpty } from './construction-ui';
+import { Card, CardHeader, EmptyState, StatusPill } from '@/components/ui';
+import styles from './construction-delivery-polish.module.css';
+
 import { HardHat, ShieldAlert, AlertOctagon, CalendarCheck, Users, Flame, ArrowUpFromLine, Shovel, Box, Truck, Zap } from 'lucide-react';
-import { toneVar, type Tone } from '@/lib/status-tones';
+import { humanizeStatus, toneVar, type Tone } from '@/lib/status-tones';
 import { PERMIT_LABEL, SAFETY_EVENT_LABEL, type SafetyPermitType, type SafetyEventKind } from '@/domain/construction';
+import { PageTabs } from '@/components/ui/page-tabs';
 
 export type PermitRow = { id: string; ref: string; type: SafetyPermitType; location: string; requestedBy: string; supervisor: string; status: string; validFromISO: string; validToISO: string; controls: string[]; expired: boolean; clash: boolean };
 export type EventRow = { id: string; kind: SafetyEventKind; title: string; atISO: string; reportedBy: string; lostDays: number; closed: boolean; action?: string; zoneLabel?: string };
@@ -14,6 +19,7 @@ const PERMIT_ICON: Record<SafetyPermitType, React.ReactNode> = {
 };
 const EVENT_TONE: Record<SafetyEventKind, Tone> = { near_miss: 'warn', first_aid: 'info', lost_time: 'danger', observation: 'muted' };
 const STATUS_TONE: Record<string, Tone> = { requested: 'info', active: 'progress', closed: 'muted', expired: 'danger' };
+const displayDate = (value: string) => new Date(value).toLocaleString('en-NG', { day: 'numeric', month: 'short', year: 'numeric', ...(value.includes('T') ? { hour: '2-digit', minute: '2-digit' } as const : {}), timeZone: 'Africa/Lagos' });
 
 export function SafetyWorkspace({ permits, events, talks, clashes, stats, projectName }: {
   permits: PermitRow[]; events: EventRow[]; talks: TalkRow[];
@@ -22,118 +28,109 @@ export function SafetyWorkspace({ permits, events, talks, clashes, stats, projec
   projectName: string;
 }) {
   return (
-    <div className="flex flex-col gap-3.5">
-      <div className="relative overflow-hidden rounded-2xl p-5 text-white shadow-card" style={{ background: 'linear-gradient(135deg,#16100a 0%,#2c1f10 55%,#453017 100%)' }}>
-        <div className="absolute -right-10 -top-10 w-56 h-56 rounded-full opacity-20" style={{ background: `radial-gradient(circle, ${toneVar(stats.band)}, transparent 70%)` }} />
+    <ConstructionFrame>
+      <ConstructionSummary>
         <div className="relative flex items-center gap-5 flex-wrap">
           <Ring score={stats.score} band={stats.band} />
           <div className="min-w-0">
-            <div className="text-[11px] text-white/70 flex items-center gap-1.5"><HardHat size={12} /> SITE SAFETY · {projectName.toUpperCase()}</div>
-            <div className="text-[21px] font-bold tracking-[-0.02em] leading-tight mt-1">
+            <div className="text-[14px] text-text-3 flex items-center gap-1.5"><HardHat size={12} /> SITE SAFETY · {projectName.toUpperCase()}</div>
+            <h2 className="text-[21px] font-medium tracking-[-0.02em] leading-tight mt-1">
               {stats.daysSinceLTI === null ? 'No lost-time injury on record' : `${stats.daysSinceLTI} days since the last lost-time injury`}
-            </div>
-            <div className="text-[12.5px] text-white/75 mt-0.5">{stats.activePermits} live permit{stats.activePermits === 1 ? '' : 's'} · {stats.nearMisses} near miss{stats.nearMisses === 1 ? '' : 'es'} reported · {stats.talksThisMonth} toolbox talk{stats.talksThisMonth === 1 ? '' : 's'} this month</div>
+            </h2>
+            <div className="text-[14px] text-text-3 mt-0.5">{stats.activePermits} active permit{stats.activePermits === 1 ? '' : 's'} · {stats.nearMisses} near miss{stats.nearMisses === 1 ? '' : 'es'} reported · {stats.talksThisMonth} toolbox talk{stats.talksThisMonth === 1 ? '' : 's'} this month</div>
           </div>
         </div>
-      </div>
+      </ConstructionSummary>
 
-      <div className="grid grid-cols-2 min-[720px]:grid-cols-4 gap-2.5">
-        <Kpi label="Live permits" value={String(stats.activePermits)} tone="progress" icon={<CalendarCheck size={16} />} />
-        <Kpi label="Lapsed permits" value={String(stats.expiredPermits)} tone={stats.expiredPermits ? 'danger' : 'success'} icon={<ShieldAlert size={16} />} />
-        <Kpi label="Permit clashes" value={String(clashes.length)} tone={clashes.length ? 'danger' : 'success'} icon={<AlertOctagon size={16} />} />
-        <Kpi label="Toolbox talks (30d)" value={String(stats.talksThisMonth)} tone={stats.talksThisMonth >= 2 ? 'success' : 'warn'} icon={<Users size={16} />} />
-      </div>
-
-      {/* Clashes */}
       {clashes.length > 0 && (
-        <div className="rounded-xl border px-4 py-3 animate-fade" style={{ borderColor: 'color-mix(in srgb, var(--tone-danger) 40%, transparent)', background: 'color-mix(in srgb, var(--tone-danger) 7%, transparent)' }}>
-          <div className="flex items-center gap-2 text-[12.5px] font-semibold mb-1.5" style={{ color: toneVar('danger') }}><AlertOctagon size={14} /> Permit clash — same place, same window</div>
+        <Card className={styles.section}>
+          <CardHeader title="Recorded permit overlap" subtitle="Same recorded location and validity window · operator review required" action={<AlertOctagon size={20} className="text-negative" />} />
           {clashes.map((c, i) => (
-            <div key={i} className="text-[12px] text-text-2">
-              <span className="font-mono font-semibold">{c.aRef}</span> ({PERMIT_LABEL[c.aType].toLowerCase()}) and <span className="font-mono font-semibold">{c.bRef}</span> ({PERMIT_LABEL[c.bType].toLowerCase()}) are both live at <span className="font-medium">{c.location}</span> — hot work beside work at height needs coordinating before either starts.
+            <div key={i} className={styles.notice}>
+              <div><p className={styles.rowTitle}>{c.aRef} · {PERMIT_LABEL[c.aType]} / {c.bRef} · {PERMIT_LABEL[c.bType]}</p><p>Both permit records overlap at {c.location}. Confirm the location, validity windows and controls with the responsible supervisor before work; this alert does not verify current site activity.</p></div>
             </div>
           ))}
-        </div>
+        </Card>
       )}
 
-      {/* Permits */}
-      <section className="bg-surface border border-border rounded-2xl shadow-card overflow-hidden">
-        <div className="px-4 py-2.5 border-b border-border text-[12.5px] font-semibold">Permits to work</div>
-        <div className="divide-y divide-border">
-          {permits.map((p) => (
-            <div key={p.id} className="px-4 py-3" style={p.clash || p.expired ? { background: 'color-mix(in srgb, var(--tone-danger) 5%, transparent)' } : undefined}>
-              <div className="flex items-start justify-between gap-2 flex-wrap">
-                <div className="min-w-0 flex items-start gap-2.5">
-                  <span className="w-8 h-8 rounded-lg grid place-items-center flex-none mt-0.5" style={{ background: `color-mix(in srgb, ${toneVar('progress')} 13%, transparent)`, color: toneVar('progress') }}>{PERMIT_ICON[p.type]}</span>
-                  <div className="min-w-0">
-                    <div className="text-[13px] font-medium flex items-center gap-1.5 flex-wrap">
-                      <span className="font-mono">{p.ref}</span> · {PERMIT_LABEL[p.type]}
-                      {p.clash && <span className="text-[9.5px] font-semibold px-1.5 h-4 inline-flex items-center rounded-full" style={{ background: `color-mix(in srgb, ${toneVar('danger')} 15%, transparent)`, color: toneVar('danger') }}>clash</span>}
-                      {p.expired && <span className="text-[9.5px] font-semibold px-1.5 h-4 inline-flex items-center rounded-full" style={{ background: `color-mix(in srgb, ${toneVar('danger')} 15%, transparent)`, color: toneVar('danger') }}>lapsed</span>}
-                    </div>
-                    <div className="text-[10.5px] text-text-3">{p.location} · {p.requestedBy} → {p.supervisor} · {p.validFromISO.slice(5)}→{p.validToISO.slice(5)}</div>
-                    <div className="flex flex-wrap gap-1 mt-1.5">
-                      {p.controls.map((c) => <span key={c} className="text-[10px] px-1.5 h-5 inline-flex items-center rounded-full bg-surface-2 text-text-3">{c}</span>)}
-                    </div>
-                  </div>
-                </div>
-                <span className="text-[10px] font-semibold px-2 h-6 inline-flex items-center rounded-full flex-none capitalize" style={{ background: `color-mix(in srgb, ${toneVar(p.expired ? 'danger' : STATUS_TONE[p.status] ?? 'muted')} 14%, transparent)`, color: toneVar(p.expired ? 'danger' : STATUS_TONE[p.status] ?? 'muted') }}>{p.expired ? 'expired' : p.status}</span>
+      <PageTabs label="Construction safety sections" items={[
+        {
+          id: 'permits', label: 'Permits to work', content: <div className={styles.stack}>
+            <ConstructionPanel >
+              <div className={styles.header}><CardHeader title="Permits to work" subtitle="Recorded validity, supervisors and controls · not a live authorisation or safety certification" /></div>
+              <div>
+                {permits.map((p) => (
+                  <section key={p.id} className={`${styles.row} ${styles.section}`} aria-label={`${p.ref} permit details`}>
+                    <CardHeader title={`${p.ref} · ${PERMIT_LABEL[p.type]}`} subtitle={p.location} action={<div className={styles.inline}><span aria-hidden="true">{PERMIT_ICON[p.type]}</span><StatusPill status={p.expired ? 'Expired' : humanizeStatus(p.status)} tone={p.expired ? 'danger' : STATUS_TONE[p.status] ?? 'muted'} />{p.clash && <StatusPill status="Recorded clash" tone="danger" />}</div>} />
+                    <dl className={styles.facts}><div><dt>Requested by</dt><dd>{p.requestedBy}</dd></div><div><dt>Responsible supervisor</dt><dd>{p.supervisor}</dd></div><div><dt>Valid from · WAT</dt><dd>{displayDate(p.validFromISO)}</dd></div><div><dt>Valid until · WAT</dt><dd>{displayDate(p.validToISO)}</dd></div></dl>
+                    <section className={styles.fieldSection}><h3 className={styles.title}>Recorded controls</h3>{p.controls.length ? <ul className={styles.list}>{p.controls.map((control, index) => <li key={`${index}-${control}`}>{control}</li>)}</ul> : <p className={styles.text}>No controls recorded. Confirm the source permit before relying on it.</p>}</section>
+                  </section>
+                ))}
+                {permits.length === 0 && <ConstructionEmpty title="No permit records" />}
               </div>
+            </ConstructionPanel>
+          </div>
+        },
+        {
+          id: 'events', label: 'Events & checks', content: <div className={styles.stack}>
+            <div className={styles.twoColumns}>
+              {/* Events */}
+              <ConstructionPanel >
+                <div className={styles.header}><CardHeader title="Safety events" subtitle="All recorded events, corrective actions and closure states" /></div>
+                <div>
+                  {events.map((e) => (
+                    <section key={e.id} className={`${styles.row} ${styles.section}`}>
+                      <CardHeader title={e.title} subtitle={`${displayDate(e.atISO)} · WAT`} action={<div className={styles.inline}><StatusPill status={SAFETY_EVENT_LABEL[e.kind]} tone={EVENT_TONE[e.kind]} /><StatusPill status={e.closed ? 'Closed' : 'Open'} tone={e.closed ? 'success' : 'warn'} /></div>} />
+                      <dl className={styles.facts}><div><dt>Reported by</dt><dd>{e.reportedBy}</dd></div><div><dt>Location / zone</dt><dd>{e.zoneLabel || 'Not recorded'}</dd></div><div><dt>Lost days recorded</dt><dd>{e.lostDays}</dd></div></dl>
+                      {e.action && <div className={styles.fieldSection}><h3 className={styles.title}>Corrective action</h3><p className={styles.text}>{e.action}</p></div>}
+                    </section>
+                  ))}
+                  {events.length === 0 && <ConstructionEmpty title="No safety event records" />}
+                </div>
+              </ConstructionPanel>
+
+              {/* Toolbox talks */}
+              <ConstructionPanel >
+                <div className={styles.header}><CardHeader title="Toolbox talks" subtitle="Recorded topics, facilitators and attendance counts" /></div>
+                <div>
+                  {talks.map((t) => (
+                    <section key={t.id} className={`${styles.row} ${styles.section}`}>
+                      <CardHeader title={t.topic} subtitle={`${displayDate(t.atISO)} · WAT`} />
+                      <dl className={styles.facts}><div><dt>Attendance recorded</dt><dd>{t.attendees}</dd></div><div><dt>Delivered by</dt><dd>{t.deliveredBy}</dd></div></dl>
+                    </section>
+                  ))}
+                  {talks.length === 0 && <EmptyState title="No toolbox talks recorded" description="This does not establish that a briefing took place." />}
+                </div>
+              </ConstructionPanel>
             </div>
-          ))}
-        </div>
-      </section>
-
-      <div className="grid grid-cols-1 min-[900px]:grid-cols-[1fr_300px] gap-3.5 items-start">
-        {/* Events */}
-        <section className="bg-surface border border-border rounded-2xl shadow-card overflow-hidden">
-          <div className="px-4 py-2.5 border-b border-border text-[12.5px] font-semibold">Safety events <span className="text-[10.5px] text-text-3 font-normal">· reporting near misses is a good sign, not a bad one</span></div>
-          <div className="divide-y divide-border">
-            {events.map((e) => (
-              <div key={e.id} className="px-4 py-3">
-                <div className="flex items-start justify-between gap-2 flex-wrap">
-                  <div className="min-w-0">
-                    <div className="text-[12.5px] font-medium flex items-center gap-1.5 flex-wrap">
-                      <span className="text-[9.5px] font-semibold px-1.5 h-4 inline-flex items-center rounded-full" style={{ background: `color-mix(in srgb, ${toneVar(EVENT_TONE[e.kind])} 14%, transparent)`, color: toneVar(EVENT_TONE[e.kind]) }}>{SAFETY_EVENT_LABEL[e.kind]}</span>
-                      {e.title}
-                    </div>
-                    <div className="text-[10.5px] text-text-3 mt-0.5">{e.atISO}{e.zoneLabel ? ` · ${e.zoneLabel}` : ''} · reported by {e.reportedBy}{e.lostDays ? ` · ${e.lostDays} days lost` : ''}</div>
-                    {e.action && <div className="text-[11px] mt-1" style={{ color: toneVar('info') }}>→ {e.action}</div>}
-                  </div>
-                  <span className="text-[10px] font-semibold px-2 h-5 inline-flex items-center rounded-full flex-none" style={{ background: `color-mix(in srgb, ${toneVar(e.closed ? 'success' : 'warn')} 14%, transparent)`, color: toneVar(e.closed ? 'success' : 'warn') }}>{e.closed ? 'closed' : 'open'}</span>
-                </div>
-              </div>
-            ))}
           </div>
-        </section>
-
-        {/* Toolbox talks */}
-        <section className="bg-surface border border-border rounded-2xl shadow-card overflow-hidden">
-          <div className="px-4 py-2.5 border-b border-border text-[12.5px] font-semibold">Toolbox talks</div>
-          <div className="divide-y divide-border">
-            {talks.map((t) => (
-              <div key={t.id} className="px-4 py-2.5">
-                <div className="text-[12px] font-medium">{t.topic}</div>
-                <div className="text-[10.5px] text-text-3">{t.atISO} · {t.attendees} attended · {t.deliveredBy}</div>
-              </div>
-            ))}
-            {talks.length === 0 && <div className="px-4 py-6 text-center text-[12.5px] text-text-3">None recorded.</div>}
+        },
+        {
+          id: 'overview', label: 'Overview', content: <div className="pb-section">
+            <div className={styles.metrics}>
+              <Kpi label="Active permits" value={String(stats.activePermits)} tone="progress" icon={<CalendarCheck size={16} />} />
+              <Kpi label="Lapsed permits" value={String(stats.expiredPermits)} tone={stats.expiredPermits ? 'danger' : 'success'} icon={<ShieldAlert size={16} />} />
+              <Kpi label="Permit clashes" value={String(clashes.length)} tone={clashes.length ? 'danger' : 'success'} icon={<AlertOctagon size={16} />} />
+              <Kpi label="Toolbox talks (30d)" value={String(stats.talksThisMonth)} tone={stats.talksThisMonth >= 2 ? 'success' : 'warn'} icon={<Users size={16} />} />
+            </div>
           </div>
-        </section>
-      </div>
-    </div>
+        }
+      ]} />
+
+      {/* Clashes */}
+
+      {/* Permits */}
+
+    </ConstructionFrame>
   );
 }
 
 function Ring({ score, band }: { score: number; band: Tone }) {
   const color = toneVar(band);
   return (
-    <div className="relative flex-none" style={{ width: 84, height: 84 }}>
-      <svg width={84} height={84} viewBox="0 0 36 36" className="-rotate-90"><circle cx="18" cy="18" r="15.5" fill="none" stroke="rgba(255,255,255,.12)" strokeWidth="3" /><circle cx="18" cy="18" r="15.5" fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeDasharray={`${(score / 100) * 97.4} 97.4`} /></svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center"><span className="text-[22px] font-bold leading-none" style={{ color }}>{score}</span><span className="text-[8px] text-white/60 uppercase tracking-wide">safety</span></div>
+    <div className="relative flex-none" style={{ width: 84, height: 84 }} role="img" aria-label={`${score} rule-derived safety record score, not an independent safety certification`}>
+      <svg width={84} height={84} viewBox="0 0 36 36" className="-rotate-90"><circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--border)" strokeWidth="3" /><circle cx="18" cy="18" r="15.5" fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeDasharray={`${(score / 100) * 97.4} 97.4`} /></svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center"><span className="text-[22px] font-medium leading-none" style={{ color }}>{score}</span><span className="text-[12px] text-text-3">record score</span></div>
     </div>
   );
-}
-function Kpi({ label, value, tone, icon }: { label: string; value: string; tone: Tone; icon: React.ReactNode }) {
-  return <div className="bg-surface border border-border rounded-2xl shadow-card p-3.5"><span className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `color-mix(in srgb, ${toneVar(tone)} 14%, transparent)`, color: toneVar(tone) }}>{icon}</span><div className="text-[12px] text-text-2 font-medium mt-2.5">{label}</div><div className="text-[17px] font-bold tracking-[-0.02em] leading-none mt-1">{value}</div></div>;
 }

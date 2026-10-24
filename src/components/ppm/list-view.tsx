@@ -1,6 +1,7 @@
 'use client';
 
-import { StatusPill } from '@/components/ui';
+import { Button, Card, CardHeader, EmptyState, StatusPill } from '@/components/ui';
+import styles from './maintenance-clinexa.module.css';
 import { humanizeStatus } from '@/lib/status-tones';
 import type { Tone } from '@/lib/status-tones';
 import type { PpmData } from './types';
@@ -20,37 +21,39 @@ export function PpmList({ data, onSelect }: { data: PpmData; onSelect: (id: stri
     .sort((a, b) => (a.occ!.dueDate < b.occ!.dueDate ? -1 : 1));
 
   return (
-    <div className="bg-surface border border-border rounded-2xl shadow-card overflow-hidden">
-      <div className="w-full overflow-x-auto">
-        <table className="w-full border-collapse text-sm">
+    <Card padded={false} className="overflow-hidden">
+      <div className={styles.header}><CardHeader title="Maintenance plan register" subtitle={`${rows.length} plan${rows.length === 1 ? '' : 's'} with an open occurrence · earliest due dates first`} /></div>
+      <div className={styles.scroll} role="region" aria-label="Maintenance plan register" tabIndex={0}>
+        <table className={styles.table}>
           <thead>
             <tr>
               {['Asset', 'Trade', 'Next due', 'Basis', 'Status', 'Assignee', 'Hrs', 'Risk'].map((h) => (
-                <th key={h} className="text-left text-[10.5px] font-semibold tracking-[0.06em] uppercase text-text-3 px-4 py-2.5 border-b border-border whitespace-nowrap">{h}</th>
+                <th scope="col" key={h}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {rows.map(({ plan, occ, risk }) => (
-              <tr key={plan.id} onClick={() => onSelect(occ!.id)} className="hover:bg-surface-2 transition-colors cursor-pointer">
-                <td className="px-4 py-2.5 border-b border-border">
-                  <div className="text-[13px] font-medium">{plan.assetName}</div>
-                  <div className="text-[11px] text-text-3">{plan.frequency}{plan.statutory ? ' · statutory' : ''}</div>
+              <tr key={plan.id}>
+                <td>
+                  <Button variant="ghost" onClick={() => onSelect(occ!.id)} aria-label={`View maintenance plan for ${plan.assetName}`} className={styles.assetButton}>{plan.assetName}</Button>
+                  <div className={styles.metadata}>{plan.frequency}{plan.statutory ? ' · statutory' : ''}</div>
                 </td>
-                <td className="px-4 py-2.5 border-b border-border text-[12.5px] text-text-2">{plan.category}</td>
-                <td className="px-4 py-2.5 border-b border-border font-mono text-[12.5px]">{occ!.dueDate}</td>
-                <td className="px-4 py-2.5 border-b border-border text-[12px] text-text-2">{occ!.basisWon === 'runtime' ? '⚡ runtime' : 'calendar'}</td>
-                <td className="px-4 py-2.5 border-b border-border"><StatusPill status={humanizeStatus(occ!.status)} tone={OCC_TONE[occ!.status] ?? 'neutral'} /></td>
-                <td className="px-4 py-2.5 border-b border-border text-[12.5px] text-text-2">{plan.assignee}</td>
-                <td className="px-4 py-2.5 border-b border-border font-mono text-[12.5px] text-text-3">{plan.estimatedHours}</td>
-                <td className="px-4 py-2.5 border-b border-border">
+                <td>{plan.category}</td>
+                <td>{occ!.dueDate}</td>
+                <td>{occ!.basisWon === 'runtime' ? '⚡ runtime' : 'calendar'}</td>
+                <td><StatusPill status={humanizeStatus(occ!.status)} tone={OCC_TONE[occ!.status] ?? 'neutral'} /></td>
+                <td>{plan.assignee}</td>
+                <td>{plan.estimatedHours}</td>
+                <td>
                   {risk ? <StatusPill status={String(risk.score)} tone={BAND_TONE[risk.band]} /> : <span className="text-text-3">—</span>}
                 </td>
               </tr>
             ))}
+            {rows.length === 0 && <tr><td colSpan={8}><EmptyState title="No open maintenance occurrences" description="Plans appear here when there is a scheduled service to review." /></td></tr>}
           </tbody>
         </table>
       </div>
-    </div>
+    </Card>
   );
 }

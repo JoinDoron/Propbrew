@@ -7,7 +7,7 @@ import { LeagueWorkspace, type LeagueRow } from '@/components/construction/leagu
  *  safety 25%) applied identically to every trade, so performance is comparable
  *  and a firm can audit its own score before the next award decision. */
 export default async function ConstructionLeaguePage() {
-  const { actor } = await requireCapability('reports_analytics');
+  const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const world = constructionWorld(actor);
   const nameOf = (id: string) => world.projects.find((p) => p.id === id)?.name ?? id;
 
@@ -20,7 +20,7 @@ export default async function ConstructionLeaguePage() {
   }));
 
   return (
-    <div className="max-w-[980px] mx-auto">
+    <div className="pb-page">
       <LeagueWorkspace
         rows={rows}
         kpis={{

@@ -1,0 +1,33 @@
+name: Staging promotion
+
+on:
+  workflow_dispatch:
+    inputs:
+      deployment_url:
+        description: 'Validated Vercel preview URL to promote'
+        required: true
+        type: string
+
+jobs:
+  verify-and-promote:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Verify staging deployment
+        run: node -e "fetch(process.env.DEPLOYMENT_URL + '/api/v1/health').then(async r => { if (!r.ok) process.exit(1); console.log(await r.text()) })"
+        env:
+          DEPLOYMENT_URL: ${{ inputs.deployment_url }}
+      - name: Promote validated artifact
+        run: npx vercel@latest promote "$DEPLOYMENT_URL" --scope="$VERCEL_SCOPE"
+        env:
+          DEPLOYMENT_URL: ${{ inputs.deployment_url }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_SCOPE: ${{ secrets.VERCEL_SCOPE }}
+      - name: Rollback command
+        run: echo 'Rollback: set VERCEL_TOKEN in the environment, then run npx vercel@latest rollback --scope="$VERCEL_SCOPE"'

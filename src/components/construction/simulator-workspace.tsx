@@ -1,14 +1,20 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { FlaskConical, RotateCcw, Zap, Info } from 'lucide-react';
+import { useId, useMemo, useState } from 'react';
+import { FlaskConical, RotateCcw } from 'lucide-react';
+import { Button, CardHeader, EmptyState, StatusPill } from '@/components/ui';
+import { PageTabs } from '@/components/ui/page-tabs';
+import { ConstructionSummary, ConstructionPanel, constructionNaira as naira, ConstructionFrame } from './construction-ui';
 import { toneVar, type Tone } from '@/lib/status-tones';
-import { recoveryPlan, simulate, fmtM, type EVM, type Task } from '@/domain/construction';
+import { recoveryPlan, simulate, type EVM, type Task } from '@/domain/construction';
+import styles from './construction-insights-polish.module.css';
 
 export type SimProject = { id: string; name: string; code: string; plannedFinishISO: string; startISO: string; approvedBudget: { minor: number; currency: 'NGN' }; plannedPercent: number; percentComplete: number };
-
-const naira = (m: number) => `₦${fmtM(m)}`;
 const DEFAULTS = { productivityPct: 100, dieselShockPct: 0, extraRainDays: 0, crashDays: 0 };
+const date = (value: string) => {
+  const parsed = new Date(value.slice(0, 10) + 'T00:00:00Z');
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+};
 
 export function SimulatorWorkspace({ project, evm, tasks, criticalIds, baselineFinishISO, baselineSlipDays, dieselExposureMinor }: {
   project: SimProject; evm: EVM; tasks: Task[]; criticalIds: string[];
@@ -16,121 +22,30 @@ export function SimulatorWorkspace({ project, evm, tasks, criticalIds, baselineF
 }) {
   const [a, setA] = useState(DEFAULTS);
   const critical = useMemo(() => new Set(criticalIds), [criticalIds]);
-
   const plan = useMemo(() => recoveryPlan(tasks, critical, a.crashDays), [tasks, critical, a.crashDays]);
-  const sim = useMemo(
-    () => simulate({ ...project } as never, evm, plan, a, dieselExposureMinor),
-    [project, evm, plan, a, dieselExposureMinor],
-  );
-
-  const maxCrash = tasks.filter((t) => critical.has(t.id) && t.crash && t.status !== 'done').reduce((n, t) => n + (t.crash?.crashableDays ?? 0), 0);
+  const sim = useMemo(() => simulate({ ...project } as never, evm, plan, a, dieselExposureMinor), [project, evm, plan, a, dieselExposureMinor]);
+  const maxCrash = tasks.filter((task) => critical.has(task.id) && task.crash && task.status !== 'done').reduce((sum, task) => sum + (task.crash?.crashableDays ?? 0), 0);
   const dirty = JSON.stringify(a) !== JSON.stringify(DEFAULTS);
   const dDays = sim.slipDays - baselineSlipDays;
   const dCost = sim.eac - evm.eac;
 
-  return (
-    <div className="flex flex-col gap-3.5">
-      <div className="relative overflow-hidden rounded-2xl p-5 text-white shadow-card" style={{ background: 'linear-gradient(135deg,#0d0716 0%,#1e0f33 55%,#301650 100%)' }}>
-        <div className="relative flex items-center gap-2 flex-wrap">
-          <span className="w-12 h-12 rounded-2xl grid place-items-center flex-none" style={{ background: 'rgba(255,255,255,.1)' }}><FlaskConical size={22} /></span>
-          <div className="min-w-0">
-            <div className="text-[11px] text-white/70">WHAT-IF SIMULATOR · {project.code}</div>
-            <div className="text-[20px] font-bold tracking-[-0.02em] leading-tight mt-0.5">{project.name}</div>
-            <div className="text-[12.5px] text-white/75 mt-0.5">Move the assumptions — the same CPM and earned-value engines recompute. Nothing is saved.</div>
-          </div>
-          {dirty && <button onClick={() => setA(DEFAULTS)} className="ml-auto text-[12px] px-3 h-9 rounded-xl font-medium bg-white/10 inline-flex items-center gap-1.5"><RotateCcw size={13} /> Reset</button>}
-        </div>
-      </div>
-
-      {/* Baseline vs scenario */}
-      <div className="grid grid-cols-1 min-[720px]:grid-cols-2 gap-2.5">
-        <Panel title="Baseline" muted>
-          <Row label="Forecast finish" value={baselineFinishISO} sub={baselineSlipDays > 0 ? `${baselineSlipDays}d late` : 'on plan'} />
-          <Row label="Forecast out-turn (EAC)" value={naira(evm.eac)} sub={`CPI ${evm.cpi.toFixed(2)} · SPI ${evm.spi.toFixed(2)}`} />
-          <Row label="Variance at completion" value={`${evm.vac < 0 ? '−' : '+'}${naira(Math.abs(evm.vac))}`} tone={evm.vac < 0 ? 'danger' : 'success'} />
-        </Panel>
-        <Panel title="Scenario" accent>
-          <Row label="Forecast finish" value={sim.finishISO} sub={`${sim.slipDays > 0 ? `${sim.slipDays}d late` : 'on plan'}${dDays !== 0 ? ` · ${dDays < 0 ? '' : '+'}${dDays}d vs baseline` : ''}`} tone={dDays < 0 ? 'success' : dDays > 0 ? 'danger' : undefined} />
-          <Row label="Forecast out-turn (EAC)" value={naira(sim.eac)} sub={`CPI ${sim.cpi.toFixed(2)} · SPI ${sim.spi.toFixed(2)}${dCost !== 0 ? ` · ${dCost > 0 ? '+' : '−'}${naira(Math.abs(dCost))}` : ''}`} tone={dCost > 0 ? 'danger' : dCost < 0 ? 'success' : undefined} />
-          <Row label="Variance at completion" value={`${sim.vac < 0 ? '−' : '+'}${naira(Math.abs(sim.vac))}`} tone={sim.vac < 0 ? 'danger' : 'success'} />
-        </Panel>
-      </div>
-
-      {/* Assumptions */}
-      <section className="bg-surface border border-border rounded-2xl shadow-card p-4">
-        <div className="text-[12.5px] font-semibold mb-3">Assumptions</div>
-        <div className="flex flex-col gap-4">
-          <Slider label="Crew productivity" hint="vs the planned rate — drives SPI, and therefore the finish date" min={60} max={130} step={5} value={a.productivityPct} suffix="%" onChange={(v) => setA((s) => ({ ...s, productivityPct: v }))} />
-          <Slider label="Diesel price shock" hint={`applied to ₦${fmtM(dieselExposureMinor)} of fuel-exposed spend — the Nigerian cost risk`} min={0} max={60} step={5} value={a.dieselShockPct} suffix="%" onChange={(v) => setA((s) => ({ ...s, dieselShockPct: v }))} />
-          <Slider label="Extra rain days" hint="lost days added straight onto the finish" min={0} max={30} step={1} value={a.extraRainDays} suffix="d" onChange={(v) => setA((s) => ({ ...s, extraRainDays: v }))} />
-          <Slider label="Days to claw back" hint={`crash the cheapest critical tasks — up to ${maxCrash}d available`} min={0} max={Math.max(1, maxCrash)} step={1} value={a.crashDays} suffix="d" onChange={(v) => setA((s) => ({ ...s, crashDays: v }))} tone="success" />
-        </div>
-      </section>
-
-      {/* Recovery plan */}
-      {a.crashDays > 0 && (
-        <section className="bg-surface border rounded-2xl shadow-card overflow-hidden" style={{ borderColor: 'color-mix(in srgb, var(--tone-success) 35%, transparent)' }}>
-          <div className="px-4 py-2.5 border-b border-border flex items-center gap-2 flex-wrap">
-            <Zap size={14} style={{ color: toneVar('success') }} />
-            <span className="text-[12.5px] font-semibold">Cheapest recovery plan</span>
-            <span className="ml-auto text-[11.5px]">
-              <span className="font-semibold" style={{ color: toneVar('success') }}>{plan.daysRecovered}d</span>
-              <span className="text-text-3"> for </span>
-              <span className="font-semibold">{naira(plan.extraCostMinor)}</span>
-              <span className="text-text-3"> · {naira(plan.costPerDayMinor)}/day</span>
-            </span>
-          </div>
-          <div className="divide-y divide-border">
-            {plan.crashes.map((c) => (
-              <div key={c.taskId} className="px-4 py-2.5 flex items-center gap-2">
-                <div className="min-w-0 flex-1"><div className="text-[12.5px] font-medium truncate">{c.name}</div><div className="text-[10.5px] text-text-3">{naira(c.costPerDayMinor)}/day · on the critical chain</div></div>
-                <span className="text-[12px] font-semibold font-mono flex-none" style={{ color: toneVar('success') }}>−{c.days}d</span>
-                <span className="text-[12px] font-mono text-text-3 flex-none w-20 text-right">{naira(c.totalMinor)}</span>
-              </div>
-            ))}
-          </div>
-          {plan.shortfallDays > 0 && (
-            <div className="px-4 py-2.5 text-[11.5px]" style={{ background: 'color-mix(in srgb, var(--tone-warn) 7%, transparent)', color: toneVar('warn') }}>
-              Only {plan.daysRecovered}d can be bought — {plan.shortfallDays}d short. Beyond this the sequence itself has to change (extra shift, re-sequence, or accept the date).
-            </div>
-          )}
-          <div className="px-4 py-2.5 text-[10.5px] text-text-3 border-t border-border">Only zero-float tasks are crashed — shortening anything else spends money without moving the finish date.</div>
-        </section>
-      )}
-
-      <div className="text-[11px] text-text-3 flex items-start gap-1.5"><Info size={12} className="mt-0.5 flex-none" /> A scenario is a calculation, not a plan. Applying one to the baseline is a deliberate, logged re-plan — never automatic.</div>
-    </div>
-  );
+  return <ConstructionFrame>
+    <ConstructionSummary><CardHeader title={project.name} subtitle={'What-if simulator · ' + project.code + ' · deterministic CPM and earned-value calculations'} action={<FlaskConical size={20} className="text-primary" />} /><div className={styles.toolbar}><div><h2 className={styles.title}>Explore the assumptions before a deliberate re-plan</h2><p className={styles.text}>Move the assumptions and the same CPM and earned-value engines recompute. Nothing is saved.</p></div>{dirty ? <Button type="button" icon={<RotateCcw size={16} />} onClick={() => setA(DEFAULTS)}>Reset</Button> : <StatusPill status="Baseline assumptions" tone="info" />}</div></ConstructionSummary>
+    <PageTabs label="Construction scenario sections" items={[
+      { id: 'assumptions', label: 'Assumptions', content: <ConstructionPanel><div className={styles.header}><CardHeader title="Scenario assumptions" subtitle="Local sensitivity controls · no change to the project baseline or purchase commitments" /></div><div className={styles.body}><div className={styles.stack}><div className={styles.twoColumns}><Slider label="Crew productivity" hint="Versus the planned rate. Scales SPI, which drives the calculated finish date." min={60} max={130} step={5} value={a.productivityPct} suffix="%" onChange={(value) => setA((current) => ({ ...current, productivityPct: value }))} /><Slider label="Diesel price shock" hint={'Applied to ' + naira(dieselExposureMinor) + ' of estimated fuel-exposed spend — a Nigerian cost sensitivity, not a live market price.'} min={0} max={60} step={5} value={a.dieselShockPct} suffix="%" onChange={(value) => setA((current) => ({ ...current, dieselShockPct: value }))} /><Slider label="Extra rain days" hint="Additional lost days added directly to the calculated finish. This is an assumption, not a connected weather forecast." min={0} max={30} step={1} value={a.extraRainDays} suffix="d" onChange={(value) => setA((current) => ({ ...current, extraRainDays: value }))} /><Slider label="Days to claw back" hint={'Shortens the cheapest eligible critical tasks first. ' + maxCrash + ' days are available in the supplied task network.'} min={0} max={Math.max(1, maxCrash)} step={1} value={a.crashDays} suffix="d" onChange={(value) => setA((current) => ({ ...current, crashDays: value }))} disabled={maxCrash <= 0} /></div><dl className={styles.facts}><div><dt>Approved budget · NGN</dt><dd>{naira(project.approvedBudget.minor)}</dd></div><div><dt>Estimated fuel-exposed spend · NGN</dt><dd>{naira(dieselExposureMinor)}</dd></div><div><dt>Planned project start</dt><dd>{date(project.startISO)}</dd></div><div><dt>Planned finish</dt><dd>{date(project.plannedFinishISO)}</dd></div></dl>{!tasks.length ? <p className={styles.notice}>No task network was supplied. Cost and finish calculations still use the recorded project/EVM inputs, but no task-level recovery can be demonstrated.</p> : null}</div></div><p className={styles.footer}>Ranges are modelling assumptions. No provider AI, weather service, fuel-price feed or procurement action is invoked by these controls.</p></ConstructionPanel> },
+      { id: 'impact', label: 'Scenario impact', content: <div className={styles.stack}><div className={styles.twoColumns}><ConstructionPanel><div className={styles.header}><CardHeader title="Baseline" subtitle="Recorded programme and earned-value inputs" action={<StatusPill status="Reference calculation" tone="neutral" />} /></div><div className={styles.body}><dl className={styles.facts}><Row label="Forecast finish" value={date(baselineFinishISO)} sub={baselineSlipDays > 0 ? baselineSlipDays + ' days late' : 'No delay in the baseline calculation'} /><Row label="Forecast out-turn (EAC) · NGN" value={naira(evm.eac)} sub={'CPI ' + evm.cpi.toFixed(2) + ' · SPI ' + evm.spi.toFixed(2)} /><Row label="Variance at completion · NGN" value={(evm.vac < 0 ? '−' : '+') + naira(Math.abs(evm.vac))} tone={evm.vac < 0 ? 'danger' : 'success'} /></dl></div></ConstructionPanel><ConstructionPanel><div className={styles.header}><CardHeader title="Scenario" subtitle="Recomputed using the current local assumptions" action={<StatusPill status={dirty ? 'Unsaved scenario' : 'Default assumptions'} tone="info" />} /></div><div className={styles.body}><dl className={styles.facts}><Row label="Forecast finish" value={date(sim.finishISO)} sub={(sim.slipDays > 0 ? sim.slipDays + ' days late' : 'No delay in the current calculation') + (dDays ? ' · ' + (dDays > 0 ? '+' : '') + dDays + ' days vs baseline' : '')} tone={dDays < 0 ? 'success' : dDays > 0 ? 'danger' : undefined} /><Row label="Forecast out-turn (EAC) · NGN" value={naira(sim.eac)} sub={'CPI ' + sim.cpi.toFixed(2) + ' · SPI ' + sim.spi.toFixed(2) + (dCost ? ' · ' + (dCost > 0 ? '+' : '−') + naira(Math.abs(dCost)) + ' vs baseline' : '')} tone={dCost > 0 ? 'danger' : dCost < 0 ? 'success' : undefined} /><Row label="Variance at completion · NGN" value={(sim.vac < 0 ? '−' : '+') + naira(Math.abs(sim.vac))} tone={sim.vac < 0 ? 'danger' : 'success'} /></dl></div></ConstructionPanel></div>
+        {a.crashDays > 0 ? <ConstructionPanel><div className={styles.header}><CardHeader title="Cheapest recovery plan" subtitle="Eligible zero-float tasks, selected by recorded crash cost per day" action={<StatusPill status={plan.daysRecovered + ' day(s) recovered'} tone={plan.shortfallDays ? 'warn' : 'info'} />} /></div><div className={styles.body}><dl className={styles.facts}><Row label="Estimated additional cost · NGN" value={naira(plan.extraCostMinor)} /><Row label="Estimated cost per recovered day · NGN" value={naira(plan.costPerDayMinor)} /><Row label="Requested recovery" value={a.crashDays + ' days'} /><Row label="Unmet recovery" value={plan.shortfallDays + ' days'} tone={plan.shortfallDays ? 'warn' : undefined} /></dl></div>{plan.crashes.length ? <div className={styles.scroll} role="region" tabIndex={0} aria-label="Scenario critical-task recovery plan"><table className={'pb-data-table ' + styles.table}><thead><tr>{['Critical task', 'Days recovered', 'Cost per day · NGN', 'Additional cost · NGN'].map((heading) => <th scope="col" key={heading}>{heading}</th>)}</tr></thead><tbody>{plan.crashes.map((crash) => <tr key={crash.taskId}><th scope="row">{crash.name}</th><td className={styles.numeric}>{crash.days}</td><td className={styles.numeric}>{naira(crash.costPerDayMinor)}</td><td className={styles.numeric}>{naira(crash.totalMinor)}</td></tr>)}</tbody></table></div> : <div className={styles.empty}><EmptyState title="No eligible recovery task" description="No supplied task can deliver the requested recovery under the current critical-path constraints." /></div>}{plan.shortfallDays > 0 ? <div className={styles.body}><p className={styles.notice}>Only {plan.daysRecovered} days can be modelled from eligible task shortening — {plan.shortfallDays} days short. A change to the work sequence or delivery strategy needs a separate, authorised re-plan.</p></div> : null}<p className={styles.footer}>Only zero-float tasks are crashed. Shortening non-critical work can spend money without moving the finish date. This calculation does not authorise overtime, a new shift or payment.</p></ConstructionPanel> : <ConstructionPanel><div className={styles.header}><CardHeader title="Recovery plan" subtitle="Select a recovery target in Assumptions to inspect eligible critical tasks" /></div><div className={styles.body}><p className={styles.text}>No task shortening is included in the default scenario. The recorded baseline remains unchanged.</p></div></ConstructionPanel>}
+        <p className={styles.notice}>A scenario is a calculation, not a plan. Applying one to the baseline is a deliberate, logged re-plan — never automatic. Date-only programme values do not imply a promised handover time.</p>
+      </div> },
+    ]} />
+  </ConstructionFrame>;
 }
 
-function Panel({ title, children, muted, accent }: { title: string; children: React.ReactNode; muted?: boolean; accent?: boolean }) {
-  return (
-    <section className="bg-surface border rounded-2xl shadow-card p-4" style={{ borderColor: accent ? 'color-mix(in srgb, var(--tone-progress) 35%, transparent)' : 'var(--border)' }}>
-      <div className="text-[11px] font-semibold uppercase tracking-wide mb-2.5" style={{ color: accent ? toneVar('progress') : 'var(--text-3)' }}>{title}{muted ? '' : ''}</div>
-      <div className="flex flex-col gap-2.5">{children}</div>
-    </section>
-  );
-}
 function Row({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: Tone }) {
-  return (
-    <div className="flex items-baseline justify-between gap-2">
-      <span className="text-[11.5px] text-text-3">{label}</span>
-      <span className="text-right">
-        <span className="text-[14px] font-bold tracking-[-0.02em] font-mono" style={tone ? { color: toneVar(tone) } : undefined}>{value}</span>
-        {sub && <span className="block text-[10px] text-text-3">{sub}</span>}
-      </span>
-    </div>
-  );
+  return <div><dt>{label}</dt><dd style={tone ? { color: toneVar(tone) } : undefined}>{value}{sub ? <span className={styles.metadata + ' block mt-2'}>{sub}</span> : null}</dd></div>;
 }
-function Slider({ label, hint, min, max, step, value, suffix, onChange, tone }: { label: string; hint: string; min: number; max: number; step: number; value: number; suffix: string; onChange: (v: number) => void; tone?: Tone }) {
-  return (
-    <div>
-      <div className="flex items-baseline justify-between gap-2 mb-1">
-        <span className="text-[12px] font-medium">{label}</span>
-        <span className="text-[13px] font-bold font-mono" style={{ color: toneVar(tone ?? 'progress') }}>{value}{suffix}</span>
-      </div>
-      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} className="w-full" aria-label={label} />
-      <div className="text-[10.5px] text-text-3 mt-0.5">{hint}</div>
-    </div>
-  );
+
+function Slider({ label, hint, min, max, step, value, suffix, onChange, disabled = false }: { label: string; hint: string; min: number; max: number; step: number; value: number; suffix: string; onChange: (value: number) => void; disabled?: boolean }) {
+  const id = useId();
+  return <div className={styles.slider}><div><label htmlFor={id} className={styles.rowTitle}>{label}</label><output htmlFor={id}>{value}{suffix}</output></div><input id={id} type="range" min={min} max={max} step={step} value={value} disabled={disabled} onChange={(event) => onChange(Number(event.target.value))} aria-label={label} aria-describedby={id + '-hint'} aria-valuetext={value + (suffix === '%' ? ' percent' : ' days')} /><p id={id + '-hint'} className={styles.metadata}>{hint}</p></div>;
 }

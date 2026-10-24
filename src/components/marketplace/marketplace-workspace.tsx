@@ -1,158 +1,108 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useId, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { ShoppingBag, TrendingUp, ShieldAlert, Store, CheckCircle2, Package } from 'lucide-react';
-import { formatMoney } from '@/components/domain';
-import { toneVar, humanizeStatus, type Tone } from '@/lib/status-tones';
+import { ChevronDown, Package, Search, ShieldAlert, ShoppingBag, Store, TrendingUp, X } from 'lucide-react';
+import { Avatar, Button, Card, CardHeader, EmptyState, IconButton, KpiCard, StatusPill } from '@/components/ui';
+import { PageTabs } from '@/components/ui/page-tabs';
+import { PortalDialog } from '@/components/portal/portal-dialog';
+import { DomainStatus } from '@/components/domain';
+import { toneVar, humanizeStatus } from '@/lib/status-tones';
 import { transition } from '@/server/actions/transitions';
 import type { InlineEvent } from '@/components/inline-actions';
 import type { Listing } from '@/domain/entities';
 import type { OrderStatus } from '@/domain/enums';
 import { PIPELINE, type Gmv, type VendorScore, type FraudFlag } from '@/domain/marketplace';
+import layout from '@/components/ui/workspace-layout.module.css';
+import styles from '@/components/security/safety-market.module.css';
 
 export type OrderView = { id: string; ref: string; residentName: string; listingTitle: string; vendorName: string; status: OrderStatus; amountMinor: number; currency: string; actions: InlineEvent[] };
-
 const COL_LABEL: Record<string, string> = { placed: 'Placed', accepted: 'Accepted', fulfilled: 'Fulfilled', closed: 'Closed' };
+export function marketplaceMoney(minor: number, currency = 'NGN'): string {
+  return new Intl.NumberFormat(currency === 'USD' ? 'en-US' : 'en-NG', { style: 'currency', currency, minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(minor / 100);
+}
+const money = marketplaceMoney;
 
 export function MarketplaceWorkspace({ orders, listings, gmv, vendors, flags, canMutate }: {
   orders: OrderView[]; listings: readonly Listing[]; gmv: Gmv; vendors: VendorScore[]; flags: FraudFlag[]; canMutate: boolean;
 }) {
   const router = useRouter();
+  const accordionId = useId();
   const [pending, start] = useTransition();
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [openVendor, setOpenVendor] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const [status, setStatus] = useState('all');
+  const [message, setMessage] = useState<string | null>(null);
+  const [confirmation, setConfirmation] = useState<{ order: OrderView; action: InlineEvent } | null>(null);
+  const liveFlags = flags.filter((flag) => !dismissed.has(flag.orderId));
+  const branchOrders = orders.filter((order) => !PIPELINE.includes(order.status));
+  const currencies = [...new Set(orders.map((order) => order.currency))];
+  const singleCurrency = currencies.length <= 1 ? currencies[0] ?? 'NGN' : null;
+  const normalized = query.trim().toLowerCase();
+  const filteredListings = listings.filter((listing) => (status === 'all' || listing.status === status) && `${listing.title} ${listing.vendorName} ${listing.category}`.toLowerCase().includes(normalized));
+  const currencyFor = (orderId: string) => orders.find((order) => order.id === orderId)?.currency ?? 'NGN';
 
-  const money = (minor: number, ccy = 'NGN') => formatMoney({ minor, currency: ccy } as Parameters<typeof formatMoney>[0]);
-  const fire = (id: string, event: string) => start(async () => { await transition('marketplace-order', id, event); router.refresh(); });
-  const liveFlags = flags.filter((f) => !dismissed.has(f.orderId));
-  const branchOrders = orders.filter((o) => !PIPELINE.includes(o.status));
+  function fire() {
+    if (!canMutate || pending || !confirmation) return;
+    setMessage(null);
+    start(async () => {
+      try {
+        const result = await transition('marketplace-order', confirmation.order.id, confirmation.action.event);
+        if (!result.ok) { setMessage(result.error); return; }
+        setMessage(`Order ${confirmation.order.ref} updated to ${humanizeStatus(result.to)}. No money was transferred by this status change.`);
+        setConfirmation(null);
+        router.refresh();
+      } catch { setMessage('Unable to update this order. Please try again.'); }
+    });
+  }
 
-  return (
-    <div className="flex flex-col gap-3.5">
-      <div className="grid grid-cols-2 min-[900px]:grid-cols-4 gap-3">
-        <Kpi label="GMV (live)" value={money(gmv.grossMinor)} note={`${gmv.orders} orders`} tone="info" icon={<TrendingUp size={18} />} />
-        <Kpi label="Realized" value={money(gmv.realizedMinor)} note={`${gmv.realizedRate}% fulfilled`} tone="success" icon={<ShoppingBag size={18} />} />
-        <Kpi label="In flight" value={money(gmv.pendingMinor)} note="placed + accepted" tone="progress" icon={<Package size={18} />} />
-        <Kpi label="Fraud review" value={String(liveFlags.length)} note={liveFlags.length ? 'human review — never auto-block' : 'queue clear'} tone={liveFlags.length ? 'warn' : 'success'} icon={<ShieldAlert size={18} />} />
-      </div>
-
-      {/* Fraud review queue (AI-E-05) */}
-      {liveFlags.length > 0 && (
-        <div className="bg-surface border border-warning/40 rounded-2xl shadow-card overflow-hidden">
-          <div className="px-4 py-2.5 border-b border-border flex items-center gap-2 bg-warning/[0.05]"><ShieldAlert size={14} className="text-warning" /><span className="text-[12.5px] font-semibold">Fraud review queue</span><span className="text-[10.5px] text-text-3 ml-auto">AI-E-05 · signals only, never auto-block</span></div>
-          <div className="divide-y divide-border">
-            {liveFlags.map((f) => (
-              <div key={f.orderId} className="flex items-center gap-3 px-4 py-2.5">
-                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md capitalize" style={{ background: `color-mix(in srgb, ${toneVar(f.severity === 'review' ? 'danger' : 'warn')} 14%, transparent)`, color: toneVar(f.severity === 'review' ? 'danger' : 'warn') }}>{f.severity}</span>
-                <div className="min-w-0 flex-1"><div className="text-[13px] font-medium">{f.ref} · {f.residentName} <span className="text-text-3 font-normal">· {money(f.amountMinor)}</span></div><div className="text-[11.5px] text-text-3">{f.reason}</div></div>
-                {canMutate && <button onClick={() => setDismissed((s) => new Set(s).add(f.orderId))} className="text-[11.5px] text-primary hover:underline flex items-center gap-1"><CheckCircle2 size={13} /> Mark reviewed</button>}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Pipeline board */}
-      <div className="grid grid-cols-2 min-[900px]:grid-cols-4 gap-2.5">
-        {PIPELINE.map((col) => {
-          const cards = orders.filter((o) => o.status === col);
-          return (
-            <div key={col} className="bg-surface-2 border border-border rounded-2xl p-2.5 min-h-[120px]">
-              <div className="flex items-center justify-between px-1 mb-2"><span className="text-[12px] font-semibold">{COL_LABEL[col]}</span><span className="text-[11px] text-text-3 tabular-nums">{cards.length}</span></div>
-              <div className="flex flex-col gap-2">
-                {cards.map((o) => (
-                  <div key={o.id} className="bg-surface border border-border rounded-xl p-2.5 shadow-sm">
-                    <div className="flex items-center justify-between"><span className="font-mono text-[12px] font-bold">{o.ref}</span><span className="text-[11px] font-semibold">{money(o.amountMinor, o.currency)}</span></div>
-                    <div className="text-[12px] font-medium mt-1 truncate">{o.listingTitle}</div>
-                    <div className="text-[11px] text-text-3 truncate">{o.residentName} · {o.vendorName}</div>
-                    {canMutate && o.actions.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 mt-2">
-                        {o.actions.map((a) => (
-                          <button key={a.event} disabled={pending} onClick={() => fire(o.id, a.event)} className={`text-[11px] px-2 h-6 rounded-md font-medium disabled:opacity-50 ${a.variant === 'danger' ? 'text-negative border border-[color:var(--tone-danger)]/40' : a.variant === 'primary' ? 'bg-primary text-white' : 'border border-border-2 text-text-2'}`}>{a.label}</button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-                {cards.length === 0 && <div className="text-[11px] text-text-3 px-1 py-3 text-center">—</div>}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      {branchOrders.length > 0 && (
-        <div className="flex flex-wrap gap-2 items-center text-[11.5px] text-text-3">
-          <span className="font-medium">Closed branches:</span>
-          {branchOrders.map((o) => <span key={o.id} className="px-2 h-6 inline-flex items-center rounded-md border border-border-2"><span className="font-mono mr-1.5">{o.ref}</span>{humanizeStatus(o.status)}</span>)}
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 min-[900px]:grid-cols-[1fr_320px] gap-3.5 items-start">
-        {/* Vendor scorecards */}
-        <div className="bg-surface border border-border rounded-2xl shadow-card overflow-hidden">
-          <div className="px-4 py-2.5 border-b border-border flex items-center gap-2"><Store size={14} className="text-text-3" /><span className="text-[12.5px] font-semibold">Vendor performance</span></div>
-          <div className="divide-y divide-border">
-            {vendors.map((v) => (
-              <button key={v.vendorOrgId} onClick={() => setOpenVendor(openVendor === v.vendorOrgId ? null : v.vendorOrgId)} className="w-full text-left px-4 py-3 hover:bg-surface-2 transition-colors">
-                <div className="flex items-center gap-3">
-                  <RatingDial rating={v.rating} tone={v.tone} />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[13.5px] font-semibold">{v.vendorName}</div>
-                    <div className="text-[11.5px] text-text-3">{v.orders} orders · {money(v.gmvMinor)} GMV · {v.activeListings} active listing{v.activeListings === 1 ? '' : 's'}{v.pausedListings ? ` · ${v.pausedListings} paused` : ''}</div>
-                  </div>
-                </div>
-                {openVendor === v.vendorOrgId && (
-                  <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-border animate-fade">
-                    <Metric label="Acceptance" value={`${v.acceptedRate}%`} tone={v.acceptedRate >= 75 ? 'success' : 'warn'} />
-                    <Metric label="Fulfilment" value={`${v.fulfilledRate}%`} tone={v.fulfilledRate >= 60 ? 'success' : 'warn'} />
-                    <Metric label="Catalogue" value={`${v.activeListings}/${v.activeListings + v.pausedListings}`} tone="info" />
-                  </div>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Listings */}
-        <div className="bg-surface border border-border rounded-2xl shadow-card overflow-hidden">
-          <div className="px-4 py-2.5 border-b border-border flex items-center gap-2"><Package size={14} className="text-text-3" /><span className="text-[12.5px] font-semibold">Listings</span><span className="ml-auto text-[10.5px] text-text-3">{listings.filter((l) => l.status === 'active').length} active</span></div>
-          <div className="divide-y divide-border">
-            {listings.map((l) => (
-              <div key={l.id} className="px-4 py-2.5 flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full flex-none" style={{ background: toneVar(l.status === 'active' ? 'success' : 'neutral') }} />
-                <div className="min-w-0 flex-1"><div className="text-[12.5px] font-medium truncate">{l.title}</div><div className="text-[11px] text-text-3">{l.category} · {l.vendorName}</div></div>
-                <span className="text-[11.5px] font-medium">{money(l.price.minor, l.price.currency)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <p className="text-[11px] text-text-3">Payout &amp; commission settlement is a separate lifecycle — blocked by PRD open question Q3. “Closed” never implies a vendor has been paid.</p>
-    </div>
-  );
+  return <div className={layout.layout}>
+    {message && !confirmation && <MarketplaceFeedback message={message} onDismiss={() => setMessage(null)} />}
+    {liveFlags.length > 0 && <Card className={layout.panel}>
+      <CardHeader title="Fraud review queue" subtitle="Rule-based signals for a human decision. These are not AI verdicts and never block or decline an order automatically." action={<StatusPill status={`${liveFlags.length} to review`} tone="warn" />} />
+      {liveFlags.map((flag) => <div key={flag.orderId} className={styles.row}>
+        <StatusPill status={flag.severity} tone={flag.severity === 'review' ? 'danger' : 'warn'} />
+        <div className={styles.rowContent}><p className={layout.title}>{flag.ref} · {flag.residentName}</p><p className={styles.meta}>{flag.reason} · {money(flag.amountMinor, currencyFor(flag.orderId))}</p></div>
+        {canMutate && <Button type="button" variant="ghost" onClick={() => setDismissed((current) => new Set(current).add(flag.orderId))} aria-label={`Hide ${flag.ref} signal for this session`}>Hide for this session</Button>}
+      </div>)}
+      <p className={styles.meta}>Hiding a signal only changes this browser view; it does not save an audit review or change the order.</p>
+    </Card>}
+    <PageTabs label="Marketplace sections" items={[
+      { id: 'orders', label: 'Order pipeline', content: <div className={layout.layout}>
+        <div className={layout.context}><div><h2 className={layout.sectionTitle}>Order pipeline</h2><p className={styles.meta}>Only transitions permitted by your role and each order’s current state are available.</p></div><StatusPill status={`${orders.length} orders in scope`} tone="neutral" /></div>
+        <div className={styles.pipeline}>{PIPELINE.map((column) => {
+          const cards = orders.filter((order) => order.status === column);
+          return <section key={column} className={styles.column} aria-label={`${COL_LABEL[column]} orders`}><h3 className={styles.columnTitle}>{COL_LABEL[column]}<span className={styles.count}>{cards.length}</span></h3><div className={styles.stack}>{cards.length ? cards.map((order) => <article key={order.id} className={styles.order}>
+            <p className={`${styles.orderRef} font-mono`}>{order.ref}</p><h4 className={styles.orderTitle}>{order.listingTitle}</h4><p className={styles.meta}>{order.vendorName}</p><div className="flex items-center gap-2 mt-4"><Avatar name={order.residentName} size={28} /><span className={styles.meta}>{order.residentName}</span></div><p className={styles.orderAmount}>{money(order.amountMinor, order.currency)}</p>
+            {canMutate && order.actions.length > 0 && <div className={`${layout.actions} mt-4`}>{order.actions.map((action) => <Button key={action.event} type="button" disabled={pending} variant={action.variant === 'primary' ? 'primary' : 'secondary'} className={action.variant === 'danger' ? styles.dangerButton : undefined} onClick={() => { setMessage(null); setConfirmation({ order, action }); }} aria-label={`${action.label} ${order.ref}`}>{action.label}</Button>)}</div>}
+          </article>) : <p className={`${styles.meta} py-4 text-center`}>No {COL_LABEL[column].toLowerCase()} orders</p>}</div></section>;
+        })}</div>
+        {branchOrders.length > 0 && <Card className={layout.panel}><CardHeader title="Closed branches" subtitle="Declined, expired and refunded statuses remain visible in the record." /><div className="pb-table-scroll" role="region" aria-label="Closed marketplace branches" tabIndex={0}><table className={`pb-data-table ${layout.table}`}><thead><tr>{['Order', 'Resident', 'Status', 'Amount'].map((heading) => <th key={heading} scope="col">{heading}</th>)}</tr></thead><tbody>{branchOrders.map((order) => <tr key={order.id}><td className="font-mono">{order.ref}</td><td>{order.residentName}</td><td><DomainStatus type="order" status={order.status} /></td><td>{money(order.amountMinor, order.currency)}</td></tr>)}</tbody></table></div></Card>}
+        {!canMutate && <p className={styles.meta}>Read-only access: order transitions and signal dismissal are unavailable for this role.</p>}
+      </div> },
+      { id: 'vendors', label: 'Vendor scorecards', content: <Card className={layout.panel}>
+        <CardHeader title="Vendor performance" subtitle="Snapshot scorecards from acceptance, fulfilment and catalogue activity—not an AI quality assessment." action={<StatusPill status={`${vendors.length} vendors`} tone="neutral" />} />
+        {vendors.length ? vendors.map((vendor, index) => {
+          const expanded = openVendor === vendor.vendorOrgId;
+          const panelId = `${accordionId}-vendor-${index}`;
+          return <div key={vendor.vendorOrgId} className="border-b border-border last:border-0"><button type="button" className={styles.vendorToggle} aria-expanded={expanded} aria-controls={panelId} onClick={() => setOpenVendor(expanded ? null : vendor.vendorOrgId)}><Avatar name={vendor.vendorName} size={40} /><div className={styles.rowContent}><p className={layout.title}>{vendor.vendorName}</p><p className={styles.meta}>{vendor.orders} orders · {singleCurrency ? money(vendor.gmvMinor, singleCurrency) : 'Multiple currencies—see orders'} order value · {vendor.activeListings} active listing{vendor.activeListings === 1 ? '' : 's'}{vendor.pausedListings ? ` · ${vendor.pausedListings} paused` : ''}</p></div><StatusPill status={`${vendor.rating}/100`} tone={vendor.tone} /><ChevronDown size={18} aria-hidden="true" className="text-text-3" /></button><div id={panelId} hidden={!expanded} className={styles.vendorDetail}><div><span className={styles.meta}>Acceptance</span><span className={styles.metricValue}>{vendor.orders ? `${vendor.acceptedRate}%` : 'N/A'}</span></div><div><span className={styles.meta}>Fulfilment</span><span className={styles.metricValue}>{vendor.orders ? `${vendor.fulfilledRate}%` : 'N/A'}</span></div><div><span className={styles.meta}>Active catalogue</span><span className={styles.metricValue}>{vendor.activeListings}/{vendor.activeListings + vendor.pausedListings}</span></div></div></div>;
+        }) : <EmptyState icon={<Store size={24} />} title="No vendor activity" description="Vendor scorecards appear when listings or orders are recorded in your scope." />}
+      </Card> },
+      { id: 'catalogue', label: 'Catalogue', content: <Card className={layout.panel}>
+        <CardHeader title="Listings" subtitle="Current service catalogue and recorded vendor prices." action={<StatusPill status={`${listings.filter((listing) => listing.status === 'active').length} active`} tone="success" />} />
+        <div className={`${layout.toolbar} mb-6`}><label className={layout.search}><Search size={18} aria-hidden="true" /><span className="sr-only">Search marketplace listings</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search listing, category or vendor…" /></label><label><span className="sr-only">Listing status</span><select className={layout.select} value={status} onChange={(event) => setStatus(event.target.value)}><option value="all">All statuses</option><option value="active">Active</option><option value="paused">Paused</option></select></label></div>
+        {filteredListings.length ? <div className="pb-table-scroll" role="region" aria-label="Marketplace catalogue" tabIndex={0}><table className={`pb-data-table ${layout.table}`}><caption className="sr-only">Marketplace listings</caption><thead><tr>{['Service', 'Vendor', 'Category', 'Price', 'Status'].map((heading) => <th key={heading} scope="col">{heading}</th>)}</tr></thead><tbody>{filteredListings.map((listing) => <tr key={listing.id}><td><p className={layout.title}>{listing.title}</p></td><td><div className={layout.person}><Avatar name={listing.vendorName} /><span>{listing.vendorName}</span></div></td><td>{listing.category}</td><td>{money(listing.price.minor, listing.price.currency)}</td><td><StatusPill status={listing.status} tone={listing.status === 'active' ? 'success' : 'muted'} /></td></tr>)}</tbody></table></div> : <EmptyState icon={<Package size={24} />} title={listings.length ? 'No listings match this view' : 'No listings in your scope'} description="Try another filter, or return when a vendor has published a service." />}
+        <p className={`${styles.meta} mt-4`}>Showing {filteredListings.length} of {listings.length} listings. Prices retain their recorded currencies.</p>
+      </Card> },
+      { id: 'overview', label: 'Commerce overview', content: <div className={layout.layout}>
+        <div className={layout.metrics}><KpiCard label="Order value in scope" value={singleCurrency ? money(gmv.grossMinor, singleCurrency) : 'By currency'} icon={<TrendingUp size={18} />} /><KpiCard label="Fulfilled / closed value" value={singleCurrency ? money(gmv.realizedMinor, singleCurrency) : 'By currency'} icon={<ShoppingBag size={18} />} /><KpiCard label="Placed / accepted value" value={singleCurrency ? money(gmv.pendingMinor, singleCurrency) : 'By currency'} icon={<Package size={18} />} /><KpiCard label="Signals awaiting review" value={String(liveFlags.length)} icon={<ShieldAlert size={18} />} iconColor={toneVar(liveFlags.length ? 'warn' : 'success')} /></div>
+        <Card className={layout.panel}><CardHeader title="Commerce snapshot" subtitle="Order values are operational records, not proof of payment or vendor settlement." /><dl className={layout.facts}><div><dt>Orders in scope</dt><dd>{gmv.orders}</dd></div><div><dt>Fulfilled / closed rate</dt><dd>{gmv.realizedRate}%</dd></div><div><dt>Active catalogue</dt><dd>{listings.filter((listing) => listing.status === 'active').length} listings</dd></div><div><dt>Payouts</dt><dd>Not connected</dd></div></dl>{!singleCurrency && <div className="mt-6"><h3 className={layout.sectionTitle}>Order value by currency</h3><dl className={layout.facts}>{currencies.map((currency) => <div key={currency}><dt>{currency}</dt><dd>{money(orders.filter((order) => order.currency === currency && PIPELINE.includes(order.status)).reduce((sum, order) => sum + order.amountMinor, 0), currency)}</dd></div>)}</dl><p className={styles.meta}>Currencies are not converted or combined.</p></div>}</Card>
+      </div> },
+    ]} />
+    <div className={layout.notice}><ShieldAlert size={18} aria-hidden="true" /><div><p className={styles.body}>Closed does not mean the vendor has been paid.</p><p className={styles.meta}>Payout and commission settlement are a separate lifecycle, pending formal policy approval (PRD Q3). Fraud signals require human review; no automatic blocking or financial action.</p></div></div>
+    {canMutate && confirmation && <PortalDialog label="Confirm marketplace order update" onClose={() => { setConfirmation(null); setMessage(null); }} canClose={!pending} width={520}><div className={layout.modal} aria-busy={pending}><div className={layout.dialogHeader}><h2 className={layout.dialogTitle}>Update order status</h2><IconButton disabled={pending} aria-label="Close marketplace confirmation" onClick={() => { setConfirmation(null); setMessage(null); }}><X size={18} /></IconButton></div><div className={layout.dialogBody}><div><p className={layout.title}>{confirmation.order.ref} · {confirmation.order.listingTitle}</p><p className={styles.meta}>{confirmation.order.residentName} · {confirmation.order.vendorName}</p></div><p className={styles.body}>Record “{confirmation.action.label}” for this order?</p><p className={styles.meta}>This records a workflow status only. It does not transfer money, initiate a bank refund, confirm a gateway refund or settle a vendor payout.</p>{message && <MarketplaceFeedback message={message} onDismiss={() => setMessage(null)} />}</div><div className={styles.dialogFooter}><Button disabled={pending} onClick={() => { setConfirmation(null); setMessage(null); }}>Cancel</Button><Button variant={confirmation.action.variant === 'primary' ? 'primary' : 'secondary'} className={confirmation.action.variant === 'danger' ? styles.dangerButton : undefined} disabled={pending} onClick={fire}>{pending ? 'Recording…' : 'Confirm status change'}</Button></div></div></PortalDialog>}
+  </div>;
 }
 
-function RatingDial({ rating, tone }: { rating: number; tone: Tone }) {
-  const color = toneVar(tone);
-  return (
-    <div className="relative flex-none" style={{ width: 40, height: 40 }}>
-      <svg width={40} height={40} viewBox="0 0 36 36" className="-rotate-90"><circle cx="18" cy="18" r="15" fill="none" stroke="var(--surface-3)" strokeWidth="4" /><circle cx="18" cy="18" r="15" fill="none" stroke={color} strokeWidth="4" strokeLinecap="round" strokeDasharray={`${(rating / 100) * 94.2} 94.2`} /></svg>
-      <span className="absolute inset-0 flex items-center justify-center font-mono font-bold text-[11px]" style={{ color }}>{rating}</span>
-    </div>
-  );
-}
-function Metric({ label, value, tone }: { label: string; value: string; tone: Tone }) {
-  return <div><div className="text-[10px] text-text-3 uppercase tracking-[0.04em]">{label}</div><div className="text-[13px] font-semibold mt-0.5" style={{ color: toneVar(tone) }}>{value}</div></div>;
-}
-function Kpi({ label, value, note, tone, icon }: { label: string; value: string; note: string; tone: Tone; icon: React.ReactNode }) {
-  return (
-    <div className="bg-surface border border-border rounded-2xl shadow-card p-4">
-      <span className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: `color-mix(in srgb, ${toneVar(tone)} 14%, transparent)`, color: toneVar(tone) }}>{icon}</span>
-      <div className="text-[13px] text-text-2 font-medium mt-3">{label}</div>
-      <div className="text-[21px] font-bold tracking-[-0.02em] leading-none mt-1">{value}</div>
-      <div className="text-[11px] mt-1" style={{ color: toneVar(tone) }}>{note}</div>
-    </div>
-  );
-}
+function MarketplaceFeedback({ message, onDismiss }: { message: string; onDismiss: () => void }) { return <div role="status" className={layout.feedback}><span>{message}</span><IconButton aria-label="Dismiss marketplace notification" onClick={onDismiss}><X size={16} /></IconButton></div>; }

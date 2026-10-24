@@ -1,8 +1,12 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import layout from '@/components/ui/workspace-layout.module.css';
+import { Card, CardHeader } from '@/components/ui';
+import styles from './maintenance-clinexa.module.css';
 import { ClipboardCheck, Download, Plus, ShieldCheck, ShieldX, TriangleAlert } from 'lucide-react';
 import { Button, KpiCard } from '@/components/ui';
+import { PageTabs } from '@/components/ui/page-tabs';
 import { ReadOnlyChip } from '@/components/domain';
 import { auditReadiness, complianceState, daysUntil } from '@/domain/inspections';
 import { toneVar } from '@/lib/status-tones';
@@ -12,10 +16,7 @@ import { InspectionsList } from './inspections-list';
 import { RunInspectionDrawer } from './run-drawer';
 import { ScheduleDialog } from './schedule-dialog';
 
-type Tab = 'compliance' | 'inspections';
-
 export function InspectionsWorkspace(data: InspectionsData) {
-  const [tab, setTab] = useState<Tab>('compliance');
   const [runId, setRunId] = useState<string | null>(null);
   const [scheduleFor, setScheduleFor] = useState<{ obligationId?: string } | null>(null);
 
@@ -31,35 +32,35 @@ export function InspectionsWorkspace(data: InspectionsData) {
   const runInsp = runId ? data.inspections.find((i) => i.id === runId) ?? null : null;
 
   return (
-    <div className="flex flex-col gap-3.5">
+    <div className={layout.layout}>
       {/* Audit readiness + KPIs */}
-      <div className="grid grid-cols-1 min-[860px]:grid-cols-[300px_1fr] gap-3.5">
-        <div className="bg-surface border border-border rounded-2xl shadow-card p-4 flex items-center gap-4">
+      <div className={styles.overview}>
+        <Card className={styles.audit}>
+          <CardHeader title="Audit readiness" subtitle="Recorded compliance coverage" />
+          <div className={styles.auditSummary}>
           <AuditDial score={audit.score} />
           <div>
-            <div className="text-[12px] text-text-3 uppercase tracking-wide">Audit-readiness</div>
-            <div className="text-[13px] font-semibold mt-0.5">{audit.valid} valid · {audit.expiring} expiring · {expired.length} lapsed{never.length ? ` · ${never.length} never` : ''}</div>
-            <div className="text-[11.5px] text-text-3 mt-1">
+            <p className={styles.text}>{audit.valid} valid · {audit.expiring} expiring · {expired.length} lapsed{never.length ? ` · ${never.length} never` : ''}</p>
+            <p className={styles.metadata}>
               {nextExpiry ? <>Next: {nextExpiry.name} in {daysUntil(nextExpiry.validUntil!)}d</> : 'No upcoming expiries'}
-            </div>
-            <button className="mt-2 inline-flex items-center gap-1.5 text-[11.5px] text-primary hover:underline">
-              <Download size={12} /> Export audit pack
-            </button>
+            </p>
           </div>
-        </div>
-        <div className="grid grid-cols-2 min-[560px]:grid-cols-4 gap-3">
-          <KpiCard label="Lapsed obligations" value={String(expired.length)} delta={expired.length ? 'shutdown risk' : 'all covered'} positive={expired.length === 0} icon={<ShieldX size={18} />} iconBg="rgba(239,68,68,.12)" iconColor="#ef4444" />
-          <KpiCard label="Expiring ≤30d" value={String(audit.expiring)} delta="renew soon" positive={audit.expiring === 0} icon={<TriangleAlert size={18} />} iconBg="rgba(245,159,11,.15)" iconColor="#f59e0b" />
+          </div>
+          <Button disabled title="Audit-pack generation is not connected" icon={<Download size={16} />}>Export audit pack · unavailable</Button>
+        </Card>
+        <div className={styles.auditMetrics}>
+          <KpiCard label="Lapsed obligations" value={String(expired.length)} icon={<ShieldX size={18} />} iconColor="var(--tone-danger)" />
+          <KpiCard label="Expiring ≤30d" value={String(audit.expiring)} icon={<TriangleAlert size={18} />} iconColor="var(--tone-warn)" />
           <KpiCard label="Overdue inspections" value={String(overdueInsp.length)} icon={<ClipboardCheck size={18} />} />
-          <KpiCard label="WOs from failures" value={String(raised)} delta="auto-raised" positive icon={<ShieldCheck size={18} />} iconBg="rgba(16,185,129,.12)" iconColor="#10b981" />
+          <KpiCard label="WOs from failures" value={String(raised)} icon={<ShieldCheck size={18} />} iconColor="var(--tone-success)" />
         </div>
       </div>
 
       {/* Risk banner */}
       {(expired.length > 0 || never.length > 0) && (
-        <div className="rounded-xl border border-[color:var(--tone-danger)]/40 bg-[color:var(--tone-danger)]/[0.06] px-4 py-2.5 flex items-center gap-2.5 flex-wrap">
+        <div className={styles.notice}>
           <TriangleAlert size={16} className="text-negative flex-none" />
-          <span className="text-[12.5px] text-text-2">
+          <span className={styles.text}>
             {expired.length > 0 && <><strong className="text-text">{expired.length} obligation{expired.length > 1 ? 's have' : ' has'} lapsed</strong> — a statutory lapse can trigger a shutdown order. </>}
             {never.length > 0 && <>{never.length} never evidenced (coverage gap).</>}
           </span>
@@ -67,31 +68,23 @@ export function InspectionsWorkspace(data: InspectionsData) {
       )}
 
       {/* Tabs + create */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="inline-flex rounded-lg border border-border-2 bg-surface p-0.5">
-          <TabBtn active={tab === 'compliance'} onClick={() => setTab('compliance')} label="Compliance register" />
-          <TabBtn active={tab === 'inspections'} onClick={() => setTab('inspections')} label={`Inspections (${data.inspections.length})`} />
-        </div>
-        <div className="ml-auto">
+      <div className={styles.toolbar}>
+        <div><h3 className={styles.heading}>Inspections & compliance</h3><p className={styles.metadata}>Review obligations, evidence gaps and inspection outcomes.</p></div>
+        <div>
           {data.canMutate
-            ? <Button variant="primary" icon={<Plus size={15} />} className="!h-8 !text-[12px]" onClick={() => setScheduleFor({})}>New inspection</Button>
+            ? <Button variant="primary" icon={<Plus size={15} />} onClick={() => setScheduleFor({})}>New inspection</Button>
             : <ReadOnlyChip />}
         </div>
       </div>
 
-      {tab === 'compliance'
-        ? <ComplianceRegister data={data} onRun={setRunId} onSchedule={(id) => setScheduleFor({ obligationId: id })} />
-        : <InspectionsList data={data} onRun={setRunId} />}
+      <PageTabs label="Inspections and compliance sections" items={[
+        { id: 'compliance', label: 'Compliance register', content: <ComplianceRegister data={data} onRun={setRunId} onSchedule={(id) => setScheduleFor({ obligationId: id })} /> },
+        { id: 'inspections', label: `Inspections (${data.inspections.length})`, content: <InspectionsList data={data} onRun={setRunId} /> },
+      ]} />
 
-      {runInsp && <RunInspectionDrawer inspection={runInsp} canMutate={data.canMutate} onClose={() => setRunId(null)} />}
+      {runInsp && <RunInspectionDrawer inspection={runInsp} canMutate={data.canMutate} workOrderBasePath={data.workOrderBasePath} onClose={() => setRunId(null)} />}
       {scheduleFor && <ScheduleDialog obligations={data.obligations} preselect={scheduleFor.obligationId} now={data.now} onClose={() => setScheduleFor(null)} />}
     </div>
-  );
-}
-
-function TabBtn({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
-  return (
-    <button onClick={onClick} className={`h-8 px-3.5 rounded-md text-[12.5px] font-medium transition-colors ${active ? 'bg-primary text-white' : 'text-text-2 hover:bg-surface-2'}`}>{label}</button>
   );
 }
 
@@ -105,8 +98,8 @@ function AuditDial({ score }: { score: number }) {
         <circle cx="18" cy="18" r="15.5" fill="none" stroke={color} strokeWidth="3.5" strokeLinecap="round" strokeDasharray={`${(score / 100) * 97.4} 97.4`} />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="font-mono font-bold text-[22px] leading-none" style={{ color }}>{score}</span>
-        <span className="text-[9px] text-text-3">/ 100</span>
+        <span className="text-[28px] font-medium leading-none tabular-nums" style={{ color }}>{score}</span>
+        <span className="text-[12px] text-text-3">/ 100</span>
       </div>
     </div>
   );

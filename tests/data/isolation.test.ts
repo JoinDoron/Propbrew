@@ -10,6 +10,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { assertCan, applyScope, type Actor, type Capability, type ScopableRow } from '@/lib/authz';
+import { scopedMutableGet } from '@/server/data';
 import { SEED } from '@/server/identities';
 import * as seed from '@/server/data/seed/fixtures';
 
@@ -91,5 +92,26 @@ describe('platform admin — the one legitimate cross-tenant reader', () => {
     const rows = scoped(platformAdmin, 'work_orders', seed.workOrders);
     expect(rows.some((w) => w.tenantId === SEED.tenantA)).toBe(true);
     expect(rows.some((w) => w.tenantId === SEED.tenantB)).toBe(true);
+  });
+});
+
+describe('mutable lookup isolation — writes cannot target an out-of-scope row', () => {
+  it('rejects a tenant-B work order id for a tenant-A facility manager', () => {
+    const foreign = seed.workOrders.find((w) => w.ref === 'WO-90001');
+    expect(foreign).toBeDefined();
+    expect(scopedMutableGet(lekkiFacilityManager, 'work_orders', seed.workOrders, foreign!.id, 'update')).toBeNull();
+  });
+
+  it('rejects another-estate work order id for a Gardens-only manager', () => {
+    const foreign = seed.workOrders.find((w) => w.ref === 'WO-24814');
+    expect(foreign).toBeDefined();
+    expect(scopedMutableGet(lekkiEstateManager, 'work_orders', seed.workOrders, foreign!.id, 'update')).toBeNull();
+  });
+
+  it('allows an in-scope row and preserves the platform-admin escape hatch', () => {
+    const own = seed.workOrders.find((w) => w.tenantId === SEED.tenantA);
+    const foreign = seed.workOrders.find((w) => w.tenantId === SEED.tenantB);
+    expect(scopedMutableGet(lekkiFacilityManager, 'work_orders', seed.workOrders, own!.id, 'update')).toBe(own);
+    expect(scopedMutableGet(platformAdmin, 'work_orders', seed.workOrders, foreign!.id, 'read')).toBe(foreign);
   });
 });

@@ -1,7 +1,8 @@
 'use client';
 
-import Link from 'next/link';
-import { Building2, CalendarClock, Play, ShieldAlert } from 'lucide-react';
+import { Card, CardHeader, EmptyState } from '@/components/ui';
+import styles from './maintenance-clinexa.module.css';
+import { CalendarClock, Play, ShieldAlert } from 'lucide-react';
 import { Button, StatusPill } from '@/components/ui';
 import { complianceState, daysUntil, STATE_LABEL, STATE_TONE } from '@/domain/inspections';
 import type { Tone } from '@/lib/status-tones';
@@ -14,7 +15,8 @@ export function ComplianceRegister({ data, onRun, onSchedule }: { data: Inspecti
   const ranked = [...data.obligations].sort((a, b) => rank(a) - rank(b));
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className={styles.stack}>
+      {ranked.length === 0 && <Card><EmptyState title="No compliance obligations in scope" description="Recorded obligations and their certificate expiry dates will appear here." /></Card>}
       {ranked.map((o) => {
         const state = complianceState(o.validUntil);
         const days = o.validUntil ? daysUntil(o.validUntil) : null;
@@ -24,48 +26,40 @@ export function ComplianceRegister({ data, onRun, onSchedule }: { data: Inspecti
         const lastInsp = data.inspections.find((i) => i.ref === o.lastInspectionRef);
 
         return (
-          <div key={o.id} className="bg-surface border border-border rounded-xl shadow-card flex items-stretch overflow-hidden">
-            <span className="w-1.5 flex-none" style={{ background: `var(--tone-${tone})` }} />
-            <div className="flex-1 min-w-0 p-3.5 flex items-center gap-3 flex-wrap">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[13.5px] font-semibold truncate">{o.name}</span>
-                  <StatusPill status={o.criticality} tone={CRIT_TONE[o.criticality] ?? 'neutral'} />
-                </div>
-                <div className="text-[11.5px] text-text-3 flex items-center gap-1.5 mt-0.5">
-                  <Building2 size={11} /> {o.scopeLabel}{o.authority ? ` · ${o.authority}` : ''}
-                </div>
-              </div>
+          <Card key={o.id} padded={false} className={styles.complianceCard}>
+            <span className={styles.complianceRail} style={{ background: `var(--tone-${tone})` }} aria-hidden="true" />
+            <div className={styles.header}><CardHeader title={o.name} subtitle={`${o.scopeLabel}${o.authority ? ` · ${o.authority}` : ''}`} action={<StatusPill status={o.criticality} tone={CRIT_TONE[o.criticality] ?? 'neutral'} />} /></div>
+            <div className={styles.complianceBody}>
 
               {/* Expiry countdown */}
-              <div className="text-right flex-none">
-                <div className="flex items-center gap-1.5 justify-end">
-                  {state === 'expired' && <ShieldAlert size={13} className="text-negative" />}
+              <div className={styles.expiry}>
+                <div className={styles.inline}>
+                  {state === 'expired' && <ShieldAlert size={16} className="text-negative" />}
                   <StatusPill status={STATE_LABEL[state]} tone={tone} />
                 </div>
-                <div className="text-[11.5px] mt-1 font-mono" style={{ color: `var(--tone-${tone})` }}>
+                <p className={styles.text} style={{ color: `var(--tone-${tone})` }}>
                   {days === null ? 'no certificate on file'
                     : days < 0 ? `expired ${-days}d ago (${o.validUntil})`
                     : `expires in ${days}d (${o.validUntil})`}
-                </div>
+                </p>
               </div>
 
               {/* Action */}
-              <div className="flex-none flex items-center gap-2">
+              <div className={styles.complianceActions}>
                 {lastInsp && (
-                  <Link href="#" onClick={(e) => { e.preventDefault(); onRun(lastInsp.id); }} className="text-[11.5px] text-primary hover:underline">
+                  <Button onClick={() => onRun(lastInsp.id)} variant="ghost" aria-label={`View inspection ${lastInsp.ref}`}>
                     {lastInsp.ref}
-                  </Link>
+                  </Button>
                 )}
                 {data.canMutate && openInsp && (
-                  <Button variant="primary" className="!h-8 !text-[12px]" icon={<Play size={13} />} onClick={() => onRun(openInsp.id)}>Run</Button>
+                  <Button variant="primary" aria-label={`Run inspection for ${o.name}`} icon={<Play size={16} />} onClick={() => onRun(openInsp.id)}>Run</Button>
                 )}
                 {data.canMutate && !openInsp && (
-                  <Button variant="secondary" className="!h-8 !text-[12px]" icon={<CalendarClock size={13} />} onClick={() => onSchedule(o.id)}>Schedule</Button>
+                  <Button variant="secondary" aria-label={`Schedule inspection for ${o.name}`} icon={<CalendarClock size={16} />} onClick={() => onSchedule(o.id)}>Schedule</Button>
                 )}
               </div>
             </div>
-          </div>
+          </Card>
         );
       })}
     </div>

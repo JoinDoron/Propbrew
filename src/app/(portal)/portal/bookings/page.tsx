@@ -1,4 +1,6 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
+import { can } from '@/lib/authz';
 import { repos } from '@/server/data';
 import { bookingMachine } from '@/domain/workflows';
 import { legalEvents } from '@/lib/legal-events';
@@ -16,12 +18,16 @@ export default async function MyBookingsPage() {
     status: b.status,
     slot: b.slot,
     feeMinor: b.fee ? b.fee.minor : null,
-    actions: legalEvents(bookingMachine, b.status, actor),
+    feeCurrency: b.fee?.currency ?? null,
+    actions: can(actor, 'bookings_amenities', 'transition').allowed ? legalEvents(bookingMachine, b.status, actor) : [],
   }));
 
   return (
-    <div className="max-w-[720px] mx-auto">
-      <BookingsWorkspace bookings={bookings} />
+    <div className="pb-page">
+      <PageHeader title="My bookings" subtitle="Reserve shared amenities and track your bookings." />
+      <div className="w-full min-w-0 flex flex-col gap-6">
+      <BookingsWorkspace bookings={bookings} canCreate={can(actor, 'bookings_amenities', 'create').allowed} canTransition={can(actor, 'bookings_amenities', 'transition').allowed} />
+      </div>
     </div>
   );
 }

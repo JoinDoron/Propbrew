@@ -2,128 +2,61 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Check, ScanLine, Sparkles, Upload, X } from 'lucide-react';
-import { Button } from '@/components/ui';
+import { FileText, X } from 'lucide-react';
+import { Button, Card, CardHeader, IconButton } from '@/components/ui';
+import { PortalDialog } from '@/components/portal/portal-dialog';
 import { EXTRACTION_TEMPLATES, DOC_TYPE_LABEL } from '@/domain/documents';
 import { uploadDocument } from '@/server/actions/documents';
 import type { DocType, ExtractedField } from '@/domain/entities';
+import common from '@/components/ui/workspace-layout.module.css';
+import styles from './documents-workspace.module.css';
 
 const TYPES: DocType[] = ['certificate', 'contract', 'policy', 'invoice', 'report', 'notice', 'handbook', 'other'];
 const FOLDERS = ['Compliance', 'Contracts', 'Finance', 'Policies', 'Notices'];
 const AUDIENCES = ['Managers', 'All residents'];
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-
-type Phase = 'form' | 'extracting' | 'review';
 
 export function UploadDialog({ onClose }: { onClose: () => void }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [phase, setPhase] = useState<Phase>('form');
-  const [step, setStep] = useState('');
-
+  const [reviewing, setReviewing] = useState(false);
   const [name, setName] = useState('');
   const [type, setType] = useState<DocType>('certificate');
   const [folder, setFolder] = useState('Compliance');
   const [audience, setAudience] = useState('Managers');
   const [scanned, setScanned] = useState(true);
   const [fields, setFields] = useState<ExtractedField[]>([]);
-
-  async function extract() {
+  function submit() {
+    if (pending) return;
     if (!name.trim()) { setError('Give the document a name first.'); return; }
-    setError(null); setPhase('extracting');
-    for (const s of ['Running OCR on the document…', 'Detecting fields…', `Extracting ${DOC_TYPE_LABEL[type].toLowerCase()} details…`]) {
-      setStep(s); await sleep(560 + Math.floor(Math.random() * 340));
-    }
-    setFields(EXTRACTION_TEMPLATES[type].map((f) => ({ ...f })));
-    setPhase('review');
-  }
-
-  const submit = () =>
+    setError(null);
+    if (!reviewing) { setFields(EXTRACTION_TEMPLATES[type].map((f) => ({ ...f }))); setReviewing(true); return; }
     start(async () => {
-      const r = await uploadDocument({ name, folder, type, audience, extracted: fields, scanned });
-      if (!r.ok) setError(r.error);
-      else { onClose(); router.refresh(); }
+      try {
+        const r = await uploadDocument({ name: name.trim(), folder, type, audience, extracted: fields, scanned });
+        if (!r.ok) setError(r.error);
+        else { onClose(); router.refresh(); }
+      } catch { setError('The document record could not be saved. Your entries are still here; please try again.'); }
     });
-
-  return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-[rgba(10,12,20,.45)]" onClick={onClose} />
-      <div className="relative w-full max-w-[440px] bg-surface border border-border rounded-2xl shadow-float p-4 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-[15px] font-semibold">Upload document</h3>
-          <button onClick={onClose} className="w-7 h-7 rounded-lg grid place-items-center hover:bg-surface-2"><X size={16} /></button>
-        </div>
-
-        {/* form */}
-        <div className="grid grid-cols-2 gap-2.5">
-          <label className="col-span-2 block">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-text-3">File name</span>
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Fire Safety Certificate 2027.pdf" className="mt-1 w-full h-9 px-2.5 rounded-lg border border-border-2 bg-surface text-[13px] outline-none focus:border-primary" />
-          </label>
-          <label className="block">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-text-3">Type</span>
-            <select value={type} onChange={(e) => { setType(e.target.value as DocType); setPhase('form'); }} className="mt-1 w-full h-9 px-2 rounded-lg border border-border-2 bg-surface text-[13px]">
-              {TYPES.map((t) => <option key={t} value={t}>{DOC_TYPE_LABEL[t]}</option>)}
-            </select>
-          </label>
-          <label className="block">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-text-3">Folder</span>
-            <select value={folder} onChange={(e) => setFolder(e.target.value)} className="mt-1 w-full h-9 px-2 rounded-lg border border-border-2 bg-surface text-[13px]">
-              {FOLDERS.map((f) => <option key={f} value={f}>{f}</option>)}
-            </select>
-          </label>
-          <label className="block">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-text-3">Audience</span>
-            <select value={audience} onChange={(e) => setAudience(e.target.value)} className="mt-1 w-full h-9 px-2 rounded-lg border border-border-2 bg-surface text-[13px]">
-              {AUDIENCES.map((a) => <option key={a} value={a}>{a}</option>)}
-            </select>
-          </label>
-          <label className="flex items-center gap-2 mt-5 text-[12px] cursor-pointer">
-            <input type="checkbox" checked={scanned} onChange={(e) => setScanned(e.target.checked)} className="accent-[color:var(--primary)]" />
-            <ScanLine size={13} className="text-text-3" /> Scanned (not born-digital)
-          </label>
-        </div>
-
-        {/* extraction */}
-        {phase === 'extracting' && (
-          <div className="mt-3.5 flex items-center gap-2 text-[12.5px] text-text-2">
-            <span className="inline-flex items-end gap-0.5 h-3">{[0, 1, 2].map((i) => <span key={i} className="w-1 h-1 rounded-full bg-current animate-bounce" style={{ animationDelay: `${i * 130}ms`, animationDuration: '900ms' }} />)}</span>
-            {step}
-          </div>
-        )}
-
-        {phase === 'review' && (
-          <div className="mt-3.5 rounded-xl border border-border p-3">
-            <div className="flex items-center gap-2 mb-2">
-              <Sparkles size={13} className="text-primary" />
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-text-3">AI extracted — review before save</span>
-              <Check size={13} className="text-success ml-auto" />
-            </div>
-            {fields.length === 0 ? (
-              <p className="text-[12px] text-text-3">No structured fields for this type — it will still be indexed for search.</p>
-            ) : (
-              <div className="flex flex-col gap-2">
-                {fields.map((f, i) => (
-                  <label key={i} className="block">
-                    <span className="text-[10.5px] text-text-3">{f.label}</span>
-                    <input value={f.value} onChange={(e) => setFields((p) => p.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))} placeholder="verify…" className="mt-0.5 w-full h-8 px-2 rounded-lg border border-border-2 bg-surface text-[12.5px] outline-none focus:border-primary" />
-                  </label>
-                ))}
-              </div>
-            )}
-            <p className="text-[10.5px] text-text-3 mt-2">AI-S-03 — extracted fields are editable before save (HITL).</p>
-          </div>
-        )}
-
-        <div className="flex items-center gap-2 justify-end mt-4">
-          <Button variant="secondary" onClick={onClose} disabled={pending}>Cancel</Button>
-          {phase !== 'review'
-            ? <Button variant="primary" icon={<Sparkles size={15} />} onClick={extract} disabled={phase === 'extracting'}>Run OCR</Button>
-            : <Button variant="primary" icon={<Upload size={15} />} onClick={submit} disabled={pending}>Upload & index</Button>}
-        </div>
-        {error && <p className="text-[12px] text-negative mt-2">{error}</p>}
-      </div>
+  }
+  return <PortalDialog label="Add document record" onClose={onClose} width={620} canClose={!pending}>
+    <div className={common.modal}>
+      <div className={common.dialogHeader}><div><h2 className={common.dialogTitle}>Add document record</h2><p className={common.metadata}>{reviewing ? 'Step 2 of 2 · Review the field template' : 'Step 1 of 2 · Document details'}</p></div><IconButton type="button" aria-label="Close document record form" onClick={onClose} disabled={pending}><X size={18} /></IconButton></div>
+      <form className={common.dialogBody} onSubmit={(e) => { e.preventDefault(); submit(); }}>
+        <div className={common.notice}><FileText size={18} /><p>Metadata only<span>No file bytes are uploaded, OCR is not performed and object storage is not connected by this form. Enter verified values from the original document.</span></p></div>
+        <fieldset className={styles.formGrid} disabled={pending}>
+          <label className={`${common.field} ${styles.full}`}><span className={common.label}>Document name</span><input className={common.control} required maxLength={200} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Fire safety certificate 2027.pdf" /></label>
+          <label className={common.field}><span className={common.label}>Type</span><select className={common.control} value={type} onChange={(e) => { setType(e.target.value as DocType); setReviewing(false); }}>{TYPES.map((t) => <option key={t} value={t}>{DOC_TYPE_LABEL[t]}</option>)}</select></label>
+          <label className={common.field}><span className={common.label}>Folder</span><select className={common.control} value={folder} onChange={(e) => setFolder(e.target.value)}>{FOLDERS.map((f) => <option key={f}>{f}</option>)}</select></label>
+          <label className={common.field}><span className={common.label}>Audience</span><select className={common.control} value={audience} onChange={(e) => setAudience(e.target.value)}>{AUDIENCES.map((a) => <option key={a}>{a}</option>)}</select></label>
+          <label className={styles.check}><input type="checkbox" checked={scanned} onChange={(e) => setScanned(e.target.checked)} />Scanned original</label>
+        </fieldset>
+        {reviewing && <Card className={common.panel}><CardHeader title="Review field template" subtitle="These blank fields are a manual template, not AI-extracted results." />
+          {fields.length ? <fieldset className={common.stack} disabled={pending}>{fields.map((f, i) => <label key={i} className={common.field}><span className={common.label}>{f.label}</span><input className={common.control} value={f.value} onChange={(e) => setFields((p) => p.map((x, j) => j === i ? { ...x, value: e.target.value } : x))} placeholder={/date/i.test(f.label) ? 'YYYY-MM-DD' : 'Enter a verified value'} /></label>)}</fieldset> : <p className={common.muted}>This type has no structured fields. Only its name, folder and audience will be recorded.</p>}
+        </Card>}
+        {error && <p className={common.feedback} role="alert">{error}</p>}
+        <div className={common.actions}><Button type="button" onClick={onClose} disabled={pending}>Cancel</Button><Button type="submit" variant="primary" disabled={pending}>{pending ? 'Saving…' : reviewing ? 'Save document record' : 'Review fields'}</Button></div>
+      </form>
     </div>
-  );
+  </PortalDialog>;
 }

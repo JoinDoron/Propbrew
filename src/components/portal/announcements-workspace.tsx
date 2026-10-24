@@ -1,12 +1,15 @@
 'use client';
 
+import layout from '@/components/ui/workspace-layout.module.css';
+import { Button, Card, CardHeader, EmptyState, StatusPill } from '@/components/ui';
+
+import { PageTabs } from '@/components/ui/page-tabs';
 import { useEffect, useMemo, useState } from 'react';
 import { Search, Droplet, Zap, Shield, Receipt, CalendarDays, Megaphone, Pin, Check, CheckCheck, Sparkles } from 'lucide-react';
 import { toneVar, type Tone } from '@/lib/status-tones';
 
 export type AnnRow = { id: string; title: string; body: string; audience: string; sentAt: string; aiDrafted: boolean; scope: string };
 
-const STORAGE_KEY = 'vesta_read_announcements';
 
 type Cat = { icon: React.ReactNode; tone: Tone; label: string };
 function categorize(title: string, body: string): Cat & { important: boolean } {
@@ -19,7 +22,7 @@ function categorize(title: string, body: string): Cat & { important: boolean } {
   return { icon: <Megaphone size={15} />, tone: 'neutral', label: 'Notice', important: false };
 }
 
-export function AnnouncementsWorkspace({ rows }: { rows: AnnRow[] }) {
+export function AnnouncementsWorkspace({ rows, storageKey }: { rows: AnnRow[]; storageKey?: string }) {
   const [read, setRead] = useState<Set<string>>(new Set());
   const [acked, setAcked] = useState<Set<string>>(new Set());
   const [tab, setTab] = useState<'all' | 'unread'>('all');
@@ -29,12 +32,13 @@ export function AnnouncementsWorkspace({ rows }: { rows: AnnRow[] }) {
   useEffect(() => {
     // Hydrate read-state from this device after mount (localStorage is client-only).
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = storageKey ? localStorage.getItem(storageKey) : null;
+      const parsed: unknown = raw ? JSON.parse(raw) : [];
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (raw) setRead(new Set(JSON.parse(raw)));
+      setRead(new Set(Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === 'string' && rows.some((row) => row.id === value)) : []));
     } catch { /* ignore */ }
-  }, []);
-  const persist = (next: Set<string>) => { setRead(next); try { localStorage.setItem(STORAGE_KEY, JSON.stringify([...next])); } catch { /* ignore */ } };
+  }, [storageKey, rows]);
+  const persist = (next: Set<string>) => { setRead(next); try { if (storageKey) localStorage.setItem(storageKey, JSON.stringify([...next])); } catch { /* Device storage may be unavailable; current-session state still works. */ } };
   const markRead = (id: string) => { if (read.has(id)) return; persist(new Set(read).add(id)); };
   const markAll = () => persist(new Set(rows.map((r) => r.id)));
 
@@ -53,63 +57,63 @@ export function AnnouncementsWorkspace({ rows }: { rows: AnnRow[] }) {
     });
   }, [enriched, tab, q, read]);
 
-  return (
-    <div className="flex flex-col gap-3.5">
-      <div className="flex items-center gap-2">
-        <div className="flex gap-1.5">
-          <button onClick={() => setTab('all')} className={`h-8 px-3 rounded-full text-[12.5px] font-medium border ${tab === 'all' ? 'border-primary bg-primary-weak text-primary' : 'border-border-2 bg-surface text-text-2'}`}>All</button>
-          <button onClick={() => setTab('unread')} className={`h-8 px-3 rounded-full text-[12.5px] font-medium border inline-flex items-center gap-1.5 ${tab === 'unread' ? 'border-primary bg-primary-weak text-primary' : 'border-border-2 bg-surface text-text-2'}`}>Unread {unreadCount > 0 && <span className="min-w-[16px] h-4 px-1 rounded-full bg-primary text-white text-[10px] grid place-items-center">{unreadCount}</span>}</button>
-        </div>
-        {unreadCount > 0 && <button onClick={markAll} className="ml-auto text-[12px] text-primary hover:underline inline-flex items-center gap-1"><CheckCheck size={14} /> Mark all read</button>}
-      </div>
-
-      <div className="flex items-center gap-2 h-9 px-3 rounded-xl border border-border-2 bg-surface">
-        <Search size={15} className="text-text-3" />
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search announcements…" className="flex-1 bg-transparent outline-none text-[13px]" aria-label="Search announcements" />
-      </div>
-
-      {filtered.length === 0 ? (
-        <div className="text-center py-14 border border-dashed border-border rounded-2xl">
-          <Megaphone size={26} className="mx-auto text-text-3 mb-2" />
-          <p className="text-[13.5px] font-medium">{tab === 'unread' ? 'You’re all caught up' : 'No announcements'}</p>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-2.5">
-          {filtered.map((r) => {
-            const isRead = read.has(r.id);
-            const isOpen = open === r.id;
-            const pinned = r.cat.important && !isRead;
-            return (
-              <div key={r.id} onClick={() => { markRead(r.id); setOpen(isOpen ? null : r.id); }} className={`rounded-2xl border shadow-card p-4 cursor-pointer transition-colors ${isRead ? 'bg-surface border-border' : 'bg-primary/[0.03] border-primary/25'}`}>
-                <div className="flex items-start gap-3">
-                  <span className="w-9 h-9 rounded-xl grid place-items-center flex-none" style={{ background: `color-mix(in srgb, ${toneVar(r.cat.tone)} 14%, transparent)`, color: toneVar(r.cat.tone) }}>{r.cat.icon}</span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {pinned && <span className="inline-flex items-center gap-0.5 text-[9.5px] font-bold uppercase text-warning"><Pin size={9} /> Pinned</span>}
-                      <span className="text-[10px] font-semibold" style={{ color: toneVar(r.cat.tone) }}>{r.cat.label}</span>
-                      {r.aiDrafted && <span className="inline-flex items-center gap-0.5 text-[9.5px] text-text-3"><Sparkles size={9} /> AI</span>}
-                      <span className="text-[11px] text-text-3 ml-auto">{new Date(r.sentAt).toLocaleDateString('en-NG', { month: 'short', day: 'numeric' })}</span>
-                      {!isRead && <span className="w-2 h-2 rounded-full bg-primary flex-none" />}
-                    </div>
-                    <h3 className="text-[14px] font-semibold mt-0.5">{r.title}</h3>
-                    <p className={`text-[12.5px] text-text-2 mt-1 ${isOpen ? '' : 'line-clamp-2'}`}>{r.body}</p>
-                    {isOpen && r.cat.important && (
-                      <div className="mt-2.5 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                        {acked.has(r.id) ? (
-                          <span className="text-[12px] text-positive inline-flex items-center gap-1"><Check size={14} /> Acknowledged</span>
-                        ) : (
-                          <button onClick={() => setAcked((s) => new Set(s).add(r.id))} className="h-8 px-3 rounded-lg bg-primary text-white text-[12px] font-medium inline-flex items-center gap-1.5"><Check size={13} /> Acknowledge</button>
-                        )}
-                        <span className="text-[11px] text-text-3">Let management know you’ve seen this</span>
-                      </div>
-                    )}
+  const sectionContent = (<div className={layout.layout}>
+    {filtered.length === 0 ? (
+      <Card><EmptyState icon={<Megaphone size={26} />} title={tab === 'unread' ? 'You’re all caught up' : 'No announcements'} description="No notices match the selected view and search." /></Card>
+    ) : (
+      <div className="flex flex-col gap-6 min-w-0">
+        {filtered.map((r) => {
+          const isRead = read.has(r.id);
+          const isOpen = open === r.id;
+          const pinned = r.cat.important && !isRead;
+          return (
+            <Card key={r.id}>
+              <div className="flex items-start gap-3">
+                <span className="w-9 h-9 rounded-xl grid place-items-center flex-none" style={{ background: `color-mix(in srgb, ${toneVar(r.cat.tone)} 14%, transparent)`, color: toneVar(r.cat.tone) }}>{r.cat.icon}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {pinned && <span className="inline-flex items-center gap-1 text-[12px] font-medium text-warning"><Pin size={14} /> Priority category</span>}
+                    <span className="text-[12px] font-semibold" style={{ color: toneVar(r.cat.tone) }}>{r.cat.label}</span>
+                    {r.aiDrafted && <span className="inline-flex items-center gap-1 text-[12px] text-text-3"><Sparkles size={14} /> AI-assisted draft</span>}
+                    <span className="text-[12px] text-text-3 ml-auto">{new Date(r.sentAt).toLocaleDateString('en-NG', { month: 'short', day: 'numeric' })}</span>
+                    {!isRead && <span className="w-2 h-2 rounded-full bg-primary flex-none" />}
                   </div>
+                  <h3 className="text-[16px] font-medium mt-1"><Button type="button" variant="ghost" aria-expanded={isOpen} aria-controls={`announcement-${r.id}`} className="-ml-3 text-left" onClick={() => { markRead(r.id); setOpen(isOpen ? null : r.id); }}>{r.title}</Button></h3>
+                  <p id={`announcement-${r.id}`} className={`text-[14px] leading-relaxed text-text-2 mt-1 ${isOpen ? '' : 'line-clamp-2'}`}>{r.body}</p>
+                  {isOpen && r.cat.important && (
+                    <div className="mt-2.5 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                      {acked.has(r.id) ? (
+                        <StatusPill status="Acknowledged in this session" tone="info" />
+                      ) : (
+                        <Button onClick={() => setAcked((s) => new Set(s).add(r.id))} icon={<Check size={16} />}>Acknowledge locally</Button>
+                      )}
+                      <span className="text-[12px] text-text-3">Local preview only. This does not notify management or confirm a delivery/read receipt.</span>
+                    </div>
+                  )}
                 </div>
               </div>
-            );
-          })}
-        </div>
-      )}
+            </Card>
+          );
+        })}
+      </div>
+    )}
+  </div>);
+
+  return (
+    <div className={layout.layout}>
+      <Card><CardHeader title="Estate notices" subtitle="Read state is stored only on this device for this signed-in account. Local acknowledgements are not sent to management." /><div className={layout.toolbar}><span className={layout.body}>{unreadCount} unread announcement{unreadCount === 1 ? '' : 's'}</span>{unreadCount > 0 && <Button onClick={markAll} icon={<CheckCheck size={16} />}>Mark all read locally</Button>}</div></Card>
+
+
+      <div className="pb-search">
+        <Search size={15} className="text-text-3" />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search announcements…" className="flex-1 bg-transparent outline-none text-[14px]" aria-label="Search announcements" />
+      </div>
+
+      <PageTabs label="Announcement views" activeTab={tab} onTabChange={(id) => setTab(id as typeof tab)} items={[
+        { id: "all", label: "All announcements", content: tab === 'all' ? sectionContent : null },
+        { id: "unread", label: "Unread", count: unreadCount, content: tab === 'unread' ? sectionContent : null }
+      ]} />
+
     </div>
   );
 }

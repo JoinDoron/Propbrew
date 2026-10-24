@@ -1,9 +1,14 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
+import polish from '@/components/facility/facility-registers-polish.module.css';
+import { facilityMoney } from '@/components/facility/facility-format';
+import layout from '@/components/ui/workspace-layout.module.css';
+import { Card, CardHeader, EmptyState } from '@/components/ui';
 import Link from 'next/link';
-import { ArrowUpRight, FileText, Plus, Search, Star, Sparkles, Wallet, ShieldAlert } from 'lucide-react';
+import { ArrowUpRight, FileText, Plus, Search, Star, Sparkles, ShieldAlert } from 'lucide-react';
 import { Button, StatusPill } from '@/components/ui';
+import { PageTabs } from '@/components/ui/page-tabs';
 import { ReadOnlyChip } from '@/components/domain';
 import { humanizeStatus, statusTone, toneVar, type Tone } from '@/lib/status-tones';
 import { compositeScore, responsiveness, avgResponseHours, complianceExpiry, slaTrend, recommendForService, allServices, type VendorMetrics } from '@/domain/vendors';
@@ -26,16 +31,17 @@ const EXPIRY_TONE: Record<string, Tone> = { expired: 'danger', soon: 'warn', ok:
 type Filter = 'all' | 'valid' | 'expiring' | 'expired';
 type Sort = 'score' | 'sla' | 'rating' | 'name';
 const NOW_MS = Date.parse('2026-07-26');
-const naira = (minor: number) => (minor >= 1e8 ? `₦${(minor / 1e8).toFixed(1)}M` : minor >= 1e5 ? `₦${Math.round(minor / 1e5)}k` : `₦${Math.round(minor / 100)}`);
 
 /** FM-05 — interactive vendor directory. Filter by compliance, search, sort, and
  *  select a vendor to see its profile, documents and assigned jobs. */
-export function VendorsExplorer({ vendors, jobs, spend, canMutate }: { vendors: VendorRow[]; jobs: JobRow[]; spend: Record<string, number>; canMutate: boolean }) {
+export function VendorsExplorer({ vendors, jobs, spend, spendLabels = {}, canMutate }: { vendors: VendorRow[]; jobs: JobRow[]; spend: Record<string, number>; spendLabels?: Record<string, string>; canMutate: boolean }) {
+  const detailsId = useId();
   const [filter, setFilter] = useState<Filter>('all');
   const [sort, setSort] = useState<Sort>('score');
   const [q, setQ] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(vendors[0]?.id ?? null);
   const [service, setService] = useState<string>('');
+  const [section, setSection] = useState('directory');
 
   const visible = useMemo(() => {
     let v = filter === 'all' ? vendors : vendors.filter((x) => x.compliance === filter);
@@ -46,160 +52,102 @@ export function VendorsExplorer({ vendors, jobs, spend, canMutate }: { vendors: 
     return [...v].sort((a, b) => (sort === 'score' ? compositeScore(b as VendorMetrics) - compositeScore(a as VendorMetrics) : sort === 'sla' ? b.slaHitRate - a.slaHitRate : sort === 'rating' ? b.rating - a.rating : a.name.localeCompare(b.name)));
   }, [vendors, filter, q, sort]);
 
-  const selected = vendors.find((v) => v.id === selectedId) ?? visible[0] ?? null;
+  const selected = visible.find((v) => v.id === selectedId) ?? visible[0] ?? null;
   const counts = vendors.reduce<Record<string, number>>((a, v) => ((a[v.compliance] = (a[v.compliance] ?? 0) + 1), a), {});
   const services = useMemo(() => allServices(vendors as VendorMetrics[]), [vendors]);
   const recs = service ? recommendForService(vendors as VendorMetrics[], service) : [];
 
   return (
-    <div className="flex flex-col gap-3.5">
-      <div className="flex items-center gap-2 flex-wrap">
+    <div className={layout.layout}>
+      <div className="pb-register-toolbar">
+        <div className="flex items-center gap-2 flex-wrap">
         {(['all', 'valid', 'expiring', 'expired'] as const).map((f) => (
-          <button key={f} onClick={() => setFilter(f)} className={`h-8 px-3 rounded-full text-[12px] font-medium capitalize border transition-colors inline-flex items-center gap-1.5 ${filter === f ? 'border-primary bg-primary-weak text-primary' : 'border-border-2 bg-surface text-text-2 hover:bg-surface-2'}`}>
+          <button key={f} type="button" aria-pressed={filter === f} onClick={() => setFilter(f)} className="pb-filter capitalize inline-flex items-center gap-1.5">
             {f}<span className="text-text-3 font-mono">{f === 'all' ? vendors.length : counts[f] ?? 0}</span>
           </button>
         ))}
+        </div>
         <div className="ml-auto flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-2 h-8 px-2.5 rounded-full border border-border-2 bg-surface">
-            <Search size={13} className="text-text-3" />
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search vendors…" className="w-28 bg-transparent outline-none text-[12.5px]" aria-label="Search vendors" />
+          <div className="pb-search">
+            <Search size={16} className="text-text-3" aria-hidden="true" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search vendors…" className="w-40 bg-transparent outline-none" aria-label="Search vendors" />
           </div>
-          <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} aria-label="Sort" className="h-8 px-2 rounded-full border border-border-2 bg-surface text-[12px] outline-none focus:border-primary">
+          <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} aria-label="Sort vendor directory" className="pb-filter">
             <option value="score">Sort: Score</option>
             <option value="sla">Sort: SLA</option>
             <option value="rating">Sort: Rating</option>
             <option value="name">Sort: Name</option>
           </select>
-          {canMutate ? <Button variant="primary" icon={<Plus size={15} />} className="!h-8 !text-[12px]">Onboard</Button> : <ReadOnlyChip />}
+          {canMutate ? <Button variant="primary" disabled title="Vendor onboarding is not connected" icon={<Plus size={15} />}>Onboard · unavailable</Button> : <ReadOnlyChip />}
         </div>
       </div>
 
-      {/* AI best-vendor recommender */}
-      <div className="bg-surface border border-border rounded-2xl shadow-card p-3.5">
+      <PageTabs label="Vendor management sections" activeTab={section} onTabChange={setSection} items={[
+        { id: 'matching', label: 'AI vendor matching', content: (
+      <Card padded={false} className="p-6 max-[640px]:p-4">
+        <CardHeader title="Rules-based vendor matching" subtitle="Recorded metrics support a human decision, not automatic assignment" />
         <div className="flex items-center gap-2 flex-wrap">
           <Sparkles size={14} className="text-primary" />
-          <span className="text-[12.5px] font-semibold">Best vendor for</span>
-          <select value={service} onChange={(e) => setService(e.target.value)} aria-label="Service" className="h-8 px-2 rounded-lg border border-border-2 bg-surface text-[12.5px] outline-none focus:border-primary">
+          <span className="text-[14px] font-semibold">Best vendor for</span>
+          <select value={service} onChange={(e) => setService(e.target.value)} aria-label="Service for rules-based vendor matching" className="pb-filter">
             <option value="">a job… (pick a service)</option>
             {services.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
-          <span className="text-[10.5px] text-text-3 ml-auto">AI-assist · advisory ranking, you assign</span>
+          <span className="text-[12px] text-text-3 ml-auto">Rules-based ranking from recorded metrics · no automatic assignment</span>
         </div>
         {recs.length > 0 && (
           <div className="flex flex-col gap-1.5 mt-2.5">
             {recs.slice(0, 3).map((r, i) => (
-              <button key={r.vendor.id} onClick={() => setSelectedId(r.vendor.id)} className="flex items-center gap-2.5 text-left px-2 py-1.5 rounded-lg hover:bg-surface-2">
-                <span className={`w-5 h-5 rounded-md grid place-items-center text-[11px] font-bold flex-none ${i === 0 ? 'bg-primary text-white' : 'bg-surface-2 text-text-3'}`}>{i + 1}</span>
-                <div className="min-w-0 flex-1"><div className="text-[12.5px] font-semibold truncate">{r.vendor.name}</div><div className="text-[11px] text-text-3 truncate">{r.reason}</div></div>
+              <button key={r.vendor.id} onClick={() => { setSelectedId(r.vendor.id); setFilter('all'); setQ(''); setSection('directory'); }} className={polish.selection}>
+                <span className={`w-5 h-5 rounded-md grid place-items-center text-[12px] font-bold flex-none ${i === 0 ? 'bg-primary text-white' : 'bg-surface-2 text-text-3'}`}>{i + 1}</span>
+                <div className="min-w-0 flex-1"><div className="text-[14px] font-semibold truncate">{r.vendor.name}</div><div className={polish.metadata}>{r.reason}</div></div>
                 <ScorePill score={r.score} />
               </button>
             ))}
           </div>
         )}
-      </div>
+      </Card>
 
-      <div className="grid min-[900px]:grid-cols-[minmax(0,1fr)_360px] gap-3.5 items-start">
+        ) },
+        { id: 'directory', label: 'Directory & compliance', count: vendors.length, content: (
+      <div className={polish.detailGrid}>
         {/* List */}
-        <div className="bg-surface border border-border rounded-2xl shadow-card overflow-hidden">
+        <Card padded={false} className="overflow-hidden"><div className={polish.registerHeader}><CardHeader title="Vendor directory" subtitle={`${visible.length} matching vendors · select a profile for compliance and work history`} /></div>
           {visible.map((v) => {
             const active = selected?.id === v.id;
             return (
-              <button key={v.id} onClick={() => setSelectedId(v.id)} className={`flex items-center gap-3 w-full text-left px-4 py-3 border-b border-border last:border-0 transition-colors ${active ? 'bg-primary-weak/50' : 'hover:bg-surface-2'}`}>
+              <button key={v.id} type="button" aria-pressed={active} aria-controls={detailsId} onClick={() => setSelectedId(v.id)} className={polish.selection}>
                 <ScorePill score={compositeScore(v as VendorMetrics)} />
                 <div className="min-w-0 flex-1">
-                  <div className="text-[13px] font-semibold truncate">{v.name}</div>
-                  <div className="text-[11.5px] text-text-3 truncate">{v.services.join(', ')}</div>
+                  <strong>{v.name}</strong>
+                  <small>{v.services.join(', ')}</small>
                 </div>
                 <StatusPill status={v.compliance} tone={COMPLIANCE_TONE[v.compliance] ?? 'neutral'} />
-                <span className="font-mono text-[12.5px] text-text-2 w-11 text-right flex-none max-[560px]:hidden">{v.slaHitRate}%</span>
-                <span className="font-mono text-[12.5px] text-text-2 w-10 text-right flex-none inline-flex items-center gap-0.5 justify-end"><Star size={11} className="fill-current text-warning" />{v.rating}</span>
+                <span className="font-mono text-[14px] text-text-2 w-11 text-right flex-none max-[560px]:hidden">{v.slaHitRate}%</span>
+                <span className="font-mono text-[14px] text-text-2 w-10 text-right flex-none inline-flex items-center gap-0.5 justify-end"><Star size={11} className="fill-current text-warning" />{v.rating}</span>
               </button>
             );
           })}
-          {visible.length === 0 && <div className="p-8 text-center text-[13px] text-text-3">No vendors match.</div>}
-        </div>
+          {visible.length === 0 && <EmptyState title="No vendors match" description="Adjust the compliance filter, sort or search term." />}
+        </Card>
 
         {/* Detail */}
         {selected && (
-          <div className="bg-surface border border-border rounded-2xl shadow-card p-4 min-[900px]:sticky min-[900px]:top-2">
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <h3 className="text-[15px] font-semibold tracking-[-0.01em]">{selected.name}</h3>
-                <p className="text-[12px] text-text-3">{selected.coverage}</p>
-              </div>
-              <StatusPill status={selected.compliance} tone={COMPLIANCE_TONE[selected.compliance] ?? 'neutral'} />
-            </div>
-
-            {/* Scorecard */}
-            <div className="flex items-center gap-3 mt-3.5 rounded-xl border border-border bg-surface-2 p-3">
-              <ScoreDial score={compositeScore(selected as VendorMetrics)} />
-              <div className="min-w-0">
-                <div className="text-[12.5px] font-semibold">Composite score</div>
-                <div className="text-[11px] text-text-3">SLA {selected.slaHitRate}% · ★{selected.rating} · {responsiveness(selected as VendorMetrics)} responsiveness (~{avgResponseHours(selected as VendorMetrics)}h)</div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2 mt-3">
-              <Metric label="Jobs" value={String(selected.jobsCompleted)} />
-              <Metric label="Spend YTD" value={spend[selected.id] ? naira(spend[selected.id]) : '—'} />
-              <Metric label="SLA trend" value={`${selected.slaHitRate}%`} />
-            </div>
-
-            {/* Compliance-expiry alert */}
-            {(() => {
-              const e = complianceExpiry(selected.insuranceExpiry, NOW_MS);
-              return (
-                <div className="mt-3 rounded-xl p-3 flex items-center gap-2.5" style={{ background: `color-mix(in srgb, ${toneVar(EXPIRY_TONE[e.state])} 8%, transparent)`, border: `1px solid color-mix(in srgb, ${toneVar(EXPIRY_TONE[e.state])} 35%, transparent)` }}>
-                  <ShieldAlert size={16} style={{ color: toneVar(EXPIRY_TONE[e.state]) }} className="flex-none" />
-                  <div className="flex-1 min-w-0"><div className="text-[12.5px] font-semibold">Insurance {e.label}</div><div className="text-[11px] text-text-3">exp {selected.insuranceExpiry}</div></div>
-                  <Link href="/documents" className="text-[11.5px] text-primary hover:underline whitespace-nowrap">Documents →</Link>
-                </div>
-              );
-            })()}
-
-            {/* SLA trend */}
-            <div className="mt-3">
-              <div className="flex items-center justify-between text-[11px] text-text-3 mb-1"><span className="inline-flex items-center gap-1"><Wallet size={12} /> SLA hit-rate trend</span><span>indicative</span></div>
-              <TrendLine points={slaTrend(selected as VendorMetrics)} />
-            </div>
-
-            <Section title="Services">
-              <div className="flex flex-wrap gap-1.5">
-                {selected.services.map((s) => (
-                  <span key={s} className="text-[11.5px] border border-border-2 rounded-full px-2.5 h-6 inline-flex items-center bg-surface-2">{s}</span>
-                ))}
-              </div>
-            </Section>
-
-            <Section title="Documents">
-              <div className="flex flex-col gap-1.5">
-                <DocRow label="Insurance certificate" expiry={selected.insuranceExpiry} tone={COMPLIANCE_TONE[selected.compliance] ?? 'neutral'} state={selected.compliance} />
-                <DocRow label="CAC registration" expiry="—" tone="success" state="valid" />
-                <DocRow label="Public liability cover" expiry={selected.insuranceExpiry} tone={selected.compliance === 'expired' ? 'danger' : 'success'} state={selected.compliance === 'expired' ? 'expired' : 'valid'} />
-              </div>
-            </Section>
-
-            <Section title={`Assigned jobs (${jobs.filter((j) => j.vendorOrgId === selected.id).length})`}>
-              <div className="flex flex-col gap-1.5">
-                {jobs.filter((j) => j.vendorOrgId === selected.id).map((j) => (
-                  <Link key={j.id} href={`/work-orders/${j.ref}`} className="flex items-center gap-2 group">
-                    <span className="font-mono text-[11.5px] font-semibold text-primary group-hover:underline">{j.ref}</span>
-                    <span className="text-[12px] text-text-2 truncate flex-1">{j.title}</span>
-                    <StatusPill status={humanizeStatus(j.status)} tone={statusTone('work-order', j.status)} />
-                  </Link>
-                ))}
-                {jobs.filter((j) => j.vendorOrgId === selected.id).length === 0 && (
-                  <p className="text-[12px] text-text-3">No jobs currently assigned.</p>
-                )}
-              </div>
-            </Section>
-
-            <Link href="/work-orders" className="inline-flex items-center gap-1 text-[12px] text-primary hover:underline mt-3">
-              View all work orders <ArrowUpRight size={13} />
-            </Link>
-          </div>
+          <section id={detailsId} aria-label={`${selected.name} vendor details`}><Card className={polish.detailPanel}>
+  <CardHeader title={selected.name} subtitle={selected.coverage} action={<StatusPill status={selected.compliance} tone={COMPLIANCE_TONE[selected.compliance] ?? 'neutral'} />} />
+  <div className={polish.notice}><ScoreDial score={compositeScore(selected as VendorMetrics)} /><div><h4 className="text-sm font-medium">Rules-based composite index</h4><p className={polish.body}>Recorded SLA hit rate {selected.slaHitRate}% · rating {selected.rating} / 5.</p><p className={polish.metadata}>Modelled responsiveness: {responsiveness(selected as VendorMetrics)} · approximately {avgResponseHours(selected as VendorMetrics)} hours. This is not a measured response log or calibrated performance prediction.</p></div></div>
+  <dl className={polish.facts}><div><dt>Recorded completed jobs</dt><dd>{selected.jobsCompleted}</dd></div><div><dt>Recorded job costs</dt><dd>{spendLabels[selected.id] ?? (spend[selected.id] !== undefined ? facilityMoney(spend[selected.id]) : 'Not recorded')}</dd></div><div><dt>Recorded SLA hit rate</dt><dd>{selected.slaHitRate}%</dd></div></dl>
+  {(() => { const expiry = complianceExpiry(selected.insuranceExpiry, NOW_MS); return <div className={polish.notice}><ShieldAlert size={20} style={{ color: toneVar(EXPIRY_TONE[expiry.state]) }} /><div><h4 className="text-sm font-medium">Insurance {expiry.label}</h4><p className={polish.body}>Recorded expiry: {selected.insuranceExpiry}.</p><p className={polish.metadata}>Expiry is checked against the 26 July 2026 reference snapshot. Confirm the original policy before assigning restricted work.</p><Link href="/documents" className={polish.link}>Open document register <ArrowUpRight size={16} /></Link></div></div>; })()}
+  <Section title="Illustrative SLA trend"><TrendLine points={slaTrend(selected as VendorMetrics)} /><p className={polish.metadata}>Generated series based on the recorded SLA percentage, not measured historical delivery.</p></Section>
+  <Section title="Service coverage"><div className={layout.filters}>{selected.services.map((service) => <span key={service} className="border border-border rounded-md px-3 py-2 text-sm bg-surface-2">{service}</span>)}</div></Section>
+  <Section title="Compliance document references"><DocRow label="Insurance certificate" expiry={selected.insuranceExpiry} tone={COMPLIANCE_TONE[selected.compliance] ?? 'neutral'} state={`Recorded: ${selected.compliance}`} /><DocRow label="CAC registration" expiry="—" tone="neutral" state="File not verified" /><DocRow label="Public liability cover" expiry={selected.insuranceExpiry} tone="neutral" state="Cover not verified" /><p className={polish.metadata}>Document names and summary metadata are not evidence that an original or current certificate has been attached.</p></Section>
+  <Section title={`Assigned jobs (${jobs.filter((job) => job.vendorOrgId === selected.id).length})`}><ul className="m-0 p-0 list-none">{jobs.filter((job) => job.vendorOrgId === selected.id).map((job) => <li key={job.id}><Link href={`/work-orders/${job.ref}`} className={polish.row}><div><span className="text-sm font-medium text-primary">{job.ref}</span><p className={polish.body}>{job.title}</p></div><StatusPill status={humanizeStatus(job.status)} tone={statusTone('work-order', job.status)} /></Link></li>)}</ul>{!jobs.some((job) => job.vendorOrgId === selected.id) && <p className={polish.body}>No jobs currently assigned.</p>}</Section>
+  <Link href="/work-orders" className={polish.link}>View all work orders <ArrowUpRight size={16} /></Link>
+</Card></section>
         )}
       </div>
+        ) },
+      ]} />
     </div>
   );
 }
@@ -220,40 +168,26 @@ function ScoreDial({ score }: { score: number }) {
   );
 }
 function TrendLine({ points }: { points: number[] }) {
-  const w = 320, h = 40;
+  const w = 320, h = 100;
   const max = Math.max(...points, 1), min = Math.min(...points, 0), span = max - min || 1;
   const step = points.length > 1 ? w / (points.length - 1) : w;
   const d = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${(i * step).toFixed(1)} ${(h - ((p - min) / span) * (h - 4) - 2).toFixed(1)}`).join(' ');
   return (
-    <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="overflow-visible">
+    <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} role="img" aria-label={`Illustrative SLA series: ${points.map((point) => `${Math.round(point * 10) / 10}%`).join(', ')}`} className="overflow-visible">
       <path d={d} fill="none" stroke="var(--primary)" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" />
       <circle cx={(points.length - 1) * step} cy={h - ((points[points.length - 1] - min) / span) * (h - 4) - 2} r={2} fill="var(--primary)" />
     </svg>
   );
 }
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg bg-surface-2 p-2.5">
-      <div className="text-[10px] text-text-3 uppercase tracking-wide">{label}</div>
-      <div className="text-[15px] font-semibold mt-0.5 font-mono">{value}</div>
-    </div>
-  );
-}
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="mt-3.5 pt-3.5 border-t border-border">
-      <div className="text-[10.5px] font-semibold uppercase tracking-wide text-text-3 mb-2">{title}</div>
-      {children}
-    </div>
-  );
-}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) { return <section className={polish.section}><h3>{title}</h3>{children}</section>; }
 
 function DocRow({ label, expiry, tone, state }: { label: string; expiry: string; tone: Tone; state: string }) {
   return (
-    <div className="flex items-center gap-2 text-[12px]">
+    <div className={polish.row}>
       <FileText size={14} className="text-text-3 flex-none" />
-      <span className="flex-1 truncate">{label}</span>
+      <span className="min-w-0 flex-1 text-sm">{label}</span>
       {expiry !== '—' && <span className="text-text-3">exp {expiry}</span>}
       <StatusPill status={state} tone={tone} />
     </div>

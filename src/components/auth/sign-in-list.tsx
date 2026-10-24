@@ -17,6 +17,7 @@ export function SignInList({ accounts }: { accounts: Account[] }) {
     <div className="flex flex-col gap-1.5">
       {accounts.map((a) => (
         <button
+          type="button"
           key={a.key}
           disabled={pending}
           onClick={() => { setActive(a.key); start(() => signInAs(a.key)); }}
@@ -24,8 +25,8 @@ export function SignInList({ accounts }: { accounts: Account[] }) {
         >
           <Avatar name={a.name} size={38} />
           <div className="flex-1 min-w-0">
-            <div className="text-[13.5px] font-semibold truncate">{a.name}</div>
-            <div className="text-[11.5px] text-text-3 truncate">{a.roleSummary} · {a.tenantLabel}</div>
+            <div className="text-sm font-medium truncate">{a.name}</div>
+            <div className="text-[12px] text-text-3 truncate">{a.roleSummary} · {a.tenantLabel}</div>
           </div>
           {active === a.key && pending ? (
             <span className="text-[11px] text-text-3">Signing in…</span>

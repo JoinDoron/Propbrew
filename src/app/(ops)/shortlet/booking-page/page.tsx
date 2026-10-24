@@ -1,3 +1,5 @@
+import { can } from '@/lib/authz';
+import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
 import { db } from '@/server/data/store';
@@ -9,7 +11,7 @@ import { BookingPageWorkspace, type AptFunnel, type PreviewApt } from '@/compone
  *  cancellation policy, hold window, promo codes) + a conversion funnel and
  *  per-apartment performance, with a live guest-facing preview. */
 export default async function ShortletBookingPagePage() {
-  const { actor } = await requireCapability('bookings_amenities');
+  const { actor } = await requireCapability('bookings_amenities', 'read', 'shortlet');
   const apts = repos.shortletApartments.list(actor).items;
   const props = new Map(repos.shortletProperties.list(actor).items.map((p) => [p.id, p.name]));
   const bookings = repos.shortletBookings.list(actor).items;
@@ -22,8 +24,9 @@ export default async function ShortletBookingPagePage() {
   const preview: PreviewApt[] = apts.filter((a) => a.status === 'active').map((a) => ({ name: a.name, type: a.type, rateMinor: a.nightlyRate.minor, property: props.get(a.propertyId) ?? '' }));
 
   return (
-    <div className="max-w-[1000px] mx-auto">
-      <BookingPageWorkspace config={db.shortletBookingPage} funnel={funnel} aptFunnels={aptFunnels} preview={preview} businessName="Marina Suites & Maitama Court" />
+    <div className="pb-page">
+      <PageHeader title="Direct booking page" subtitle="Manage your guest-facing page, promotions and conversion performance." />
+      <BookingPageWorkspace canUpdate={can(actor, 'bookings_amenities', 'update').allowed} config={db.shortletBookingPage} funnel={funnel} aptFunnels={aptFunnels} preview={preview} businessName="Marina Suites & Maitama Court" />
     </div>
   );
 }

@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Reeve UI primitives.
+ * Propbrew UI primitives — Clinexa-inspired application foundations.
  *
  * The repeating patterns of the design system:
  * cards, KPI tiles, status pills, filter chips, buttons, tabs and tables.
@@ -11,6 +11,7 @@
 
 import type { ButtonHTMLAttributes, ReactNode, ThHTMLAttributes } from 'react';
 import { toneVar, type Tone } from '@/lib/status-tones';
+import styles from './primitives.module.css';
 
 /** Fade a hex colour to an rgba() string — used for soft status backgrounds. */
 export function hexA(hex: string, alpha: number): string {
@@ -49,8 +50,8 @@ export function Card({
   return (
     <div
       className={cx(
-        'bg-surface border border-border rounded-[16px] shadow-card',
-        padded && 'p-4 sm:p-[18px]',
+        styles.card,
+        padded && styles.cardPadded,
         className,
       )}
     >
@@ -71,11 +72,11 @@ export function CardHeader({
   return (
     <div className="flex items-start justify-between gap-3 mb-4">
       <div className="min-w-0">
-        <h3 className="text-[15px] font-semibold tracking-[-0.01em] leading-tight">
+        <h3 className={styles.heading}>
           {title}
         </h3>
         {subtitle && (
-          <p className="text-[12.5px] text-text-3 mt-0.5">{subtitle}</p>
+          <p className={styles.subtitle}>{subtitle}</p>
         )}
       </div>
       {action}
@@ -105,31 +106,30 @@ export function KpiCard({
   iconColor?: string;
 }) {
   return (
-    <div className="bg-surface border border-border rounded-[16px] p-4 sm:px-[18px] shadow-card transition-transform duration-150 hover:-translate-y-px">
+    <div className={cx(styles.card, styles.kpi)}>
+      <div className={styles.kpiHeader}>
       {icon && (
         <span
-          className="w-10 h-10 rounded-xl flex items-center justify-center"
+          className={styles.kpiIcon}
           style={{
-            background: iconBg ?? 'var(--primary-weak)',
+            ...(iconBg ? { background: iconBg, borderRadius: 6, padding: 3 } : {}),
             color: iconColor ?? 'var(--primary)',
           }}
         >
           {icon}
         </span>
       )}
-      <div className="text-[13px] text-text-2 font-medium mt-3.5">{label}</div>
-      <div className="flex items-center justify-between gap-2 mt-1.5">
-        <span className="text-[26px] font-bold tracking-[-0.02em] leading-none">
+        <div className={styles.kpiLabel}>{label}</div>
+      </div>
+      <div className={styles.kpiBody}>
+        <span className={styles.kpiValue}>
           {value}
         </span>
         {delta && (
           <span
-            className="text-[11.5px] font-semibold px-1.5 py-1 rounded-md whitespace-nowrap"
+            className={styles.kpiDelta}
             style={{
               color: positive ? 'var(--color-positive)' : 'var(--color-negative)',
-              background: positive
-                ? 'rgba(16,185,129,.12)'
-                : 'rgba(239,68,68,.12)',
             }}
           >
             {positive ? '↑' : '↓'} {delta}
@@ -154,8 +154,8 @@ export function StatusPill({ status, tone }: { status: string; tone: Tone }) {
   const color = toneVar(tone);
   return (
     <span
-      className="inline-flex items-center gap-1.5 h-[22px] px-2 rounded-md text-[11.5px] font-semibold whitespace-nowrap"
-      style={{ color, background: `color-mix(in srgb, ${color} 14%, transparent)` }}
+      className="inline-flex items-center gap-1.5 min-h-[24px] px-2 rounded-md text-[11.5px] font-medium whitespace-nowrap border border-transparent"
+      style={{ color, background: `color-mix(in srgb, ${color} 8%, var(--surface))`, borderColor: `color-mix(in srgb, ${color} 18%, var(--border))` }}
     >
       <span className="w-1.5 h-1.5 rounded-full flex-none" style={{ background: color }} />
       {status}
@@ -179,17 +179,14 @@ export function Button({
   className,
   ...rest
 }: ButtonProps) {
-  const base =
-    'inline-flex items-center justify-center gap-2 h-[38px] px-4 rounded-[11px] text-sm font-medium cursor-pointer transition-[filter,background,border-color,transform] duration-150 hover:brightness-[1.03] active:translate-y-px disabled:opacity-50 disabled:cursor-not-allowed';
-
   const variants = {
-    primary: 'bg-primary text-on-primary border border-transparent',
-    secondary: 'bg-surface text-text border border-border-2 hover:bg-surface-2',
-    ghost: 'bg-transparent text-text-2 border border-transparent hover:bg-surface-2',
+    primary: styles.primary,
+    secondary: '',
+    ghost: styles.ghost,
   } as const;
 
   return (
-    <button className={cx(base, variants[variant], className)} {...rest}>
+    <button className={cx(styles.button, variants[variant], className)} {...rest}>
       {icon}
       {children}
     </button>
@@ -205,8 +202,8 @@ export function IconButton({
   return (
     <button
       className={cx(
-        'w-[38px] h-[38px] flex-none rounded-[10px] flex items-center justify-center text-text-2 cursor-pointer transition-colors duration-150 hover:bg-surface-2 hover:text-text relative',
-        bordered ? 'border border-border bg-surface' : 'border-none bg-transparent',
+        styles.iconButton,
+        !bordered && styles.unbordered,
         className,
       )}
       {...rest}
@@ -233,12 +230,11 @@ export function FilterChip({
 }) {
   return (
     <button
+      type="button"
+      aria-pressed={Boolean(active)}
       onClick={onClick}
       className={cx(
-        'inline-flex items-center gap-1.5 h-[38px] px-4 rounded-[11px] text-sm cursor-pointer transition-colors duration-150',
-        active
-          ? 'border-[1.5px] border-primary bg-primary-weak text-primary font-semibold'
-          : 'border border-border-2 bg-surface text-text font-medium hover:bg-surface-2',
+        styles.filter,
       )}
     >
       {label}
@@ -297,10 +293,10 @@ export function Tabs<T extends string>({
 /* Table                                                                       */
 /* -------------------------------------------------------------------------- */
 
-export function Table({ children }: { children: ReactNode }) {
+export function Table({ children, label = 'Data register' }: { children: ReactNode; label?: string }) {
   return (
-    <div className="w-full overflow-x-auto">
-      <table className="w-full border-collapse text-sm">{children}</table>
+    <div className="pb-table-frame" role="region" aria-label={label} tabIndex={0}>
+      <table className="pb-data-table">{children}</table>
     </div>
   );
 }
@@ -312,8 +308,9 @@ export function Th({
 }: ThHTMLAttributes<HTMLTableCellElement>) {
   return (
     <th
+      scope="col"
       className={cx(
-        'text-left text-[10.5px] font-semibold tracking-[0.06em] uppercase text-text-3 px-3 py-2.5 border-b border-border whitespace-nowrap',
+        'text-left text-[12px] font-medium tracking-[-0.02em] text-text-3 bg-surface-2 px-4 py-3 border-b border-border whitespace-nowrap',
         className,
       )}
       {...rest}
@@ -331,7 +328,7 @@ export function Td({
   className?: string;
 }) {
   return (
-    <td className={cx('px-3 py-3 border-b border-border align-middle', className)}>
+    <td className={cx('px-4 py-3.5 border-b border-border align-middle', className)}>
       {children}
     </td>
   );
@@ -361,7 +358,7 @@ export function TableRow({
 /* Misc                                                                        */
 /* -------------------------------------------------------------------------- */
 
-/** Circular initials avatar with the template's warm gradient. */
+/** Honest initials fallback; user photographs remain dynamic, never stock faces. */
 export function Avatar({
   name,
   size = 34,
@@ -374,12 +371,11 @@ export function Avatar({
     ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || '?';
   return (
     <span
-      className="rounded-full flex-none flex items-center justify-center text-white font-semibold"
+      className={styles.avatar}
       style={{
         width: size,
         height: size,
         fontSize: size * 0.38,
-        background: 'linear-gradient(135deg,#ffb27a,#ff7ac2)',
       }}
     >
       {initials}
@@ -418,9 +414,9 @@ export function EmptyState({
           {icon}
         </span>
       )}
-      <p className="font-semibold text-[15px]">{title}</p>
+      <p className="font-medium text-base">{title}</p>
       {description && (
-        <p className="text-[13px] text-text-3 mt-1 max-w-sm">{description}</p>
+        <p className="text-sm text-text-3 mt-1 max-w-sm">{description}</p>
       )}
       {action && <div className="mt-4">{action}</div>}
     </div>

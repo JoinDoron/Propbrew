@@ -37,5 +37,20 @@ jobs:
       - name: Tenant isolation (release gate)
         run: npx vitest run tests/data/isolation.test.ts tests/authz
 
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Install browser for E2E
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser E2E and accessibility smoke
+        run: npm run test:e2e
+
       - name: Build
         run: npx next build
+
+      - name: Migration presence
+        run: test -s db/migrations/001_production_foundation.sql && test -s db/migrations/002_ng_pilot.sql && test -s db/migrations/003_domain_rows.sql && test -s db/migrations/004_operations_ai_comms.sql
+
+      - name: Production env contract
+        run: npm run check:production-env

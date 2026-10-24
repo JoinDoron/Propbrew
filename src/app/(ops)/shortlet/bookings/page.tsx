@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { can, type Role } from '@/lib/authz';
 import { repos } from '@/server/data';
@@ -11,7 +12,7 @@ const ACTION_LABEL: Record<string, string> = { CONFIRM: 'Confirm', CHECK_IN: 'Ch
  *  (confirm → check-in → check-out → close via inspection), record off-platform
  *  payments, and generate the personalised guest link + a professional receipt. */
 export default async function ShortletBookingsPage() {
-  const { actor } = await requireCapability('bookings_amenities');
+  const { actor } = await requireCapability('bookings_amenities', 'read', 'shortlet');
   const roles = actor.roles as Role[];
   const canTransition = can(actor, 'bookings_amenities', 'transition').allowed;
   const apts = repos.shortletApartments.list(actor).items;
@@ -44,8 +45,9 @@ export default async function ShortletBookingsPage() {
   const aptOptions: AptOption[] = apts.map((a) => ({ id: a.id, name: a.name, property: propById.get(a.propertyId)?.name ?? '', rateMinor: a.nightlyRate.minor }));
 
   return (
-    <div className="max-w-[900px] mx-auto">
-      <BookingsWorkspace bookings={rows} apartments={aptOptions} />
+    <div className="pb-page">
+      <PageHeader title="Bookings" subtitle="Manage enquiries, stays, payments and guest receipts." />
+      <BookingsWorkspace canCreate={can(actor, 'bookings_amenities', 'create').allowed} canUpdate={can(actor, 'bookings_amenities', 'update').allowed} bookings={rows} apartments={aptOptions} />
     </div>
   );
 }

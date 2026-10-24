@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ArrowRight, Banknote, Boxes, CalendarClock, ClipboardCheck, Radar, ShieldAlert, ShieldX, Sparkles, Wrench, Zap } from 'lucide-react';
 import { KpiCard, StatusPill } from '@/components/ui';
+import { PageHeader } from '@/components/ui/page-header';
 import { AskData } from '@/components/reports/ask-data';
 import { toneVar, humanizeStatus, statusTone, type Tone } from '@/lib/status-tones';
 import { auditReadiness, complianceState, daysUntil } from '@/domain/inspections';
@@ -52,31 +53,27 @@ export function DashboardWorkspace(data: DashData) {
   const shown = alerts.slice(0, 9);
 
   return (
-    <div className="flex flex-col gap-3.5">
+    <div className="pb-section">
       {/* Header + estate filter */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <div>
-          <h1 className="text-[19px] font-bold tracking-[-0.02em] leading-tight">Command center</h1>
-          <p className="text-[12.5px] text-text-3">Your operation at a glance · {estate === 'all' ? data.scopeLabel : data.estates.find((e) => e.id === estate)?.name}</p>
-        </div>
-        {data.estates.length > 1 && (
+      <PageHeader title="Command center" subtitle={`Your operation at a glance · ${estate === 'all' ? data.scopeLabel : data.estates.find((e) => e.id === estate)?.name}`}
+        actions={data.estates.length > 1 ? (
           <div className="ml-auto inline-flex rounded-lg border border-border-2 bg-surface p-0.5 flex-wrap">
             <FilterBtn active={estate === 'all'} onClick={() => setEstate('all')} label="All estates" />
             {data.estates.map((e) => <FilterBtn key={e.id} active={estate === e.id} onClick={() => setEstate(e.id)} label={e.name.replace(/ (Estate|Court)$/, '')} />)}
           </div>
-        )}
-      </div>
+        ) : undefined}
+      />
 
       {/* Health + KPIs */}
       <div className="grid grid-cols-1 min-[900px]:grid-cols-[300px_1fr] gap-3.5">
         <div className="bg-surface border border-border rounded-2xl shadow-card p-4 flex items-center gap-4">
           <HealthDial score={health} />
           <div className="min-w-0">
-            <div className="text-[11px] text-text-3 uppercase tracking-wide">Estate health</div>
-            <div className="text-[13px] font-semibold mt-0.5">{healthLabel(health)}</div>
+            <div className="text-[12px] text-text-3 uppercase tracking-wide">Estate health</div>
+            <div className="text-sm font-medium mt-0.5">{healthLabel(health)}</div>
             <div className="flex flex-col gap-0.5 mt-1.5">
               {sub.map((s) => (
-                <div key={s.label} className="flex items-center gap-1.5 text-[11px]">
+                <div key={s.label} className="flex items-center gap-1.5 text-[12px]">
                   <span className="text-text-3 w-20">{s.label}</span>
                   <span className="flex-1 h-1.5 rounded-full bg-surface-2 overflow-hidden"><span className="block h-full rounded-full" style={{ width: `${s.score}%`, background: toneVar(s.score >= 80 ? 'success' : s.score >= 55 ? 'warn' : 'danger') }} /></span>
                   <span className="font-mono text-text-2 w-7 text-right">{s.score}</span>
@@ -99,8 +96,8 @@ export function DashboardWorkspace(data: DashData) {
         <div className="bg-surface border border-border rounded-2xl shadow-card">
           <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border">
             <Radar size={15} className="text-primary" />
-            <span className="text-[13px] font-semibold">Needs your attention</span>
-            <span className="text-[11px] text-text-3 ml-auto">{alerts.length} item{alerts.length === 1 ? '' : 's'} · ranked</span>
+            <span className="text-sm font-medium">Needs your attention</span>
+            <span className="text-[12px] text-text-3 ml-auto">{alerts.length} item{alerts.length === 1 ? '' : 's'} · ranked</span>
           </div>
           {shown.length === 0 ? (
             <div className="p-8 text-center text-[13px] text-text-3">✓ Nothing urgent — your operation is on track.</div>
@@ -110,19 +107,19 @@ export function DashboardWorkspace(data: DashData) {
                 <span className="w-8 h-8 rounded-lg flex items-center justify-center flex-none" style={{ background: `color-mix(in srgb, ${toneVar(SEV_TONE[a.severity])} 14%, transparent)`, color: toneVar(SEV_TONE[a.severity]) }}>{a.icon}</span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-[13px] font-medium truncate">{a.title}</span>
+                    <span className="text-sm font-medium truncate">{a.title}</span>
                     <StatusPill status={a.severity} tone={SEV_TONE[a.severity]} />
                   </div>
-                  <div className="text-[11.5px] text-text-3 truncate">{a.category} · {a.detail}</div>
+                  <div className="text-[12px] text-text-3 truncate">{a.category} · {a.detail}</div>
                 </div>
                 <ArrowRight size={15} className="text-text-3 group-hover:text-primary flex-none" />
               </Link>
             ))
           )}
-          {alerts.length > shown.length && <div className="px-4 py-2 text-[11.5px] text-text-3">+{alerts.length - shown.length} more</div>}
+          {alerts.length > shown.length && <div className="px-4 py-2 text-[12px] text-text-3">+{alerts.length - shown.length} more</div>}
         </div>
 
-        <div className="flex flex-col gap-3.5">
+        <div className="pb-section">
           <AskData />
           {data.flags.wo && <Distribution title="Work-order pipeline" items={pipeline(wos)} />}
           {data.flags.compliance && obligations.length > 0 && <Distribution title="Compliance status" items={complianceDist(obligations)} />}
@@ -199,13 +196,13 @@ function Distribution({ title, items }: { title: string; items: { label: string;
   const total = items.reduce((a, i) => a + i.value, 0) || 1;
   return (
     <div className="bg-surface border border-border rounded-2xl shadow-card p-4">
-      <div className="flex items-center gap-2 mb-3"><Boxes size={14} className="text-text-3" /><span className="text-[12.5px] font-semibold">{title}</span></div>
+      <div className="flex items-center gap-2 mb-3"><Boxes size={14} className="text-text-3" /><span className="text-sm font-medium">{title}</span></div>
       <div className="h-2.5 rounded-full overflow-hidden flex mb-2.5">
         {items.map((i) => <span key={i.label} title={`${i.label}: ${i.value}`} style={{ width: `${(i.value / total) * 100}%`, background: toneVar(i.tone) }} />)}
       </div>
       <div className="flex flex-wrap gap-x-3 gap-y-1">
         {items.map((i) => (
-          <span key={i.label} className="inline-flex items-center gap-1.5 text-[11.5px]">
+          <span key={i.label} className="inline-flex items-center gap-1.5 text-[12px]">
             <span className="w-2 h-2 rounded-sm" style={{ background: toneVar(i.tone) }} />{i.label}<span className="text-text-3 font-mono">{i.value}</span>
           </span>
         ))}
@@ -217,7 +214,7 @@ function Distribution({ title, items }: { title: string; items: { label: string;
 /* --- bits ------------------------------------------------------------------ */
 
 function FilterBtn({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
-  return <button onClick={onClick} className={`h-7 px-2.5 rounded-md text-[12px] font-medium transition-colors ${active ? 'bg-primary text-white' : 'text-text-2 hover:bg-surface-2'}`}>{label}</button>;
+  return <button onClick={onClick} className={`pb-action ${`h-7 px-2.5 rounded-md text-[12px] font-medium transition-colors ${active ? 'bg-primary text-white' : 'text-text-2 hover:bg-surface-2'}`}`}>{label}</button>;
 }
 
 function HealthDial({ score }: { score: number }) {

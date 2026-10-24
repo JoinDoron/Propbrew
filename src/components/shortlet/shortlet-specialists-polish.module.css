@@ -1,0 +1,81 @@
+.stack { display: flex; min-width: 0; flex-direction: column; gap: 24px; }
+.panel { min-width: 0; }
+.header { padding: 24px; border-bottom: 1px solid var(--border); border-radius: var(--radius-card) var(--radius-card) 0 0; background: var(--surface-2); overflow-wrap: anywhere; }
+.header > div { flex-wrap: wrap; margin-bottom: 0; }
+.body { min-width: 0; padding: 24px; }
+.footer { min-width: 0; padding: 16px 24px; border-top: 1px solid var(--border); color: var(--text-3); font-size: 12px; line-height: 1.7; }
+.toolbar { display: flex; min-width: 0; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+.actions { display: flex; min-width: 0; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 12px; }
+.actions > button { white-space: normal; text-align: left; }
+.identity { display: flex; min-width: 0; align-items: center; gap: 12px; }
+.identity > div { min-width: 0; }
+.icon { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 40px; height: 40px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface-2); color: var(--primary); }
+.title { margin: 0; color: var(--text); font-size: 16px; font-weight: 500; line-height: 1.5; letter-spacing: -.03em; overflow-wrap: anywhere; }
+.text { color: var(--text-2); font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
+.metadata { color: var(--text-3); font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.value { color: var(--text); font-size: 28px; font-weight: 400; line-height: 1.3; letter-spacing: -.03em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.rowTitle { color: var(--text); font-size: 14px; font-weight: 500; line-height: 1.6; overflow-wrap: anywhere; }
+.grid { display: grid; min-width: 0; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 24px; }
+.twoColumns { display: grid; min-width: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.planGrid { display: grid; min-width: 0; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 24px; align-items: stretch; }
+.planCard { display: flex; min-width: 0; flex-direction: column; }
+.planCard > .body { flex: 1; }
+.currentPlan { border-color: var(--primary); }
+.facts { display: grid; min-width: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 24px; margin: 0; }
+.facts > div { min-width: 0; }
+.facts dt { color: var(--text-3); font-size: 12px; line-height: 1.7; }
+.facts dd { margin: 4px 0 0; color: var(--text); font-size: 14px; font-weight: 500; line-height: 1.6; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.scroll { width: 100%; min-width: 0; max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
+.table { width: 100%; min-width: 920px; border-collapse: collapse; text-align: left; }
+.table .numeric { text-align: right; font-variant-numeric: tabular-nums; }
+.table .center { text-align: center; }
+.table td { vertical-align: middle; }
+.table td > p + p { margin-top: 4px; }
+.table th[scope='row'] { color: var(--text); font-size: 14px; font-weight: 500; }
+.rank { color: var(--text-3); font-size: 12px; font-variant-numeric: tabular-nums; }
+.form { display: flex; min-width: 0; flex-direction: column; gap: 24px; }
+.field { display: flex; min-width: 0; flex-direction: column; gap: 8px; color: var(--text); font-size: 13px; font-weight: 500; line-height: 1.5; }
+.field textarea { height: auto; min-height: 128px; resize: vertical; line-height: 1.7; }
+.formGrid { display: grid; min-width: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.roleControl { display: flex; min-width: 0; align-items: end; flex-wrap: wrap; gap: 12px; }
+.roleControl > label { flex: 1; min-width: min(100%, 180px); }
+.notice { padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface-2); color: var(--text-2); font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
+.notice > p + p { margin-top: 8px; }
+.list { padding: 0; margin: 0; list-style: none; }
+.listRow { display: flex; min-width: 0; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 20px; padding: 24px; border-bottom: 1px solid var(--border); }
+.listRow:last-child { border-bottom: 0; }
+.listContent { flex: 1; min-width: min(100%, 180px); }
+.listContent > * + * { margin-top: 12px; }
+.channel { display: flex; min-width: 0; align-items: flex-start; flex-direction: column; gap: 16px; padding: 20px; border: 1px solid var(--border); border-radius: var(--radius-control); }
+.channel > button { margin-top: auto; white-space: normal; text-align: left; }
+.channel > p { flex: 1; }
+.url { display: block; width: 100%; min-width: 0; padding: 12px 16px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface-2); color: var(--text-2); font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; user-select: all; }
+.progress { display: block; appearance: none; width: 100%; height: 8px; overflow: hidden; border: 0; border-radius: 4px; background: var(--surface-3); accent-color: var(--primary); }
+.progress::-webkit-progress-bar { background: var(--surface-3); border-radius: 4px; }
+.progress::-webkit-progress-value { background: var(--primary); border-radius: 4px; }
+.progress::-moz-progress-bar { background: var(--primary); border-radius: 4px; }
+.funnel { display: flex; min-width: 0; flex-direction: column; gap: 24px; }
+.funnelItem { display: flex; min-width: 0; flex-direction: column; gap: 12px; }
+.funnelItem > div { display: flex; min-width: 0; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.funnelItem span { color: var(--text-2); font-size: 14px; line-height: 1.6; }
+.funnelItem strong { font-size: 14px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.checkList { display: flex; min-width: 0; flex-direction: column; gap: 16px; margin: 0; padding: 0; list-style: none; }
+.checkList li { display: flex; align-items: flex-start; gap: 12px; color: var(--text-2); font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
+.checkList svg { flex: none; margin-top: 4px; color: var(--primary); }
+.switch { position: relative; flex: none; width: 44px; height: 44px; min-width: 44px; padding: 0; border: 0; border-radius: 10px; background: transparent; }
+.switchTrack { position: absolute; inset: 12px 4px; display: block; border-radius: 12px; background: var(--surface-3); }
+.switchTrack > span { position: absolute; top: 2px; left: 2px; display: block; width: 16px; height: 16px; border-radius: 50%; background: var(--surface); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.switch[aria-checked='true'] .switchTrack { background: var(--primary); }
+.switch[aria-checked='true'] .switchTrack > span { left: 18px; }
+.preview { white-space: pre-wrap; color: var(--text-2); font-size: 14px; line-height: 1.8; overflow-wrap: anywhere; }
+.timeline { margin: 0; padding: 0; list-style: none; }
+.timelineItem { display: flex; min-width: 0; gap: 16px; padding: 24px; border-bottom: 1px solid var(--border); }
+.timelineItem:last-child { border-bottom: 0; }
+.timelineItem > div { min-width: 0; flex: 1; }
+.timelineItem > div > * + * { margin-top: 16px; }
+.step { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 32px; height: 32px; border: 1px solid var(--border); border-radius: 50%; background: var(--surface-2); color: var(--primary); font-size: 12px; font-weight: 500; }
+.empty { padding: 24px; }
+.scroll:focus-visible, .switch:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+@media (max-width: 1000px) { .twoColumns { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 640px) { .stack, .grid, .planGrid, .twoColumns, .form, .formGrid { gap: 16px; } .header, .body, .listRow, .timelineItem, .empty { padding: 16px; } .footer { padding: 16px; } .formGrid { grid-template-columns: minmax(0, 1fr); } .facts { gap: 16px; } .channel { padding: 16px; } .actions { justify-content: flex-start; } .timelineItem { gap: 12px; } }
+@media (pointer: coarse) { .url { min-height: 44px; } }

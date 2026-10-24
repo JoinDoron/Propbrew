@@ -148,10 +148,11 @@ describe('copilot metering + rate limiting', () => {
     const opus = copilotModel('claude-opus-5');
     expect(estCostMinorNgn(1000, 500, haiku)).toBeGreaterThan(0);
     expect(estCostMinorNgn(1000, 500, opus)).toBeGreaterThan(estCostMinorNgn(1000, 500, haiku));
-    expect(COPILOT_MODELS).toHaveLength(3);
+    expect(COPILOT_MODELS.some((model) => model.id === 'gpt-6.1-sol' && model.gatewayId === 'openai/gpt-6.1-sol')).toBe(true);
+    expect(estCostMinorNgn(1000, 500, copilotModel('gpt-6-luna'))).toBeLessThan(estCostMinorNgn(1000, 500, copilotModel('gpt-6-astra')));
     expect(estimateTokens('four characters!!')).toBeGreaterThan(0);
   });
   it('falls back to the default model for an unknown id', () => {
-    expect(copilotModel('nope').id).toBe('claude-sonnet-5');
+    expect(copilotModel('nope').id).toBe('gpt-6.1-sol');
   });
 });

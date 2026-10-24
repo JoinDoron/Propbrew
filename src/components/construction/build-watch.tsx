@@ -1,8 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { Eye, Camera, Flag, CalendarClock, Building2, ShieldCheck, TrendingUp } from 'lucide-react';
+import { Building2, Camera, Eye, Flag, ShieldCheck } from 'lucide-react';
+import { CardHeader, EmptyState, StatusPill } from '@/components/ui';
+import { PageTabs } from '@/components/ui/page-tabs';
+import { ConstructionSummary, ConstructionPanel, ConstructionFrame } from './construction-ui';
 import { toneVar, type Tone } from '@/lib/status-tones';
+import styles from './construction-insights-polish.module.css';
 
 export type WatchProject = {
   id: string; name: string; location: string; code: string;
@@ -12,133 +16,32 @@ export type WatchProject = {
   levels: { level: number; label: string; progress: number; band: Tone }[];
   milestones: { name: string; dueISO: string; status: string; band: Tone }[];
   updates: { dateISO: string; text: string; photos: number }[];
-  unitsSold?: number; unitsTotal?: number;
-  investorHref?: string;
+  unitsSold?: number; unitsTotal?: number; investorHref?: string;
+};
+const date = (value: string) => {
+  const parsed = new Date(value.slice(0, 10) + 'T00:00:00Z');
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 };
 
 export function BuildWatch({ projects, showCommercials }: { projects: WatchProject[]; showCommercials: boolean }) {
-  return (
-    <div className="flex flex-col gap-3.5">
-      <div className="relative overflow-hidden rounded-2xl p-5 text-white shadow-card" style={{ background: 'linear-gradient(135deg,#0c1408 0%,#182a10 55%,#26401a 100%)' }}>
-        <div className="relative flex items-center gap-2 flex-wrap">
-          <span className="w-12 h-12 rounded-2xl grid place-items-center flex-none" style={{ background: 'rgba(255,255,255,.1)' }}><Eye size={22} /></span>
-          <div className="min-w-0">
-            <div className="text-[11px] text-white/70">BUILD WATCH · CLIENT VIEW</div>
-            <div className="text-[20px] font-bold tracking-[-0.02em] leading-tight mt-0.5">Watch your building go up</div>
-            <div className="text-[12.5px] text-white/75 mt-0.5">Progress, confidence and handover outlook — the same records the site team works from{showCommercials ? '' : ', with commercial detail withheld'}</div>
-          </div>
-        </div>
-      </div>
-
-      {projects.map((p) => (
-        <section key={p.id} className="bg-surface border border-border rounded-2xl shadow-card overflow-hidden">
-          <div className="px-4 py-3.5 border-b border-border flex items-start justify-between gap-3 flex-wrap">
-            <div className="min-w-0">
-              <div className="text-[15px] font-semibold flex items-center gap-1.5 flex-wrap">{p.name} <span className="text-[10.5px] text-text-3 font-mono font-normal">{p.code}</span></div>
-              <div className="text-[11.5px] text-text-3 flex items-center gap-1"><Building2 size={11} /> {p.location}</div>
-              {p.unitsTotal ? <div className="text-[11px] text-text-3 mt-0.5">{p.unitsSold}/{p.unitsTotal} units sold{p.investorHref ? ' · ' : ''}{p.investorHref && <Link href={p.investorHref} className="text-primary">sales portfolio →</Link>}</div> : null}
-            </div>
-            <ConfidenceRing c={p.confidence} />
-          </div>
-
-          {/* Progress */}
-          <div className="px-4 py-3">
-            <div className="flex justify-between text-[11.5px] mb-1"><span className="text-text-3">Construction progress</span><span className="font-mono font-semibold">{p.percentComplete}%</span></div>
-            <div className="h-2.5 rounded-full bg-surface-2 overflow-hidden relative">
-              <div className="h-full rounded-full" style={{ width: `${p.percentComplete}%`, background: toneVar(p.percentComplete >= p.plannedPercent ? 'success' : 'warn') }} />
-              <span className="absolute top-[-3px] bottom-[-3px] w-px bg-text" style={{ left: `${p.plannedPercent}%` }} title="planned to date" />
-            </div>
-            <div className="text-[10.5px] text-text-3 mt-1">Planned {p.plannedPercent}% by today</div>
-          </div>
-
-          {/* Confidence drivers */}
-          <div className="px-4 pb-3 grid grid-cols-2 min-[560px]:grid-cols-4 gap-2.5">
-            {p.confidence.drivers.map((d) => (
-              <div key={d.label} className="rounded-xl bg-surface-2 px-3 py-2">
-                <div className="text-[10px] text-text-3 uppercase tracking-wide">{d.label}</div>
-                <div className="text-[12.5px] font-semibold mt-0.5" style={{ color: toneVar(d.tone) }}>{d.value}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Handover */}
-          <div className="px-4 py-3 border-t border-border flex items-center gap-2 flex-wrap text-[12px]">
-            <CalendarClock size={13} className="text-text-3" />
-            <span className="text-text-3">Handover</span>
-            <span className="font-mono font-semibold">{p.handoverISO}</span>
-            {p.slipDays > 0
-              ? <span className="text-[11px] px-2 h-6 inline-flex items-center rounded-full font-medium" style={{ background: `color-mix(in srgb, ${toneVar('warn')} 13%, transparent)`, color: toneVar('warn') }}>tracking {p.slipDays} days late — recovery under review</span>
-              : <span className="text-[11px] px-2 h-6 inline-flex items-center rounded-full font-medium" style={{ background: `color-mix(in srgb, ${toneVar('success')} 13%, transparent)`, color: toneVar('success') }}>on programme</span>}
-          </div>
-
-          {/* Floors */}
-          {p.levels.length > 0 && (
-            <div className="px-4 py-3 border-t border-border">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-text-3 mb-2">Floor by floor</div>
-              <div className="flex flex-col-reverse gap-1">
-                {p.levels.map((l) => (
-                  <div key={l.level} className="flex items-center gap-2">
-                    <span className="text-[10px] font-mono text-text-3 w-6 flex-none">L{l.level}</span>
-                    <div className="flex-1 h-5 rounded-md bg-surface-2 overflow-hidden relative">
-                      <div className="h-full rounded-md" style={{ width: `${l.progress}%`, background: `color-mix(in srgb, ${toneVar(l.band)} 55%, transparent)` }} />
-                      <span className="absolute inset-0 flex items-center px-2 text-[10.5px]">{l.label}</span>
-                    </div>
-                    <span className="text-[10.5px] font-mono text-text-3 w-9 text-right flex-none">{l.progress}%</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Milestones */}
-          {p.milestones.length > 0 && (
-            <div className="px-4 py-3 border-t border-border flex flex-wrap gap-1.5">
-              {p.milestones.map((m) => (
-                <span key={m.name} className="text-[10.5px] px-2 h-6 inline-flex items-center gap-1 rounded-full" style={{ background: `color-mix(in srgb, ${toneVar(m.band)} 12%, transparent)`, color: toneVar(m.band) }}><Flag size={9} /> {m.name} · {m.dueISO}</span>
-              ))}
-            </div>
-          )}
-
-          {/* Site updates */}
-          {p.updates.length > 0 && (
-            <div className="px-4 py-3 border-t border-border">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-text-3 mb-2">From site</div>
-              <div className="flex flex-col gap-2">
-                {p.updates.map((u) => (
-                  <div key={u.dateISO} className="flex items-start gap-2.5">
-                    <span className="text-[10.5px] font-mono text-text-3 flex-none w-16 mt-0.5">{u.dateISO.slice(5)}</span>
-                    <div className="min-w-0 flex-1 text-[12px] text-text-2">{u.text}</div>
-                    {u.photos > 0 && <span className="text-[10.5px] text-text-3 inline-flex items-center gap-1 flex-none"><Camera size={10} /> {u.photos}</span>}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </section>
-      ))}
-
-      <div className="bg-surface border border-border rounded-2xl shadow-card p-4 flex items-start gap-2.5">
-        <ShieldCheck size={16} className="mt-0.5 flex-none" style={{ color: toneVar('success') }} />
-        <div className="text-[11.5px] text-text-3">
-          Every figure here is computed from approved site records and the project cost ledger — the same source the delivery team uses. Confidence blends schedule, cost, reporting discipline and safety; it is an estimate of delivery risk, not a guarantee{showCommercials ? '' : '. Vendor pricing, bid detail and labour rates are not shown at your access level'}.
-        </div>
-      </div>
-    </div>
-  );
+  return <ConstructionFrame>
+    <ConstructionSummary><CardHeader title="Build Watch" subtitle="Client view · recorded progress and a modelled handover outlook" action={<Eye size={20} className="text-primary" />} /><p className={styles.text}>Follow your building through the same project records the site team uses{showCommercials ? '.' : ', with vendor pricing, bid detail and labour rates withheld.'} Progress is recorded, while delivery scores and finish dates are deterministic estimates rather than independent verification.</p></ConstructionSummary>
+    <PageTabs label="Build Watch sections" items={[
+      { id: 'progress', label: 'Project progress', content: <div className={styles.stack}>{projects.length ? projects.map((project) => <ConstructionPanel key={project.id}><div className={styles.header}><CardHeader title={project.name} subtitle={project.code + ' · ' + project.location} action={<ConfidenceRing confidence={project.confidence} />} /></div><div className={styles.body}><div className={styles.stack}>
+        <section className={styles.stack} aria-label={project.name + ' progress'}><div className={styles.toolbar}><h3 className={styles.title}>Construction progress</h3><StatusPill status={project.percentComplete + '% recorded'} tone={project.percentComplete >= project.plannedPercent ? 'success' : 'warn'} /></div><div className={styles.track} role="img" aria-label={project.name + ': recorded progress ' + project.percentComplete + ' percent, planned ' + project.plannedPercent + ' percent at the snapshot'}><span style={{ width: Math.max(0, Math.min(100, project.percentComplete)) + '%', background: toneVar(project.percentComplete >= project.plannedPercent ? 'success' : 'warn') }} /><span className={styles.plannedMarker} style={{ left: Math.max(0, Math.min(100, project.plannedPercent)) + '%' }} /></div><p className={styles.metadata}>The dark marker is the planned {project.plannedPercent}% at the recorded snapshot, not a live programme update.</p></section>
+        <dl className={styles.facts}>{project.confidence.drivers.map((driver) => <div key={driver.label}><dt>{driver.label}</dt><dd style={{ color: toneVar(driver.tone) }}>{driver.value}</dd></div>)}</dl>
+        <section className={styles.notice} aria-label={project.name + ' handover outlook'}><div className={styles.toolbar}><h3 className={styles.title}>Handover outlook</h3><StatusPill status={project.slipDays > 0 ? project.slipDays + ' days later in the model' : 'No delay in the current model'} tone={project.slipDays > 0 ? 'warn' : 'info'} /></div><dl className={styles.facts + ' mt-4'}><div><dt>Planned handover</dt><dd>{date(project.handoverISO)}</dd></div><div><dt>Modelled finish</dt><dd>{date(project.forecastFinishISO)}</dd></div></dl><p className={styles.metadata + ' mt-4'}>Date-only programme records · not a guarantee of handover or confirmation that recovery work has been approved.</p></section>
+        <section className={styles.stack} aria-label={project.name + ' floor progress'}><h3 className={styles.title}>Floor by floor</h3>{project.levels.length ? <div className={styles.floorStack}>{project.levels.map((level) => <div key={level.level} className={styles.floor}><div><span className={styles.rowTitle}>L{level.level} · {level.label}</span><span className={styles.text}>{level.progress}%</span></div><div className={styles.track} role="img" aria-label={'Level ' + level.level + ', ' + level.label + ': ' + level.progress + ' percent recorded progress'}><span style={{ width: Math.max(0, Math.min(100, level.progress)) + '%', background: toneVar(level.band) }} /></div></div>)}</div> : <p className={styles.text}>No floor progress records were supplied for this project.</p>}</section>
+        <section className={styles.stack} aria-label={project.name + ' milestones'}><h3 className={styles.title}>Milestones</h3>{project.milestones.length ? <div className={styles.grid}>{project.milestones.map((milestone, index) => <div key={milestone.name + '-' + index} className={styles.notice}><div className={styles.toolbar}><h4 className={styles.rowTitle}>{milestone.name}</h4><StatusPill status={milestone.status.replaceAll('_', ' ')} tone={milestone.band} /></div><p className={styles.text + ' mt-3'}>Due {date(milestone.dueISO)}</p></div>)}</div> : <p className={styles.text}>No milestones were supplied for this project.</p>}</section>
+        <section className={styles.stack} aria-label={project.name + ' approved site updates'}><h3 className={styles.title}>From site</h3>{project.updates.length ? <ul className={styles.list}>{project.updates.map((update, index) => <li key={update.dateISO + '-' + index} className={styles.notice + (index ? ' mt-4' : '')}><div className={styles.toolbar}><time dateTime={update.dateISO} className={styles.rowTitle}>{date(update.dateISO)}</time><span className={styles.metadata}>{update.photos} recorded photo(s)</span></div><p className={styles.text + ' mt-3'}>{update.text || 'No update narrative was supplied.'}</p><p className={styles.metadata + ' mt-3'}>Approved report narrative. A photo count does not provide independently verified image evidence in this view.</p></li>)}</ul> : <p className={styles.text}>No approved site update was supplied for this project. Missing reports are not evidence that work progressed.</p>}</section>
+        {project.unitsTotal !== undefined ? <section className={styles.notice} aria-label={project.name + ' sales context'}><div className={styles.identity}><Building2 size={18} className="text-primary flex-none" aria-hidden="true" /><div><h3 className={styles.rowTitle}>Recorded sales context</h3><p className={styles.text}>{project.unitsSold ?? 'Not recorded'} / {project.unitsTotal} units recorded sold.</p>{project.investorHref ? <Link href={project.investorHref} className={styles.link}>Open sales portfolio <Flag size={16} aria-hidden="true" /></Link> : null}</div></div></section> : null}
+      </div></div><p className={styles.footer}>Showing all {project.updates.length} supplied approved update(s). Delivery confidence is a rules-based index, not a calibrated probability, safety certificate or independent construction verification.</p></ConstructionPanel>) : <ConstructionPanel><EmptyState icon={<Camera size={26} />} title="No project progress records" description="Recorded project progress, programme dates and approved reports will appear for projects in your current scope." /></ConstructionPanel>}</div> },
+      { id: 'verification', label: 'Verification policy', content: <ConstructionPanel><div className={styles.header}><CardHeader title="How this client view is verified" subtitle="Recorded sources, explicit model assumptions and the same operating snapshot" action={<ShieldCheck size={20} className="text-primary" />} /></div><div className={styles.body}><div className={styles.stack}><p className={styles.text}>Project progress and floor layers come from recorded project state. Site updates are drawn only from approved reports. The delivery index blends schedule, cost, reporting coverage and safety using fixed rules; it is not independent construction verification, a calibrated probability or a handover guarantee.</p><dl className={styles.facts}><div><dt>Progress source</dt><dd>Recorded project and floor state</dd></div><div><dt>Site narrative source</dt><dd>Approved reports supplied by the workspace</dd></div><div><dt>Forecast basis</dt><dd>Deterministic programme and earned-value rules</dd></div><div><dt>Commercial visibility</dt><dd>{showCommercials ? 'Controlled by the signed-in actor’s upstream access' : 'Vendor pricing, bid detail and labour rates withheld'}</dd></div></dl><p className={styles.notice}>Confirm actual site conditions, source documents and the contract programme with the responsible project team before making a financial, safety or handover decision.</p></div></div></ConstructionPanel> },
+    ]} />
+  </ConstructionFrame>;
 }
 
-function ConfidenceRing({ c }: { c: WatchProject['confidence'] }) {
-  const color = toneVar(c.band);
-  return (
-    <div className="flex items-center gap-2.5 flex-none">
-      <div className="relative" style={{ width: 60, height: 60 }}>
-        <svg width={60} height={60} viewBox="0 0 36 36" className="-rotate-90"><circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--surface-2)" strokeWidth="3.5" /><circle cx="18" cy="18" r="15.5" fill="none" stroke={color} strokeWidth="3.5" strokeLinecap="round" strokeDasharray={`${(c.score / 100) * 97.4} 97.4`} /></svg>
-        <div className="absolute inset-0 flex items-center justify-center"><span className="text-[14px] font-bold" style={{ color }}>{c.score}</span></div>
-      </div>
-      <div>
-        <div className="text-[12px] font-semibold" style={{ color }}>{c.label}</div>
-        <div className="text-[10px] text-text-3 inline-flex items-center gap-1"><TrendingUp size={9} /> build confidence</div>
-      </div>
-    </div>
-  );
+function ConfidenceRing({ confidence }: { confidence: WatchProject['confidence'] }) {
+  const color = toneVar(confidence.band);
+  return <div className={styles.confidence}><div className={styles.confidenceRing}><svg width={60} height={60} viewBox="0 0 36 36" className="-rotate-90" role="img" aria-label={'Rules-based delivery index ' + confidence.score + ' out of 100, not a probability'}><circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--border)" strokeWidth="3.5" /><circle cx="18" cy="18" r="15.5" fill="none" stroke={color} strokeWidth="3.5" strokeLinecap="round" strokeDasharray={String(Math.max(0, Math.min(100, confidence.score)) * .974) + ' 97.4'} /></svg><span className={styles.confidenceScore} aria-hidden="true" style={{ color }}>{confidence.score}</span></div><div><StatusPill status={confidence.label} tone={confidence.band} /><p className={styles.metadata + ' mt-2'}>Rules-based delivery index</p></div></div>;
 }

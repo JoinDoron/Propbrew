@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { seed } from '@/server/data';
 import { getAllHistory } from '@/server/data/store';
@@ -59,7 +60,8 @@ export default async function AdminOverviewPage() {
   ];
 
   return (
-    <div className="max-w-[1200px] mx-auto">
+    <div className="pb-page">
+      <PageHeader title="Platform overview" subtitle="Tenant health, platform activity and system configuration." />
       <PlatformOverview
         totals={{ tenants: tenants.length, units: tenants.reduce((a, t) => a + t.units, 0), users: tenants.reduce((a, t) => a + t.users, 0), mrrMinor: tenants.reduce((a, t) => a + t.mrrMinor, 0), incidents, aiCostMinor: ai.costMinor }}
         tenants={tenants}

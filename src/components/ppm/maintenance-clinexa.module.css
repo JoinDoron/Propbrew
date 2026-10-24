@@ -1,0 +1,90 @@
+.stack { display: flex; min-width: 0; flex-direction: column; gap: 24px; }
+.sectionCard > div:first-child { margin-bottom: 0; }
+.body { padding: 24px; }
+.header { padding: 24px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+.header > div { margin-bottom: 0; flex-wrap: wrap; }
+.toolbar, .inline { display: flex; min-width: 0; align-items: center; flex-wrap: wrap; gap: 12px; }
+.toolbar { justify-content: space-between; }
+.heading { color: var(--text); font-size: 16px; font-weight: 500; line-height: 1.5; letter-spacing: -.03em; overflow-wrap: anywhere; }
+.text { color: var(--text-2); font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.metadata { color: var(--text-3); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.gapList { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 16px; }
+.gapItem { display: flex; min-width: 0; flex-direction: column; align-items: flex-start; gap: 12px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; }
+.overdueRail { display: flex; gap: 16px; max-width: 100%; overflow-x: auto; padding: 24px; }
+.overdueCard { display: flex; flex: 0 0 280px; min-width: 0; flex-direction: column; gap: 16px; }
+.link { display: inline-flex; min-height: 40px; align-items: center; gap: 8px; color: var(--primary); font-size: 14px; font-weight: 500; line-height: 1.5; overflow-wrap: anywhere; }
+.link:hover { text-decoration: underline; }
+.calendarToolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 24px; border-bottom: 1px solid var(--border); }
+.month { min-width: 160px; text-align: center; }
+.calendarWeekdays, .calendarWeek { display: grid; grid-template-columns: 44px repeat(7, minmax(0, 1fr)); border-bottom: 1px solid var(--border); }
+.calendarWeekdays { background: var(--surface-2); }
+.calendarWeekdays > div { display: flex; min-height: 40px; align-items: center; padding: 8px; color: var(--text-3); font-size: 12px; font-weight: 500; }
+.calendarWeekdays > div:first-child { justify-content: center; padding: 4px; }
+.calendarWeek { min-height: 128px; }
+.calendarWeek:last-child { border-bottom: 0; }
+.calendarLoad { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 4px; border-right: 1px solid var(--border); }
+.calendarDay { min-width: 0; padding: 8px; border-right: 1px solid var(--border); }
+.calendarDay:last-child { border-right: 0; }
+.outsideMonth { background: var(--surface-2); }
+.today { box-shadow: inset 0 0 0 2px var(--primary); }
+.dayLabel { display: flex; min-height: 24px; align-items: center; flex-wrap: wrap; gap: 4px; font-size: 12px; color: var(--text-2); }
+.todayLabel { margin-left: auto; color: var(--primary); font-size: 12px; font-weight: 500; }
+.events { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.dayEvents { display: flex; flex-direction: column; gap: 8px; }
+.dayToggle { width: 100%; height: auto; min-height: 40px; justify-content: flex-start; padding: 8px; white-space: normal; text-align: left; line-height: 1.5; }
+.event { display: block; width: 100%; min-height: 40px; padding: 8px; border: 1px solid transparent; border-radius: 10px; text-align: left; font-size: 14px; font-weight: 500; line-height: 1.5; overflow-wrap: anywhere; cursor: pointer; }
+.event:hover { filter: brightness(.97); }
+.scroll { width: 100%; max-width: 100%; overflow-x: auto; }
+.table { width: 100%; min-width: 760px; border-collapse: collapse; }
+.table th { height: 40px; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--surface-2); color: var(--text-3); font-size: 12px; font-weight: 500; line-height: 1.5; text-align: left; white-space: nowrap; }
+.table td { height: 64px; padding: 18px 16px; border-bottom: 1px solid var(--border); color: var(--text-2); font-size: 14px; line-height: 1.5; vertical-align: middle; }
+.table tbody tr:last-child td { border-bottom: 0; }
+.table tbody tr:hover { background: var(--surface-2); }
+.table .assetButton { justify-content: flex-start; height: auto; padding: 0; text-align: left; white-space: normal; }
+.runtimeGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.runtimeCard { display: flex; min-width: 0; flex-direction: column; gap: 24px; }
+.runtimeCard > div:first-child { margin-bottom: 0; flex-wrap: wrap; }
+.runtimeGauge { display: flex; min-width: 0; align-items: flex-end; flex-wrap: wrap; gap: 24px; }
+.runtimeValue { color: var(--text); font-size: 32px; font-weight: 500; line-height: 1.2; font-variant-numeric: tabular-nums; letter-spacing: -.03em; }
+.runtimeUnit { color: var(--text-3); font-size: 14px; font-weight: 400; }
+.gauge { flex: 1; min-width: 120px; }
+.bar { height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.bar > div { height: 100%; border-radius: inherit; }
+.gauge .metadata { margin-top: 8px; text-align: right; }
+.callout { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); }
+.riskGrid { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 24px; align-items: start; }
+.riskChoice { display: flex; width: 100%; min-width: 0; min-height: 88px; align-items: center; gap: 16px; padding: 24px; border-bottom: 1px solid var(--border); text-align: left; cursor: pointer; }
+.riskChoice:last-child { border-bottom: 0; }
+.riskChoice:hover { background: var(--surface-2); }
+.riskChoice[aria-pressed='true'] { background: var(--primary-weak); }
+.riskChoice > div:nth-child(2) { min-width: 0; flex: 1; }
+.riskChoice .heading { font-size: 14px; }
+.riskSummary { position: sticky; top: 8px; }
+.riskSummary > .inline { align-items: flex-start; }
+.drivers { display: flex; flex-direction: column; gap: 16px; }
+.driverLabel { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.facts { display: grid; min-width: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.facts > div { min-width: 0; }
+.facts dt { color: var(--text-3); font-size: 12px; line-height: 1.6; }
+.facts dd { margin-top: 4px; color: var(--text); font-size: 14px; font-weight: 500; line-height: 1.6; overflow-wrap: anywhere; }
+.facts .danger { color: var(--tone-danger); }
+.checklist { display: flex; min-width: 0; flex-direction: column; gap: 12px; }
+.checklist button { height: auto; min-height: 40px; justify-content: flex-start; white-space: normal; text-align: left; }
+.checklist button > svg { flex: none; }
+.evidence { height: auto; min-height: 40px; justify-content: flex-start; white-space: normal; text-align: left; }
+.evidence > svg { flex: none; }
+.reschedule { display: flex; min-width: 0; align-items: flex-end; flex-wrap: wrap; gap: 12px; }
+.reschedule label { min-width: 160px; flex: 1; }
+.fieldset { display: flex; min-width: 0; flex-direction: column; gap: 24px; padding: 0; border: 0; }
+.review { display: flex; flex-direction: column; gap: 16px; padding-top: 24px; border-top: 1px solid var(--border); }
+.scroll:focus-visible, .overdueRail:focus-visible, .event:focus-visible, .riskChoice:focus-visible, .link:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+@media (max-width: 899px) { .riskGrid { grid-template-columns: minmax(0, 1fr); } .riskSummary { position: static; } }
+@media (max-width: 719px) { .runtimeGrid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 640px) {
+  .stack, .runtimeCard, .fieldset { gap: 16px; }
+  .body, .header, .overdueRail, .calendarToolbar, .riskChoice { padding: 16px; }
+  .runtimeGrid, .riskGrid, .facts { gap: 16px; }
+  .review { padding-top: 16px; }
+  .riskChoice { flex-wrap: wrap; }
+}
+@media (pointer: coarse) { .event, .dayToggle, .link, .checklist button, .evidence { min-height: 44px; } }

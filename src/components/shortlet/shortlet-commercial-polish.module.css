@@ -1,0 +1,89 @@
+.stack { display:flex; min-width:0; flex-direction:column; gap:24px; }
+.card { min-width:0; overflow:hidden; }
+.header { padding:24px; border-bottom:1px solid var(--border); background:var(--surface-2); }
+.header > div { margin-bottom:0; flex-wrap:wrap; }
+.body { padding:24px; min-width:0; }
+.text { color:var(--text-2); font-size:14px; line-height:1.7; overflow-wrap:anywhere; }
+.metadata { color:var(--text-3); font-size:12px; line-height:1.6; overflow-wrap:anywhere; }
+.toolbar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:16px; }
+.toolbar > p { flex:1; min-width:200px; }
+.actions { display:flex; align-items:center; flex-wrap:wrap; gap:12px; }
+.link { display:inline-flex; align-items:center; gap:8px; min-height:40px; font-size:14px; line-height:1.6; color:var(--primary); }
+.link:focus-visible,.scroll:focus-visible { outline:2px solid var(--primary); outline-offset:3px; }
+.metrics { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); min-width:0; gap:24px; }
+.list { list-style:none; margin:0; padding:0; }
+.movement { display:flex; flex-direction:column; gap:8px; padding:16px 0; border-bottom:1px solid var(--border); }
+.movement:first-child { padding-top:0; }
+.movement:last-child { padding-bottom:0; border-bottom:0; }
+.movement strong,.rowTitle { color:var(--text); font-size:14px; line-height:1.6; font-weight:500; overflow-wrap:anywhere; }
+.movement dl { display:flex; flex-wrap:wrap; gap:8px 16px; margin:0; font-size:12px; line-height:1.6; }
+.movement dl > div { display:flex; flex-wrap:wrap; gap:4px; }
+.movement dt { color:var(--text-3); }
+.movement dd { color:var(--text-2); margin:0; overflow-wrap:anywhere; }
+.attention { display:flex; align-items:flex-start; gap:16px; padding:18px 24px; min-height:72px; border-bottom:1px solid var(--border); }
+.attention:last-child { border-bottom:0; }
+.attention > div { min-width:0; flex:1; }
+.attention:hover { background:var(--surface-2); }
+.icon { display:grid; place-items:center; width:36px; height:36px; border-radius:10px; flex:none; }
+.scroll { overflow:auto; min-width:0; }
+.calendar { min-width:0; }
+.calendarHeader { display:grid; background:var(--surface-2); padding:12px 16px; border-bottom:1px solid var(--border); color:var(--text-3); font-size:12px; line-height:1.6; }
+.calendarRow { display:grid; align-items:center; min-height:72px; padding:8px 16px; border-bottom:1px solid var(--border); }
+.calendarRow:last-child { border-bottom:0; }
+.calendarRow > div:first-child { min-width:0; padding-right:12px; overflow-wrap:anywhere; }
+.calendarGap { min-height:40px; margin:4px 2px; display:grid; place-items:center; background:var(--surface-2); color:var(--text-3); border-radius:8px; font-size:12px; }
+.chart { display:flex; align-items:flex-end; min-width:480px; height:216px; gap:16px; padding-bottom:4px; }
+.chartMonth { display:flex; flex:1; min-width:48px; height:100%; flex-direction:column; align-items:center; gap:12px; }
+.chartBars { flex:1; display:flex; width:100%; align-items:flex-end; justify-content:center; gap:6px; border-bottom:1px solid var(--border); }
+.chartBars > span { width:36%; border-radius:4px 4px 0 0; }
+.chartMonth > span { color:var(--text-3); font-size:12px; line-height:1.6; }
+.legend { display:flex; flex-wrap:wrap; gap:16px; margin:16px 0 24px; color:var(--text-3); font-size:12px; line-height:1.6; }
+.legend > span { display:flex; gap:8px; align-items:center; }
+.legend i { width:10px; height:10px; border-radius:2px; }
+.table { width:100%; min-width:680px; border-collapse:collapse; text-align:left; }
+.table th { padding:14px 16px; background:var(--surface-2); color:var(--text-3); font-size:12px; line-height:1.5; font-weight:500; border-bottom:1px solid var(--border); }
+.table td,.table tbody th { padding:18px 16px; font-size:14px; line-height:1.6; border-bottom:1px solid var(--border); color:var(--text-2); vertical-align:top; }
+.table tbody th { background:transparent; color:var(--text); font-weight:500; }
+.table tr:last-child td,.table tr:last-child th { border-bottom:0; }
+.table .numeric { text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.table .note { min-width:220px; overflow-wrap:anywhere; }
+.miniChartList { display:flex; flex-direction:column; gap:24px; list-style:none; margin:0; padding:0; }
+.miniChartList > li { display:flex; flex-direction:column; gap:12px; }
+.row { display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:8px 16px; }
+.bar { height:8px; border-radius:4px; overflow:hidden; background:var(--surface-2); }
+.bar > span { display:block; height:100%; border-radius:4px; }
+.facts { display:flex; flex-wrap:wrap; gap:12px 24px; margin:0; }
+.facts > div { min-width:0; }
+.facts dt { color:var(--text-3); font-size:12px; line-height:1.6; }
+.facts dd { margin:4px 0 0; color:var(--text); font-size:14px; line-height:1.6; font-weight:500; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
+.notice { display:flex; gap:16px; align-items:flex-start; padding:16px; border:1px solid var(--border); border-radius:10px; background:var(--surface-2); color:var(--text-2); font-size:14px; line-height:1.7; }
+.notice > svg { color:var(--primary); flex:none; margin-top:3px; }
+.rule { display:flex; flex-direction:column; gap:16px; padding:20px 0; border-bottom:1px solid var(--border); }
+.rule:first-child { padding-top:0; }
+.rule:last-child { border-bottom:0; padding-bottom:0; }
+.ruleHeading { display:flex; align-items:center; flex-wrap:wrap; gap:12px; }
+.ruleHeading > div { min-width:0; flex:1; }
+.rateSection { padding-top:24px; margin-top:24px; border-top:1px solid var(--border); }
+.rateSection h4 { margin:0 0 8px; font-size:16px; font-weight:500; line-height:1.5; }
+.rateChart { display:flex; align-items:flex-end; gap:3px; height:120px; min-width:480px; margin:16px 0; }
+.rateChart > span { flex:1; border-radius:3px 3px 0 0; }
+.rateDays { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:12px; list-style:none; padding:0; margin:16px 0 0; }
+.rateDays li { display:flex; min-width:0; flex-direction:column; gap:4px; padding:12px; border:1px solid var(--border); border-radius:10px; }
+.rateDays time { color:var(--text-3); font-size:12px; line-height:1.6; }
+.rateDays strong { font-size:14px; line-height:1.6; font-weight:500; }
+.rateDays span { font-size:12px; line-height:1.6; color:var(--text-3); overflow-wrap:anywhere; }
+.disclosure { display:flex; flex-wrap:wrap; align-items:center; gap:12px; min-height:40px; cursor:pointer; color:var(--primary); font-size:14px; line-height:1.6; }
+.form { display:flex; min-width:0; flex-direction:column; gap:24px; margin-top:24px; }
+.form fieldset { border:0; min-width:0; margin:0; padding:0; }
+.formGrid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; }
+.field { display:flex; min-width:0; flex-direction:column; gap:8px; color:var(--text); font-size:14px; line-height:1.6; }
+.field > span { font-weight:500; }
+.field input,.field select { min-height:40px; width:100%; min-width:0; padding:8px 12px; border:1px solid var(--border); border-radius:10px; background:var(--surface); color:var(--text); font-size:14px; }
+.field input:focus-visible,.field select:focus-visible { outline:2px solid var(--primary); outline-offset:2px; }
+.select { min-height:40px; min-width:160px; max-width:100%; padding:8px 32px 8px 12px; border:1px solid var(--border); border-radius:10px; background:var(--surface); font-size:14px; color:var(--text); }
+.error { margin-top:16px; color:var(--tone-danger); font-size:14px; line-height:1.6; }
+@media(max-width:1280px){.metrics{grid-template-columns:repeat(3,minmax(0,1fr));}}
+@media(max-width:960px){.metrics{grid-template-columns:repeat(2,minmax(0,1fr));}}
+@media(max-width:640px){.stack,.metrics,.form,.formGrid{gap:16px;}.header,.body{padding:16px;}.attention{padding:16px;}.formGrid{grid-template-columns:minmax(0,1fr);}.toolbar > p{min-width:0;flex-basis:100%;}.rule{padding:16px 0;}.facts{gap:12px 16px;}}
+@media(max-width:420px){.metrics{grid-template-columns:minmax(0,1fr);}}
+@media(pointer:coarse){.link,.disclosure,.field input,.field select,.select{min-height:44px;}.calendarGap{min-height:44px;}}

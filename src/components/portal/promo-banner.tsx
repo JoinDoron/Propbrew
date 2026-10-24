@@ -5,12 +5,12 @@
 
 import { useEffect, useState } from 'react';
 
-type Promo = { title: string; body: string; cta: string; from: string; to: string };
+type Promo = { title: string; body: string; cta: string };
 
 const PROMOS: Promo[] = [
-  { title: 'Get 5% off your next top-up', body: 'Fund your wallet with a bank transfer this week.', cta: 'Learn more', from: '#2563eb', to: '#7c3aed' },
-  { title: 'Estate generator upgrade', body: 'Reliable power, 24/7. Community update from management.', cta: 'Read update', from: '#0e9f6e', to: '#0891b2' },
-  { title: 'Refer a neighbour', body: 'Earn ₦2,000 wallet credit for every referral who joins.', cta: 'Invite', from: '#e0533d', to: '#db2777' },
+  { title: 'Get 5% off your next top-up', body: 'Fund your wallet with a bank transfer this week.', cta: 'Learn more' },
+  { title: 'Estate generator upgrade', body: 'Reliable power, 24/7. Community update from management.', cta: 'Read update' },
+  { title: 'Refer a neighbour', body: 'Earn ₦2,000 wallet credit for every referral who joins.', cta: 'Invite' },
 ];
 
 export function PromoBanner() {
@@ -23,12 +23,12 @@ export function PromoBanner() {
 
   return (
     <button
-      className="w-full text-left rounded-2xl p-4 text-white relative overflow-hidden transition-[background] duration-500"
-      style={{ backgroundImage: `linear-gradient(120deg, ${p.from}, ${p.to})` }}
+      className="min-h-11 w-full text-left rounded-xl p-4 relative overflow-hidden shadow-card"
+      style={{ background: 'var(--brand-solid)', color: 'var(--on-brand-solid)' }}
     >
-      <span className="absolute top-2.5 right-2.5 text-[9.5px] font-bold uppercase tracking-wide bg-black/25 rounded px-1.5 py-0.5">Ad</span>
-      <div className="text-[14px] font-semibold pr-8">{p.title}</div>
-      <div className="text-[12.5px] text-white/85 mt-0.5">{p.body}</div>
+      <span className="absolute top-2.5 right-2.5 text-[12px] font-bold uppercase tracking-wide bg-black/25 rounded px-1.5 py-0.5">Ad</span>
+      <div className="text-[14px] font-medium pr-8">{p.title}</div>
+      <div className="text-[14px] leading-relaxed mt-1">{p.body}</div>
       <div className="inline-flex items-center gap-1 text-[12px] font-semibold mt-2 underline underline-offset-2">{p.cta} →</div>
       <div className="flex gap-1 mt-3">
         {PROMOS.map((_, n) => (

@@ -1,5 +1,5 @@
 import { requireCapability } from '@/server/guard';
-import { effectiveLevel } from '@/lib/authz';
+import { can } from '@/lib/authz';
 import { constructionWorld } from '@/server/reads/construction';
 import { NOW, NOW_MS } from '@/domain/ppm';
 import { attendanceSummary, labourCostMinor, certBand } from '@/domain/construction';
@@ -9,8 +9,8 @@ import { WorkforceWorkspace, type WorkerRow } from '@/components/construction/wo
  *  labour cost for the day, and a certification-expiry watch that surfaces a
  *  lapsing ticket before it blocks certified work. */
 export default async function ConstructionWorkforcePage() {
-  const { actor } = await requireCapability('reports_analytics');
-  const canMutate = ['F', 'M'].includes(effectiveLevel(actor, 'reports_analytics'));
+  const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
+  const canMutate = can(actor, 'reports_analytics', 'update').allowed;
   const world = constructionWorld(actor);
   const today = NOW.slice(0, 10);
 
@@ -42,7 +42,7 @@ export default async function ConstructionWorkforcePage() {
   }
 
   return (
-    <div className="max-w-[980px] mx-auto">
+    <div className="pb-page">
       <WorkforceWorkspace
         workers={workers}
         byTrade={[...trades.entries()].map(([trade, v]) => ({ trade, ...v })).sort((a, b) => b.total - a.total)}

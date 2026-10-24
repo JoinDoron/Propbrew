@@ -8,7 +8,7 @@ import { SafetyWorkspace, type PermitRow, type EventRow, type TalkRow } from '@/
  *  permit-to-work register with lapse detection and same-place clash detection,
  *  the event log (near misses count as good reporting) and toolbox talks. */
 export default async function ConstructionSafetyPage() {
-  const { actor } = await requireCapability('reports_analytics');
+  const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const world = constructionWorld(actor);
 
   const counts = new Map<string, number>();
@@ -39,7 +39,7 @@ export default async function ConstructionSafetyPage() {
   const talkRows: TalkRow[] = [...talks].sort((a, b) => Date.parse(b.atISO) - Date.parse(a.atISO)).map((t) => ({ id: t.id, topic: t.topic, atISO: t.atISO, attendees: t.attendees, deliveredBy: t.deliveredBy }));
 
   return (
-    <div className="max-w-[1000px] mx-auto">
+    <div className="pb-page">
       <SafetyWorkspace
         permits={permitRows}
         events={eventRows}

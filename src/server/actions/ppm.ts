@@ -19,7 +19,7 @@ import { nowISO } from '@/server/clock';
 
 export type PpmResult = { ok: true; ref?: string } | { ok: false; error: string };
 
-const REVALIDATE = ['/ppm', '/work-orders', '/dashboard', '/assets'];
+const REVALIDATE = ['/ppm', '/work-orders', '/estate/work-orders', '/people', '/facility', '/dashboard', '/assets'];
 let woCounter = 0;
 
 function gate(actor: Actor): PpmResult | null {
@@ -88,6 +88,7 @@ export async function generatePpmWorkOrder(occurrenceId: string): Promise<PpmRes
   live.workOrderRef = ref;
   recordHistory('ppm', String(occ.planId), hist('GENERATE', 'scheduled', 'wo_generated', actor, `Work order ${ref} generated for ${occ.assetName}`));
   revalidate();
+  revalidatePath('/estate');
   return { ok: true, ref };
 }
 

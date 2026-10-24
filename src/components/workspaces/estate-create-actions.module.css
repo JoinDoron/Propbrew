@@ -1,0 +1,36 @@
+.actions { display: flex; gap: 8px; align-items: center; }
+.primary, .secondary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 9px 14px; border-radius: var(--radius-control, 10px); font-size: 13px; font-weight: 500; line-height: 1.5; cursor: pointer; box-shadow: var(--shadow); }
+.primary { background: var(--primary); color: var(--on-primary); border: 1px solid var(--primary); }
+.secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+.primary:hover { filter: brightness(.94); }
+.secondary:hover { background: var(--surface-2); border-color: var(--primary); }
+.primary:disabled, .secondary:disabled, .close:disabled { cursor: wait; opacity: .6; }
+.actions :is(button, a):focus-visible, .dialog :is(button, input, select, textarea):focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.dialog { padding: 0; width: min(590px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); margin: auto; border: 1px solid var(--border); border-radius: var(--radius-card, 12px); background: var(--surface); color: var(--text); box-shadow: var(--shadow-lg); }
+.dialog::backdrop { background: rgb(2 8 23 / .5); backdrop-filter: blur(3px); }
+.dialogHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--border); padding: 24px; background: var(--surface-2); }
+.eyebrow { color: var(--primary); font-size: 12px; font-weight: 500; line-height: 1.5; margin-bottom: 5px; }
+.dialog h2 { margin: 0; font-size: 20px; font-weight: 500; letter-spacing: -.72px; line-height: 1.4; }
+.close { display: grid; place-items: center; width: 40px; height: 40px; border: 1px solid var(--border); border-radius: var(--radius-control, 10px); color: var(--text-2); cursor: pointer; background: var(--surface); flex: none; }
+.close:hover { color: var(--primary); }
+.body { padding: 24px; }
+.description { color: var(--text-2); font-size: 13px; line-height: 1.8; }
+.demo { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; color: var(--text-2); background: var(--surface-2); font-size: 12px; line-height: 1.8; }
+.fields { border: 0; padding: 0; margin: 24px 0 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.fields label { display: flex; flex-direction: column; gap: 7px; min-width: 0; color: var(--text); font-size: 13px; font-weight: 500; }
+.fields input, .fields textarea, .fields select { width: 100%; padding: 10px 12px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-control, 10px); font-size: 14px; font-weight: 400; min-height: 40px; }
+.fields textarea { resize: vertical; }
+.fields input::placeholder, .fields textarea::placeholder { color: var(--text-2); }
+.full { grid-column: 1 / -1; }
+.help { color: var(--text-2); font-size: 12px; line-height: 1.8; }
+.footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border); }
+.error { margin-top: 16px; padding: 12px; border: 1px solid var(--tone-danger); border-radius: 10px; color: var(--text); background: color-mix(in srgb, var(--tone-danger) 5%, var(--surface)); font-size: 12px; line-height: 1.8; }
+.notice { color: var(--text-2); font-size: 13px; line-height: 1.8; margin-bottom: 20px; }
+.success { padding: 32px 24px; text-align: center; }
+.success > svg { color: var(--tone-success); margin: 0 auto 16px; }
+.success h3 { font-size: 20px; font-weight: 500; letter-spacing: -.6px; margin-bottom: 10px; }
+.success p { color: var(--text-2); font-size: 13px; line-height: 1.8; margin: 8px 0; }
+.success button { margin-top: 20px; }
+@media (max-width: 520px) { .dialogHeader, .body { padding: 18px; } .fields { grid-template-columns: 1fr; } .actions { flex-wrap: wrap; } .primary, .secondary { padding-left: 12px; padding-right: 12px; } }
+
+@media (pointer: coarse) { .primary, .secondary, .fields input, .fields textarea, .fields select { min-height: 44px; } .close { width: 44px; height: 44px; } }

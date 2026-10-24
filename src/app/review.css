@@ -1,0 +1,6 @@
+body[data-private-review="true"] { --review-banner-height: 48px; padding-top: var(--review-banner-height); }
+.propbrew-review-banner { position: fixed; z-index: 10000; inset: 0 0 auto; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 2px 12px; min-height: var(--review-banner-height); padding: 7px 16px; border-bottom: 1px solid #dfb253; background: #fff3cd; color: #513300; font-size: 12px; line-height: 16px; text-align: center; }
+.propbrew-review-banner strong { font-weight: 700; }
+.pb-app .pb-form-control.propbrew-review-password, .pb-app .pb-action.propbrew-review-submit { min-height: 44px; }
+.pb-app .pb-form-control.propbrew-review-password { font-size: 16px; }
+@media (max-width: 640px) { body[data-private-review="true"] { --review-banner-height: 64px; } }

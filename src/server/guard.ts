@@ -13,12 +13,15 @@ import 'server-only';
 import { notFound } from 'next/navigation';
 import { ForbiddenError, assertCan, type Action, type Actor, type Capability, type ScopeFilter } from '@/lib/authz';
 import { getActor } from './session';
+import { requireWorkspace } from './workspaces';
+import type { WorkspaceId } from '@/config/workspaces';
 
 export async function requireCapability(
   capability: Capability,
   action: Action = 'read',
+  workspace?: WorkspaceId,
 ): Promise<{ actor: Actor; scope: ScopeFilter }> {
-  const actor = await getActor();
+  const actor = workspace ? (await requireWorkspace(workspace)).actor : await getActor();
   try {
     const scope = assertCan(actor, capability, action);
     return { actor, scope };

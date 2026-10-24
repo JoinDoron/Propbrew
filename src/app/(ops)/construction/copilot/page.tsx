@@ -10,12 +10,12 @@ import { CopilotWorkspace } from '@/components/construction/copilot-workspace';
  *  may write from, so it cannot invent state; every factual answer cites records.
  *  View-only stakeholders get commercial figures withheld. */
 export default async function ConstructionCopilotPage() {
-  const { actor } = await requireCapability('reports_analytics');
+  const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const canSeeCommercials = ['F', 'M'].includes(effectiveLevel(actor, 'reports_analytics'));
   const world = constructionWorld(actor);
 
   return (
-    <div className="max-w-[880px] mx-auto">
+    <div className="pb-page">
       <CopilotWorkspace suggestions={suggestedQuestions(world, NOW_MS)} canSeeCommercials={canSeeCommercials} />
     </div>
   );

@@ -1,107 +1,38 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { RefreshCw, Link2, Copy, AlertTriangle, ShieldCheck, Crown, Calendar, Plug } from 'lucide-react';
-import { toneVar, type Tone } from '@/lib/status-tones';
+import { AlertTriangle, CalendarDays, Copy, Link2, RefreshCw, ShieldCheck } from 'lucide-react';
+import { Button, Card, CardHeader, EmptyState, StatusPill } from '@/components/ui';
+import { PageTabs } from '@/components/ui/page-tabs';
 import { toggleChannel } from '@/server/actions/shortlet';
+import { ShortletConfirm, ShortletFeedback, ShortletMetric, ShortletNotice, shortletStyles } from './reference-ui';
+import styles from './shortlet-specialists-polish.module.css';
 
 export type ChannelKey = 'airbnb' | 'booking_com' | 'google';
 export type AptRow = { id: string; name: string; property: string; channels: ChannelKey[]; feedUrl: string };
 export type ConflictRow = { apt: string; guestA: string; guestB: string; rangeA: string; rangeB: string; nights: number };
 export type Summary = { connections: number; apartmentsSynced: number; byChannel: { channel: ChannelKey; label: string; count: number }[] };
+const CHANNELS: { key: ChannelKey; label: string }[] = [{ key: 'airbnb', label: 'Airbnb' }, { key: 'booking_com', label: 'Booking.com' }, { key: 'google', label: 'Google Calendar' }];
+const syncLabel = (value: string) => Number.isNaN(Date.parse(value)) ? value : new Date(value).toLocaleString('en-NG', { timeZone: 'Africa/Lagos', dateStyle: 'medium', timeStyle: 'short' }) + ' WAT';
 
-const CHANNELS: { key: ChannelKey; label: string; color: string }[] = [
-  { key: 'airbnb', label: 'Airbnb', color: '#FF5A5F' },
-  { key: 'booking_com', label: 'Booking.com', color: '#003580' },
-  { key: 'google', label: 'Google', color: '#4285F4' },
-];
-
-export function ChannelsWorkspace({ apartments, summary, conflicts, lastSync }: { apartments: AptRow[]; summary: Summary; conflicts: ConflictRow[]; lastSync: string }) {
+export function ChannelsWorkspace({ apartments, summary, conflicts, lastSync, canUpdate = false }: { apartments: AptRow[]; summary: Summary; conflicts: ConflictRow[]; lastSync: string; canUpdate?: boolean }) {
   const router = useRouter();
-  const [pending, start] = useTransition();
-  const [syncing, setSyncing] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
-  const flash = (m: string) => { setToast(m); setTimeout(() => setToast(null), 2600); };
-
-  const toggle = (aptId: string, ch: ChannelKey, on: boolean, label: string) => start(async () => {
-    const r = await toggleChannel(aptId, ch);
-    if (r.ok) { router.refresh(); flash(on ? `${label} disconnected` : `${label} connected & synced`); } else flash(r.error);
-  });
-  const syncNow = () => { setSyncing(true); setTimeout(() => { setSyncing(false); flash('All channels synced just now'); }, 1100); };
-
-  return (
-    <div className="flex flex-col gap-3.5">
-      <div className="rounded-xl px-4 py-2.5 text-[12px] flex items-center gap-2 flex-wrap" style={{ background: 'color-mix(in srgb, var(--primary) 7%, transparent)', border: '1px solid color-mix(in srgb, var(--primary) 25%, transparent)' }}>
-        <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-primary text-white"><Crown size={10} /> Growth tier+</span>
-        <span className="text-text-2">Two-way iCal sync with Airbnb, Booking.com and Google Calendar. External bookings block availability automatically to prevent double-bookings.</span>
-        <button onClick={syncNow} disabled={syncing} className="ml-auto inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-primary text-white text-[12px] font-medium disabled:opacity-60"><RefreshCw size={13} className={syncing ? 'animate-spin' : ''} /> {syncing ? 'Syncing…' : 'Sync now'}</button>
-      </div>
-
-      <div className="grid grid-cols-2 min-[720px]:grid-cols-4 gap-2.5">
-        <Kpi label="Connections" value={String(summary.connections)} tone="info" icon={<Plug size={16} />} />
-        <Kpi label="Units synced" value={`${summary.apartmentsSynced}/${apartments.length}`} tone="progress" icon={<Calendar size={16} />} />
-        <Kpi label="Conflicts" value={String(conflicts.length)} tone={conflicts.length ? 'danger' : 'success'} icon={conflicts.length ? <AlertTriangle size={16} /> : <ShieldCheck size={16} />} />
-        <Kpi label="Last sync" value={lastSync} tone="neutral" icon={<RefreshCw size={16} />} />
-      </div>
-
-      {/* Double-booking guard */}
-      <div className="bg-surface border rounded-2xl shadow-card overflow-hidden" style={{ borderColor: conflicts.length ? 'color-mix(in srgb, var(--tone-danger) 40%, transparent)' : 'var(--border)' }}>
-        <div className="px-4 py-2.5 border-b border-border flex items-center gap-2">
-          {conflicts.length ? <AlertTriangle size={14} className="text-negative" /> : <ShieldCheck size={14} className="text-positive" />}
-          <span className="text-[12.5px] font-semibold">Double-booking guard</span>
-          <span className="ml-auto text-[11px]" style={{ color: toneVar(conflicts.length ? 'danger' : 'success') }}>{conflicts.length ? `${conflicts.length} conflict${conflicts.length === 1 ? '' : 's'}` : 'All clear'}</span>
-        </div>
-        {conflicts.length === 0 ? (
-          <p className="text-[12.5px] text-text-3 px-4 py-3">No overlapping stays across your channels. New external bookings will block matching dates automatically.</p>
-        ) : (
-          <div className="divide-y divide-border">
-            {conflicts.map((c, i) => (
-              <div key={i} className="px-4 py-3 flex items-center gap-3">
-                <span className="w-8 h-8 rounded-lg grid place-items-center flex-none" style={{ background: `color-mix(in srgb, ${toneVar('danger')} 14%, transparent)`, color: toneVar('danger') }}><AlertTriangle size={16} /></span>
-                <div className="min-w-0 flex-1"><div className="text-[13px] font-semibold">{c.apt} · {c.nights}-night overlap</div><div className="text-[11.5px] text-text-3"><b>{c.guestA}</b> ({c.rangeA}) vs <b>{c.guestB}</b> ({c.rangeB})</div></div>
-                <span className="text-[10.5px] font-bold text-negative uppercase flex-none">Resolve</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Per-apartment channels */}
-      <div className="bg-surface border border-border rounded-2xl shadow-card overflow-hidden">
-        <div className="px-4 py-2.5 border-b border-border text-[12.5px] font-semibold">Connected channels by apartment</div>
-        <div className="divide-y divide-border">
-          {apartments.map((a) => (
-            <div key={a.id} className="px-4 py-3">
-              <div className="flex items-center gap-2 flex-wrap">
-                <div className="min-w-0"><div className="text-[13px] font-semibold truncate">{a.name}</div><div className="text-[11px] text-text-3">{a.property}</div></div>
-                <div className="ml-auto flex gap-1.5">
-                  {CHANNELS.map((ch) => {
-                    const on = a.channels.includes(ch.key);
-                    return (
-                      <button key={ch.key} disabled={pending} onClick={() => toggle(a.id, ch.key, on, ch.label)} className={`text-[11px] px-2.5 h-7 rounded-lg font-medium border transition-colors disabled:opacity-50 ${on ? 'text-white border-transparent' : 'text-text-3 border-border-2'}`} style={on ? { background: ch.color } : undefined}>
-                        {on ? '✓ ' : '+ '}{ch.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-              <div className="mt-2 flex items-center gap-2">
-                <span className="text-[10px] text-text-3 uppercase flex items-center gap-1 flex-none"><Link2 size={11} /> Outbound feed</span>
-                <div className="flex-1 h-7 px-2.5 rounded-lg border border-border-2 bg-surface-2 text-[11px] font-mono text-text-3 flex items-center truncate">{a.feedUrl}</div>
-                <button onClick={() => { navigator.clipboard?.writeText(a.feedUrl); flash('Feed URL copied'); }} className="h-7 px-2.5 rounded-lg border border-border-2 text-[11px] inline-flex items-center gap-1 flex-none"><Copy size={12} /> Copy</button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <p className="text-[11px] text-text-3 flex items-center gap-1.5"><AlertTriangle size={12} className="text-warning" /> iCal polls periodically, so a residual double-booking window exists — the guard flags overlaps so you can act fast (PRD risk note).</p>
-      {toast && <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[90] bg-text text-surface text-[13px] font-medium px-4 py-2.5 rounded-xl shadow-float animate-fade">{toast}</div>}
-    </div>
-  );
-}
-
-function Kpi({ label, value, tone, icon }: { label: string; value: string; tone: Tone; icon: React.ReactNode }) {
-  return <div className="bg-surface border border-border rounded-2xl shadow-card p-3.5"><span className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `color-mix(in srgb, ${toneVar(tone)} 14%, transparent)`, color: toneVar(tone) }}>{icon}</span><div className="text-[12px] text-text-2 font-medium mt-2.5">{label}</div><div className="text-[16px] font-bold tracking-[-0.02em] leading-none mt-1">{value}</div></div>;
+  const [message, setMessage] = useState<string | null>(null);
+  async function copy(url: string) {
+    try { await navigator.clipboard.writeText(url); setMessage('Sample feed URL copied. The outbound feed service is not verified here.'); }
+    catch { setMessage('Copy is unavailable. Select and copy the URL manually.'); }
+  }
+  return <div className={styles.stack}>
+    <ShortletNotice>Channel configuration preview · Growth tier+<p className={styles.text}>Connections below are recorded preferences, not authenticated external accounts. Live iCal polling and feed publication are not connected. Do not rely on this page as a real-time availability guarantee.</p></ShortletNotice>
+    <PageTabs label="Channel management sections" items={[
+      { id: 'connections', label: 'Channel connections', content: <div className={styles.stack}>{apartments.length ? apartments.map((apartment) => <Card key={apartment.id} padded={false} className={styles.panel}><div className={styles.header}><CardHeader title={apartment.name} subtitle={apartment.property} action={<StatusPill status={apartment.channels.length + ' preference(s) recorded'} tone="info" />} /></div><div className={styles.body}><div className={styles.grid}>{CHANNELS.map((channel) => {
+        const configured = apartment.channels.includes(channel.key);
+        return <section key={channel.key} className={styles.channel} aria-label={apartment.name + ' ' + channel.label + ' preference'}><div className={styles.identity}><span className={styles.icon}><CalendarDays size={18} aria-hidden="true" /></span><h3 className={styles.title}>{channel.label}</h3></div><StatusPill status={configured ? 'Configured record' : 'Not configured'} tone={configured ? 'info' : 'neutral'} /><p className={styles.text}>{configured ? 'A channel preference is recorded. Account authentication, calendar polling and feed freshness are not verified.' : 'No preference is recorded for this apartment. Configuring it here does not authenticate an external account.'}</p><ShortletConfirm pressed={configured} disabled={!canUpdate} title={'Review ' + channel.label + ' configuration'} label={configured ? 'Remove ' + channel.label : 'Configure ' + channel.label} description={'Update ' + apartment.name + '’s recorded channel preference only. No external account is connected or disconnected.'} action={() => toggleChannel(apartment.id, channel.key)} onDone={() => { router.refresh(); setMessage('Channel preference recorded. External synchronisation is not connected.'); }} /></section>;
+      })}</div></div><div className={styles.footer}><div className={styles.toolbar}><label className={styles.field + ' flex-1'}>Sample outbound feed URL<input aria-label={apartment.name + ' sample outbound feed URL'} readOnly value={apartment.feedUrl} className="pb-form-control" /></label><Button icon={<Copy size={16} />} onClick={() => copy(apartment.feedUrl)} disabled={!apartment.feedUrl}>Copy sample URL</Button></div><p className={styles.metadata + ' mt-3'}>Sample reference only. Publication, scoped access and the external consumer’s polling schedule must be verified separately.</p></div></Card>) : <Card><EmptyState icon={<Link2 size={26} />} title="No apartments to configure" description="Channel preferences appear for apartments in your current scope." /></Card>}</div> },
+      { id: 'summary', label: 'Channel health', content: <div className={styles.stack}><div className={shortletStyles.metrics}><ShortletMetric label="Recorded connections" value={String(summary.connections)} /><ShortletMetric label="Units configured" value={summary.apartmentsSynced + ' / ' + apartments.length} /><ShortletMetric label="Recorded overlaps" value={String(conflicts.length)} /><ShortletMetric label="Provider status" value="Not connected" /></div><div className={styles.twoColumns}><Card padded={false} className={styles.panel}><div className={styles.header}><CardHeader title="Synchronisation status" subtitle="No external poll has been verified" action={<StatusPill status="Not connected" tone="neutral" />} /></div><div className={styles.body}><div className={styles.stack}><dl className={styles.facts}><div><dt>Last sync record</dt><dd>{syncLabel(lastSync)}</dd></div><div><dt>Live worker</dt><dd>Not connected</dd></div><div><dt>Published outbound feeds</dt><dd>Not verified</dd></div><div><dt>Provider delivery evidence</dt><dd>Not available</dd></div></dl><p className={styles.text}>Synchronisation controls remain unavailable until a real provider worker, scoped feeds and durable logs are connected.</p><div className={styles.actions}><Button disabled icon={<RefreshCw size={16} />}>Live sync unavailable</Button></div></div></div><p className={styles.footer}>A saved preference is not proof that an external calendar has been imported, published or refreshed.</p></Card><Card padded={false} className={styles.panel}><div className={styles.header}><CardHeader title="Channel coverage" subtitle="Configured preferences by recorded channel" /></div>{summary.byChannel.length ? <ul className={styles.list}>{summary.byChannel.map((channel) => <li key={channel.channel} className={styles.listRow}><span className={styles.rowTitle}>{channel.label}</span><StatusPill status={channel.count + ' configured'} tone="info" /></li>)}</ul> : <div className={styles.empty}><EmptyState title="No channel summary" description="No configured channel counts were supplied for this scope." /></div>}<p className={styles.footer}>Counts describe workspace configuration, not external provider connectivity.</p></Card></div></div> },
+    ]} />
+    <Card padded={false} className={styles.panel}><div className={styles.header}><CardHeader title="Double-booking guard" subtitle="Checks overlapping stays in the current recorded snapshot" action={<StatusPill status={conflicts.length ? conflicts.length + ' overlaps' : 'No recorded overlaps'} tone={conflicts.length ? 'danger' : 'success'} />} /></div>{conflicts.length ? <ul className={styles.list}>{conflicts.map((conflict, index) => <li key={conflict.apt + '-' + index} className={styles.listRow}><span className={styles.icon}><AlertTriangle size={18} aria-hidden="true" /></span><div className={styles.listContent}><h3 className={styles.title}>{conflict.apt}</h3><p className={styles.text}>{conflict.nights}-night overlap in the supplied booking records.</p><dl className={styles.facts}><div><dt>First stay</dt><dd>{conflict.guestA}<span className={styles.metadata + ' block'}>{conflict.rangeA}</span></dd></div><div><dt>Overlapping stay</dt><dd>{conflict.guestB}<span className={styles.metadata + ' block'}>{conflict.rangeB}</span></dd></div></dl></div><StatusPill status="Operator review required" tone="danger" /></li>)}</ul> : <div className={styles.empty}><EmptyState icon={<ShieldCheck size={26} />} title="No overlaps in these records" description="This does not verify external availability. Confirm the channel calendars directly before accepting a booking." /></div>}<p className={styles.footer}>A residual double-booking window exists with periodic iCal polling. This guard does not reserve dates or prevent an external booking.</p></Card>
+    {message ? <ShortletFeedback message={message} onClose={() => setMessage(null)} /> : null}
+  </div>;
 }

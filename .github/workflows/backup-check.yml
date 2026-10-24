@@ -1,0 +1,24 @@
+name: Backup recovery check
+
+on:
+  workflow_dispatch:
+    inputs:
+      backup_file:
+        description: 'Path to the approved pg_dump archive in the runner workspace'
+        required: true
+        type: string
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Verify archive
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BACKUP_FILE: ${{ inputs.backup_file }}
+        run: bash scripts/verify-backup.sh

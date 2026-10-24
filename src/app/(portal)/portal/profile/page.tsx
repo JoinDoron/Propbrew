@@ -1,77 +1,47 @@
+import { PageHeader } from '@/components/ui/page-header';
+import { PageTabs } from '@/components/ui/page-tabs';
 import { requireCapability } from '@/server/guard';
 import { seed } from '@/server/data';
 import { brand } from '@/config/brand';
-import { Card, CardHeader, Avatar } from '@/components/ui';
-import { QrCode, ShieldCheck } from 'lucide-react';
+import { Card, CardHeader, Avatar, EmptyState, StatusPill } from '@/components/ui';
+import { BadgeHelp, Home, UserRound } from 'lucide-react';
+import layout from '@/components/ui/workspace-layout.module.css';
 
-/** Profile & IDs (resident-home PRD tile) — the resident's identity and a
- *  digital ID card for their unit(s), verifiable at the gate. */
 export default async function ProfilePage() {
   const { actor } = await requireCapability('work_orders');
-  const units = actor.unitIds.map((id) => seed.units.find((u) => u.id === id)).filter(Boolean);
-  const name = 'Folake Bello';
-  const residentId = 'RES-014-2291';
+  const user = seed.users.find((record) => record.id === actor.userId && record.tenantId === actor.tenantId);
+  const resident = seed.residents.find((record) => record.userId === actor.userId && record.tenantId === actor.tenantId && actor.unitIds.includes(record.unitId));
+  const units = seed.units.filter((unit) => unit.tenantId === actor.tenantId && actor.unitIds.includes(unit.id));
+  const sites = seed.sites.filter((site) => site.tenantId === actor.tenantId && units.some((unit) => unit.siteId === site.id));
+  const name = user?.name ?? resident?.name ?? 'Resident';
+  const residentId = resident?.id ?? 'Not recorded';
+  const estateNames = sites.map((site) => site.name).join(', ') || 'No linked estate';
+  const moveIn = resident?.moveInDate
+    ? new Date(resident.moveInDate).toLocaleDateString('en-NG', { timeZone: 'Africa/Lagos', dateStyle: 'medium' })
+    : 'Not recorded';
 
-  return (
-    <div className="max-w-[560px] mx-auto flex flex-col gap-4">
-      {/* Digital ID card */}
-      <div className="rounded-[20px] p-5 text-white shadow-float" style={{ backgroundImage: 'linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 70%, #000))' }}>
-        <div className="flex items-center justify-between">
-          <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-white/80">{brand.name} · Resident ID</span>
-          <ShieldCheck size={18} className="text-white/90" />
-        </div>
-        <div className="flex items-center gap-3 mt-4">
-          <Avatar name={name} size={48} />
-          <div>
-            <div className="text-[16px] font-bold">{name}</div>
-            <div className="font-mono text-[12px] text-white/80">{residentId}</div>
-          </div>
-          <span className="ml-auto w-14 h-14 rounded-xl bg-white/90 text-primary grid place-items-center flex-none">
-            <QrCode size={34} />
-          </span>
-        </div>
-        <div className="mt-4 pt-3 border-t border-white/20 flex flex-wrap gap-x-6 gap-y-1 text-[12px]">
-          <span className="text-white/70">Estate <span className="text-white font-medium">Lekki Gardens</span></span>
-          <span className="text-white/70">Units <span className="text-white font-medium">{units.map((u) => u!.label.split('·')[1]?.trim() ?? u!.label).join(', ')}</span></span>
-          <span className="text-white/70">Status <span className="text-white font-medium">Verified</span></span>
-        </div>
-      </div>
-
-      <Card>
-        <CardHeader title="Profile" subtitle="Your details on file with the estate" />
-        <div className="grid grid-cols-2 gap-4 mt-4">
-          <Field label="Full name" value={name} />
-          <Field label="Resident ID" value={residentId} />
-          <Field label="Email" value="folake@gmail.com" />
-          <Field label="Phone" value="+234 802 555 0142" />
-          <Field label="Household" value="4 members" />
-          <Field label="Move-in" value="Mar 2024" />
-        </div>
-      </Card>
-
-      <Card>
-        <CardHeader title="My units" subtitle="Spaces linked to your account" />
-        <div className="flex flex-col gap-2 mt-3">
-          {units.map((u) => (
-            <div key={u!.id} className="flex items-center justify-between rounded-xl border border-border bg-surface-2 px-3.5 py-2.5">
-              <div>
-                <div className="text-[13px] font-medium">{u!.label}</div>
-                <div className="text-[11.5px] text-text-3">{u!.type}</div>
-              </div>
-              <span className="text-[11px] font-semibold text-[color:var(--tone-success)]">Active</span>
-            </div>
-          ))}
-        </div>
-      </Card>
-    </div>
-  );
+  return <div className="pb-page">
+    <PageHeader title="Profile & IDs" subtitle="Your account record and the units linked to your signed-in identity." />
+    <PageTabs label="Resident profile sections" items={[
+      { id: 'identity', label: 'Digital ID', content: <Card>
+        <CardHeader title={brand.name + ' resident record'} subtitle="Account information only · identity verification and gate credentials are not connected" action={<BadgeHelp size={22} className="text-primary" aria-hidden="true" />} />
+        <div className={layout.context}><div className={layout.person}><Avatar name={name} size={48} /><div><h2 className={layout.sectionTitle}>{name}</h2><p className={layout.metadata}>Resident record · {residentId}</p></div></div><StatusPill status="Not an access credential" tone="warn" /></div>
+        <dl className={layout.analytics + ' mt-6'}><Field label="Linked estates" value={estateNames} /><Field label="Linked units" value={units.map((unit) => unit.label).join(', ') || 'None recorded'} /></dl>
+        <p className={layout.footnote}>This screen does not verify identity, generate a scannable pass or authorise entry. Follow your estate’s approved visitor and resident access process.</p>
+      </Card> },
+      { id: 'profile', label: 'Personal details', content: <Card>
+        <CardHeader title="Personal details" subtitle="Read-only account and resident records · contact your estate team to request corrections" />
+        <dl className={layout.analytics}><Field label="Full name" value={name} /><Field label="Resident record ID" value={residentId} /><Field label="Email" value={resident?.email ?? user?.email ?? 'Not recorded'} /><Field label="Phone" value={resident?.phone ?? 'Not recorded'} /><Field label="Household" value={resident ? resident.household + ' member' + (resident.household === 1 ? '' : 's') : 'Not recorded'} /><Field label="Recorded move-in" value={moveIn} /></dl>
+        {!user && !resident ? <p className={layout.footnote}>No matching profile record is available for this signed-in account. No sample identity has been substituted.</p> : null}
+      </Card> },
+      { id: 'units', label: 'My units', content: <Card>
+        <CardHeader title="My units" subtitle="Only units linked to this signed-in account and tenant" />
+        {units.length ? <ul className={layout.list}>{units.map((unit) => <li key={unit.id} className={layout.listRow}><Home size={20} className="text-primary" aria-hidden="true" /><div className="min-w-0 flex-1"><p className={layout.title}>{unit.label}</p><p className={layout.metadata}>{unit.type} · {sites.find((site) => site.id === unit.siteId)?.name ?? 'Estate not recorded'}</p></div><StatusPill status={unit.occupancy} tone={unit.occupancy === 'occupied' ? 'success' : unit.occupancy === 'reserved' ? 'info' : 'neutral'} /></li>)}</ul> : <EmptyState icon={<UserRound size={26} />} title="No units linked" description="Your estate team must link the correct unit before it appears here." />}
+      </Card> },
+    ]} />
+  </div>;
 }
 
 function Field({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div className="text-[11px] text-text-3 uppercase tracking-wide">{label}</div>
-      <div className="text-[13.5px] font-medium mt-0.5">{value}</div>
-    </div>
-  );
+  return <div><dt className={layout.metadata}>{label}</dt><dd className={layout.body + ' mt-1'}>{value}</dd></div>;
 }

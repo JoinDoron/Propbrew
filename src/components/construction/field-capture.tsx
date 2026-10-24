@@ -1,25 +1,29 @@
 'use client';
 
+import { ConstructionSummary, ConstructionPanel, ConstructionToast, ConstructionKpi as Kpi, ConstructionFrame } from './construction-ui';
+import { Button, CardHeader, EmptyState, IconButton, StatusPill } from '@/components/ui';
+import styles from './construction-delivery-polish.module.css';
+
+import { PageTabs } from '@/components/ui/page-tabs';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { HardHat, WifiOff, Wifi, Camera, Check, Trash2, RefreshCw, TriangleAlert, CloudUpload, Plus, X } from 'lucide-react';
 import { toneVar, type Tone } from '@/lib/status-tones';
 import { queueStats, syncPosture, OP_LABEL, STATUS_TONE, type OpKind } from '@/domain/sync';
 import { useOutbox, useOnline, capture, removeOp, clearSynced, abandon, requeue, setForcedOffline, isForcedOffline } from '@/lib/offline/outbox';
+const displayDate = (value: string) => new Date(value).toLocaleString('en-NG', { day: 'numeric', month: 'short', year: 'numeric', ...(value.includes('T') ? { hour: '2-digit', minute: '2-digit' } as const : {}), timeZone: 'Africa/Lagos' });
 
 export type FieldProject = { id: string; name: string; code: string };
 export type FieldTask = { id: string; name: string; percentComplete: number };
 export type FieldWorker = { id: string; name: string; trade: string };
 
-type Tab = 'report' | 'issue' | 'progress' | 'queue';
-
-export function FieldCapture({ projects, tasks, workers, todayISO }: {
+export function FieldCapture({ projects, tasks, workers, todayISO, canCapture = false }: {
   projects: FieldProject[]; tasks: FieldTask[]; workers: FieldWorker[]; todayISO: string;
+  canCapture?: boolean;
 }) {
   const router = useRouter();
   const ops = useOutbox();
   const online = useOnline();
-  const [tab, setTab] = useState<Tab>('report');
   const [toast, setToast] = useState<string | null>(null);
   const [forced, setForced] = useState(() => (typeof window === 'undefined' ? false : isForcedOffline()));
 
@@ -30,66 +34,60 @@ export function FieldCapture({ projects, tasks, workers, todayISO }: {
   const toggleOffline = () => {
     const next = !forced;
     setForcedOffline(next); setForced(next);
-    flash(next ? 'Signal cut — capture still works, everything queues on this device' : 'Back online — the queue is draining now');
+    flash(next ? 'Offline simulation enabled — capture queues on this device' : 'Offline simulation disabled — sync will be attempted when a connection is available');
     if (!next) setTimeout(() => router.refresh(), 1200);
   };
 
   return (
-    <div className="flex flex-col gap-3.5">
+    <ConstructionFrame>
       {/* Hero */}
-      <div className="relative overflow-hidden rounded-2xl p-5 text-white shadow-card" style={{ background: 'linear-gradient(135deg,#101408 0%,#1e2810 55%,#2d3c17 100%)' }}>
+      <ConstructionSummary>
         <div className="relative flex items-center gap-3 flex-wrap">
-          <span className="w-12 h-12 rounded-2xl grid place-items-center flex-none" style={{ background: 'rgba(255,255,255,.1)' }}><HardHat size={22} /></span>
+          <span className="construction-summary-icon" ><HardHat size={22} /></span>
           <div className="min-w-0">
-            <div className="text-[11px] text-white/70 flex items-center gap-1.5">
+            <div className="text-[14px] text-text-3 flex items-center gap-1.5">
               FIELD CAPTURE ·
               <span className="inline-flex items-center gap-1" style={{ color: toneVar(posture.tone) }}>
                 {online ? <Wifi size={11} /> : <WifiOff size={11} />} {posture.label}
               </span>
             </div>
-            <div className="text-[20px] font-bold tracking-[-0.02em] leading-tight mt-0.5">Works with no signal</div>
-            <div className="text-[12.5px] text-white/75 mt-0.5">{posture.detail}</div>
+            <h2 className="text-[20px] font-medium tracking-[-0.02em] leading-tight mt-0.5">Works with no signal</h2>
+            <div className="text-[14px] text-text-3 mt-0.5">{posture.label === 'Synced' ? 'No queued changes on this device.' : posture.detail}</div>
           </div>
-          <button onClick={toggleOffline} className="ml-auto text-[12px] px-3 h-9 rounded-xl font-medium inline-flex items-center gap-1.5 flex-none" style={{ background: 'rgba(255,255,255,.12)' }}>
+          <Button type="button" onClick={toggleOffline} className="ml-auto flex-none">
             {forced ? <><Wifi size={13} /> Restore signal</> : <><WifiOff size={13} /> Simulate no signal</>}
-          </button>
+          </Button>
         </div>
-      </div>
+      </ConstructionSummary>
 
-      {/* Tabs */}
-      <div className="flex items-center gap-1.5 flex-wrap">
-        {([['report', 'Daily report'], ['issue', 'Raise issue'], ['progress', 'Task progress'], ['queue', `Outbox${stats.pending + stats.conflicts ? ` (${stats.pending + stats.conflicts})` : ''}`]] as const).map(([k, label]) => (
-          <button key={k} onClick={() => setTab(k)} className="text-[12px] px-3 h-9 rounded-xl font-medium border transition-colors"
-            style={tab === k ? { borderColor: 'transparent', background: `color-mix(in srgb, ${toneVar('progress')} 15%, transparent)`, color: toneVar('progress') } : { borderColor: 'var(--border-2)', background: 'var(--surface)' }}>
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {tab === 'report' && <ReportForm projects={projects} todayISO={todayISO} onCaptured={flash} online={online} />}
-      {tab === 'issue' && <IssueForm projects={projects} onCaptured={flash} online={online} />}
-      {tab === 'progress' && <ProgressForm projects={projects} tasks={tasks} onCaptured={flash} online={online} />}
-      {tab === 'queue' && <Outbox ops={ops} onToast={flash} />}
-
-      {/* Attendance quick-punch is always visible — it's the most common field action. */}
-      {tab !== 'queue' && (
-        <section className="bg-surface border border-border rounded-2xl shadow-card overflow-hidden">
-          <div className="px-4 py-2.5 border-b border-border text-[12.5px] font-semibold">Quick attendance · {todayISO}</div>
-          <div className="divide-y divide-border">
-            {workers.slice(0, 6).map((w) => (
-              <div key={w.id} className="px-4 py-2.5 flex items-center gap-2">
-                <div className="min-w-0 flex-1"><div className="text-[12.5px] font-medium truncate">{w.name}</div><div className="text-[10.5px] text-text-3">{w.trade}</div></div>
-                <button
-                  onClick={() => { capture('attendance', `${w.name} present · ${todayISO}`, { workerId: w.id, projectId: projects[0]?.id ?? '', dateISO: todayISO, status: 'present', clockIn: '07:00' }); flash(`${w.name} clocked in — saved on this device`); }}
-                  className="text-[11.5px] px-2.5 h-8 rounded-lg border border-border-2 inline-flex items-center gap-1 flex-none"><Check size={12} /> Present</button>
+      <PageTabs label="Construction field capture sections" items={[
+        { id: 'report', label: 'Daily report', content: <fieldset disabled={!canCapture} className={styles.fieldset}><legend className="sr-only">Daily report capture</legend>{!canCapture && <p className={styles.notice}>Read-only access · construction capture permission is required.</p>}<ReportForm projects={projects} todayISO={todayISO} onCaptured={flash} online={online} /></fieldset> },
+        { id: 'issue', label: 'Raise issue', content: <fieldset disabled={!canCapture} className={styles.fieldset}><legend className="sr-only">Issue capture</legend><IssueForm projects={projects} onCaptured={flash} online={online} /></fieldset> },
+        { id: 'progress', label: 'Task progress', content: <fieldset disabled={!canCapture} className={styles.fieldset}><legend className="sr-only">Progress capture</legend><ProgressForm projects={projects} tasks={tasks} onCaptured={flash} online={online} /></fieldset> },
+        {
+          id: 'attendance', label: 'Quick attendance', content: (
+            <ConstructionPanel >
+              <div className={styles.header}><CardHeader title="Quick attendance" subtitle={`${displayDate(todayISO)} · WAT · ${workers.length} worker records`} /></div>
+              <div className={styles.body}><p className={styles.notice}>Manual attendance capture uses the first supplied project ({projects[0]?.name ?? 'no project available'}) and a recorded 07:00 WAT clock-in. It does not verify physical presence or a geofence.</p></div>
+              <div>
+                {workers.map((w) => (
+                  <div key={w.id} className={`${styles.row} ${styles.toolbar}`}>
+                    <div><p className={styles.rowTitle}>{w.name}</p><p className={styles.text}>{w.trade}</p></div>
+                    <Button type="button" disabled={!canCapture || projects.length === 0}
+                      onClick={() => { capture('attendance', `${w.name} present · ${todayISO}`, { workerId: w.id, projectId: projects[0]?.id ?? '', dateISO: todayISO, status: 'present', clockIn: '07:00' }); flash(`${w.name} clocked in — saved on this device`); }}
+                      className="flex-none"><Check size={12} /> Present</Button>
+                  </div>
+                ))}
+                {workers.length === 0 && <EmptyState title="No workers available for capture" description="Attendance capture requires a worker and a scoped project record." />}
               </div>
-            ))}
-          </div>
-        </section>
-      )}
+            </ConstructionPanel>
+          )
+        },
+        { id: 'queue', label: 'Device outbox', count: stats.pending + stats.conflicts, content: <Outbox ops={ops} onToast={flash} /> }
+      ]} />
 
-      {toast && <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[90] bg-text text-surface text-[13px] font-medium px-4 py-2.5 rounded-xl shadow-float animate-fade max-w-[92vw]">{toast}</div>}
-    </div>
+      {toast && <ConstructionToast>{toast}</ConstructionToast>}
+    </ConstructionFrame>
   );
 }
 
@@ -98,8 +96,8 @@ export function FieldCapture({ projects, tasks, workers, todayISO }: {
 function ReportForm({ projects, todayISO, onCaptured, online }: { projects: FieldProject[]; todayISO: string; onCaptured: (m: string) => void; online: boolean }) {
   const [projectId, setProjectId] = useState(projects[0]?.id ?? '');
   const [dateISO, setDateISO] = useState(todayISO);
-  const [weather, setWeather] = useState('Fair · 29°C');
-  const [crew, setCrew] = useState('42');
+  const [weather, setWeather] = useState('');
+  const [crew, setCrew] = useState('');
   const [completed, setCompleted] = useState<string[]>([]);
   const [ongoing, setOngoing] = useState<string[]>([]);
   const [constraints, setConstraints] = useState<string[]>([]);
@@ -112,33 +110,36 @@ function ReportForm({ projects, todayISO, onCaptured, online }: { projects: Fiel
       completed, ongoing, delayed: [], plannedNext: [], deliveries: [], incidents: [], constraints, photos: photos.length,
     }, photos);
     setCompleted([]); setOngoing([]); setConstraints([]); setPhotos([]);
-    onCaptured(online ? 'Report captured — sending now' : 'Report saved on this device — it will send itself when signal returns');
+    onCaptured(online ? 'Report captured — queued for sync' : 'Report queued offline on this device — check the outbox when the connection returns');
   };
 
   return (
-    <section className="bg-surface border border-border rounded-2xl shadow-card p-4 flex flex-col gap-3">
-      <div className="grid grid-cols-1 min-[560px]:grid-cols-3 gap-2.5">
-        <Field label="Project"><select value={projectId} onChange={(e) => setProjectId(e.target.value)} className="inpf">{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
-        <Field label="Date"><input type="date" value={dateISO} onChange={(e) => setDateISO(e.target.value)} className="inpf" /></Field>
-        <Field label="Crew on site"><input value={crew} onChange={(e) => setCrew(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" className="inpf" /></Field>
+    <ConstructionPanel>
+      <div className={styles.header}><CardHeader title="Daily site report" subtitle="Capture a local record for review and synchronisation; no site evidence is independently verified by this form." /></div>
+      <div className={`${styles.body} ${styles.stack}`}>
+      <div className={styles.formGrid}>
+        <Field label="Project"><select value={projectId} onChange={(e) => setProjectId(e.target.value)}>{projects.length ? projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>) : <option value="">No projects available</option>}</select></Field>
+        <Field label="Date · WAT"><input type="date" value={dateISO} onChange={(e) => setDateISO(e.target.value)} /></Field>
+        <Field label="Crew on site"><input value={crew} onChange={(e) => setCrew(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" /></Field>
       </div>
-      <Field label="Weather"><input value={weather} onChange={(e) => setWeather(e.target.value)} className="inpf" /></Field>
+      <Field label="Weather"><input value={weather} onChange={(e) => setWeather(e.target.value)} /></Field>
 
       <ListField label="Completed today" items={completed} setItems={setCompleted} placeholder="e.g. L4 columns struck" tone="success" />
       <ListField label="Ongoing" items={ongoing} setItems={setOngoing} placeholder="e.g. Rebar fixing to L4 slab" tone="progress" />
       <ListField label="Constraints" items={constraints} setItems={setConstraints} placeholder="e.g. Rebar delivery still outstanding" tone="warn" />
 
-      <div className="flex items-center gap-2 flex-wrap">
-        <label className="text-[11.5px] px-2.5 h-8 rounded-lg border border-border-2 inline-flex items-center gap-1 cursor-pointer">
-          <Camera size={12} /> Attach photo
-          <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => { setPhotos((p) => [...p, ...Array.from(e.target.files ?? [])]); e.target.value = ''; }} />
+      <div className={styles.toolbar}>
+        <label className={styles.fileButton}>
+          <Camera size={18} /> Attach photo
+          <input type="file" aria-label="Attach site photos" accept="image/*" multiple className="sr-only" onChange={(e) => { setPhotos((p) => [...p, ...Array.from(e.target.files ?? [])]); e.target.value = ''; }} />
         </label>
-        {photos.length > 0 && <span className="text-[11.5px] text-text-3">{photos.length} photo{photos.length === 1 ? '' : 's'} · {Math.round(photos.reduce((n, f) => n + f.size, 0) / 1024)} KB held on this device</span>}
-        <button onClick={submit} className="ml-auto text-[12.5px] px-4 h-10 rounded-xl bg-primary text-white font-medium inline-flex items-center gap-1.5"><Check size={14} /> Submit report</button>
+        {photos.length > 0 && <span className="text-[14px] text-text-3">{photos.length} photo{photos.length === 1 ? '' : 's'} · {Math.round(photos.reduce((n, f) => n + f.size, 0) / 1024)} KB held on this device</span>}
+        <Button variant="primary" type="button" disabled={!projectId || !dateISO || crew === ''} onClick={submit}><Check size={16} /> Submit report</Button>
       </div>
-      <p className="text-[10.5px] text-text-3">Submitting saves to this device first. Photos are stored as real files in IndexedDB (not base64 in the queue), so a full set of site pictures neither blows the quota nor janks the form.</p>
-      <style>{`.inpf{width:100%;height:36px;padding:0 10px;border-radius:8px;border:1px solid var(--border-2);background:var(--surface);font-size:13px;outline:none}.inpf:focus{border-color:var(--primary)}`}</style>
-    </section>
+      {photos.length > 0 && <ul className={styles.list} aria-label="Attached site photo files">{photos.map((photo, index) => <li key={`${index}-${photo.name}`}>{photo.name} · {Math.round(photo.size / 1024)} KB</li>)}</ul>}
+      <p className={styles.metadata}>Capture uses this device&apos;s outbox first. Attachments use IndexedDB storage; quota or storage failures can prevent persistence. Check the outbox acknowledgement before treating a report or photo as synced.</p>
+      </div>
+    </ConstructionPanel>
   );
 }
 
@@ -148,19 +149,21 @@ function IssueForm({ projects, onCaptured, online }: { projects: FieldProject[];
   const [severity, setSeverity] = useState('medium');
   const [action, setAction] = useState('');
   return (
-    <section className="bg-surface border border-border rounded-2xl shadow-card p-4 flex flex-col gap-3">
-      <div className="grid grid-cols-1 min-[560px]:grid-cols-2 gap-2.5">
-        <Field label="Project"><select value={projectId} onChange={(e) => setProjectId(e.target.value)} className="inpf">{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
-        <Field label="Severity"><select value={severity} onChange={(e) => setSeverity(e.target.value)} className="inpf"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="critical">Critical</option></select></Field>
+    <ConstructionPanel>
+      <div className={styles.header}><CardHeader title="Raise a site issue" subtitle="Record the issue and proposed correction. Capture does not dispatch emergency services or verify completed corrective work." /></div>
+      <div className={`${styles.body} ${styles.stack}`}>
+      <div className={styles.formGrid}>
+        <Field label="Project"><select value={projectId} onChange={(e) => setProjectId(e.target.value)}>{projects.length ? projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>) : <option value="">No projects available</option>}</select></Field>
+        <Field label="Severity"><select value={severity} onChange={(e) => setSeverity(e.target.value)}><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="critical">Critical</option></select></Field>
       </div>
-      <Field label="What's wrong"><input value={title} onChange={(e) => setTitle(e.target.value)} className="inpf" placeholder="e.g. Honeycombing on L3 column C4" /></Field>
-      <Field label="Corrective action"><input value={action} onChange={(e) => setAction(e.target.value)} className="inpf" placeholder="e.g. Break out and re-pour, QS to price" /></Field>
-      <button
-        disabled={!title.trim()}
-        onClick={() => { capture('site_issue', `Issue · ${title.trim()}`, { projectId, title: title.trim(), severity, category: 'Quality', correctiveAction: action.trim() }); setTitle(''); setAction(''); onCaptured(online ? 'Issue captured — sending now' : 'Issue saved on this device'); }}
-        className="self-start text-[12.5px] px-4 h-10 rounded-xl bg-primary text-white font-medium disabled:opacity-40 inline-flex items-center gap-1.5"><Check size={14} /> Raise issue</button>
-      <style>{`.inpf{width:100%;height:36px;padding:0 10px;border-radius:8px;border:1px solid var(--border-2);background:var(--surface);font-size:13px;outline:none}.inpf:focus{border-color:var(--primary)}`}</style>
-    </section>
+      <Field label="What's wrong"><input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Honeycombing on L3 column C4" /></Field>
+      <Field label="Corrective action"><input value={action} onChange={(e) => setAction(e.target.value)} placeholder="e.g. Record the proposed correction for technical review" /></Field>
+      <Button variant="primary" type="button"
+        disabled={!title.trim() || !projectId}
+        onClick={() => { capture('site_issue', `Issue · ${title.trim()}`, { projectId, title: title.trim(), severity, category: 'Quality', correctiveAction: action.trim() }); setTitle(''); setAction(''); onCaptured(online ? 'Issue captured — queued for sync' : 'Issue queued offline on this device'); }}
+        className="self-start"><Check size={14} /> Raise issue</Button>
+      </div>
+    </ConstructionPanel>
   );
 }
 
@@ -169,22 +172,25 @@ function ProgressForm({ projects, tasks, onCaptured, online }: { projects: Field
   const task = tasks.find((t) => t.id === taskId);
   const [pct, setPct] = useState(String(task?.percentComplete ?? 0));
   return (
-    <section className="bg-surface border border-border rounded-2xl shadow-card p-4 flex flex-col gap-3">
+    <ConstructionPanel>
+      <div className={styles.header}><CardHeader title="Record task progress" subtitle="A local progress record must receive server acknowledgement. Lower progress is surfaced as a conflict, not a silent overwrite." /></div>
+      <div className={`${styles.body} ${styles.stack}`}>
       <Field label="Task">
-        <select value={taskId} onChange={(e) => { setTaskId(e.target.value); setPct(String(tasks.find((t) => t.id === e.target.value)?.percentComplete ?? 0)); }} className="inpf">
-          {tasks.map((t) => <option key={t.id} value={t.id}>{t.name} — {t.percentComplete}%</option>)}
+        <select value={taskId} onChange={(e) => { setTaskId(e.target.value); setPct(String(tasks.find((t) => t.id === e.target.value)?.percentComplete ?? 0)); }}>
+          {tasks.length ? tasks.map((t) => <option key={t.id} value={t.id}>{t.name} — {t.percentComplete}%</option>) : <option value="">No tasks available</option>}
         </select>
       </Field>
       <div>
-        <div className="flex justify-between text-[11px] mb-1"><span className="text-text-3">Percent complete</span><span className="font-mono font-bold text-[15px]">{pct}%</span></div>
-        <input type="range" min="0" max="100" step="5" value={pct} onChange={(e) => setPct(e.target.value)} className="w-full" aria-label="Percent complete" />
-        {task && Number(pct) < task.percentComplete && <p className="text-[10.5px] mt-1" style={{ color: toneVar('warn') }}>Lower than the {task.percentComplete}% already on the server — this will be flagged as a conflict rather than silently overwriting it.</p>}
+        <div className={styles.barLabel}><span>Percent complete</span><output>{pct}%</output></div>
+        <input type="range" min="0" max="100" step="5" value={pct} onChange={(e) => setPct(e.target.value)} className={styles.range} aria-label="Percent complete" aria-valuetext={`${pct}% complete`} />
+        {task && Number(pct) < task.percentComplete && <p className={styles.notice}>Lower than the {task.percentComplete}% in the supplied server snapshot — this will be flagged as a conflict rather than silently overwriting it.</p>}
       </div>
-      <button
-        onClick={() => { capture('task_progress', `${task?.name ?? 'Task'} → ${pct}%`, { taskId, percentComplete: Number(pct), projectId: projects[0]?.id ?? '' }); onCaptured(online ? 'Progress captured — sending now' : 'Progress saved on this device'); }}
-        className="self-start text-[12.5px] px-4 h-10 rounded-xl bg-primary text-white font-medium inline-flex items-center gap-1.5"><Check size={14} /> Record progress</button>
-      <style>{`.inpf{width:100%;height:36px;padding:0 10px;border-radius:8px;border:1px solid var(--border-2);background:var(--surface);font-size:13px;outline:none}.inpf:focus{border-color:var(--primary)}`}</style>
-    </section>
+      <Button variant="primary" type="button" disabled={!taskId || projects.length === 0}
+        onClick={() => { capture('task_progress', `${task?.name ?? 'Task'} → ${pct}%`, { taskId, percentComplete: Number(pct), projectId: projects[0]?.id ?? '' }); onCaptured(online ? 'Progress captured — queued for sync' : 'Progress queued offline on this device'); }}
+        className="self-start"><Check size={14} /> Record progress</Button>
+      <p className={styles.metadata}>Progress capture uses {projects[0]?.name ?? 'the first scoped project when available'} as its project reference. Confirm the task and project before recording.</p>
+      </div>
+    </ConstructionPanel>
   );
 }
 
@@ -196,93 +202,74 @@ function Outbox({ ops, onToast }: { ops: ReturnType<typeof useOutbox>; onToast: 
   const sorted = [...ops].sort((a, b) => (a.status === 'synced' ? 1 : 0) - (b.status === 'synced' ? 1 : 0) || Date.parse(a.capturedISO) - Date.parse(b.capturedISO));
 
   return (
-    <div className="flex flex-col gap-3.5">
-      <div className="grid grid-cols-2 min-[720px]:grid-cols-4 gap-2.5">
+    <ConstructionFrame>
+      <div className={styles.metrics}>
         <Kpi label="Waiting to send" value={String(stats.pending)} tone={stats.pending ? 'warn' : 'success'} />
         <Kpi label="Sending" value={String(stats.sending)} tone={stats.sending ? 'progress' : 'muted'} />
         <Kpi label="Needs review" value={String(stats.conflicts)} tone={stats.conflicts ? 'danger' : 'success'} />
         <Kpi label="Synced" value={String(stats.synced)} tone="success" />
       </div>
 
-      <section className="bg-surface border border-border rounded-2xl shadow-card overflow-hidden">
-        <div className="px-4 py-2.5 border-b border-border flex items-center gap-2">
-          <span className="text-[12.5px] font-semibold">Device outbox</span>
-          <span className="text-[10.5px] text-text-3">· survives reload and restart</span>
-          {stats.synced > 0 && <button onClick={() => { clearSynced(); onToast('Cleared synced receipts'); }} className="ml-auto text-[11px] text-text-3 hover:text-primary">Clear synced</button>}
-        </div>
-        <div className="divide-y divide-border">
+      <ConstructionPanel >
+        <div className={styles.header}><CardHeader title="Device outbox" subtitle="Local queued records, server acknowledgements and conflicts · persistence depends on device storage" action={stats.synced > 0 ? <Button type="button" onClick={() => { clearSynced(); onToast('Cleared synced receipts'); }}>Clear synced</Button> : undefined} /></div>
+        <div>
           {sorted.map((o) => (
-            <div key={o.id} className={`px-4 py-3 ${o.status === 'synced' ? 'opacity-55' : ''}`} style={o.status === 'conflict' ? { background: 'color-mix(in srgb, var(--tone-danger) 5%, transparent)' } : undefined}>
-              <div className="flex items-start justify-between gap-2 flex-wrap">
-                <div className="min-w-0">
-                  <div className="text-[13px] font-medium flex items-center gap-1.5 flex-wrap">
-                    {o.label}
-                    <span className="text-[9.5px] font-semibold px-1.5 h-4 inline-flex items-center rounded-full capitalize" style={{ background: `color-mix(in srgb, ${toneVar(STATUS_TONE[o.status])} 14%, transparent)`, color: toneVar(STATUS_TONE[o.status]) }}>{o.status}</span>
-                    {o.attachments > 0 && <span className="text-[9.5px] text-text-3 inline-flex items-center gap-0.5"><Camera size={9} /> {o.attachments}</span>}
-                  </div>
-                  <div className="text-[10.5px] text-text-3 mt-0.5 font-mono">{OP_LABEL[o.kind as OpKind]} · id {o.id.slice(0, 8)} · captured {new Date(o.capturedISO).toLocaleString('en-NG', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
-                  {o.error && <div className="text-[11px] mt-1" style={{ color: toneVar(STATUS_TONE[o.status]) }}>{o.error}</div>}
-                  {o.serverState && <div className="text-[11px] text-text-3 mt-0.5">Server has: <span className="font-medium">{o.serverState}</span></div>}
-                </div>
-                <div className="flex items-center gap-1.5 flex-none">
+            <section key={o.id} className={`${styles.row} ${styles.section}`} aria-label={`${o.label} outbox record`}>
+              <CardHeader title={o.label} subtitle={`${OP_LABEL[o.kind as OpKind] ?? o.kind} · ${displayDate(o.capturedISO)} · WAT`} action={<StatusPill status={o.status} tone={STATUS_TONE[o.status]} />} />
+              <dl className={styles.facts}><div><dt>Client record / idempotency key</dt><dd>{o.id}</dd></div><div><dt>Attachment references</dt><dd>{o.attachments}</dd></div></dl>
+                  {o.error && <p className={styles.error}>{o.error}</p>}
+                  {o.serverState && <p className={styles.notice}>Recorded server state: {o.serverState}</p>}
+                <div className={styles.actions}>
                   {o.status === 'conflict' && (
                     <>
-                      <button onClick={() => { requeue(o.id); onToast('Re-queued — will try again'); }} className="text-[11px] px-2.5 h-8 rounded-lg border border-border-2 inline-flex items-center gap-1"><RefreshCw size={11} /> Retry</button>
-                      <button onClick={async () => { await abandon(o.id); onToast('Discarded — the server keeps its version'); router.refresh(); }} className="text-[11px] px-2.5 h-8 rounded-lg border border-border-2 inline-flex items-center gap-1" style={{ color: toneVar('danger') }}><Trash2 size={11} /> Discard mine</button>
+                      <Button type="button" onClick={() => { requeue(o.id); onToast('Re-queued — will try again'); }} ><RefreshCw size={11} /> Retry</Button>
+                      <Button type="button" onClick={async () => { await abandon(o.id); onToast('Discarded — the server keeps its version'); router.refresh(); }} style={{ color: toneVar('danger') }}><Trash2 size={11} /> Discard mine</Button>
                     </>
                   )}
-                  {o.status === 'failed' && <button onClick={() => { requeue(o.id); onToast('Re-queued'); }} className="text-[11px] px-2.5 h-8 rounded-lg border border-border-2 inline-flex items-center gap-1"><RefreshCw size={11} /> Retry now</button>}
-                  {o.status === 'synced' && <button onClick={() => removeOp(o.id)} className="w-7 h-7 rounded-lg grid place-items-center text-text-3" title="Remove receipt"><X size={13} /></button>}
+                  {o.status === 'failed' && <Button type="button" onClick={() => { requeue(o.id); onToast('Re-queued'); }} ><RefreshCw size={11} /> Retry now</Button>}
+                  {o.status === 'synced' && <IconButton aria-label={`Remove receipt for ${o.label}`} type="button" onClick={() => removeOp(o.id)} title="Remove receipt"><X size={18} /></IconButton>}
                 </div>
-              </div>
-            </div>
+            </section>
           ))}
           {ops.length === 0 && (
-            <div className="px-4 py-10 text-center">
-              <CloudUpload size={20} className="mx-auto mb-2 text-text-3" />
-              <div className="text-[13px] font-medium">Outbox empty</div>
-              <div className="text-[11.5px] text-text-3 mt-1">Capture a report or issue — it saves here first, then syncs itself.</div>
-            </div>
+            <EmptyState icon={<CloudUpload size={24} />} title="Outbox empty" description="Capture a local report or issue, then check its queue state and server acknowledgement here." />
           )}
         </div>
-      </section>
+      </ConstructionPanel>
 
-      <div className="text-[11px] text-text-3 flex items-start gap-1.5">
-        <TriangleAlert size={12} className="mt-0.5 flex-none" />
+      <div className={styles.notice}>
+        <TriangleAlert size={18} />
         Each record carries a client-generated id that the server treats as an idempotency key: if a send times out and retries, the server recognises the id and confirms the original instead of applying it twice. Conflicts are server-authoritative — your copy is held, never silently overwritten, until you decide.
       </div>
-    </div>
+    </ConstructionFrame>
   );
 }
 
 /* --- bits ----------------------------------------------------------------- */
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div><label className="block text-[11px] font-semibold uppercase tracking-[.04em] text-text-3 mb-1">{label}</label>{children}</div>;
+  return <label className={styles.field}><span>{label}</span>{children}</label>;
 }
 function ListField({ label, items, setItems, placeholder, tone }: { label: string; items: string[]; setItems: (v: string[]) => void; placeholder: string; tone: Tone }) {
   const [draft, setDraft] = useState('');
   const add = () => { if (draft.trim()) { setItems([...items, draft.trim()]); setDraft(''); } };
   return (
-    <div>
-      <label className="block text-[11px] font-semibold uppercase tracking-[.04em] mb-1" style={{ color: toneVar(tone) }}>{label}</label>
-      <div className="flex gap-1.5">
-        <input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } }} placeholder={placeholder} className="flex-1 h-9 px-2.5 rounded-lg border border-border-2 bg-surface text-[13px] outline-none focus:border-primary" />
-        <button onClick={add} className="w-9 h-9 rounded-lg border border-border-2 grid place-items-center flex-none"><Plus size={14} /></button>
+    <div className={styles.fieldSection}>
+      <div className={styles.inline}><h3 className={styles.title}>{label}</h3><StatusPill status={`${items.length} entries`} tone={tone} /></div>
+      <div className={styles.listEntry}>
+        <input aria-label={label} value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } }} placeholder={placeholder} className={styles.control} />
+        <IconButton type="button" aria-label={'Add to ' + label.toLowerCase()} onClick={add} className="flex-none"><Plus size={14} /></IconButton>
       </div>
       {items.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mt-1.5">
+        <ul className={styles.list}>
           {items.map((it, i) => (
-            <span key={i} className="text-[11px] px-2 h-6 inline-flex items-center gap-1 rounded-full bg-surface-2">
-              {it}
-              <button onClick={() => setItems(items.filter((_, k) => k !== i))} className="text-text-3 hover:text-negative"><X size={10} /></button>
-            </span>
+            <li key={i} className={styles.listEntry}>
+              <span>{it}</span>
+              <IconButton type="button" aria-label={'Remove ' + it} onClick={() => setItems(items.filter((_, k) => k !== i))} ><X size={14} /></IconButton>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
     </div>
   );
-}
-function Kpi({ label, value, tone }: { label: string; value: string; tone: Tone }) {
-  return <div className="bg-surface border border-border rounded-2xl shadow-card p-3.5"><div className="text-[11px] text-text-3 font-medium">{label}</div><div className="text-[19px] font-bold tracking-[-0.02em] leading-none mt-1.5" style={{ color: toneVar(tone) }}>{value}</div></div>;
 }

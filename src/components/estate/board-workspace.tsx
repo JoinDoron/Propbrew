@@ -1,11 +1,17 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { Landmark, Users, CalendarClock, Vote, Gavel, Plus, X, Check, CalendarCheck, FileText, UserPlus, Crown, Trophy, Scale, Zap } from 'lucide-react';
+import { Users, CalendarClock, Vote, Gavel, Plus, X, CalendarCheck, UserPlus, Trophy, Scale, Zap, Landmark } from 'lucide-react';
+import { Card, CardHeader, KpiCard, Avatar, StatusPill, Button, IconButton, EmptyState } from '@/components/ui';
+import { PageTabs } from '@/components/ui/page-tabs';
+import { PortalDialog } from '@/components/portal/portal-dialog';
 import { toneVar, type Tone } from '@/lib/status-tones';
 import { termStatus, meetingState, MOTION_STATUS_LABEL, electionTally, electionWinner, ELECTION_STATUS_LABEL, electionStatusTone, motionTally, proxyWeights, projectedTally, resolveProxyChain, proxyHolderName, type BoardRole, type MeetingType, type MeetingStatus, type MotionStatus, type ElectionStatus, type ProxyStatus, type VoteChoice } from '@/domain/estate';
 import { createMotion, recordMeetingHeld, nominateCandidate, openElectionVoting, decideElection, exerciseProxies, revokeProxyLink, type CreateMotionInput, type NominateInput } from '@/server/actions/estate';
+import { committeeDate, CommitteeDecisionDialog, CommitteeFeedback, CommitteeMeter, type CommitteeDecision } from './committee-ui';
+import layout from '@/components/ui/workspace-layout.module.css';
+import styles from './committee.module.css';
 
 export type BoardRow = { id: string; name: string; unitLabel: string; role: BoardRole; portfolio: string; sinceISO: string; termEndISO: string };
 export type MeetingRow = { id: string; title: string; type: MeetingType; whenISO: string; venue: string; status: MeetingStatus; resolutions: number; attendees: number; quorumRequired: number };
@@ -14,317 +20,83 @@ export type ElectionRow = { id: string; ref: string; seatTitle: string; portfoli
 export type ProxyRow = { id: string; motionId: string; grantorName: string; grantorUnit: string; holderName: string; direction: VoteChoice; status: ProxyStatus };
 export type EgmMotion = { id: string; ref: string; title: string; meetingLabel: string; forWeight: number; againstWeight: number; abstainWeight: number; eligibleWeight: number; quorumPct: number; thresholdPct: number };
 export type EgmData = { motion: EgmMotion; proxies: ProxyRow[] } | null;
-
 const ROLE_TONE: Record<BoardRole, Tone> = { Chair: 'success', Treasurer: 'info', Secretary: 'progress', Member: 'muted' };
-const day = (iso: string) => new Date(iso).toLocaleDateString('en-NG', { weekday: 'short', day: 'numeric', month: 'short' });
+const DIR_TONE: Record<VoteChoice, Tone> = { for: 'success', against: 'danger', abstain: 'muted' };
+const PROXY_TONE: Record<ProxyStatus, Tone> = { held: 'progress', exercised: 'success', revoked: 'muted', expired: 'muted' };
 
-export function BoardWorkspace({ members, meetings, elections, egm, motionCounts, nowMs }: {
+export function BoardWorkspace({ members, meetings, elections, egm, motionCounts, nowMs, canCreate = false, canMutate = false }: {
   members: BoardRow[]; meetings: MeetingRow[]; elections: ElectionRow[]; egm: EgmData;
-  motionCounts: Record<MotionStatus, number>; nowMs: number;
+  motionCounts: Record<MotionStatus, number>; nowMs: number; canCreate?: boolean; canMutate?: boolean;
 }) {
   const [showMotion, setShowMotion] = useState(false);
   const [heldFor, setHeldFor] = useState<MeetingRow | null>(null);
   const [nominateFor, setNominateFor] = useState<ElectionRow | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
-  const flash = (m: string) => { setToast(m); setTimeout(() => setToast(null), 2800); };
-
-  const scheduled = meetings.filter((m) => m.status === 'scheduled').sort((a, b) => Date.parse(a.whenISO) - Date.parse(b.whenISO));
-  const held = meetings.filter((m) => m.status === 'held').sort((a, b) => Date.parse(b.whenISO) - Date.parse(a.whenISO));
+  const [decision, setDecision] = useState<CommitteeDecision | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const scheduled = meetings.filter((meeting) => meeting.status === 'scheduled').sort((a, b) => Date.parse(a.whenISO) - Date.parse(b.whenISO));
+  const held = meetings.filter((meeting) => meeting.status === 'held').sort((a, b) => Date.parse(b.whenISO) - Date.parse(a.whenISO));
   const next = scheduled[0];
-  const termsEnding = members.filter((m) => termStatus(m, nowMs).daysLeft <= 90).length;
-  const openMotions = motionCounts.open + motionCounts.draft;
-
-  return (
-    <div className="flex flex-col gap-3.5">
-      <div className="relative overflow-hidden rounded-2xl p-5 text-white shadow-card" style={{ background: 'linear-gradient(135deg,#101a12 0%,#183024 55%,#20463218 100%),linear-gradient(135deg,#12241a,#1c3d2b)' }}>
-        <div className="relative flex items-center gap-2 flex-wrap">
-          <span className="w-12 h-12 rounded-2xl grid place-items-center flex-none" style={{ background: 'rgba(255,255,255,.1)' }}><Landmark size={22} /></span>
-          <div className="min-w-0">
-            <div className="text-[11px] text-white/70">RESIDENTS’ COMMITTEE</div>
-            <div className="text-[21px] font-bold tracking-[-0.02em] leading-tight mt-0.5">{members.length}-member board</div>
-            <div className="text-[12.5px] text-white/75 mt-0.5">{next ? `Next: ${next.title} · ${day(next.whenISO)}` : 'No meeting scheduled'}</div>
-          </div>
-          <button onClick={() => setShowMotion(true)} className="ml-auto inline-flex items-center gap-2 h-10 px-4 rounded-xl font-semibold text-[13px] bg-white text-[#183024]"><Plus size={15} /> Table a motion</button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 min-[720px]:grid-cols-4 gap-2.5">
-        <Kpi label="Committee" value={String(members.length)} tone="info" icon={<Users size={16} />} />
-        <Kpi label="Next meeting" value={next ? day(next.whenISO).split(',')[0] : '—'} tone="progress" icon={<CalendarClock size={16} />} />
-        <Kpi label="Motions in play" value={String(openMotions)} tone={openMotions ? 'warn' : 'success'} icon={<Vote size={16} />} />
-        <Kpi label="Terms ending" value={String(termsEnding)} tone={termsEnding ? 'warn' : 'success'} icon={<Gavel size={16} />} />
-      </div>
-
-      {egm && <EgmCard egm={egm} onToast={flash} />}
-      {elections.map((el) => <ElectionCard key={el.id} el={el} nowMs={nowMs} onNominate={() => setNominateFor(el)} onToast={flash} />)}
-
-      <div className="grid grid-cols-1 min-[900px]:grid-cols-[1fr_320px] gap-3.5 items-start">
-        {/* Roster */}
-        <section className="bg-surface border border-border rounded-2xl shadow-card overflow-hidden">
-          <div className="px-4 py-2.5 border-b border-border flex items-center gap-2"><Users size={14} className="text-text-3" /><span className="text-[12.5px] font-semibold">Committee roster</span></div>
-          <div className="divide-y divide-border">
-            {members.map((m) => {
-              const term = termStatus(m, nowMs);
-              return (
-                <div key={m.id} className="px-4 py-3 flex items-center gap-3">
-                  <span className="w-9 h-9 rounded-full grid place-items-center flex-none text-[12px] font-bold" style={{ background: `color-mix(in srgb, ${toneVar(ROLE_TONE[m.role])} 16%, transparent)`, color: toneVar(ROLE_TONE[m.role]) }}>{m.name.split(' ').map((s) => s[0]).slice(0, 2).join('')}</span>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[13px] font-semibold truncate">{m.name} <span className="text-[10.5px] font-medium" style={{ color: toneVar(ROLE_TONE[m.role]) }}>· {m.role}</span></div>
-                    <div className="text-[11px] text-text-3 truncate">{m.portfolio} · {m.unitLabel}</div>
-                  </div>
-                  <span className="text-[10px] font-semibold px-2 h-5 inline-flex items-center rounded-full flex-none" style={{ background: `color-mix(in srgb, ${toneVar(term.band)} 14%, transparent)`, color: toneVar(term.band) }}>{term.daysLeft < 0 ? term.label : `${Math.round(term.daysLeft / 30)}mo left`}</span>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* Meetings */}
-        <section className="bg-surface border border-border rounded-2xl shadow-card overflow-hidden">
-          <div className="px-4 py-2.5 border-b border-border flex items-center gap-2"><CalendarClock size={14} className="text-text-3" /><span className="text-[12.5px] font-semibold">Meetings</span></div>
-          <div className="divide-y divide-border">
-            {[...scheduled, ...held].map((m) => {
-              const st = meetingState(m, nowMs);
-              return (
-                <div key={m.id} className="px-4 py-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0"><div className="text-[12.5px] font-semibold truncate">{m.title}</div><div className="text-[10.5px] text-text-3">{m.type} · {day(m.whenISO)} · {m.venue}</div></div>
-                    <span className="text-[10px] font-semibold px-2 h-5 inline-flex items-center rounded-full flex-none" style={{ background: `color-mix(in srgb, ${toneVar(st.tone)} 14%, transparent)`, color: toneVar(st.tone) }}>{st.label}</span>
-                  </div>
-                  <div className="flex items-center gap-2 mt-2">
-                    <span className="text-[10.5px] text-text-3">{m.status === 'held' ? `${m.resolutions} resolutions · ${m.attendees}/${m.quorumRequired} present` : `quorum ${m.quorumRequired}`}</span>
-                    {m.status === 'scheduled' && <button onClick={() => setHeldFor(m)} className="ml-auto text-[11px] px-2.5 h-7 rounded-lg font-medium border border-border-2 inline-flex items-center gap-1"><CalendarCheck size={11} /> Mark held</button>}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      </div>
-
-      {/* Motion pipeline */}
-      <section className="bg-surface border border-border rounded-2xl shadow-card p-4">
-        <div className="flex items-center gap-2 mb-2.5"><FileText size={14} className="text-text-3" /><span className="text-[12.5px] font-semibold">Motion pipeline</span><a href="/governance" className="ml-auto text-[11px] text-primary font-medium">Open governance →</a></div>
-        <div className="grid grid-cols-3 min-[560px]:grid-cols-5 gap-2">
-          {(['draft', 'open', 'passed', 'rejected', 'quorum_failed'] as MotionStatus[]).map((s) => (
-            <div key={s} className="rounded-xl bg-surface-2 px-3 py-2.5">
-              <div className="text-[17px] font-bold leading-none">{motionCounts[s]}</div>
-              <div className="text-[10px] text-text-3 mt-1">{MOTION_STATUS_LABEL[s]}</div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {showMotion && <MotionDialog onClose={() => setShowMotion(false)} onDone={(ref) => { setShowMotion(false); flash(`Motion tabled · ${ref}`); }} />}
-      {heldFor && <HeldDialog meeting={heldFor} onClose={() => setHeldFor(null)} onDone={() => { setHeldFor(null); flash('Meeting recorded'); }} />}
-      {nominateFor && <NominateDialog el={nominateFor} onClose={() => setNominateFor(null)} onDone={(n) => { setNominateFor(null); flash(`Nominated · ${n}`); }} />}
-      {toast && <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[90] bg-text text-surface text-[13px] font-medium px-4 py-2.5 rounded-xl shadow-float animate-fade">{toast}</div>}
-    </div>
-  );
+  const termsEnding = members.filter((member) => termStatus(member, nowMs).daysLeft <= 90).length;
+  return <div className={layout.layout}>
+    <div className={layout.toolbar}><div><h2 className={layout.sectionTitle}>Residents’ committee</h2><p className={layout.metadata}>Snapshot · {committeeDate(new Date(nowMs).toISOString())} · {members.length} committee member(s)</p></div>{canCreate ? <Button variant="primary" icon={<Plus size={16} />} onClick={() => setShowMotion(true)}>Table a motion</Button> : <StatusPill status={canMutate ? 'Committee update access' : 'Read-only access'} tone="muted" />}</div>
+    <PageTabs label="Board and committee sections" items={[
+      { id: 'overview', label: 'Overview', content: <div className={layout.layout}>
+        <div className={layout.metrics}><KpiCard label="Committee members" value={String(members.length)} icon={<Users size={18} />} /><KpiCard label="Scheduled meetings" value={String(scheduled.length)} icon={<CalendarClock size={18} />} /><KpiCard label="Motions in play" value={String(motionCounts.open + motionCounts.draft)} icon={<Vote size={18} />} /><KpiCard label="Terms ending / expired" value={String(termsEnding)} icon={<Gavel size={18} />} /></div>
+        <Card><CardHeader title="Motion pipeline" subtitle="Drafts, open votes and resolved estate decisions." action={<a className="pb-action text-primary" href="/governance">Open governance →</a>} /><div className={styles.pipeline}>{(['draft', 'open', 'passed', 'rejected', 'quorum_failed'] as MotionStatus[]).map((status) => <div key={status} className={styles.pipelineItem}><span className={layout.metric}>{motionCounts[status]}</span><span className={layout.metadata}>{MOTION_STATUS_LABEL[status]}</span></div>)}</div></Card>
+        <div className={layout.analytics}><Card><CardHeader title="Next meeting" subtitle="The next scheduled meeting in the current records." />{next ? <div className={layout.stack}><h4 className={layout.title}>{next.title}</h4><p className={layout.muted}>{next.type} · {committeeDate(next.whenISO)}</p><p className={layout.muted}>{next.venue}</p><StatusPill status={`Quorum: ${next.quorumRequired} attendees`} tone="info" /></div> : <EmptyState icon={<CalendarClock size={24} />} title="No meeting scheduled" description="Scheduled committee meetings will appear here." />}</Card><Card><CardHeader title="Term planning" subtitle="Review continuity before a committee term ends." /><p className={layout.muted}>{termsEnding} member(s) have a term ending within 90 days or already expired, using the supplied snapshot date.</p><p className={layout.notice}>Elections and proxies remain separate records. A person only joins the committee after a confirmed election decision.</p></Card></div>
+      </div> },
+      { id: 'committee', label: 'Committee', content: <Card><CardHeader title="Committee roster" subtitle="People, portfolios and recorded terms of office." /><div className="pb-table-scroll" role="region" aria-label="Committee roster" tabIndex={0}><table className={`pb-data-table ${layout.table}`}><thead><tr>{['Member', 'Role', 'Portfolio', 'Since', 'Term end', 'Term status'].map((label) => <th scope="col" key={label}>{label}</th>)}</tr></thead><tbody>{members.map((member) => { const term = termStatus(member, nowMs); return <tr key={member.id}><td><div className={layout.person}><Avatar name={member.name} size={36} /><div className={styles.tableName}><div className={layout.title}>{member.name}</div><div className={layout.metadata}>{member.unitLabel}</div></div></div></td><td><StatusPill status={member.role} tone={ROLE_TONE[member.role]} /></td><td>{member.portfolio}</td><td>{committeeDate(member.sinceISO)}</td><td>{committeeDate(member.termEndISO)}</td><td><StatusPill status={term.daysLeft < 0 ? term.label : `${term.daysLeft}d left`} tone={term.band} /></td></tr>; })}</tbody></table></div>{!members.length && <EmptyState icon={<Landmark size={24} />} title="No committee members in your scope" description="The recorded board roster will appear here." />}</Card> },
+      { id: 'meetings', label: 'Meetings', content: <Card><CardHeader title="Meeting register" subtitle="Scheduled meetings, attendance and recorded resolutions." /><div className="pb-table-scroll" role="region" aria-label="Committee meeting register" tabIndex={0}><table className={`pb-data-table ${layout.table}`}><thead><tr>{['Meeting', 'When and where', 'Status', 'Attendance', 'Resolutions', 'Action'].map((label) => <th scope="col" key={label}>{label}</th>)}</tr></thead><tbody>{[...scheduled, ...held].map((meeting) => { const state = meetingState(meeting, nowMs); return <tr key={meeting.id}><td><div className={styles.tableName}><div className={layout.title}>{meeting.title}</div><div className={layout.metadata}>{meeting.type}</div></div></td><td><div>{committeeDate(meeting.whenISO)}</div><div className={layout.metadata}>{meeting.venue}</div></td><td><StatusPill status={state.label} tone={state.tone} /></td><td>{meeting.status === 'held' ? `${meeting.attendees} present` : 'Not recorded'}<div className={layout.metadata}>Quorum {meeting.quorumRequired}</div></td><td>{meeting.status === 'held' ? meeting.resolutions : '—'}</td><td>{canMutate && meeting.status === 'scheduled' ? <Button icon={<CalendarCheck size={16} />} onClick={() => setHeldFor(meeting)} aria-label={`Record meeting ${meeting.title}`}>Record held</Button> : <span className={layout.metadata}>No action</span>}</td></tr>; })}</tbody></table></div>{!meetings.length && <EmptyState icon={<CalendarClock size={24} />} title="No meetings in your scope" description="Committee meeting records will appear here." />}</Card> },
+      ...(Boolean(egm) || elections.length > 0 ? [{ id: 'voting', label: 'Elections & proxies', content: <div className={layout.layout}>{egm && <EgmCard egm={egm} canMutate={canMutate} onDecision={setDecision} />}{elections.map((election) => <ElectionCard key={election.id} el={election} nowMs={nowMs} canCreate={canCreate} canMutate={canMutate} onNominate={() => setNominateFor(election)} onDecision={setDecision} />)}</div> }] : []),
+    ]} />
+    {canCreate && showMotion && <MotionDialog onClose={() => setShowMotion(false)} onDone={(ref) => { setShowMotion(false); setMessage(`Draft motion tabled · ${ref}`); }} />}
+    {canMutate && heldFor && <HeldDialog meeting={heldFor} onClose={() => setHeldFor(null)} onDone={() => { setHeldFor(null); setMessage('Meeting and associated governance records updated'); }} />}
+    {canCreate && nominateFor && <NominateDialog el={nominateFor} onClose={() => setNominateFor(null)} onDone={(name) => { setNominateFor(null); setMessage(`Candidate nominated · ${name}`); }} />}
+    {canMutate && decision && <CommitteeDecisionDialog decision={decision} onClose={() => setDecision(null)} onDone={(text) => { setDecision(null); setMessage(text); }} />}
+    {message && <CommitteeFeedback message={message} onDismiss={() => setMessage(null)} />}
+  </div>;
 }
 
-function MotionDialog({ onClose, onDone }: { onClose: () => void; onDone: (ref: string) => void }) {
-  const router = useRouter();
-  const [pending, start] = useTransition();
-  const [f, setF] = useState<CreateMotionInput>({ title: '', summary: '', category: 'works', quorumPct: 33, thresholdPct: 50 });
+function EgmCard({ egm, canMutate, onDecision }: { egm: NonNullable<EgmData>; canMutate: boolean; onDecision: (decision: CommitteeDecision) => void }) {
+  const { motion, proxies } = egm;
+  const tally = motionTally(motion);
+  const held = proxies.filter((proxy) => proxy.status === 'held');
+  const weights = proxyWeights(held);
+  const projected = projectedTally(motion, held);
+  const exercised = proxies.filter((proxy) => proxy.status === 'exercised').length;
+  return <Card><CardHeader title={`EGM · ${motion.title}`} subtitle={`${motion.ref} · ${motion.meetingLabel}`} action={<StatusPill status={`${tally.turnoutPct}% turnout`} tone={tally.quorumMet ? 'success' : 'warn'} />} />
+    <div className={styles.proxyProjection}><CommitteeMeter label="Recorded quorum" value={tally.turnoutPct} marker={motion.quorumPct} met={tally.quorumMet} summary={`${tally.turnoutPct}% turnout`} hint={`Requires ${motion.quorumPct}% of ${motion.eligibleWeight} eligible unit weights`} /><p className={layout.muted}><span className={styles.turnout}>{projected.turnoutPct}% projected turnout</span> if the {held.length} held proxy record(s) are exercised. {projected.addsQuorum ? 'This projection would meet quorum.' : tally.quorumMet ? 'Recorded quorum is already met.' : 'The projection remains below quorum.'}</p><p className={layout.metadata}>{weights.forW} held for · {weights.againstW} held against · {exercised} already exercised</p></div>
+    <div className="pb-table-scroll" role="region" aria-label="EGM proxy register" tabIndex={0}><table className={`pb-data-table ${layout.table}`}><thead><tr>{['Grantor', 'Proxy holder / chain', 'Direction', 'Status', 'Action'].map((label) => <th scope="col" key={label}>{label}</th>)}</tr></thead><tbody>{proxies.map((proxy) => { const chain = resolveProxyChain(proxy, proxies); return <tr key={proxy.id}><td><div className={layout.title}>{proxy.grantorName}</div><div className={layout.metadata}>{proxy.grantorUnit}</div></td><td><div>{proxyHolderName(proxy.holderName)}</div>{chain.depth > 1 && !chain.cycle && <div className={layout.metadata}>Chain: {chain.path.map(proxyHolderName).join(' → ')}</div>}</td><td><StatusPill status={proxy.direction} tone={DIR_TONE[proxy.direction]} /></td><td><StatusPill status={proxy.status} tone={PROXY_TONE[proxy.status]} /></td><td>{canMutate && proxy.status === 'held' ? <Button onClick={() => onDecision({ title: 'Revoke proxy assignment', record: `${proxy.grantorName} · ${proxy.grantorUnit}`, description: 'Revoking this proxy also revokes upstream assignments delegated through this grantor and creates return-vote notices for affected residents.', confirmLabel: 'Confirm revoke proxy', action: () => revokeProxyLink(proxy.id), success: 'Proxy revoked' })} aria-label={`Review revocation for ${proxy.grantorName}`}>Revoke</Button> : <span className={layout.metadata}>No action</span>}</td></tr>; })}</tbody></table></div>
+    {!proxies.length && <EmptyState icon={<Scale size={24} />} title="No proxies assigned" description="Directed proxy records will appear here." />}
+    <div className={styles.recordActions}><span className={layout.metadata}>{held.length} proxy record(s) awaiting a committee decision</span>{canMutate && <Button variant="primary" disabled={!held.length} icon={<Zap size={16} />} onClick={() => onDecision({ title: 'Exercise held proxies', record: `${motion.ref} · ${motion.title}`, description: `Add all ${held.length} held directed proxy records to the recorded ballot weights and mark them as exercised. The projection is not a certified voting result.`, confirmLabel: 'Confirm exercise proxies', action: () => exerciseProxies(motion.id), success: 'Proxies exercised' })}>Exercise proxies</Button>}</div>
+  </Card>;
+}
+
+function ElectionCard({ el, nowMs, canCreate, canMutate, onNominate, onDecision }: { el: ElectionRow; nowMs: number; canCreate: boolean; canMutate: boolean; onNominate: () => void; onDecision: (decision: CommitteeDecision) => void }) {
+  const tally = electionTally(el);
+  const winner = el.status === 'decided' ? el.candidates.find((candidate) => candidate.id === el.winnerCandidateId) : null;
+  const projectedWinner = electionWinner(el);
+  return <Card><CardHeader title={`Board election · ${el.seatTitle}`} subtitle={`${el.ref} · ${el.portfolio}`} action={<StatusPill status={ELECTION_STATUS_LABEL[el.status]} tone={electionStatusTone(el.status)} />} />
+    {winner ? <div className={layout.notice}><Trophy size={18} aria-hidden="true" /><span>{winner.residentName} was recorded as elected with {winner.votes} votes · {tally.turnoutPct}% turnout.</span></div> : <div className={layout.stack}><CommitteeMeter label="Election quorum" value={tally.turnoutPct} marker={el.quorumPct} met={tally.quorumMet} summary={`${tally.turnoutPct}% turnout`} hint={`Requires ${el.quorumPct}% of ${el.eligibleWeight} eligible unit weights`} />{tally.ranked.map(({ candidate, pct }, index) => <div key={candidate.id} className={styles.candidate}><span className={styles.candidateRank}>{index + 1}</span><div className={styles.candidateBody}><div className={styles.badges}><Avatar name={candidate.residentName} size={32} /><h4 className={layout.title}>{candidate.residentName}</h4><span className={layout.metadata}>{candidate.unitLabel}</span>{el.status === 'voting' && projectedWinner?.id === candidate.id && <StatusPill status="Current qualifying leader" tone="success" />}</div><p className={layout.muted}>{candidate.statement}</p><div className={styles.meter} role="img" aria-label={`${candidate.residentName}: ${candidate.votes} votes; ${pct}% of votes`}><span style={{ width: `${pct}%`, background: toneVar('progress') }} /></div><p className={layout.metadata}>{candidate.votes} recorded votes · {pct}%</p></div></div>)}{!el.candidates.length && <EmptyState icon={<UserPlus size={24} />} title="No candidates nominated" description="Candidate records will appear when nominations are recorded." />}<div className={styles.recordActions}><span className={layout.metadata}>{el.candidates.length} standing · {el.status === 'voting' ? `${Math.max(0, Math.round((Date.parse(el.closesISO) - nowMs) / 86400000))}d to scheduled close` : 'Nominations open'}</span>{canCreate && <Button icon={<UserPlus size={16} />} onClick={onNominate}>Nominate</Button>}{canMutate && el.status === 'nominations' && <Button variant="primary" disabled={el.candidates.length < 2} onClick={() => onDecision({ title: 'Open election voting', record: `${el.ref} · ${el.seatTitle}`, description: 'Open this election using the current candidate list and quorum requirement. At least two candidates are required.', confirmLabel: 'Confirm open election', action: () => openElectionVoting(el.id), success: 'Election voting opened' })}>Open voting</Button>}{canMutate && el.status === 'voting' && <Button variant="primary" icon={<Gavel size={16} />} disabled={!projectedWinner} onClick={() => onDecision({ title: 'Close and declare election', record: `${el.ref} · ${el.seatTitle}`, description: `Declare ${projectedWinner?.residentName ?? 'the qualifying candidate'} using the recorded result and add them to the committee for a two-year term. This closes the election.`, confirmLabel: 'Confirm close and declare', action: () => decideElection(el.id), success: 'Election decided' })}>Close &amp; declare</Button>}</div>{el.status === 'voting' && !projectedWinner && <p className={layout.metadata}>A result cannot be declared until quorum is met and the lead is not tied.</p>}</div>}
+  </Card>;
+}
+
+export function MotionDialog({ onClose, onDone }: { onClose: () => void; onDone: (ref: string) => void }) {
+  const router = useRouter(); const [pending, start] = useTransition();
+  const [fields, setFields] = useState<CreateMotionInput>({ title: '', summary: '', category: 'works', quorumPct: 33, thresholdPct: 50 });
   const [error, setError] = useState<string | null>(null);
-  const set = (k: keyof CreateMotionInput, v: string | number) => setF((s) => ({ ...s, [k]: v }));
-  function submit() { setError(null); start(async () => { const r = await createMotion(f); if (!r.ok) { setError(r.error); return; } router.refresh(); onDone(r.ref ?? ''); }); }
-  return (
-    <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center p-3 sm:p-4">
-      <div className="absolute inset-0 bg-[rgba(10,12,20,.45)] animate-fade" onClick={onClose} />
-      <div className="relative w-full max-w-[380px] bg-surface border border-border rounded-2xl shadow-float p-4 animate-[tms-slideup_.2s_ease]">
-        <div className="flex items-center justify-between mb-3"><h3 className="text-[15px] font-semibold">Table a motion</h3><button onClick={onClose} className="w-8 h-8 rounded-lg grid place-items-center hover:bg-surface-2"><X size={17} /></button></div>
-        <div className="flex flex-col gap-2.5">
-          <div><label className="lblb">Title</label><input value={f.title} onChange={(e) => set('title', e.target.value)} className="inpb" autoFocus placeholder="e.g. Approve gym refurbishment" /></div>
-          <div><label className="lblb">Summary</label><textarea value={f.summary} onChange={(e) => set('summary', e.target.value)} className="inpb" style={{ height: 56, padding: '8px 10px' }} placeholder="What residents are voting on…" /></div>
-          <div className="grid grid-cols-3 gap-2.5">
-            <div><label className="lblb">Type</label><select value={f.category} onChange={(e) => set('category', e.target.value)} className="inpb"><option value="works">Works</option><option value="budget">Budget</option><option value="rule">Bylaw</option><option value="board">Board</option></select></div>
-            <div><label className="lblb">Quorum %</label><input value={String(f.quorumPct)} onChange={(e) => set('quorumPct', Number(e.target.value.replace(/[^0-9]/g, '')) || 0)} inputMode="numeric" className="inpb" /></div>
-            <div><label className="lblb">Pass %</label><input value={String(f.thresholdPct)} onChange={(e) => set('thresholdPct', Number(e.target.value.replace(/[^0-9]/g, '')) || 0)} inputMode="numeric" className="inpb" /></div>
-          </div>
-        </div>
-        <p className="text-[10.5px] text-text-3 mt-2">Tabled as a draft — open it for voting from Governance.</p>
-        {error && <div className="text-[12px] text-negative mt-2">{error}</div>}
-        <div className="flex justify-end gap-2 mt-4"><button onClick={onClose} className="h-9 px-3.5 rounded-lg border border-border-2 text-[13px]">Cancel</button><button onClick={submit} disabled={pending || !f.title.trim()} className="h-9 px-4 rounded-lg bg-primary text-white text-[13px] font-medium disabled:opacity-50 inline-flex items-center gap-1"><Check size={13} /> {pending ? 'Tabling…' : 'Table motion'}</button></div>
-        <style>{`.lblb{display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--text-3);margin-bottom:4px}.inpb{width:100%;height:36px;padding:0 10px;border-radius:8px;border:1px solid var(--border-2);background:var(--surface);font-size:13px;outline:none;font-family:inherit;resize:none}.inpb:focus{border-color:var(--primary)}`}</style>
-      </div>
-    </div>
-  );
+  function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); if (pending || !fields.title.trim()) return; setError(null); start(async () => { try { const result = await createMotion(fields); if (!result.ok) { setError(result.error); return; } router.refresh(); onDone(result.ref ?? ''); } catch { setError('The motion could not be tabled. Please try again.'); } }); }
+  return <PortalDialog label="Table a motion" onClose={onClose} width={600} canClose={!pending}><div className={layout.modal}><div className={layout.dialogHeader}><h2 className={layout.dialogTitle}>Table a motion</h2><IconButton aria-label="Close motion form" disabled={pending} onClick={onClose}><X size={18} /></IconButton></div><form className={styles.form} onSubmit={submit} aria-busy={pending}><fieldset className={styles.formFields} disabled={pending}><div><label className="pb-form-label" htmlFor="motion-title">Title</label><input id="motion-title" className="pb-form-control" required value={fields.title} onChange={(event) => setFields((current) => ({ ...current, title: event.target.value }))} placeholder="e.g. Approve gym refurbishment" /></div><div><label className="pb-form-label" htmlFor="motion-summary">Summary</label><textarea id="motion-summary" className="pb-form-control" value={fields.summary} onChange={(event) => setFields((current) => ({ ...current, summary: event.target.value }))} placeholder="What residents are being asked to decide" /></div><div><label className="pb-form-label" htmlFor="motion-category">Type</label><select id="motion-category" className="pb-form-control" value={fields.category} onChange={(event) => setFields((current) => ({ ...current, category: event.target.value as CreateMotionInput['category'] }))}><option value="works">Works</option><option value="budget">Budget</option><option value="rule">Bylaw</option><option value="board">Board</option></select></div><div className={styles.formGrid}><div><label className="pb-form-label" htmlFor="motion-quorum">Quorum (%)</label><input id="motion-quorum" type="number" min="1" max="100" step="1" required className="pb-form-control" value={fields.quorumPct} onChange={(event) => setFields((current) => ({ ...current, quorumPct: Number(event.target.value) }))} /></div><div><label className="pb-form-label" htmlFor="motion-threshold">Approval threshold (%)</label><input id="motion-threshold" type="number" min="1" max="100" step="1" required className="pb-form-control" value={fields.thresholdPct} onChange={(event) => setFields((current) => ({ ...current, thresholdPct: Number(event.target.value) }))} /></div></div><p className={layout.notice}>This saves a draft motion. Voting remains closed until a manager opens it from Governance.</p>{error && <p className={styles.error} role="alert">{error}</p>}<div className={styles.recordActions}><Button type="button" disabled={pending} onClick={onClose}>Cancel</Button><Button type="submit" variant="primary" disabled={pending || !fields.title.trim()}>{pending ? 'Tabling…' : 'Table draft motion'}</Button></div></fieldset></form></div></PortalDialog>;
 }
 
-function HeldDialog({ meeting, onClose, onDone }: { meeting: MeetingRow; onClose: () => void; onDone: () => void }) {
-  const router = useRouter();
-  const [pending, start] = useTransition();
-  const [attendees, setAttendees] = useState(String(meeting.quorumRequired));
-  function submit() { start(async () => { const r = await recordMeetingHeld(meeting.id, Number(attendees)); if (r.ok) { router.refresh(); onDone(); } }); }
-  return (
-    <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center p-3 sm:p-4">
-      <div className="absolute inset-0 bg-[rgba(10,12,20,.45)] animate-fade" onClick={onClose} />
-      <div className="relative w-full max-w-[320px] bg-surface border border-border rounded-2xl shadow-float p-4 animate-[tms-slideup_.2s_ease]">
-        <div className="flex items-center justify-between mb-3"><h3 className="text-[15px] font-semibold">Record meeting</h3><button onClick={onClose} className="w-8 h-8 rounded-lg grid place-items-center hover:bg-surface-2"><X size={17} /></button></div>
-        <div className="rounded-xl bg-surface-2 p-3 mb-3 text-[12.5px]"><div className="font-semibold">{meeting.title}</div><div className="text-text-3">Quorum {meeting.quorumRequired} required</div></div>
-        <label className="block text-[11px] font-semibold uppercase tracking-[.04em] text-text-3 mb-1">Attendees present</label>
-        <input value={attendees} onChange={(e) => setAttendees(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" className="w-full h-9 px-2.5 rounded-lg border border-border-2 bg-surface text-[13px] outline-none focus:border-primary" autoFocus />
-        <div className="flex justify-end gap-2 mt-4"><button onClick={onClose} className="h-9 px-3.5 rounded-lg border border-border-2 text-[13px]">Cancel</button><button onClick={submit} disabled={pending} className="h-9 px-4 rounded-lg bg-primary text-white text-[13px] font-medium disabled:opacity-50">{pending ? 'Saving…' : 'Mark held'}</button></div>
-      </div>
-    </div>
-  );
-}
-const DIR_TONE: Record<VoteChoice, Tone> = { for: 'success', against: 'danger', abstain: 'muted' };
-const PROXY_TONE: Record<ProxyStatus, Tone> = { held: 'progress', exercised: 'success', revoked: 'muted', expired: 'muted' };
-
-function EgmCard({ egm, onToast }: { egm: NonNullable<EgmData>; onToast: (m: string) => void }) {
-  const router = useRouter();
-  const [pending, start] = useTransition();
-  const { motion: m, proxies } = egm;
-  const t = motionTally(m);
-  const held = proxies.filter((p) => p.status === 'held');
-  const w = proxyWeights(held);
-  const proj = projectedTally(m, held);
-  const exercised = proxies.filter((p) => p.status === 'exercised').length;
-  const act = () => start(async () => { const r = await exerciseProxies(m.id); if (r.ok) { router.refresh(); onToast(`Proxies cast · ${r.ref}`); } else onToast(r.error ?? 'Failed'); });
-  const revoke = (id: string) => start(async () => { const r = await revokeProxyLink(id); if (r.ok) { router.refresh(); onToast(`Revoked · ${r.ref}`); } else onToast(r.error ?? 'Failed'); });
-
-  return (
-    <section className="bg-surface border rounded-2xl shadow-card overflow-hidden" style={{ borderColor: 'color-mix(in srgb, var(--tone-progress) 40%, transparent)' }}>
-      <div className="px-4 py-3 border-b border-border flex items-center gap-2 flex-wrap">
-        <span className="w-8 h-8 rounded-lg grid place-items-center flex-none" style={{ background: `color-mix(in srgb, ${toneVar('progress')} 14%, transparent)`, color: toneVar('progress') }}><Scale size={16} /></span>
-        <div className="min-w-0">
-          <div className="text-[13px] font-semibold flex items-center gap-1.5">EGM · {m.title}<span className="text-[10px] font-mono text-text-3">{m.ref}</span></div>
-          <div className="text-[11px] text-text-3">{m.meetingLabel} · proxy voting open</div>
-        </div>
-        <span className="ml-auto text-[10.5px] font-semibold px-2 h-6 inline-flex items-center rounded-full flex-none" style={{ background: `color-mix(in srgb, ${toneVar(t.quorumMet ? 'success' : 'warn')} 14%, transparent)`, color: toneVar(t.quorumMet ? 'success' : 'warn') }}>{t.turnoutPct}% turnout {t.quorumMet ? '· quorate' : `· needs ${m.quorumPct}%`}</span>
-      </div>
-
-      {/* quorum meter with projected extension */}
-      <div className="px-4 pt-3">
-        <div className="flex items-center justify-between text-[11px] mb-1"><span className="text-text-3">Quorum {held.length > 0 && !t.quorumMet && <span style={{ color: toneVar('progress') }}>· +{held.length} proxies projected</span>}</span><span className="font-mono" style={{ color: toneVar(proj.quorumMet ? 'success' : 'warn') }}>{proj.turnoutPct}% with proxies</span></div>
-        <div className="h-2.5 rounded-full bg-surface-2 overflow-hidden relative flex">
-          <div className="h-full" style={{ width: `${Math.min(100, t.turnoutPct)}%`, background: toneVar('progress') }} />
-          <div className="h-full" style={{ width: `${Math.max(0, Math.min(100, proj.turnoutPct) - t.turnoutPct)}%`, background: `repeating-linear-gradient(45deg, ${toneVar('progress')}, ${toneVar('progress')} 3px, transparent 3px, transparent 6px)` }} />
-          <span className="absolute top-[-2px] bottom-[-2px] w-px bg-text" style={{ left: `${Math.min(100, m.quorumPct)}%` }} />
-        </div>
-        <div className="text-[10.5px] mt-1" style={{ color: toneVar(proj.addsQuorum ? 'success' : 'muted') }}>{proj.addsQuorum ? `Exercising ${held.length} held ${held.length === 1 ? 'proxy' : 'proxies'} carries quorum → ${proj.passing ? 'motion passes' : 'still below approval threshold'}.` : t.quorumMet ? 'Quorum already met.' : `${held.length} held · not enough to reach quorum yet.`}</div>
-      </div>
-
-      {/* proxy register (with delegation chains) */}
-      {(() => { const chained = proxies.filter((p) => resolveProxyChain(p, proxies).depth > 1).length; return (
-      <div className="px-4 py-2 mt-1 text-[11px] font-semibold text-text-2 flex items-center gap-1.5"><Users size={12} /> Proxy register · {w.forW} for · {w.againstW} against{exercised ? ` · ${exercised} cast` : ''}{chained ? ` · ${chained} delegated onward` : ''}</div>
-      ); })()}
-      <div className="divide-y divide-border max-h-[220px] overflow-y-auto">
-        {proxies.map((p) => {
-          const chain = resolveProxyChain(p, proxies);
-          const isChain = chain.depth > 1 && !chain.cycle;
-          return (
-            <div key={p.id} className="px-4 py-2 flex items-center gap-2">
-              <div className="min-w-0 flex-1">
-                <div className="text-[12px] font-medium truncate">{p.grantorUnit} <span className="text-text-3 font-normal">→ {proxyHolderName(p.holderName)}</span></div>
-                {isChain
-                  ? <div className="text-[10px] flex items-center gap-1 flex-wrap mt-0.5" style={{ color: toneVar('info') }}><span className="opacity-70">chain:</span>{chain.path.map((n, i) => <span key={i}>{i > 0 && <span className="opacity-50">→ </span>}{proxyHolderName(n)}</span>)}</div>
-                  : <div className="text-[10px] text-text-3">{p.grantorName}</div>}
-              </div>
-              <span className="text-[10px] font-semibold px-1.5 h-4 inline-flex items-center rounded-full flex-none capitalize" style={{ background: `color-mix(in srgb, ${toneVar(DIR_TONE[p.direction])} 14%, transparent)`, color: toneVar(DIR_TONE[p.direction]) }}>{p.direction}</span>
-              <span className="text-[10px] font-semibold px-1.5 h-4 inline-flex items-center rounded-full flex-none capitalize" style={{ background: `color-mix(in srgb, ${toneVar(PROXY_TONE[p.status])} 14%, transparent)`, color: toneVar(PROXY_TONE[p.status]) }}>{p.status}</span>
-              {p.status === 'held' && <button disabled={pending} onClick={() => revoke(p.id)} className="w-5 h-5 rounded grid place-items-center flex-none text-text-3 hover:text-negative disabled:opacity-40" title="Revoke this proxy (cascades to anyone routed through them)"><X size={13} /></button>}
-            </div>
-          );
-        })}
-        {proxies.length === 0 && <div className="px-4 py-4 text-center text-[12px] text-text-3">No proxies assigned yet.</div>}
-      </div>
-      <div className="px-4 py-3 border-t border-border flex items-center gap-2">
-        <span className="text-[11px] text-text-3">{held.length} awaiting the Chair</span>
-        <button disabled={pending || held.length === 0} onClick={act} className="ml-auto text-[11.5px] px-3 h-8 rounded-lg font-medium bg-primary text-white inline-flex items-center gap-1 disabled:opacity-40"><Zap size={12} /> {pending ? 'Casting…' : 'Exercise proxies'}</button>
-      </div>
-    </section>
-  );
+export function HeldDialog({ meeting, onClose, onDone }: { meeting: MeetingRow; onClose: () => void; onDone: () => void }) {
+  const router = useRouter(); const [pending, start] = useTransition(); const [attendees, setAttendees] = useState(String(meeting.quorumRequired)); const [error, setError] = useState<string | null>(null);
+  function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); if (pending) return; const count = Number(attendees); if (!attendees.trim() || !Number.isSafeInteger(count) || count < 0) { setError('Enter a whole, non-negative attendance count.'); return; } setError(null); start(async () => { try { const result = await recordMeetingHeld(meeting.id, count); if (!result.ok) { setError(result.error); return; } router.refresh(); onDone(); } catch { setError('The meeting could not be recorded. Please try again.'); } }); }
+  return <PortalDialog label="Record meeting held" onClose={onClose} width={560} canClose={!pending}><div className={layout.modal}><div className={layout.dialogHeader}><h2 className={layout.dialogTitle}>Record meeting held</h2><IconButton aria-label="Close meeting record" disabled={pending} onClick={onClose}><X size={18} /></IconButton></div><form className={styles.form} onSubmit={submit} aria-busy={pending}><fieldset className={styles.formFields} disabled={pending}><div><h3 className={layout.sectionTitle}>{meeting.title}</h3><p className={layout.metadata}>{committeeDate(meeting.whenISO)} · {meeting.venue} · quorum {meeting.quorumRequired}</p></div><div><label className="pb-form-label" htmlFor="meeting-attendance">Attendees present</label><input id="meeting-attendance" type="number" min="0" step="1" required className="pb-form-control" value={attendees} onChange={(event) => setAttendees(event.target.value)} /></div><p className={layout.notice}>Confirming also expires any unused proxies tied to this meeting, resolves its open EGM motions using recorded ballots and creates outcome announcements. Review the voting records before continuing.</p>{error && <p className={styles.error} role="alert">{error}</p>}<div className={styles.recordActions}><Button type="button" disabled={pending} onClick={onClose}>Cancel</Button><Button type="submit" variant="primary" disabled={pending}>{pending ? 'Saving…' : 'Confirm held and resolve votes'}</Button></div></fieldset></form></div></PortalDialog>;
 }
 
-function ElectionCard({ el, nowMs, onNominate, onToast }: { el: ElectionRow; nowMs: number; onNominate: () => void; onToast: (m: string) => void }) {
-  const router = useRouter();
-  const [pending, start] = useTransition();
-  const t = electionTally(el);
-  const winner = el.status === 'decided' ? el.candidates.find((c) => c.id === el.winnerCandidateId) : null;
-  const wouldWin = electionWinner(el);
-  const closes = Math.max(0, Math.round((Date.parse(el.closesISO) - nowMs) / 86400000));
-  const act = (fn: () => Promise<{ ok: boolean; error?: string; ref?: string }>, ok: string) => start(async () => { const r = await fn(); if (r.ok) { router.refresh(); onToast(r.ref ? `${ok} · ${r.ref}` : ok); } else onToast(r.error ?? 'Failed'); });
-
-  return (
-    <section className="bg-surface border rounded-2xl shadow-card overflow-hidden" style={{ borderColor: el.status === 'voting' ? 'color-mix(in srgb, var(--tone-progress) 40%, transparent)' : 'var(--border)' }}>
-      <div className="px-4 py-3 border-b border-border flex items-center gap-2 flex-wrap">
-        <span className="w-8 h-8 rounded-lg grid place-items-center flex-none" style={{ background: `color-mix(in srgb, ${toneVar('warn')} 14%, transparent)`, color: toneVar('warn') }}><Crown size={16} /></span>
-        <div className="min-w-0">
-          <div className="text-[13px] font-semibold flex items-center gap-1.5">Board election · {el.seatTitle}<span className="text-[10px] font-mono text-text-3">{el.ref}</span></div>
-          <div className="text-[11px] text-text-3">Vacant seat · {el.portfolio}</div>
-        </div>
-        <span className="ml-auto text-[10.5px] font-semibold px-2 h-6 inline-flex items-center rounded-full flex-none" style={{ background: `color-mix(in srgb, ${toneVar(electionStatusTone(el.status))} 14%, transparent)`, color: toneVar(electionStatusTone(el.status)) }}>{ELECTION_STATUS_LABEL[el.status]}</span>
-      </div>
-
-      {winner ? (
-        <div className="px-4 py-3 flex items-center gap-2.5" style={{ background: 'color-mix(in srgb, var(--tone-success) 7%, transparent)' }}>
-          <Trophy size={18} style={{ color: toneVar('success') }} />
-          <div className="text-[13px]"><span className="font-semibold">{winner.residentName}</span> elected to the seat — {winner.votes} votes ({t.turnoutPct}% turnout). Now on the committee.</div>
-        </div>
-      ) : (
-        <>
-          <div className="px-4 pt-3">
-            <div className="flex items-center justify-between text-[11px] mb-1"><span className="text-text-3">Quorum</span><span className="font-mono font-semibold" style={{ color: toneVar(t.quorumMet ? 'success' : 'warn') }}>{t.turnoutPct}% turnout {t.quorumMet ? '· met' : `· needs ${el.quorumPct}%`}</span></div>
-            <div className="h-2 rounded-full bg-surface-2 overflow-hidden relative"><div className="h-full rounded-full" style={{ width: `${Math.min(100, t.turnoutPct)}%`, background: toneVar(t.quorumMet ? 'success' : 'warn') }} /><span className="absolute top-[-2px] bottom-[-2px] w-px bg-text" style={{ left: `${Math.min(100, el.quorumPct)}%` }} /></div>
-          </div>
-          <div className="divide-y divide-border mt-2">
-            {t.ranked.map(({ candidate: c, pct }, i) => (
-              <div key={c.id} className="px-4 py-2.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-bold text-text-3 w-4 flex-none">{i + 1}</span>
-                  <div className="min-w-0 flex-1"><div className="text-[12.5px] font-medium truncate">{c.residentName} <span className="text-[10.5px] text-text-3 font-normal">· {c.unitLabel}</span>{el.status === 'voting' && wouldWin?.id === c.id && <span className="ml-1.5 text-[9.5px] font-semibold px-1.5 h-4 inline-flex items-center rounded-full" style={{ background: `color-mix(in srgb, ${toneVar('success')} 14%, transparent)`, color: toneVar('success') }}>leading</span>}</div></div>
-                  <span className="text-[11px] font-mono text-text-3 flex-none">{c.votes} · {pct}%</span>
-                </div>
-                <div className="text-[10.5px] text-text-3 mt-0.5 ml-6">{c.statement}</div>
-                <div className="h-1.5 rounded-full bg-surface-2 overflow-hidden mt-1 ml-6"><div className="h-full rounded-full" style={{ width: `${pct}%`, background: toneVar(wouldWin?.id === c.id ? 'success' : 'progress') }} /></div>
-              </div>
-            ))}
-          </div>
-          <div className="px-4 py-3 flex items-center gap-2 flex-wrap border-t border-border">
-            <span className="text-[11px] text-text-3">{el.status === 'voting' ? `closes in ${closes}d · ` : ''}{el.candidates.length} standing</span>
-            <div className="ml-auto flex gap-2">
-              <button disabled={pending} onClick={onNominate} className="text-[11.5px] px-2.5 h-8 rounded-lg font-medium border border-border-2 inline-flex items-center gap-1 disabled:opacity-50"><UserPlus size={12} /> Nominate</button>
-              {el.status === 'nominations' && <button disabled={pending} onClick={() => act(() => openElectionVoting(el.id), 'Voting opened')} className="text-[11.5px] px-2.5 h-8 rounded-lg font-medium bg-primary text-white inline-flex items-center gap-1 disabled:opacity-50">Open voting</button>}
-              {el.status === 'voting' && <button disabled={pending} onClick={() => act(() => decideElection(el.id), 'Seat filled')} className="text-[11.5px] px-2.5 h-8 rounded-lg font-medium bg-text text-surface inline-flex items-center gap-1 disabled:opacity-50" title={wouldWin ? `Declare ${wouldWin.residentName}` : 'Quorum not met / tie'}><Gavel size={12} /> Close & declare</button>}
-            </div>
-          </div>
-        </>
-      )}
-    </section>
-  );
-}
-
-function NominateDialog({ el, onClose, onDone }: { el: ElectionRow; onClose: () => void; onDone: (n: string) => void }) {
-  const router = useRouter();
-  const [pending, start] = useTransition();
-  const [f, setF] = useState<NominateInput>({ name: '', unitLabel: '', statement: '' });
-  const [error, setError] = useState<string | null>(null);
-  const set = (k: keyof NominateInput, v: string) => setF((s) => ({ ...s, [k]: v }));
-  function submit() { setError(null); start(async () => { const r = await nominateCandidate(el.id, f); if (!r.ok) { setError(r.error); return; } router.refresh(); onDone(r.ref ?? f.name); }); }
-  return (
-    <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center p-3 sm:p-4">
-      <div className="absolute inset-0 bg-[rgba(10,12,20,.45)] animate-fade" onClick={onClose} />
-      <div className="relative w-full max-w-[380px] bg-surface border border-border rounded-2xl shadow-float p-4 animate-[tms-slideup_.2s_ease]">
-        <div className="flex items-center justify-between mb-3"><h3 className="text-[15px] font-semibold">Nominate a candidate</h3><button onClick={onClose} className="w-8 h-8 rounded-lg grid place-items-center hover:bg-surface-2"><X size={17} /></button></div>
-        <div className="rounded-xl bg-surface-2 p-3 mb-3 text-[12px] text-text-3">{el.seatTitle} · {el.portfolio}</div>
-        <div className="flex flex-col gap-2.5">
-          <div className="grid grid-cols-2 gap-2.5">
-            <div><label className="lblb">Name</label><input value={f.name} onChange={(e) => set('name', e.target.value)} className="inpb" autoFocus placeholder="Resident name" /></div>
-            <div><label className="lblb">Unit</label><input value={f.unitLabel} onChange={(e) => set('unitLabel', e.target.value)} className="inpb" placeholder="Block C · 09A" /></div>
-          </div>
-          <div><label className="lblb">Manifesto</label><textarea value={f.statement} onChange={(e) => set('statement', e.target.value)} className="inpb" style={{ height: 56, padding: '8px 10px' }} placeholder="Why they’re standing…" /></div>
-        </div>
-        {error && <div className="text-[12px] text-negative mt-2">{error}</div>}
-        <div className="flex justify-end gap-2 mt-4"><button onClick={onClose} className="h-9 px-3.5 rounded-lg border border-border-2 text-[13px]">Cancel</button><button onClick={submit} disabled={pending || !f.name.trim()} className="h-9 px-4 rounded-lg bg-primary text-white text-[13px] font-medium disabled:opacity-50 inline-flex items-center gap-1"><Check size={13} /> {pending ? 'Adding…' : 'Add candidate'}</button></div>
-        <style>{`.lblb{display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--text-3);margin-bottom:4px}.inpb{width:100%;height:36px;padding:0 10px;border-radius:8px;border:1px solid var(--border-2);background:var(--surface);font-size:13px;outline:none;font-family:inherit;resize:none}.inpb:focus{border-color:var(--primary)}`}</style>
-      </div>
-    </div>
-  );
-}
-function Kpi({ label, value, tone, icon }: { label: string; value: string; tone: Tone; icon: React.ReactNode }) {
-  return <div className="bg-surface border border-border rounded-2xl shadow-card p-3.5"><span className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `color-mix(in srgb, ${toneVar(tone)} 14%, transparent)`, color: toneVar(tone) }}>{icon}</span><div className="text-[12px] text-text-2 font-medium mt-2.5">{label}</div><div className="text-[15px] font-bold tracking-[-0.02em] leading-none mt-1 truncate">{value}</div></div>;
+export function NominateDialog({ el, onClose, onDone }: { el: ElectionRow; onClose: () => void; onDone: (name: string) => void }) {
+  const router = useRouter(); const [pending, start] = useTransition(); const [fields, setFields] = useState<NominateInput>({ name: '', unitLabel: '', statement: '' }); const [error, setError] = useState<string | null>(null);
+  function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); if (pending || !fields.name.trim()) return; setError(null); start(async () => { try { const result = await nominateCandidate(el.id, fields); if (!result.ok) { setError(result.error); return; } router.refresh(); onDone(result.ref ?? fields.name); } catch { setError('The candidate could not be added. Please try again.'); } }); }
+  return <PortalDialog label="Nominate a candidate" onClose={onClose} width={560} canClose={!pending}><div className={layout.modal}><div className={layout.dialogHeader}><h2 className={layout.dialogTitle}>Nominate a candidate</h2><IconButton aria-label="Close nomination form" disabled={pending} onClick={onClose}><X size={18} /></IconButton></div><form className={styles.form} onSubmit={submit} aria-busy={pending}><fieldset className={styles.formFields} disabled={pending}><p className={layout.notice}>{el.seatTitle} · {el.portfolio}</p><div className={styles.formGrid}><div><label className="pb-form-label" htmlFor="candidate-name">Resident name</label><input id="candidate-name" required className="pb-form-control" value={fields.name} onChange={(event) => setFields((current) => ({ ...current, name: event.target.value }))} /></div><div><label className="pb-form-label" htmlFor="candidate-unit">Unit</label><input id="candidate-unit" className="pb-form-control" value={fields.unitLabel} onChange={(event) => setFields((current) => ({ ...current, unitLabel: event.target.value }))} placeholder="Block C · 09A" /></div></div><div><label className="pb-form-label" htmlFor="candidate-statement">Candidate statement</label><textarea id="candidate-statement" className="pb-form-control" value={fields.statement} onChange={(event) => setFields((current) => ({ ...current, statement: event.target.value }))} placeholder="Why this resident is standing" /></div><p className={layout.metadata}>This creates a nomination record, not an elected appointment.</p>{error && <p className={styles.error} role="alert">{error}</p>}<div className={styles.recordActions}><Button type="button" disabled={pending} onClick={onClose}>Cancel</Button><Button type="submit" variant="primary" disabled={pending || !fields.name.trim()}>{pending ? 'Adding…' : 'Add candidate'}</Button></div></fieldset></form></div></PortalDialog>;
 }

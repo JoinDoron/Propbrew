@@ -15,6 +15,18 @@ import {
 
 export type CopilotUsage = { requests: number; inputTokens: number; outputTokens: number; costMinorNgn: number };
 
+/** Per-tenant daily spend guard. Zero/unset means no cap for local development. */
+export function dailyCapMinorNgn(): number | null {
+  const raw = Number(process.env.REEVE_AI_DAILY_CAP_MINOR_NGN ?? '0');
+  return Number.isFinite(raw) && raw > 0 ? Math.round(raw) : null;
+}
+
+export function canSpend(tenantId: string): { allowed: boolean; capMinorNgn: number | null; usedMinorNgn: number } {
+  const cap = dailyCapMinorNgn();
+  const used = getUsage(tenantId).costMinorNgn;
+  return { allowed: cap === null || used < cap, capMinorNgn: cap, usedMinorNgn: used };
+}
+
 export function getTenantModel(tenantId: string): CopilotModelId {
   const row = db.copilotSettings.find((r) => r.tenantId === tenantId);
   const id = row?.model ?? DEFAULT_COPILOT_MODEL;

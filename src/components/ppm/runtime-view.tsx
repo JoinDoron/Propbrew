@@ -1,8 +1,12 @@
 'use client';
 
-import { useTransition } from 'react';
+import { useState, useTransition } from 'react';
+import { FacilityDialog } from '@/components/facility/facility-ui';
+import layout from '@/components/ui/workspace-layout.module.css';
+import { Card, CardHeader, EmptyState, StatusPill } from '@/components/ui';
+import styles from './maintenance-clinexa.module.css';
 import { useRouter } from 'next/navigation';
-import { Fuel, Gauge, Plus } from 'lucide-react';
+import { Gauge, Plus } from 'lucide-react';
 import { Button } from '@/components/ui';
 import { addDays } from '@/domain/ppm';
 import { logRuntimeReading, generatePpmWorkOrder } from '@/server/actions/ppm';
@@ -27,53 +31,43 @@ export function RuntimeView({ data, onSelect }: { data: PpmData; onSelect: (id: 
   if (cards.length === 0) return <Empty />;
 
   return (
-    <div className="grid grid-cols-1 min-[720px]:grid-cols-2 gap-3.5">
+    <div className={styles.runtimeGrid}>
       {cards.map((c) => (
-        <div key={String(c.rt.assetId)} className="bg-surface border border-border rounded-2xl shadow-card p-4">
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <div className="flex items-center gap-1.5"><Fuel size={15} className="text-warning" /><h3 className="text-[14px] font-semibold">{c.rt.assetName}</h3></div>
-              <p className="text-[11.5px] text-text-3">{c.rt.dailyRuntimeHours}h/day · {c.plan?.runtimeIntervalHours ?? c.rt.runtimeServiceInterval}h service interval</p>
-            </div>
-            {c.runtimeWins && <span className="text-[10px] font-bold text-white bg-[color:var(--tone-warn)] px-1.5 h-5 rounded inline-flex items-center">RUNTIME-DRIVEN</span>}
-          </div>
+        <Card key={String(c.rt.assetId)} className={styles.runtimeCard}>
+          <CardHeader title={c.rt.assetName} subtitle={`${c.rt.dailyRuntimeHours}h/day · ${c.plan?.runtimeIntervalHours ?? c.rt.runtimeServiceInterval}h service interval`} action={c.runtimeWins ? <StatusPill status="Runtime-driven" tone="warn" /> : <Gauge size={20} className="text-primary" />} />
 
           {/* Big run-hours + gauge */}
-          <div className="flex items-end gap-3 mt-3">
+          <div className={styles.runtimeGauge}>
             <div>
-              <div className="text-[26px] font-bold font-mono tracking-tight leading-none">{c.accrued}<span className="text-[14px] text-text-3">/{c.rt.runtimeServiceInterval}h</span></div>
-              <div className="text-[11px] text-text-3 mt-0.5">since last service</div>
+              <div className={styles.runtimeValue}>{c.accrued}<span className={styles.runtimeUnit}> / {c.rt.runtimeServiceInterval}h</span></div>
+              <div className={styles.metadata}>Since last service</div>
             </div>
-            <div className="flex-1 pb-1">
-              <div className="h-2.5 rounded-full bg-surface-2 overflow-hidden">
-                <div className="h-full rounded-full" style={{ width: `${c.pct}%`, background: c.pct >= 85 ? 'var(--tone-danger)' : c.pct >= 60 ? 'var(--tone-warn)' : 'var(--tone-success)' }} />
+            <div className={styles.gauge}>
+              <div className={styles.bar}>
+                <div style={{ width: `${c.pct}%`, background: c.pct >= 85 ? 'var(--tone-danger)' : c.pct >= 60 ? 'var(--tone-warn)' : 'var(--tone-success)' }} />
               </div>
-              <div className="text-[10.5px] text-text-3 mt-1 text-right">{c.pct}% of interval</div>
+              <div className={styles.metadata}>{c.pct}% of interval</div>
             </div>
           </div>
 
           {/* Dual countdown */}
-          <div className="mt-3 rounded-xl bg-surface-2 p-2.5 text-[12px]">
-            <div className="flex items-center gap-1.5">
-              <Gauge size={13} className="text-text-3" />
-              Service in <strong className={c.runtimeWins ? 'text-warning' : ''}>{c.remaining} running-hrs (~{c.daysToRuntime}d)</strong>
-              <span className="text-text-3">or by</span>
-              <strong className={!c.runtimeWins ? 'text-warning' : ''}>{c.calendarDue}</strong>
-              <span className="text-text-3">— whichever first</span>
-            </div>
-            <div className="text-[11px] text-text-3 mt-1">Next service: <strong className="text-text-2">{c.winner}</strong></div>
+          <div className={styles.callout}>
+            <p className={styles.text}>Service in <strong className={c.runtimeWins ? 'text-warning' : ''}>{c.remaining} running-hrs (~{c.daysToRuntime}d)</strong> or by <strong className={!c.runtimeWins ? 'text-warning' : ''}>{c.calendarDue}</strong> — whichever comes first.</p>
+            <p className={styles.metadata}>Next service: <strong className="text-text-2">{c.winner}</strong></p>
           </div>
 
           {data.canMutate && (
-            <div className="flex items-center gap-2 mt-3">
+            <div className={styles.toolbar}>
+              <div className={styles.inline}>
               <LogReadingButton assetId={String(c.rt.assetId)} />
               {c.occId && (
                 <GenerateButton occId={c.occId} generated={!!data.occurrences.find((o) => o.id === c.occId)?.workOrderRef} />
               )}
-              {c.occId && <button onClick={() => onSelect(c.occId!)} className="text-[12px] text-primary hover:underline ml-auto">Details</button>}
+              </div>
+              {c.occId && <Button variant="ghost" onClick={() => onSelect(c.occId!)} aria-label={`View runtime maintenance details for ${c.rt.assetName}`}>Details →</Button>}
             </div>
           )}
-        </div>
+        </Card>
       ))}
     </div>
   );
@@ -82,24 +76,40 @@ export function RuntimeView({ data, onSelect }: { data: PpmData; onSelect: (id: 
 function LogReadingButton({ assetId }: { assetId: string }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  return (
-    <Button variant="secondary" disabled={pending} className="!h-8 !text-[12px]" icon={<Plus size={14} />} onClick={() => start(async () => { await logRuntimeReading(assetId, 8.4); router.refresh(); })}>
-      Log +8h
-    </Button>
-  );
+  const [open, setOpen] = useState(false);
+  const [hours, setHours] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  function submit() { if (pending || !(Number(hours) > 0)) return; setError(null); start(async () => { try { const result = await logRuntimeReading(assetId, Number(hours)); if (!result.ok) { setError(result.error); return; } setOpen(false); setHours(''); router.refresh(); } catch { setError('The runtime entry could not be confirmed. Refresh before retrying.'); } }); }
+  return <><Button icon={<Plus size={16} />} onClick={() => setOpen(true)}>Log runtime</Button>{open && (
+    <FacilityDialog title="Log additional runtime" onClose={() => setOpen(false)} pending={pending}>
+      <div className={styles.stack}>
+        <p className={layout.body}>Enter the additional running hours since the last recorded reading. This is a manual maintenance input, not a connected meter reading.</p>
+        <label className={layout.field}><span>Additional running hours</span><input className={layout.control} type="number" min="0.01" step="0.01" inputMode="decimal" value={hours} disabled={pending} onChange={(event) => setHours(event.target.value)} required /></label>
+        {error && <p role="alert" className="text-[14px] text-negative">{error}</p>}
+        <div className={layout.actions}><Button disabled={pending} onClick={() => setOpen(false)}>Cancel</Button><Button variant="primary" disabled={pending || !(Number(hours) > 0)} onClick={submit}>{pending ? 'Saving…' : 'Save runtime'}</Button></div>
+      </div>
+    </FacilityDialog>
+  )}</>;
 }
 
 function GenerateButton({ occId, generated }: { occId: string; generated: boolean }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  if (generated) return <span className="text-[11.5px] text-success font-medium">WO generated ✓</span>;
-  return (
-    <Button variant="primary" disabled={pending} className="!h-8 !text-[12px]" onClick={() => start(async () => { await generatePpmWorkOrder(occId); router.refresh(); })}>
-      Generate WO
-    </Button>
-  );
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (generated) return <span className="text-[12px] text-positive font-medium">WO generated ✓</span>;
+  function generate() { if (pending) return; setError(null); start(async () => { try { const result = await generatePpmWorkOrder(occId); if (!result.ok) { setError(result.error); return; } setOpen(false); router.refresh(); } catch { setError('Work-order creation could not be confirmed. Refresh before retrying.'); } }); }
+  return <><Button variant="primary" onClick={() => setOpen(true)}>Generate WO</Button>{open && (
+    <FacilityDialog title="Generate maintenance work order" onClose={() => setOpen(false)} pending={pending}>
+      <div className={styles.stack}>
+        <p className={layout.body}>Creates a work order for this maintenance occurrence. Review the plan and assignment before field work begins.</p>
+        {error && <p role="alert" className="text-[14px] text-negative">{error}</p>}
+        <div className={layout.actions}><Button disabled={pending} onClick={() => setOpen(false)}>Cancel</Button><Button variant="primary" disabled={pending} onClick={generate}>{pending ? 'Generating…' : 'Confirm work order'}</Button></div>
+      </div>
+    </FacilityDialog>
+  )}</>;
 }
 
 function Empty() {
-  return <div className="text-center text-[13px] text-text-3 py-10 border border-dashed border-border rounded-xl">No runtime-metered assets in scope. Generators and pumps show here.</div>;
+  return <Card><EmptyState title="No runtime-metered assets in scope" description="Generators and pumps appear here when runtime readings and service intervals are recorded." icon={<Gauge size={24} />} /></Card>;
 }

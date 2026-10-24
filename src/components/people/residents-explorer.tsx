@@ -1,18 +1,17 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { ArrowUpRight, CalendarCheck, DoorClosed, Home, Mail, Receipt, Search, UserPlus, Wrench, HeartPulse, Users, MessageSquare } from 'lucide-react';
-import { Avatar, Button, StatusPill } from '@/components/ui';
+import { ArrowUpRight, CalendarCheck, HeartPulse, Home, Mail, MessageSquare, Receipt, Search, Users, Wrench } from 'lucide-react';
+import { Avatar, Button, FilterChip, StatusPill } from '@/components/ui';
 import { ReadOnlyChip } from '@/components/domain';
+import { PageTabs } from '@/components/ui/page-tabs';
 import { humanizeStatus, statusTone, toneVar, type Tone } from '@/lib/status-tones';
 import { tenure, paymentReliability, engagementScore, engagementTone, riskFlags, type EngagementInput } from '@/domain/residents';
+import styles from './residents-explorer.module.css';
 
 const NOW_MS = Date.parse('2026-07-26');
-const HOUSE_NAMES = ['Spouse', 'Child', 'Child', 'Relative', 'Guest'];
-function householdMembers(count: number): string[] {
-  return Array.from({ length: Math.max(0, count - 1) }, (_, i) => HOUSE_NAMES[i] ?? 'Member');
-}
+const STATUSES = ['all', 'active', 'invited', 'moved_out'];
 
 export type ResidentRow = { id: string; userId: string; name: string; email?: string; unitId: string; unitLabel: string; unitType: string; status: string; household: number; balanceLabel: string; balanceOwed: boolean; moveInDate: string };
 export type BillRow = { id: string; ref: string; ownerUserId: string; unitId: string; status: string; amountLabel: string; dueDate: string };
@@ -23,242 +22,182 @@ const RESIDENT_TONE: Record<string, Tone> = { active: 'success', invited: 'info'
 const BOOKING_TONE: Record<string, Tone> = { requested: 'neutral', approved: 'info', auto_approved: 'info', confirmed: 'progress', completed: 'success', declined: 'muted', cancelled: 'muted' };
 const INVOICE_TONE: Record<string, Tone> = { draft: 'neutral', issued: 'info', partially_paid: 'warn', paid: 'success', overdue: 'warn', in_arrears: 'danger', escalated: 'danger' };
 
-/** EM-02 — interactive resident directory. Pick a resident to see everything
- *  about them in one place: their unit, bills, maintenance requests and
- *  bookings. Each section only appears if the VIEWER may read that data (§7), so
- *  a facility manager sees requests but not bills. */
+function dateLabel(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Africa/Lagos' });
+}
+
+/** Related records are supplied by the permission-gated server route.
+ * Hidden capabilities never render a panel or financial advisory signal. */
 export function ResidentsExplorer({
   residents, bills, requests, bookings, seesBills, seesRequests, seesBookings, canMutate,
 }: {
   residents: ResidentRow[]; bills: BillRow[]; requests: RequestRow[]; bookings: BookingRow[];
   seesBills: boolean; seesRequests: boolean; seesBookings: boolean; canMutate: boolean;
 }) {
+  const instance = useId();
+  const [section, setSection] = useState('directory');
   const [status, setStatus] = useState('all');
   const [q, setQ] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(residents[0]?.id ?? null);
-
-  const statusCounts = residents.reduce<Record<string, number>>((a, r) => ((a[r.status] = (a[r.status] ?? 0) + 1), a), {});
+  const statusCounts = residents.reduce<Record<string, number>>((counts, resident) => {
+    counts[resident.status] = (counts[resident.status] ?? 0) + 1;
+    return counts;
+  }, {});
   const visible = useMemo(() => {
-    let v = status === 'all' ? residents : residents.filter((r) => r.status === status);
-    if (q.trim()) {
-      const s = q.toLowerCase();
-      v = v.filter((r) => r.name.toLowerCase().includes(s) || r.unitLabel.toLowerCase().includes(s) || (r.email ?? '').toLowerCase().includes(s));
-    }
-    return v;
+    const query = q.trim().toLowerCase();
+    return residents.filter((resident) => (status === 'all' || resident.status === status) &&
+      (!query || resident.name.toLowerCase().includes(query) || resident.unitLabel.toLowerCase().includes(query) || (resident.email ?? '').toLowerCase().includes(query)));
   }, [residents, status, q]);
+  const sel = residents.find((resident) => resident.id === selectedId) ?? visible[0] ?? null;
 
-  const sel = residents.find((r) => r.id === selectedId) ?? visible[0] ?? null;
-  const mine = <T extends { ownerUserId?: string; requesterUserId?: string; unitId?: string }>(rows: T[]) =>
-    !sel ? [] : rows.filter((x) => x.ownerUserId === sel.userId || x.requesterUserId === sel.userId || (x.unitId && x.unitId === sel.unitId));
-
-  const selBills = seesBills ? mine(bills) : [];
-  const selRequests = seesRequests ? mine(requests) : [];
-  const selBookings = seesBookings ? mine(bookings) : [];
-
-  const forRes = <T extends { ownerUserId?: string; requesterUserId?: string; unitId?: string }>(r: ResidentRow, rows: T[]) =>
-    rows.filter((x) => x.ownerUserId === r.userId || x.requesterUserId === r.userId || (x.unitId && x.unitId === r.unitId));
-  const engOf = (r: ResidentRow): EngagementInput => ({
-    status: r.status, moveInDate: r.moveInDate, balanceOwed: r.balanceOwed,
-    bills: seesBills ? forRes(r, bills) : [], requests: seesRequests ? forRes(r, requests) : [], bookings: seesBookings ? forRes(r, bookings) : [],
-  });
-
-  const selEng = sel ? engOf(sel) : null;
+  const forResident = <T extends { ownerUserId?: string; requesterUserId?: string; unitId?: string }>(resident: ResidentRow, rows: T[]) =>
+    rows.filter((row) => row.ownerUserId === resident.userId || row.requesterUserId === resident.userId || (row.unitId && row.unitId === resident.unitId));
+  const selBills = sel && seesBills ? forResident(sel, bills) : [];
+  const selRequests = sel && seesRequests ? forResident(sel, requests) : [];
+  const selBookings = sel && seesBookings ? forResident(sel, bookings) : [];
+  const selEng: EngagementInput | null = sel ? {
+    status: sel.status, moveInDate: sel.moveInDate, balanceOwed: seesBills && sel.balanceOwed,
+    bills: selBills, requests: selRequests, bookings: selBookings,
+  } : null;
   const selScore = selEng ? engagementScore(selEng, NOW_MS) : 0;
-  const selRel = selEng ? paymentReliability(selEng.bills) : null;
+  const selRel = seesBills && selEng ? paymentReliability(selEng.bills) : null;
   const selTenure = sel ? tenure(sel.moveInDate, NOW_MS) : null;
   const selFlags = selEng ? riskFlags(selEng, NOW_MS) : [];
-  const members = sel ? householdMembers(sel.household) : [];
-
-  const STATUSES = ['all', 'active', 'invited', 'moved_out'];
+  const additionalMembers = Math.max(0, (sel?.household ?? 0) - 1);
 
   return (
-    <div className="flex flex-col gap-3.5">
-      <div className="flex items-center gap-2 flex-wrap">
-        {STATUSES.filter((s) => s === 'all' || statusCounts[s]).map((s) => (
-          <button key={s} onClick={() => setStatus(s)} className={`h-8 px-3 rounded-full text-[12px] font-medium border transition-colors inline-flex items-center gap-1.5 ${status === s ? 'border-primary bg-primary-weak text-primary' : 'border-border-2 bg-surface text-text-2 hover:bg-surface-2'}`}>
-            {s === 'all' ? 'All' : humanizeStatus(s)}<span className="text-text-3 font-mono">{s === 'all' ? residents.length : statusCounts[s] ?? 0}</span>
-          </button>
-        ))}
-        <div className="ml-auto flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-2 h-8 px-2.5 rounded-full border border-border-2 bg-surface">
-            <Search size={13} className="text-text-3" />
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search residents…" className="w-32 bg-transparent outline-none text-[12.5px]" aria-label="Search residents" />
-          </div>
-          {canMutate ? <Button variant="primary" icon={<UserPlus size={15} />} className="!h-8 !text-[12px]">Invite</Button> : <ReadOnlyChip />}
+    <div className={styles.workspace} data-residents-workspace="true">
+      {section !== 'directory' && sel ? (
+        <div className={styles.context}>
+          <label htmlFor={instance + '-resident-context'}>Viewing resident</label>
+          <select id={instance + '-resident-context'} value={sel.id} onChange={(event) => setSelectedId(event.target.value)}>
+            {residents.map((resident) => <option key={resident.id} value={resident.id}>{resident.name} · {resident.unitLabel}</option>)}
+          </select>
         </div>
-      </div>
-
-      <div className="grid min-[900px]:grid-cols-[minmax(0,1fr)_380px] gap-3.5 items-start">
-        {/* List */}
-        <div className="bg-surface border border-border rounded-2xl shadow-card overflow-hidden">
-          {visible.map((r) => {
-            const active = sel?.id === r.id;
-            return (
-              <button key={r.id} onClick={() => setSelectedId(r.id)} className={`flex items-center gap-3 w-full text-left px-4 py-3 border-b border-border last:border-0 transition-colors ${active ? 'bg-primary-weak/50' : 'hover:bg-surface-2'}`}>
-                <Avatar name={r.name} size={34} />
-                <div className="min-w-0 flex-1">
-                  <div className="text-[13px] font-semibold truncate">{r.name}</div>
-                  <div className="text-[11.5px] text-text-3 truncate">{r.unitLabel}</div>
-                </div>
-                {(() => { const sc = engagementScore(engOf(r), NOW_MS); return <span title={`Engagement ${sc}/100`} className="font-mono text-[12px] font-bold w-8 text-center rounded-md flex-none py-0.5 max-[560px]:hidden" style={{ background: `color-mix(in srgb, ${toneVar(engagementTone(sc))} 14%, transparent)`, color: toneVar(engagementTone(sc)) }}>{sc}</span>; })()}
-                <StatusPill status={humanizeStatus(r.status)} tone={RESIDENT_TONE[r.status] ?? 'neutral'} />
-                <span className={`font-mono text-[12.5px] w-20 text-right flex-none ${r.balanceOwed ? 'text-warning' : 'text-text-3'}`}>{r.balanceLabel}</span>
-              </button>
-            );
-          })}
-          {visible.length === 0 && <div className="p-8 text-center text-[13px] text-text-3">No residents match.</div>}
-        </div>
-
-        {/* Profile */}
-        {sel && (
-          <div className="bg-surface border border-border rounded-2xl shadow-card p-4 min-[900px]:sticky min-[900px]:top-2">
-            <div className="flex items-center gap-3">
-              <Avatar name={sel.name} size={44} />
-              <div className="min-w-0 flex-1">
-                <h3 className="text-[15px] font-semibold truncate">{sel.name}</h3>
-                {sel.email && <div className="text-[12px] text-text-3 truncate flex items-center gap-1"><Mail size={12} /> {sel.email}</div>}
-              </div>
-              <StatusPill status={humanizeStatus(sel.status)} tone={RESIDENT_TONE[sel.status] ?? 'neutral'} />
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 mt-3.5">
-              <Fact icon={<Home size={13} />} label="Unit" value={sel.unitLabel} sub={sel.unitType} />
-              <Fact icon={<DoorClosed size={13} />} label="Household" value={`${sel.household} ${sel.household === 1 ? 'person' : 'people'}`} sub={`since ${sel.moveInDate}`} />
-            </div>
-            <div className="mt-2 rounded-lg bg-surface-2 p-2.5 flex items-center justify-between">
-              <span className="text-[11px] text-text-3 uppercase tracking-wide">Balance</span>
-              <span className={`text-[15px] font-semibold font-mono ${sel.balanceOwed ? 'text-warning' : ''}`}>{sel.balanceLabel}</span>
-            </div>
-
-            {/* Engagement + reliability */}
-            <div className="mt-3 rounded-xl border border-border p-3 flex items-center gap-3">
-              <div className="relative flex-none" style={{ width: 52, height: 52 }}>
-                <svg width={52} height={52} viewBox="0 0 36 36" className="-rotate-90"><circle cx="18" cy="18" r="15" fill="none" stroke="var(--surface-3)" strokeWidth="4" /><circle cx="18" cy="18" r="15" fill="none" stroke={toneVar(engagementTone(selScore))} strokeWidth="4" strokeLinecap="round" strokeDasharray={`${(selScore / 100) * 94.2} 94.2`} /></svg>
-                <span className="absolute inset-0 flex items-center justify-center font-mono font-bold text-[13px]" style={{ color: toneVar(engagementTone(selScore)) }}>{selScore}</span>
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-[12.5px] font-semibold flex items-center gap-1.5"><HeartPulse size={13} /> Engagement</div>
-                <div className="text-[11px] text-text-3 mt-0.5">{selTenure?.label} tenure{selRel && selRel.total > 0 ? ` · payment ${selRel.score}%` : ''}</div>
-                {selRel && selRel.total > 0 && (
-                  <div className="h-1.5 rounded-full bg-surface-2 overflow-hidden mt-1.5"><div className="h-full rounded-full" style={{ width: `${selRel.score}%`, background: toneVar(selRel.tone) }} /></div>
-                )}
-              </div>
-            </div>
-
-            {/* Risk flags */}
-            {selFlags.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mt-2.5">
-                {selFlags.map((f) => (
-                  <span key={f.label} className="text-[10.5px] font-semibold px-2 h-[22px] inline-flex items-center rounded-full" style={{ background: `color-mix(in srgb, ${toneVar(f.tone)} 14%, transparent)`, color: toneVar(f.tone) }}>{f.label}</span>
+      ) : null}
+      <PageTabs label="Resident page sections" activeTab={section} onTabChange={setSection} items={[
+        { id: 'directory', label: 'Directory', count: residents.length, content: (
+          <section className={styles.directory} aria-label="Resident directory">
+            <div className={styles.toolbar}>
+              <div className={styles.filters} role="group" aria-label="Filter residents by status">
+                {STATUSES.filter((value) => value === 'all' || statusCounts[value]).map((value) => (
+                  <FilterChip key={value} label={value === 'all' ? 'All residents' : humanizeStatus(value)}
+                    count={value === 'all' ? residents.length : statusCounts[value] ?? 0}
+                    active={status === value} onClick={() => setStatus(value)} />
                 ))}
               </div>
-            )}
-
-            {/* Move-in / lifecycle */}
-            <div className="mt-3 flex items-center gap-1.5 text-[11px] text-text-3">
-              {(['invited', 'active', 'moved_out'] as const).map((s, i) => {
-                const reached = ['invited', 'active', 'moved_out'].indexOf(sel.status) >= i || (sel.status === 'active' && s !== 'moved_out');
-                return (
-                  <span key={s} className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full" style={{ background: reached ? toneVar('success') : 'var(--surface-3)' }} />
-                    <span className="capitalize">{humanizeStatus(s)}</span>
-                    {i < 2 && <span className="w-4 h-px bg-border" />}
-                  </span>
-                );
-              })}
-              <span className="ml-auto">moved in {sel.moveInDate}</span>
+              <div className={styles.searchGroup}>
+                <label className={styles.search}>
+                  <Search size={16} aria-hidden="true" />
+                  <input type="search" value={q} onChange={(event) => setQ(event.target.value)} placeholder="Search name, email or unit…" aria-label="Search residents" />
+                </label>
+                {!canMutate ? <ReadOnlyChip /> : null}
+              </div>
             </div>
-
-            {/* Household members */}
-            {members.length > 0 && (
-              <Section icon={<Users size={13} />} title={`Household (${sel.household})`} href="#">
-                <div className="flex flex-wrap gap-1.5">
-                  {members.map((m, i) => <span key={i} className="text-[11.5px] border border-border-2 rounded-full px-2.5 h-6 inline-flex items-center bg-surface-2">{m}</span>)}
-                </div>
-              </Section>
-            )}
-
-            {seesBills && (
-              <Section icon={<Receipt size={13} />} title={`Bills (${selBills.length})`} href="/billing">
-                {selBills.length === 0 ? <Empty label="No charges." /> : selBills.map((b) => (
-                  <Row key={b.id} left={b.ref} mid={b.dueDate} right={<StatusPill status={humanizeStatus(b.status)} tone={INVOICE_TONE[b.status] ?? 'neutral'} />} extra={b.amountLabel} />
-                ))}
-              </Section>
-            )}
-
-            {seesRequests && (
-              <Section icon={<Wrench size={13} />} title={`Requests (${selRequests.length})`} href="/work-orders">
-                {selRequests.length === 0 ? <Empty label="No maintenance requests." /> : selRequests.map((w) => (
-                  <Link key={w.id} href={`/work-orders/${w.ref}`} className="flex items-center gap-2 group py-0.5">
-                    <span className="font-mono text-[11.5px] font-semibold text-primary group-hover:underline flex-none">{w.ref}</span>
-                    <span className="text-[12px] text-text-2 truncate flex-1">{w.title}</span>
-                    <StatusPill status={humanizeStatus(w.status)} tone={statusTone('work-order', w.status)} />
-                  </Link>
-                ))}
-              </Section>
-            )}
-
-            {seesBookings && (
-              <Section icon={<CalendarCheck size={13} />} title={`Bookings (${selBookings.length})`} href="/bookings">
-                {selBookings.length === 0 ? <Empty label="No amenity bookings." /> : selBookings.map((bk) => (
-                  <Row key={bk.id} left={bk.amenity} mid={new Date(bk.slot).toLocaleDateString('en-NG', { month: 'short', day: 'numeric' })} right={<StatusPill status={humanizeStatus(bk.status)} tone={BOOKING_TONE[bk.status] ?? 'neutral'} />} />
-                ))}
-              </Section>
-            )}
-
-            {/* Comms history (recent, from this resident's activity) */}
-            <Section icon={<MessageSquare size={13} />} title="Comms history">
-              {(() => {
-                const comms: { text: string; when: string }[] = [];
-                comms.push({ text: 'Estate announcement delivered', when: 'Jul 24' });
-                if (sel.balanceOwed) comms.push({ text: 'Payment reminder sent', when: 'Jul 22' });
-                if (selBookings.length) comms.push({ text: 'Booking confirmation sent', when: 'Jul 20' });
-                if (sel.status === 'invited') comms.push({ text: 'Portal invitation emailed', when: 'Jul 18' });
-                return comms.map((c, i) => (
-                  <div key={i} className="flex items-center gap-2 text-[12px]"><span className="w-1.5 h-1.5 rounded-full bg-text-3 flex-none" /><span className="flex-1 truncate text-text-2">{c.text}</span><span className="text-[11px] text-text-3">{c.when}</span></div>
-                ));
-              })()}
-            </Section>
-          </div>
-        )}
-      </div>
+            <div className={styles.card}>
+              <div className={styles.tableScroll} tabIndex={0} role="region" aria-label="Residents table, scroll horizontally on smaller screens">
+                <table className={styles.table}>
+                  <caption className={styles.srOnly}>Resident directory, {visible.length} matching residents</caption>
+                  <thead><tr>
+                    <th scope="col">Resident</th><th scope="col">Unit</th><th scope="col">Household</th><th scope="col">Status</th>
+                    {seesBills ? <th scope="col" className={styles.amount}>Balance</th> : null}
+                    <th scope="col"><span className={styles.srOnly}>Actions</span></th>
+                  </tr></thead>
+                  <tbody>
+                    {visible.map((resident) => (
+                      <tr key={resident.id} data-selected={sel?.id === resident.id ? 'true' : undefined}>
+                        <td><div className={styles.person}>
+                          <Avatar name={resident.name} size={36} />
+                          <div className={styles.personText}><span className={styles.name}>{resident.name}</span>{resident.email ? <span className={styles.secondary}>{resident.email}</span> : null}</div>
+                        </div></td>
+                        <td><span className={styles.cellTitle}>{resident.unitLabel}</span><span className={styles.secondary}>{resident.unitType}</span></td>
+                        <td><span className={styles.householdCount}>{resident.household} {resident.household === 1 ? 'person' : 'people'}</span></td>
+                        <td><StatusPill status={humanizeStatus(resident.status)} tone={RESIDENT_TONE[resident.status] ?? 'neutral'} /></td>
+                        {seesBills ? <td className={styles.amount}><span className={resident.balanceOwed ? styles.owed : styles.balance}>{resident.balanceLabel}</span></td> : null}
+                        <td className={styles.rowAction}><Button type="button" variant="ghost" aria-label={'View profile for ' + resident.name} onClick={() => { setSelectedId(resident.id); setSection('profile'); }}>View profile <ArrowUpRight size={14} aria-hidden="true" /></Button></td>
+                      </tr>
+                    ))}
+                    {visible.length === 0 ? <tr><td colSpan={seesBills ? 6 : 5}><Empty title="No residents match." detail={residents.length ? 'Try another name, email, unit or status.' : 'Residents will appear here when they are added to this estate.'} /></td></tr> : null}
+                  </tbody>
+                </table>
+              </div>
+              <div className={styles.tableFooter} role="status" aria-live="polite">Showing {visible.length} of {residents.length} residents</div>
+            </div>
+          </section>
+        ) },
+        ...(sel ? [
+          { id: 'profile', label: 'Profile & household', content: (
+            <div className={styles.profile}>
+              <section className={styles.identity} aria-label="Resident identity">
+                <Avatar name={sel.name} size={48} />
+                <div className={styles.identityText}><h2>{sel.name}</h2><p><Home size={14} aria-hidden="true" />{sel.unitLabel} · {sel.unitType}</p>{sel.email ? <p><Mail size={14} aria-hidden="true" />{sel.email}</p> : null}</div>
+                <StatusPill status={humanizeStatus(sel.status)} tone={RESIDENT_TONE[sel.status] ?? 'neutral'} />
+              </section>
+              <div className={styles.profileGrid}>
+                <section className={styles.panel} aria-label="Residence details">
+                  <PanelHeading icon={<Home size={17} />} title="Residence details" />
+                  <dl className={styles.facts}>
+                    <Fact label="Unit" value={sel.unitLabel} /><Fact label="Unit type" value={sel.unitType} />
+                    <Fact label="Move-in date" value={dateLabel(sel.moveInDate)} /><Fact label="Tenure" value={selTenure?.label ?? 'Not available'} />
+                    {seesBills ? <Fact label="Balance" value={sel.balanceLabel} warning={sel.balanceOwed} /> : null}
+                  </dl>
+                </section>
+                <section className={styles.panel} aria-label="Household details">
+                  <PanelHeading icon={<Users size={17} />} title="Household" />
+                  <div className={styles.householdTotal}>{sel.household}<span>{sel.household === 1 ? 'person recorded' : 'people recorded'}</span></div>
+                  <div className={styles.householdMember}><Avatar name={sel.name} size={32} /><span>{sel.name}<small>Selected resident</small></span></div>
+                  {additionalMembers > 0 ? <p className={styles.note}>{additionalMembers} additional {additionalMembers === 1 ? 'member' : 'members'}. Names and relationships have not been recorded in this view.</p> : null}
+                </section>
+                <section className={styles.panel} aria-label="Resident engagement">
+                  <PanelHeading icon={<HeartPulse size={17} />} title="Engagement snapshot" />
+                  <div className={styles.engagementValue} style={{ color: toneVar(engagementTone(selScore)) }}>{selScore}<span>/ 100</span></div>
+                  <div className={styles.meter} role="meter" aria-label="Resident engagement score" aria-valuemin={0} aria-valuemax={100} aria-valuenow={selScore} aria-valuetext={selScore + ' out of 100, advisory only'}><span style={{ width: selScore + '%', background: toneVar(engagementTone(selScore)) }} /></div>
+                  {selRel && selRel.total > 0 ? <p className={styles.reliability}>{selRel.score}% payment reliability <span>Across {selRel.total} recorded {selRel.total === 1 ? 'bill' : 'bills'}</span></p> : null}
+                  <p className={styles.note}>Advisory calculation from tenure, status and records visible to your role. Snapshot: {dateLabel('2026-07-26')}. Not an AI or credit decision.</p>
+                </section>
+              </div>
+              {selFlags.length > 0 ? <div className={styles.flags} aria-label="Resident advisory signals">{selFlags.map((flag) => <StatusPill key={flag.label} status={flag.label} tone={flag.tone} />)}</div> : null}
+            </div>
+          ) },
+          ...(seesBills ? [{ id: 'bills', label: 'Bills', count: selBills.length, content: (
+            <RecordPanel title="Bills" subtitle={'Charges linked to ' + sel.name + ' or ' + sel.unitLabel + '.'} icon={<Receipt size={17} />} href="/billing" linkLabel="Open billing">
+              {selBills.length ? <div className={styles.tableScroll} tabIndex={0} role="region" aria-label="Resident bills table"><table className={styles.table}><caption className={styles.srOnly}>Bills for {sel.name}</caption><thead><tr><th scope="col">Reference</th><th scope="col">Due date</th><th scope="col">Status</th><th scope="col" className={styles.amount}>Amount</th></tr></thead><tbody>{selBills.map((bill) => <tr key={bill.id}><td className={styles.reference}>{bill.ref}</td><td>{dateLabel(bill.dueDate)}</td><td><StatusPill status={humanizeStatus(bill.status)} tone={INVOICE_TONE[bill.status] ?? 'neutral'} /></td><td className={styles.amount + ' ' + styles.balance}>{bill.amountLabel}</td></tr>)}</tbody></table></div> : <Empty title="No charges." detail="No bills are linked to this resident or unit." />}
+            </RecordPanel>
+          ) }] : []),
+          ...(seesRequests ? [{ id: 'requests', label: 'Maintenance', count: selRequests.length, content: (
+            <RecordPanel title="Maintenance requests" subtitle={'Requests linked to ' + sel.name + ' or ' + sel.unitLabel + '.'} icon={<Wrench size={17} />} href="/estate/work-orders" linkLabel="Open maintenance">
+              {selRequests.length ? <div className={styles.tableScroll} tabIndex={0} role="region" aria-label="Resident maintenance table"><table className={styles.table}><caption className={styles.srOnly}>Maintenance requests for {sel.name}</caption><thead><tr><th scope="col">Reference</th><th scope="col">Request</th><th scope="col">Status</th><th scope="col"><span className={styles.srOnly}>Actions</span></th></tr></thead><tbody>{selRequests.map((request) => <tr key={request.id}><td className={styles.reference}>{request.ref}</td><td>{request.title}</td><td><StatusPill status={humanizeStatus(request.status)} tone={statusTone('work-order', request.status)} /></td><td className={styles.rowAction}><Link className={styles.recordLink} href={'/estate/work-orders/' + request.ref} aria-label={'View maintenance request ' + request.ref}>View request <ArrowUpRight size={14} aria-hidden="true" /></Link></td></tr>)}</tbody></table></div> : <Empty title="No maintenance requests." detail="No maintenance requests are linked to this resident or unit." />}
+            </RecordPanel>
+          ) }] : []),
+          ...(seesBookings ? [{ id: 'bookings', label: 'Bookings', count: selBookings.length, content: (
+            <RecordPanel title="Amenity bookings" subtitle={'Bookings made by ' + sel.name + '.'} icon={<CalendarCheck size={17} />} href="/bookings" linkLabel="Open bookings">
+              {selBookings.length ? <div className={styles.tableScroll} tabIndex={0} role="region" aria-label="Resident bookings table"><table className={styles.table}><caption className={styles.srOnly}>Amenity bookings for {sel.name}</caption><thead><tr><th scope="col">Amenity</th><th scope="col">Date</th><th scope="col">Status</th></tr></thead><tbody>{selBookings.map((booking) => <tr key={booking.id}><td>{booking.amenity}</td><td>{dateLabel(booking.slot)}</td><td><StatusPill status={humanizeStatus(booking.status)} tone={BOOKING_TONE[booking.status] ?? 'neutral'} /></td></tr>)}</tbody></table></div> : <Empty title="No amenity bookings." detail="This resident has no recorded amenity bookings." />}
+            </RecordPanel>
+          ) }] : []),
+          { id: 'communication', label: 'Communication', content: (
+            <RecordPanel title="Communication history" subtitle={'Recorded messages and delivery events for ' + sel.name + '.'} icon={<MessageSquare size={17} />}>
+              <Empty icon={<MessageSquare size={22} />} title="No communication history available" detail="No delivery records have been supplied to this view. Messages and delivery statuses will appear here when recorded history is available." />
+            </RecordPanel>
+          ) },
+        ] : []),
+      ]} />
     </div>
   );
 }
 
-function Fact({ icon, label, value, sub }: { icon: React.ReactNode; label: string; value: string; sub?: string }) {
-  return (
-    <div className="rounded-lg bg-surface-2 p-2.5 min-w-0">
-      <div className="text-[10px] text-text-3 uppercase tracking-wide flex items-center gap-1">{icon}{label}</div>
-      <div className="text-[12.5px] font-semibold mt-0.5 truncate">{value}</div>
-      {sub && <div className="text-[11px] text-text-3 truncate">{sub}</div>}
-    </div>
-  );
+function PanelHeading({ icon, title }: { icon: ReactNode; title: string }) {
+  return <h3 className={styles.panelHeading}><span aria-hidden="true">{icon}</span>{title}</h3>;
 }
 
-function Section({ icon, title, href, children }: { icon: React.ReactNode; title: string; href?: string; children: React.ReactNode }) {
-  return (
-    <div className="mt-3.5 pt-3.5 border-t border-border">
-      <div className="flex items-center justify-between mb-2">
-        <div className="text-[10.5px] font-semibold uppercase tracking-wide text-text-3 flex items-center gap-1.5">{icon}{title}</div>
-        {href && <Link href={href} className="text-[11px] text-primary hover:underline inline-flex items-center gap-0.5">Open <ArrowUpRight size={11} /></Link>}
-      </div>
-      <div className="flex flex-col gap-1.5">{children}</div>
-    </div>
-  );
+function Fact({ label, value, warning }: { label: string; value: string; warning?: boolean }) {
+  return <div><dt>{label}</dt><dd className={warning ? styles.owed : undefined}>{value}</dd></div>;
 }
 
-function Row({ left, mid, right, extra }: { left: string; mid: string; right: React.ReactNode; extra?: string }) {
-  return (
-    <div className="flex items-center gap-2 text-[12px]">
-      <span className="font-mono text-[11.5px] font-semibold flex-none">{left}</span>
-      <span className="text-text-3 truncate flex-1">{mid}</span>
-      {extra && <span className="font-mono text-[11.5px] text-text-2 flex-none">{extra}</span>}
-      {right}
-    </div>
-  );
+function RecordPanel({ title, subtitle, icon, href, linkLabel, children }: { title: string; subtitle: string; icon: ReactNode; href?: string; linkLabel?: string; children: ReactNode }) {
+  return <section className={styles.card}><div className={styles.recordHeader}><div><PanelHeading icon={icon} title={title} /><p>{subtitle}</p></div>{href ? <Link className={styles.recordLink} href={href}>{linkLabel ?? 'Open'}<ArrowUpRight size={14} aria-hidden="true" /></Link> : null}</div>{children}</section>;
 }
 
-function Empty({ label }: { label: string }) {
-  return <p className="text-[12px] text-text-3">{label}</p>;
+function Empty({ title, detail, icon }: { title: string; detail: string; icon?: ReactNode }) {
+  return <div className={styles.empty}>{icon ? <span className={styles.emptyIcon} aria-hidden="true">{icon}</span> : null}<p>{title}</p><span>{detail}</span></div>;
 }

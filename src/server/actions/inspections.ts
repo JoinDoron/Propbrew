@@ -19,7 +19,7 @@ import { INSPECTION_TEMPLATES, templateChecklist } from '@/domain/inspection-tem
 
 export type InspResult = { ok: true; raised?: number; passed?: boolean } | { ok: false; error: string };
 
-const REVALIDATE = ['/inspections', '/work-orders', '/dashboard'];
+const REVALIDATE = ['/inspections', '/estate/inspections', '/work-orders', '/estate/work-orders', '/people', '/facility', '/dashboard'];
 let woCounter = 0;
 
 function gate(actor: Actor): InspResult | null {
@@ -103,6 +103,7 @@ export async function runInspection(
   }
 
   REVALIDATE.forEach((p) => revalidatePath(p));
+  if (refs.length > 0) revalidatePath('/estate');
   return { ok: true, raised: refs.length, passed: failed.length === 0 };
 }
 

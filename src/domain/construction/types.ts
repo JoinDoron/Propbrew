@@ -74,7 +74,7 @@ export type ReportStatus = 'draft' | 'submitted' | 'reviewed' | 'approved' | 're
 export type DailyReport = TenantScoped & {
   id: string; projectId: string; dateISO: string; weather: string; shift: string; officer: string;
   workforceCount: number; completed: string[]; ongoing: string[]; delayed: string[]; plannedNext: string[];
-  deliveries: string[]; incidents: string[]; constraints: string[]; photos: number; status: ReportStatus;
+  deliveries: string[]; incidents: string[]; constraints: string[]; photos: number; mediaRefs?: readonly string[]; status: ReportStatus;
 };
 
 /* --- procurement ---------------------------------------------------------- */

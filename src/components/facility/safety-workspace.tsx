@@ -1,104 +1,67 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { ShieldCheck, AlertOctagon, FileWarning, Flame, ArrowUpFromLine, Zap, Box, ChevronRight, TriangleAlert } from 'lucide-react';
-import { toneVar, type Tone } from '@/lib/status-tones';
+import { AlertOctagon, ArrowUpFromLine, Box, FileWarning, Flame, ShieldCheck, TriangleAlert, Zap } from 'lucide-react';
+import { Button, Card, CardHeader, EmptyState, StatusPill } from '@/components/ui';
+import { PageTabs } from '@/components/ui/page-tabs';
+import { FacilityDialog, FacilityFeedback, FacilityKpi } from './facility-ui';
+import { type Tone } from '@/lib/status-tones';
 import { permitConflicts, type Permit, type PermitType, type Incident } from '@/domain/facility';
 import { advancePermit } from '@/server/actions/facility';
+import layout from '@/components/ui/workspace-layout.module.css';
+import styles from './facility-specialists.module.css';
 
 const TYPE_META: Record<PermitType, { label: string; icon: React.ReactNode }> = {
-  hot_work: { label: 'Hot work', icon: <Flame size={14} /> },
-  height: { label: 'Work at height', icon: <ArrowUpFromLine size={14} /> },
-  electrical: { label: 'Electrical', icon: <Zap size={14} /> },
-  confined_space: { label: 'Confined space', icon: <Box size={14} /> },
+  hot_work: { label: 'Hot work', icon: <Flame size={18} /> },
+  height: { label: 'Work at height', icon: <ArrowUpFromLine size={18} /> },
+  electrical: { label: 'Electrical', icon: <Zap size={18} /> },
+  confined_space: { label: 'Confined space', icon: <Box size={18} /> },
 };
 const STATUS_TONE: Record<Permit['status'], Tone> = { requested: 'info', active: 'progress', closed: 'muted' };
 const INC_TONE: Record<Incident['severity'], Tone> = { near_miss: 'info', minor: 'warn', major: 'danger' };
 const NEXT_LABEL: Record<Permit['status'], string | null> = { requested: 'Approve & activate', active: 'Close permit', closed: null };
+const date = (iso: string) => new Date(iso).toLocaleString('en-NG', { timeZone: 'Africa/Lagos', dateStyle: 'medium', timeStyle: 'short' });
 
-export function SafetyWorkspace({ permits, incidents, kpis }: {
+export function SafetyWorkspace({ permits, incidents, kpis, canMutate = false }: {
   permits: Permit[]; incidents: Incident[];
-  kpis: { activePermits: number; openIncidents: number; safetyScore: number };
+  kpis: { activePermits: number; openIncidents: number; safetyScore: number }; canMutate?: boolean;
 }) {
-  const conflicts = permitConflicts(permits);
-  const conflictIds = new Set(conflicts.flatMap((c) => [c.a.id, c.b.id]));
-  const [toast, setToast] = useState<string | null>(null);
-  const flash = (m: string) => { setToast(m); setTimeout(() => setToast(null), 2600); };
-  const sorted = [...permits].sort((a, b) => (a.status === 'closed' ? 1 : 0) - (b.status === 'closed' ? 1 : 0) || Date.parse(a.validFromISO) - Date.parse(b.validFromISO));
-
-  return (
-    <div className="flex flex-col gap-3.5">
-      <div className="grid grid-cols-2 min-[720px]:grid-cols-4 gap-2.5">
-        <Kpi label="Active permits" value={String(kpis.activePermits)} tone="progress" icon={<FileWarning size={16} />} />
-        <Kpi label="Conflicts" value={String(conflicts.length)} tone={conflicts.length ? 'danger' : 'success'} icon={<AlertOctagon size={16} />} />
-        <Kpi label="Open incidents" value={String(kpis.openIncidents)} tone={kpis.openIncidents ? 'warn' : 'success'} icon={<TriangleAlert size={16} />} />
-        <Kpi label="Safety score" value={`${kpis.safetyScore}`} tone={kpis.safetyScore >= 90 ? 'success' : 'warn'} icon={<ShieldCheck size={16} />} />
-      </div>
-
-      {conflicts.length > 0 && (
-        <div className="rounded-xl border px-4 py-3 animate-fade" style={{ borderColor: 'color-mix(in srgb, var(--tone-danger) 40%, transparent)', background: 'color-mix(in srgb, var(--tone-danger) 7%, transparent)' }}>
-          <div className="flex items-center gap-2 text-[12.5px] font-semibold mb-1.5" style={{ color: toneVar('danger') }}><AlertOctagon size={14} /> Permit clash detected</div>
-          <div className="flex flex-col gap-1">
-            {conflicts.map((c, i) => (
-              <div key={i} className="text-[12px] text-text-2">
-                <span className="font-mono font-semibold">{c.a.ref}</span> & <span className="font-mono font-semibold">{c.b.ref}</span> both live in <span className="font-medium">{c.a.location}</span> — {TYPE_META[c.a.type].label.toLowerCase()} beside {TYPE_META[c.b.type].label.toLowerCase()} needs coordination.
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <section className="bg-surface border border-border rounded-2xl shadow-card overflow-hidden">
-        <div className="px-4 py-2.5 border-b border-border text-[12px] font-semibold text-text-2">Permits to work</div>
-        <div className="flex flex-col divide-y divide-border">
-          {sorted.map((p) => <PermitRow key={p.id} permit={p} conflict={conflictIds.has(p.id)} onDone={flash} />)}
-        </div>
-      </section>
-
-      <section className="bg-surface border border-border rounded-2xl shadow-card overflow-hidden">
-        <div className="px-4 py-2.5 border-b border-border text-[12px] font-semibold text-text-2">Incident log</div>
-        <div className="flex flex-col divide-y divide-border">
-          {incidents.map((it) => (
-            <div key={it.id} className="px-4 py-3 flex items-center justify-between gap-3">
-              <div className="min-w-0"><div className="text-[13px] font-medium truncate">{it.category}</div><div className="text-[11px] text-text-3">{it.location} · {it.atISO.slice(0, 10)}</div></div>
-              <div className="flex items-center gap-2 flex-none">
-                <span className="text-[10.5px] font-semibold px-2 h-5 inline-flex items-center rounded-full capitalize" style={{ background: `color-mix(in srgb, ${toneVar(INC_TONE[it.severity])} 14%, transparent)`, color: toneVar(INC_TONE[it.severity]) }}>{it.severity.replace('_', ' ')}</span>
-                <span className="text-[10.5px] font-semibold px-2 h-5 inline-flex items-center rounded-full capitalize" style={{ background: `color-mix(in srgb, ${toneVar(it.status === 'open' ? 'warn' : 'muted')} 14%, transparent)`, color: toneVar(it.status === 'open' ? 'warn' : 'muted') }}>{it.status}</span>
-              </div>
-            </div>
-          ))}
-          {incidents.length === 0 && <div className="px-4 py-6 text-center text-[13px] text-text-3">No incidents logged.</div>}
-        </div>
-      </section>
-
-      {toast && <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[90] bg-text text-surface text-[13px] font-medium px-4 py-2.5 rounded-xl shadow-float animate-fade">{toast}</div>}
-    </div>
-  );
-}
-
-function PermitRow({ permit, conflict, onDone }: { permit: Permit; conflict: boolean; onDone: (m: string) => void }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const next = NEXT_LABEL[permit.status];
-  function advance() { start(async () => { const r = await advancePermit(permit.id); if (r.ok) { router.refresh(); onDone(permit.status === 'requested' ? 'Permit activated' : 'Permit closed'); } }); }
-  return (
-    <div className="px-4 py-3 flex items-center justify-between gap-3" style={conflict ? { background: 'color-mix(in srgb, var(--tone-danger) 5%, transparent)' } : undefined}>
-      <div className="min-w-0 flex items-start gap-2.5">
-        <span className="w-8 h-8 rounded-lg flex items-center justify-center flex-none mt-0.5" style={{ background: `color-mix(in srgb, ${toneVar('progress')} 12%, transparent)`, color: toneVar('progress') }}>{TYPE_META[permit.type].icon}</span>
-        <div className="min-w-0">
-          <div className="text-[13px] font-medium flex items-center gap-1.5"><span className="font-mono">{permit.ref}</span> · {TYPE_META[permit.type].label}{conflict && <span className="text-[10px] font-semibold px-1.5 h-4 inline-flex items-center rounded-full" style={{ background: `color-mix(in srgb, ${toneVar('danger')} 14%, transparent)`, color: toneVar('danger') }}>clash</span>}</div>
-          <div className="text-[11px] text-text-3 truncate">{permit.location} · {permit.requestedBy} · {permit.validFromISO.slice(5)}→{permit.validToISO.slice(5)}</div>
-        </div>
-      </div>
-      <div className="flex items-center gap-2 flex-none">
-        <span className="text-[10.5px] font-semibold px-2 h-5 inline-flex items-center rounded-full capitalize" style={{ background: `color-mix(in srgb, ${toneVar(STATUS_TONE[permit.status])} 14%, transparent)`, color: toneVar(STATUS_TONE[permit.status]) }}>{permit.status}</span>
-        {next && <button onClick={advance} disabled={pending} className="text-[11.5px] px-2.5 h-7 rounded-lg font-medium border border-border-2 inline-flex items-center gap-1 disabled:opacity-50">{pending ? '…' : <>{next} <ChevronRight size={12} /></>}</button>}
-      </div>
-    </div>
-  );
-}
+  const inFlight = useRef(false);
+  const [selected, setSelected] = useState<Permit | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const conflicts = permitConflicts(permits);
+  const conflictIds = new Set(conflicts.flatMap((conflict) => [conflict.a.id, conflict.b.id]));
+  const sorted = [...permits].sort((a, b) => (a.status === 'closed' ? 1 : 0) - (b.status === 'closed' ? 1 : 0) || Date.parse(a.validFromISO) - Date.parse(b.validFromISO));
 
-function Kpi({ label, value, tone, icon }: { label: string; value: string; tone: Tone; icon: React.ReactNode }) {
-  return <div className="bg-surface border border-border rounded-2xl shadow-card p-3.5"><span className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `color-mix(in srgb, ${toneVar(tone)} 14%, transparent)`, color: toneVar(tone) }}>{icon}</span><div className="text-[12px] text-text-2 font-medium mt-2.5">{label}</div><div className="text-[17px] font-bold tracking-[-0.02em] leading-none mt-1">{value}</div></div>;
+  function advance() {
+    if (!selected || !canMutate || pending || inFlight.current || selected.status === 'closed') return;
+    inFlight.current = true;
+    setFeedback(null);
+    start(async () => {
+      try {
+        const result = await advancePermit(selected.id);
+        if (!result.ok) { setFeedback(result.error); return; }
+        setSelected(null);
+        router.refresh();
+        setFeedback(selected.status === 'requested' ? 'Permit activation recorded.' : 'Permit closure recorded.');
+      } catch { setFeedback('The permit update could not be confirmed. Refresh before trying again.'); }
+      finally { inFlight.current = false; }
+    });
+  }
+
+  return <div className={styles.stack}>
+    <div className={layout.metrics}><FacilityKpi label="Active permits" value={String(kpis.activePermits)} tone="progress" icon={<FileWarning size={18} />} /><FacilityKpi label="Conflicts" value={String(conflicts.length)} tone={conflicts.length ? 'danger' : 'success'} icon={<AlertOctagon size={18} />} /><FacilityKpi label="Open incidents" value={String(kpis.openIncidents)} tone={kpis.openIncidents ? 'warn' : 'success'} icon={<TriangleAlert size={18} />} /><FacilityKpi label="Safety score" value={String(kpis.safetyScore)} sub="Rules-based record indicator" tone={kpis.safetyScore >= 90 ? 'success' : 'warn'} icon={<ShieldCheck size={18} />} /></div>
+
+    {conflicts.length ? <Card padded={false} className={styles.emergency}><div className={styles.panelHeader}><CardHeader title="Permit clash detected" subtitle="Overlapping work in the same location needs human coordination" action={<StatusPill status={conflicts.length + ' conflict(s)'} tone="danger" />} /></div><ul className={styles.list}>{conflicts.map((conflict) => <li key={conflict.a.id + '-' + conflict.b.id} className={styles.row}><div className={styles.rowContent}><h3 className={styles.rowTitle}>{conflict.a.location}</h3><p className={styles.body}>{conflict.a.ref} · {TYPE_META[conflict.a.type].label} overlaps {conflict.b.ref} · {TYPE_META[conflict.b.type].label}.</p><p className={styles.metadata}>Coordinate the permit owners, timing and isolation arrangements before allowing overlapping work.</p></div><StatusPill status="Review required" tone="danger" /></li>)}</ul></Card> : null}
+
+    <PageTabs label="Facility safety sections" items={[
+      { id: 'permits', label: 'Permits to work', count: permits.length, content: <Card padded={false} className={styles.panel}><div className={styles.panelHeader}><CardHeader title="Permits to work" subtitle="Scope, validity, responsible person and approval state" action={<StatusPill status={kpis.activePermits + ' active'} tone="progress" />} /></div>{sorted.length ? <div className={styles.scroll} role="region" aria-label="Facility permit register" tabIndex={0}><table className={'pb-data-table ' + styles.table}><thead><tr>{['Permit', 'Location & requester', 'Validity · WAT', 'Work notes', 'Status', 'Action'].map((heading) => <th key={heading} scope="col">{heading}</th>)}</tr></thead><tbody>{sorted.map((permit) => <tr key={permit.id}><td><div className={styles.identity}><span className={styles.icon}>{TYPE_META[permit.type].icon}</span><div><p className={styles.rowTitle}>{permit.ref}</p><p className={styles.metadata}>{TYPE_META[permit.type].label}</p></div></div></td><td><p className={styles.body}>{permit.location}</p><p className={styles.metadata}>{permit.requestedBy}</p></td><td><p className={styles.body}>{date(permit.validFromISO)}</p><p className={styles.metadata}>Until {date(permit.validToISO)}</p></td><td><p className={styles.body}>{permit.note || 'No work note recorded.'}</p></td><td><div className={styles.stack}><StatusPill status={permit.status} tone={STATUS_TONE[permit.status]} />{conflictIds.has(permit.id) ? <StatusPill status="Location / time clash" tone="danger" /> : null}</div></td><td>{canMutate && NEXT_LABEL[permit.status] ? <Button disabled={pending} onClick={() => { setFeedback(null); setSelected(permit); }}>{NEXT_LABEL[permit.status]}</Button> : <span className={styles.metadata}>{permit.status === 'closed' ? 'Terminal record' : 'Read-only'}</span>}</td></tr>)}</tbody></table></div> : <div className={styles.empty}><EmptyState icon={<FileWarning size={26} />} title="No permits recorded" description="No permits to work are recorded in your current facility scope." /></div>}<p className={styles.footer}>Activation records a supervisor decision. It does not replace an on-site permit briefing, isolation check or safety inspection. Closed permits are terminal records.</p></Card> },
+      { id: 'incidents', label: 'Incident log', count: incidents.length, content: <Card padded={false} className={styles.panel}><div className={styles.panelHeader}><CardHeader title="Incident log" subtitle="Recorded events and review status · not an emergency reporting channel" action={<StatusPill status={kpis.openIncidents + ' open'} tone={kpis.openIncidents ? 'warn' : 'muted'} />} /></div>{incidents.length ? <div className={styles.scroll} role="region" aria-label="Facility incident register" tabIndex={0}><table className={'pb-data-table ' + styles.table}><thead><tr>{['Incident category', 'Location', 'Severity', 'Status', 'Recorded · WAT'].map((heading) => <th key={heading} scope="col">{heading}</th>)}</tr></thead><tbody>{incidents.map((incident) => <tr key={incident.id}><td><p className={styles.rowTitle}>{incident.category}</p></td><td>{incident.location}</td><td><StatusPill status={incident.severity.replaceAll('_', ' ')} tone={INC_TONE[incident.severity]} /></td><td><StatusPill status={incident.status} tone={incident.status === 'open' ? 'warn' : 'muted'} /></td><td>{date(incident.atISO)}</td></tr>)}</tbody></table></div> : <div className={styles.empty}><EmptyState icon={<ShieldCheck size={26} />} title="No incidents logged." description="No incidents are recorded in this scope. This does not certify that the facility is safe." /></div>}<p className={styles.footer}>For immediate danger, follow the facility emergency procedure. This register does not dispatch emergency responders.</p></Card> },
+    ]} />
+
+    {selected ? <FacilityDialog title={NEXT_LABEL[selected.status] ?? 'Review permit'} onClose={() => setSelected(null)} pending={pending}><div className={styles.stack}><div className={styles.notice}><p className={styles.title}>{selected.ref} · {TYPE_META[selected.type].label}</p><p>{selected.location} · requested by {selected.requestedBy}</p></div><p className={styles.body}>{selected.status === 'requested' ? 'Confirm the responsible supervisor has checked the permit, isolation and site conditions before activation.' : 'Confirm work is complete and the work area has been made safe before closing this permit. This is a terminal status.'}</p>{conflictIds.has(selected.id) ? <p className={styles.notice}>A location/time conflict is recorded. Coordinate the overlapping work before proceeding.</p> : null}{feedback ? <p role="alert" className="text-[14px] text-negative">{feedback}</p> : null}<div className={styles.actions}><Button disabled={pending} onClick={() => setSelected(null)}>Cancel</Button><Button variant="primary" disabled={pending} onClick={advance}>{pending ? 'Saving…' : 'Confirm ' + (selected.status === 'requested' ? 'activation' : 'closure')}</Button></div></div></FacilityDialog> : feedback ? <FacilityFeedback message={feedback} onDismiss={() => setFeedback(null)} /> : null}
+  </div>;
 }

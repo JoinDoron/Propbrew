@@ -1,152 +1,68 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Fuel, Gauge, Leaf, Zap, AlertTriangle, Droplet, X, Sparkles, Plug, TrendingUp } from 'lucide-react';
+import { Droplet, Fuel, Gauge, Leaf, Plug, Zap } from 'lucide-react';
+import { Button, Card, CardHeader, EmptyState, StatusPill } from '@/components/ui';
+import { PageTabs } from '@/components/ui/page-tabs';
+import { FacilityDialog, FacilityFeedback, FacilityKpi } from './facility-ui';
+import { facilityMoney } from './facility-format';
 import { toneVar, type Tone } from '@/lib/status-tones';
 import { refuelForecast, fuelAnomaly, dieselCost, co2Kg, type Generator } from '@/domain/facility';
 import { logRefuel, logMeterReading } from '@/server/actions/facility';
+import layout from '@/components/ui/workspace-layout.module.css';
+import styles from './facility-specialists.module.css';
 
 export type GenRow = Generator & { siteName: string };
 export type MeterRow = { id: string; label: string; kind: string; unit: string; reading: number; previous: number; atISO: string };
-
-const money = (m: number) => `₦${(m / 100).toLocaleString('en-NG')}`;
 const GEN_STATUS_TONE: Record<string, Tone> = { running: 'success', standby: 'info', fault: 'danger' };
+const date = (value: string) => new Date(value).toLocaleString('en-NG', { timeZone: 'Africa/Lagos', dateStyle: 'medium', timeStyle: 'short' });
+const planningDate = (value: string) => new Date(value).toLocaleDateString('en-NG', { timeZone: 'Africa/Lagos', dateStyle: 'medium' });
 
-export function EnergyWorkspace({ generators, meters, kpis, reliance, nowMs }: { generators: GenRow[]; meters: MeterRow[]; kpis: { dieselSpendMinor: number; litresMonth: number; costPerKwhMinor: number; co2Kg: number }; reliance: { gensetPct: number; gridPct: number }; nowMs: number }) {
+export function EnergyWorkspace({ generators, meters, kpis, reliance, nowMs, canMutate = false }: {
+  generators: GenRow[]; meters: MeterRow[];
+  kpis: { dieselSpendMinor: number; litresMonth: number; costPerKwhMinor: number; co2Kg: number };
+  reliance: { gensetPct: number; gridPct: number }; nowMs: number; canMutate?: boolean;
+}) {
   const [refuelFor, setRefuelFor] = useState<GenRow | null>(null);
   const [meterFor, setMeterFor] = useState<MeterRow | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
-  const flash = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3000); };
-
-  return (
-    <div className="flex flex-col gap-3.5">
-      <div className="grid grid-cols-2 min-[720px]:grid-cols-4 gap-2.5">
-        <Kpi label="Diesel spend" value={money(kpis.dieselSpendMinor)} note={`${kpis.litresMonth.toLocaleString()} L this month`} tone="danger" icon={<Fuel size={16} />} />
-        <Kpi label="Genset reliance" value={`${reliance.gensetPct}%`} note={`${reliance.gridPct}% grid`} tone={reliance.gensetPct > 60 ? 'warn' : 'success'} icon={<Zap size={16} />} />
-        <Kpi label="Cost / kWh" value={money(kpis.costPerKwhMinor)} note="genset, diesel" tone="progress" icon={<Gauge size={16} />} />
-        <Kpi label="Carbon" value={`${(kpis.co2Kg / 1000).toFixed(1)}t`} note="CO₂ this month" tone="neutral" icon={<Leaf size={16} />} />
-      </div>
-
-      {/* Grid vs genset reliance */}
-      <div className="bg-surface border border-border rounded-2xl shadow-card p-4">
-        <div className="flex items-center gap-2 mb-2"><Plug size={14} className="text-text-3" /><span className="text-[12.5px] font-semibold">Power source split · last 30 days</span></div>
-        <div className="h-3 rounded-full overflow-hidden flex bg-surface-2">
-          <div className="h-full" style={{ width: `${reliance.gensetPct}%`, background: toneVar('warn') }} />
-          <div className="h-full" style={{ width: `${reliance.gridPct}%`, background: toneVar('success') }} />
-        </div>
-        <div className="flex gap-4 mt-2 text-[11px] text-text-3">
-          <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-[2px]" style={{ background: toneVar('warn') }} /> Generator {reliance.gensetPct}%</span>
-          <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-[2px]" style={{ background: toneVar('success') }} /> Grid {reliance.gridPct}%</span>
-        </div>
-      </div>
-
-      {/* Generators */}
-      <div className="grid grid-cols-1 min-[720px]:grid-cols-2 gap-3">
-        {generators.map((g) => {
-          const f = refuelForecast(g, nowMs);
-          const anom = fuelAnomaly(g);
-          return (
-            <div key={g.id} className="bg-surface border border-border rounded-2xl shadow-card p-4">
-              <div className="flex items-start justify-between gap-2">
-                <div><div className="text-[14px] font-semibold">{g.name}</div><div className="text-[11.5px] text-text-3">{g.siteName} · {g.capacityKva}kVA</div></div>
-                <span className="text-[10.5px] font-semibold px-2 h-6 inline-flex items-center rounded-full capitalize" style={{ background: `color-mix(in srgb, ${toneVar(GEN_STATUS_TONE[g.status])} 14%, transparent)`, color: toneVar(GEN_STATUS_TONE[g.status]) }}>{g.status}</span>
-              </div>
-
-              {/* fuel gauge */}
-              <div className="mt-3">
-                <div className="flex items-center justify-between text-[11px] mb-1"><span className="text-text-2 inline-flex items-center gap-1"><Fuel size={11} /> Fuel</span><span className="font-mono font-semibold">{g.fuelPct}% · {f.litresRemaining}L</span></div>
-                <div className="h-2.5 rounded-full bg-surface-2 overflow-hidden"><div className="h-full rounded-full" style={{ width: `${g.fuelPct}%`, background: toneVar(f.band) }} /></div>
-              </div>
-
-              {/* refuel forecast */}
-              <div className="mt-3 rounded-xl p-2.5 flex items-center gap-2" style={{ background: `color-mix(in srgb, ${toneVar(f.band)} 8%, transparent)`, border: `1px solid color-mix(in srgb, ${toneVar(f.band)} 28%, transparent)` }}>
-                <Sparkles size={14} style={{ color: toneVar(f.band) }} className="flex-none" />
-                <div className="text-[11.5px]">{f.runsDryISO ? <>Runs dry in <b>{f.daysToEmpty} day{f.daysToEmpty === 1 ? '' : 's'}</b> (~{f.runsDryISO.slice(5)}) at current draw</> : 'On standby — no active draw'}</div>
-              </div>
-
-              {/* efficiency + anomaly */}
-              <div className="flex items-center gap-3 mt-2.5 text-[11.5px]">
-                <span className="text-text-3">{g.litresPerHour} L/hr</span>
-                {anom.anomalous ? <span className="inline-flex items-center gap-1 font-medium text-negative"><AlertTriangle size={12} /> +{anom.deltaPct}% vs baseline · check for fault</span> : <span className="text-positive">efficient ({anom.deltaPct >= 0 ? '+' : ''}{anom.deltaPct}% vs baseline)</span>}
-                <span className="ml-auto text-text-3">{g.runtimeHoursToday}h today · {g.runtimeHoursMonth}h/mo</span>
-              </div>
-              <button onClick={() => setRefuelFor(g)} className="mt-3 h-8 px-3 rounded-lg border border-border-2 text-[12px] font-medium inline-flex items-center gap-1.5"><Fuel size={13} /> Log refuel</button>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Meters */}
-      <div className="bg-surface border border-border rounded-2xl shadow-card overflow-hidden">
-        <div className="px-4 py-2.5 border-b border-border flex items-center gap-2"><TrendingUp size={14} className="text-text-3" /><span className="text-[12.5px] font-semibold">Meter readings</span></div>
-        <div className="divide-y divide-border">
-          {meters.map((m) => (
-            <div key={m.id} className="flex items-center gap-3 px-4 py-3">
-              <span className="w-8 h-8 rounded-lg grid place-items-center flex-none" style={{ background: `color-mix(in srgb, ${toneVar(m.kind === 'water' ? 'info' : m.kind === 'grid' ? 'success' : 'warn')} 13%, transparent)`, color: toneVar(m.kind === 'water' ? 'info' : m.kind === 'grid' ? 'success' : 'warn') }}>{m.kind === 'water' ? <Droplet size={15} /> : <Zap size={15} />}</span>
-              <div className="min-w-0 flex-1"><div className="text-[12.5px] font-medium truncate">{m.label}</div><div className="text-[11px] text-text-3">+{(m.reading - m.previous).toLocaleString()} {m.unit} since last · read {m.atISO.slice(5)}</div></div>
-              <div className="text-right flex-none"><div className="text-[13px] font-mono font-semibold">{m.reading.toLocaleString()}</div><div className="text-[10px] text-text-3">{m.unit}</div></div>
-              <button onClick={() => setMeterFor(m)} className="h-8 px-3 rounded-lg border border-border-2 text-[12px] font-medium flex-none">Read</button>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {refuelFor && <RefuelDialog gen={refuelFor} onClose={() => setRefuelFor(null)} onDone={() => { setRefuelFor(null); flash('Refuel logged'); }} />}
-      {meterFor && <MeterDialog meter={meterFor} onClose={() => setMeterFor(null)} onDone={() => { setMeterFor(null); flash('Meter reading saved'); }} />}
-      {toast && <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[90] bg-text text-surface text-[13px] font-medium px-4 py-2.5 rounded-xl shadow-float animate-fade">{toast}</div>}
-    </div>
-  );
+  const [feedback, setFeedback] = useState<string | null>(null);
+  return <div className={styles.stack}>
+    <PageTabs label="Energy and utilities sections" items={[
+      { id: 'overview', label: 'Energy overview', content: <div className={styles.stack}>
+        <div className={layout.metrics}><FacilityKpi label="Estimated diesel cost" value={facilityMoney(kpis.dieselSpendMinor)} note={kpis.litresMonth.toLocaleString('en-NG') + ' L estimated from runtime · not booked spend'} tone="warn" icon={<Fuel size={18} />} /><FacilityKpi label="Genset reliance" value={reliance.gensetPct + '%'} note={reliance.gridPct + '% grid'} tone={reliance.gensetPct > 60 ? 'warn' : 'info'} icon={<Zap size={18} />} /><FacilityKpi label="Cost / kWh" value={facilityMoney(kpis.costPerKwhMinor)} note="Estimated diesel generation cost" tone="info" icon={<Gauge size={18} />} /><FacilityKpi label="Carbon" value={(kpis.co2Kg / 1000).toFixed(1) + 't'} note="Calculated CO₂ from recorded diesel use" tone="neutral" icon={<Leaf size={18} />} /></div>
+        <Card className={styles.panel}><CardHeader title="Power source split" subtitle="Run-hour estimate over the recorded month · not a connected electricity feed" action={<Plug size={20} className="text-primary" />} /><div className={styles.stack}><div className={styles.track} role="img" aria-label={'Generator ' + reliance.gensetPct + ' percent, grid ' + reliance.gridPct + ' percent'}><span style={{ width: Math.max(0, Math.min(100, reliance.gensetPct)) + '%', background: toneVar('warn') }} /><span style={{ width: Math.max(0, Math.min(100, reliance.gridPct)) + '%', background: toneVar('info') }} /></div><div className={styles.legend}><span><i className={styles.dot} style={{ background: toneVar('warn') }} />Generator · {reliance.gensetPct}%</span><span><i className={styles.dot} style={{ background: toneVar('info') }} />Grid · {reliance.gridPct}%</span></div><p className={styles.metadata}>Snapshot · {date(new Date(nowMs).toISOString())}. Cost and carbon are planning estimates, not supplier invoices or verified emissions statements.</p></div></Card>
+      </div> },
+      { id: 'generators', label: 'Generators & fuel', content: generators.length ? <div className={styles.recordGrid}>{generators.map((generator) => {
+        const forecast = refuelForecast(generator, nowMs);
+        const anomaly = fuelAnomaly(generator);
+        return <Card key={generator.id} className={styles.panel}><CardHeader title={generator.name} subtitle={generator.siteName + ' · ' + generator.capacityKva + ' kVA'} action={<StatusPill status={generator.status} tone={GEN_STATUS_TONE[generator.status] ?? 'neutral'} />} /><div className={styles.stack}><div><div className={styles.barHeader}><span>Recorded fuel level</span><strong className="font-medium">{generator.fuelPct}% · {forecast.litresRemaining.toLocaleString('en-NG')} L</strong></div><progress className={styles.progress + ' mt-3'} max={100} value={Math.max(0, Math.min(100, generator.fuelPct))} aria-label={generator.name + ' recorded fuel percentage'} /></div><div className={styles.notice}><div className={styles.toolbar}><p className={styles.rowTitle}>Estimated fuel runway</p><StatusPill status={!forecast.runsDryISO ? 'No draw estimate' : forecast.daysToEmpty <= 1.5 ? 'Refuel review · urgent' : forecast.daysToEmpty <= 3 ? 'Refuel review · soon' : 'Planning estimate'} tone={forecast.runsDryISO ? forecast.band : 'muted'} /></div><p>{forecast.runsDryISO ? String(forecast.daysToEmpty) + ' day(s), approximately ' + planningDate(forecast.runsDryISO) + ', at the recorded draw.' : 'No positive consumption rate is recorded; time to empty cannot be calculated.'}</p><p className={styles.metadata}>Manual planning estimate, not a live forecast.</p></div><dl className={styles.facts}><div><dt>Recorded consumption</dt><dd>{generator.litresPerHour} L/hr</dd></div><div><dt>Baseline comparison</dt><dd>{anomaly.deltaPct >= 0 ? '+' : ''}{anomaly.deltaPct}% <span className={styles.metadata}>{anomaly.anomalous ? '· inspect for a fault' : '· within recorded baseline'}</span></dd></div><div><dt>Runtime today</dt><dd>{generator.runtimeHoursToday} hours</dd></div><div><dt>Runtime this month</dt><dd>{generator.runtimeHoursMonth} hours</dd></div></dl>{canMutate ? <div className={styles.actions}><Button icon={<Fuel size={16} />} onClick={() => setRefuelFor(generator)}>Log refuel</Button></div> : <p className={styles.metadata}>Read-only energy records</p>}</div></Card>;
+      })}</div> : <Card><EmptyState icon={<Fuel size={26} />} title="No generators in scope" description="Generator capacity, fuel level and service planning appear here when recorded." /></Card> },
+      { id: 'meters', label: 'Meter readings', content: <Card padded={false} className={styles.panel}><div className={styles.panelHeader}><CardHeader title="Meter readings" subtitle="Manual readings with a visible previous value and recording timestamp" /></div>{meters.length ? <div className={styles.scroll} role="region" tabIndex={0} aria-label="Energy meter register"><table className={'pb-data-table ' + styles.table}><thead><tr>{['Meter', 'Reading', 'Previous', 'Change', 'Recorded · WAT', 'Action'].map((heading) => <th scope="col" key={heading}>{heading}</th>)}</tr></thead><tbody>{meters.map((meter) => <tr key={meter.id}><td><p className={styles.rowTitle}>{meter.label}</p><p className={styles.metadata}>{meter.kind.replaceAll('_', ' ')}</p></td><td className={styles.numeric}>{meter.reading.toLocaleString('en-NG')} {meter.unit}</td><td className={styles.numeric}>{meter.previous.toLocaleString('en-NG')} {meter.unit}</td><td className={styles.numeric}>{meter.reading - meter.previous >= 0 ? '+' : ''}{(meter.reading - meter.previous).toLocaleString('en-NG')} {meter.unit}</td><td>{date(meter.atISO)}</td><td className={styles.action}>{canMutate ? <Button aria-label={'Log reading for ' + meter.label} onClick={() => setMeterFor(meter)}>Log reading</Button> : <span className={styles.metadata}>Read-only</span>}</td></tr>)}</tbody></table></div> : <div className={styles.empty}><EmptyState icon={<Droplet size={26} />} title="No meter readings" description="No manual or provider-confirmed readings are recorded in this scope." /></div>}<p className={styles.footer}>Reading changes update operational records only. They do not create a utility bill or authorise a provider payment.</p></Card> },
+    ]} />
+    {refuelFor ? <ReadingDialog title="Log refuel" label="Litres added" initial={String(Math.round(refuelFor.tankLitres * (1 - refuelFor.fuelPct / 100)))} detail={refuelFor.name + ' · tank ' + refuelFor.tankLitres + ' L · recorded fuel ' + refuelFor.fuelPct + '%'} onClose={() => setRefuelFor(null)} action={(value) => logRefuel(refuelFor.id, value)} onDone={() => { setRefuelFor(null); setFeedback('Refuel logged'); }} refuel /> : null}
+    {meterFor ? <ReadingDialog title="Log meter reading" label={'New reading (' + meterFor.unit + ')'} initial={String(meterFor.reading)} detail={meterFor.label + ' · last ' + meterFor.reading.toLocaleString('en-NG') + ' ' + meterFor.unit} onClose={() => setMeterFor(null)} action={(value) => logMeterReading(meterFor.id, value)} onDone={() => { setMeterFor(null); setFeedback('Meter reading saved'); }} /> : null}
+    {feedback ? <FacilityFeedback message={feedback} onDismiss={() => setFeedback(null)} /> : null}
+  </div>;
 }
 
-function RefuelDialog({ gen, onClose, onDone }: { gen: GenRow; onClose: () => void; onDone: () => void }) {
+function ReadingDialog({ title, label, initial, detail, onClose, action, onDone, refuel = false }: {
+  title: string; label: string; initial: string; detail: string; onClose: () => void;
+  action: (value: number) => Promise<{ ok: boolean; error?: string }>; onDone: () => void; refuel?: boolean;
+}) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [litres, setLitres] = useState(String(Math.round(gen.tankLitres * (1 - gen.fuelPct / 100))));
+  const inFlight = useRef(false);
+  const [value, setValue] = useState(initial);
   const [error, setError] = useState<string | null>(null);
-  const cost = dieselCost(Number(litres || 0));
-  const co2 = co2Kg(Number(litres || 0));
-  function submit() { setError(null); start(async () => { const r = await logRefuel(gen.id, Number(litres)); if (!r.ok) { setError(r.error); return; } router.refresh(); onDone(); }); }
-  return (
-    <Modal title="Log refuel" onClose={onClose}>
-      <div className="rounded-xl bg-surface-2 p-3 mb-3 text-[12.5px]"><div className="font-semibold">{gen.name}</div><div className="text-text-3">Tank {gen.tankLitres}L · currently {gen.fuelPct}%</div></div>
-      <label className="lble">Litres added</label><input value={litres} onChange={(e) => setLitres(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" className="inpe" autoFocus />
-      <div className="mt-2 rounded-lg bg-surface-2 p-2.5 text-[11.5px] flex items-center justify-between"><span>Diesel cost ≈ <b>{money(cost)}</b></span><span className="text-text-3">{co2}kg CO₂</span></div>
-      {error && <div className="text-[12px] text-negative mt-2">{error}</div>}
-      <Actions onClose={onClose} onSubmit={submit} pending={pending} disabled={!litres} label="Log refuel" />
-    </Modal>
-  );
-}
-function MeterDialog({ meter, onClose, onDone }: { meter: MeterRow; onClose: () => void; onDone: () => void }) {
-  const router = useRouter();
-  const [pending, start] = useTransition();
-  const [reading, setReading] = useState(String(meter.reading));
-  const [error, setError] = useState<string | null>(null);
-  function submit() { setError(null); start(async () => { const r = await logMeterReading(meter.id, Number(reading)); if (!r.ok) { setError(r.error); return; } router.refresh(); onDone(); }); }
-  return (
-    <Modal title="Log meter reading" onClose={onClose}>
-      <div className="rounded-xl bg-surface-2 p-3 mb-3 text-[12.5px]"><div className="font-semibold">{meter.label}</div><div className="text-text-3">Last {meter.reading.toLocaleString()} {meter.unit}</div></div>
-      <label className="lble">New reading ({meter.unit})</label><input value={reading} onChange={(e) => setReading(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" className="inpe" autoFocus />
-      {error && <div className="text-[12px] text-negative mt-2">{error}</div>}
-      <Actions onClose={onClose} onSubmit={submit} pending={pending} disabled={!reading} label="Save reading" />
-    </Modal>
-  );
-}
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  return (
-    <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center p-3 sm:p-4">
-      <div className="absolute inset-0 bg-[rgba(10,12,20,.45)] animate-fade" onClick={onClose} />
-      <div className="relative w-full max-w-[360px] bg-surface border border-border rounded-2xl shadow-float p-4 animate-[tms-slideup_.2s_ease]">
-        <div className="flex items-center justify-between mb-3"><h3 className="text-[15px] font-semibold">{title}</h3><button onClick={onClose} className="w-8 h-8 rounded-lg grid place-items-center hover:bg-surface-2"><X size={17} /></button></div>
-        {children}
-        <style>{`.lble{display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--text-3);margin-bottom:4px}.inpe{width:100%;height:36px;padding:0 10px;border-radius:8px;border:1px solid var(--border-2);background:var(--surface);font-size:13px;outline:none}.inpe:focus{border-color:var(--primary)}`}</style>
-      </div>
-    </div>
-  );
-}
-function Actions({ onClose, onSubmit, pending, disabled, label }: { onClose: () => void; onSubmit: () => void; pending: boolean; disabled?: boolean; label: string }) {
-  return <div className="flex justify-end gap-2 mt-4"><button onClick={onClose} className="h-9 px-3.5 rounded-lg border border-border-2 text-[13px]">Cancel</button><button onClick={onSubmit} disabled={pending || disabled} className="h-9 px-4 rounded-lg bg-primary text-white text-[13px] font-medium disabled:opacity-50">{pending ? 'Saving…' : label}</button></div>;
-}
-function Kpi({ label, value, note, tone, icon }: { label: string; value: string; note: string; tone: Tone; icon: React.ReactNode }) {
-  return <div className="bg-surface border border-border rounded-2xl shadow-card p-3.5"><span className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `color-mix(in srgb, ${toneVar(tone)} 14%, transparent)`, color: toneVar(tone) }}>{icon}</span><div className="text-[12px] text-text-2 font-medium mt-2.5">{label}</div><div className="text-[17px] font-bold tracking-[-0.02em] leading-none mt-1">{value}</div><div className="text-[10.5px] mt-1" style={{ color: toneVar(tone) }}>{note}</div></div>;
+  function submit() {
+    if (inFlight.current || !value) return;
+    inFlight.current = true; setError(null);
+    start(async () => {
+      try { const result = await action(Number(value)); if (!result.ok) { setError(result.error ?? 'The record could not be updated.'); return; } router.refresh(); onDone(); }
+      catch { setError('The save could not be confirmed. Your entries are still here; refresh the record before retrying.'); }
+      finally { inFlight.current = false; }
+    });
+  }
+  return <FacilityDialog title={title} onClose={onClose} pending={pending}><form className={styles.stack} onSubmit={(event) => { event.preventDefault(); submit(); }}><p className={styles.body}>{detail}</p><label className={styles.field}><span>{label}</span><input className={layout.control} value={value} onChange={(event) => setValue(event.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" required disabled={pending} autoFocus /></label>{refuel ? <div className={styles.notice}><dl className={styles.facts}><div><dt>Estimated diesel cost</dt><dd>{facilityMoney(dieselCost(Number(value || 0)))}</dd></div><div><dt>Calculated emissions</dt><dd>{co2Kg(Number(value || 0))} kg CO₂</dd></div></dl><p className={styles.metadata}>Confirm fuel was physically delivered. This records a refuel only; no supplier payment is made.</p></div> : null}{error ? <p role="alert" className="text-[14px] text-negative">{error}</p> : null}<div className={styles.actions}><Button type="button" disabled={pending} onClick={onClose}>Cancel</Button><Button type="submit" variant="primary" disabled={pending || !value}>{pending ? 'Saving…' : refuel ? 'Log refuel' : 'Save reading'}</Button></div></form></FacilityDialog>;
 }

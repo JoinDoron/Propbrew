@@ -1,160 +1,82 @@
 'use client';
 
-import { Fragment, useState, useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { CalendarCheck, Clock, Wallet, Gauge, AlertTriangle, Sparkles, ListChecks } from 'lucide-react';
-import { formatMoney } from '@/components/domain';
+import { CalendarCheck, Clock, Wallet, Gauge, AlertTriangle, ListChecks, Info, Search, X, CheckCircle2 } from 'lucide-react';
+import { PageTabs } from '@/components/ui/page-tabs';
+import { Avatar, Button, Card, CardHeader, EmptyState, IconButton, KpiCard, StatusPill } from '@/components/ui';
+import { PortalDialog } from '@/components/portal/portal-dialog';
 import { DomainStatus } from '@/components/domain';
-import { toneVar, type Tone } from '@/lib/status-tones';
+import { toneVar } from '@/lib/status-tones';
 import { transition } from '@/server/actions/transitions';
 import type { InlineEvent } from '@/components/inline-actions';
 import type { BookingStatus } from '@/domain/enums';
-import { utilisation, conflicts, wouldAutoApprove, usageHeatmap, revenue, amenityOf, AMENITIES, DAYS, BANDS, type BookingLike } from '@/domain/bookings';
+import type { CurrencyCode } from '@/domain/primitives';
+import { utilisation, conflicts, wouldAutoApprove, usageHeatmap, amenityOf, AMENITIES, DAYS, BANDS, type BookingLike } from '@/domain/bookings';
+import layout from '@/components/ui/workspace-layout.module.css';
+import styles from '@/components/estate/experience-workspaces.module.css';
 
-export type BookingView = { id: string; amenity: string; residentName: string; status: BookingStatus; slot: string; feeMinor: number | null; actions: InlineEvent[] };
-
-const RULE_LABEL: Record<string, string> = { always: 'Auto-approve', off_peak: 'Off-peak auto', manual: 'Manual' };
+export type BookingView = { id: string; amenity: string; residentName: string; status: BookingStatus; slot: string; feeMinor: number | null; feeCurrency?: CurrencyCode; actions: InlineEvent[] };
+const RULE_LABEL: Record<string, string> = { always: 'Auto-approve', off_peak: 'Off-peak auto', manual: 'Manual approval' };
+const money = (minor: number, currency: CurrencyCode = 'NGN') => new Intl.NumberFormat('en-NG', { style: 'currency', currency, minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(minor / 100);
+function fmtSlot(iso: string) {
+  if (!Number.isFinite(Date.parse(iso))) return iso;
+  return `${new Date(iso).toLocaleString('en-NG', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Lagos' })} WAT`;
+}
 
 export function BookingsWorkspace({ bookings, canMutate }: { bookings: BookingView[]; canMutate: boolean }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [amenity, setAmenity] = useState(AMENITIES[0].name);
-  const money = (minor: number) => formatMoney({ minor, currency: 'NGN' } as Parameters<typeof formatMoney>[0]);
-  const fire = (id: string, event: string) => start(async () => { await transition('booking', id, event); router.refresh(); });
-
+  const [query, setQuery] = useState('');
+  const [status, setStatus] = useState('all');
+  const [review, setReview] = useState<{ booking: BookingView; action: InlineEvent } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(null);
   const lite: BookingLike[] = bookings.map((b) => ({ id: b.id, amenity: b.amenity, status: b.status, slot: b.slot, feeMinor: b.feeMinor }));
   const util = utilisation(lite);
   const conf = conflicts(lite);
   const queue = bookings.filter((b) => b.status === 'requested');
   const heat = usageHeatmap(amenity);
-  const rev = revenue(lite);
-  const avgUtil = Math.round(util.reduce((n, u) => n + u.pct, 0) / (util.length || 1));
-
-  return (
-    <div className="flex flex-col gap-3.5">
-      <div className="grid grid-cols-2 min-[900px]:grid-cols-4 gap-3">
-        <Kpi label="Bookings" value={String(bookings.length)} note={`${AMENITIES.length} amenities`} tone="info" icon={<CalendarCheck size={18} />} />
-        <Kpi label="Awaiting approval" value={String(queue.length)} note={queue.length ? 'in the queue' : 'all clear'} tone={queue.length ? 'warn' : 'success'} icon={<Clock size={18} />} />
-        <Kpi label="Fees booked" value={money(rev)} note="confirmed + completed" tone="progress" icon={<Wallet size={18} />} />
-        <Kpi label="Avg utilisation" value={`${avgUtil}%`} note="across amenities" tone={avgUtil >= 70 ? 'danger' : avgUtil >= 40 ? 'warn' : 'success'} icon={<Gauge size={18} />} />
-      </div>
-
-      {/* Conflicts */}
-      {conf.length > 0 && (
-        <div className="rounded-2xl border border-warning/40 bg-warning/[0.05] p-3 flex items-start gap-2.5">
-          <AlertTriangle size={16} className="text-warning flex-none mt-0.5" />
-          <div className="text-[12.5px]"><span className="font-semibold">{conf.length} scheduling conflict{conf.length === 1 ? '' : 's'}</span> — {conf.map((c) => c.amenity).join(', ')} double-booked within a 2-hour window. Resolve before confirming.</div>
-        </div>
-      )}
-
-      {/* Approval queue */}
-      {queue.length > 0 && (
-        <div className="bg-surface border border-border rounded-2xl shadow-card overflow-hidden">
-          <div className="px-4 py-2.5 border-b border-border flex items-center gap-2"><ListChecks size={14} className="text-text-3" /><span className="text-[12.5px] font-semibold">Approval queue</span><span className="ml-auto text-[10.5px] text-text-3">auto-rule hints are advisory</span></div>
-          <div className="divide-y divide-border">
-            {queue.map((b) => {
-              const rule = wouldAutoApprove(b.amenity, b.slot);
-              return (
-                <div key={b.id} className="px-4 py-3 flex items-center gap-3 flex-wrap">
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[13px] font-semibold">{b.amenity} · <span className="font-normal text-text-2">{b.residentName}</span></div>
-                    <div className="text-[11.5px] text-text-3">{fmtSlot(b.slot)}{b.feeMinor ? ` · ${money(b.feeMinor)}` : ' · free'}</div>
-                  </div>
-                  <span className="text-[10.5px] font-semibold px-2 h-[22px] inline-flex items-center gap-1 rounded-full" style={{ background: `color-mix(in srgb, ${toneVar(rule.auto ? 'success' : 'warn')} 14%, transparent)`, color: toneVar(rule.auto ? 'success' : 'warn') }}><Sparkles size={11} /> {rule.auto ? 'Rule: auto-approve' : 'Rule: review'} · {rule.reason}</span>
-                  {canMutate && b.actions.map((a) => (
-                    <button key={a.event} disabled={pending} onClick={() => fire(b.id, a.event)} className={`text-[11.5px] px-2.5 h-7 rounded-lg font-medium disabled:opacity-50 ${a.variant === 'danger' ? 'text-negative border border-[color:var(--tone-danger)]/40' : a.variant === 'primary' ? 'bg-primary text-white' : 'border border-border-2 text-text-2'}`}>{a.label}</button>
-                  ))}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 min-[900px]:grid-cols-[1fr_300px] gap-3.5 items-start">
-        {/* Availability heatmap */}
-        <div className="bg-surface border border-border rounded-2xl shadow-card p-4">
-          <div className="flex items-center gap-2 mb-3 flex-wrap">
-            <CalendarCheck size={14} className="text-text-3" /><span className="text-[12.5px] font-semibold">Availability</span>
-            <select value={amenity} onChange={(e) => setAmenity(e.target.value)} aria-label="Amenity" className="ml-auto h-7 px-2 rounded-lg border border-border-2 bg-surface text-[12px] outline-none focus:border-primary">
-              {AMENITIES.map((a) => <option key={a.name}>{a.name}</option>)}
-            </select>
-          </div>
-          <div className="overflow-x-auto">
-            <div className="inline-grid gap-1" style={{ gridTemplateColumns: `auto repeat(${BANDS.length}, 1fr)` }}>
-              <span />
-              {BANDS.map((b) => <span key={b} className="text-[9.5px] text-text-3 text-center">{b}</span>)}
-              {heat.map((row, d) => (
-                <Fragment key={d}>
-                  <span className="text-[10px] text-text-3 pr-1 self-center">{DAYS[d]}</span>
-                  {row.map((v, t) => (
-                    <span key={`${d}-${t}`} title={`${DAYS[d]} ${BANDS[t]} · ${v === 0 ? 'free' : `${v}/4 busy`}`} className="w-full rounded-[3px]" style={{ aspectRatio: '1.6', minWidth: 22, background: v === 0 ? 'var(--surface-3)' : `color-mix(in srgb, ${toneVar(v >= 3 ? 'danger' : v >= 2 ? 'warn' : 'success')} ${25 + v * 18}%, transparent)` }} />
-                  ))}
-                </Fragment>
-              ))}
-            </div>
-          </div>
-          <div className="text-[10.5px] text-text-3 mt-2">Indicative weekly demand for {amenity} · capacity {amenityOf(amenity).capacity} · rule {RULE_LABEL[amenityOf(amenity).autoApprove]}</div>
-        </div>
-
-        {/* Utilisation + rules */}
-        <div className="bg-surface border border-border rounded-2xl shadow-card p-4">
-          <div className="flex items-center gap-2 mb-3"><Gauge size={14} className="text-text-3" /><span className="text-[12.5px] font-semibold">Utilisation</span></div>
-          <div className="flex flex-col gap-2.5">
-            {util.map((u) => (
-              <button key={u.amenity} onClick={() => setAmenity(u.amenity)} className="text-left">
-                <div className="flex items-center justify-between text-[11.5px] mb-0.5"><span className="text-text-2 truncate">{u.amenity}</span><span className="font-mono text-text-3">{u.bookings} · {RULE_LABEL[u.rule]}</span></div>
-                <div className="h-1.5 rounded-full bg-surface-2 overflow-hidden"><div className="h-full rounded-full" style={{ width: `${Math.max(4, u.pct)}%`, background: toneVar(u.tone) }} /></div>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Full register */}
-      <div className="bg-surface border border-border rounded-2xl shadow-card overflow-hidden">
-        <div className="px-4 py-2.5 border-b border-border text-[12.5px] font-semibold">All bookings</div>
-        <div className="w-full overflow-x-auto">
-          <table className="w-full border-collapse text-sm">
-            <thead><tr>{['Amenity', 'Resident', 'Status', 'Slot', 'Fee', 'Actions'].map((h, i) => <th key={h} className={`text-left text-[10.5px] font-semibold tracking-[0.06em] uppercase text-text-3 px-4 py-2.5 border-b border-border whitespace-nowrap ${i > 3 ? 'text-right' : ''} ${i === 3 ? 'max-[560px]:hidden' : ''}`}>{h}</th>)}</tr></thead>
-            <tbody>
-              {bookings.map((b) => (
-                <tr key={b.id} className="hover:bg-surface-2 transition-colors">
-                  <td className="px-4 py-2.5 border-b border-border text-[13px] font-medium">{b.amenity}</td>
-                  <td className="px-4 py-2.5 border-b border-border text-[13px] text-text-2">{b.residentName}</td>
-                  <td className="px-4 py-2.5 border-b border-border"><DomainStatus type="booking" status={b.status} /></td>
-                  <td className="px-4 py-2.5 border-b border-border max-[560px]:hidden font-mono text-[12.5px]">{fmtSlot(b.slot)}</td>
-                  <td className="px-4 py-2.5 border-b border-border text-right text-[12.5px]">{b.feeMinor ? money(b.feeMinor) : '—'}</td>
-                  <td className="px-4 py-2.5 border-b border-border text-right">
-                    {canMutate && b.actions.length > 0 ? (
-                      <div className="inline-flex gap-1.5">
-                        {b.actions.map((a) => <button key={a.event} disabled={pending} onClick={() => fire(b.id, a.event)} className={`text-[11px] px-2 h-6 rounded-md font-medium disabled:opacity-50 ${a.variant === 'danger' ? 'text-negative border border-[color:var(--tone-danger)]/40' : a.variant === 'primary' ? 'bg-primary text-white' : 'border border-border-2 text-text-2'}`}>{a.label}</button>)}
-                      </div>
-                    ) : <span className="text-text-3 text-[12px]">—</span>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <p className="text-[11px] text-text-3">Fees are collected through the SC-02 wallet/gateway on confirmation. Auto-approval rules are advisory hints — a manual-rule amenity always needs manager sign-off.</p>
-    </div>
-  );
-}
-
-function fmtSlot(iso: string): string {
-  return new Date(iso).toLocaleString('en-NG', { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
-
-function Kpi({ label, value, note, tone, icon }: { label: string; value: string; note: string; tone: Tone; icon: React.ReactNode }) {
-  return (
-    <div className="bg-surface border border-border rounded-2xl shadow-card p-4">
-      <span className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: `color-mix(in srgb, ${toneVar(tone)} 14%, transparent)`, color: toneVar(tone) }}>{icon}</span>
-      <div className="text-[13px] text-text-2 font-medium mt-3">{label}</div>
-      <div className="text-[21px] font-bold tracking-[-0.02em] leading-none mt-1">{value}</div>
-      <div className="text-[11px] mt-1" style={{ color: toneVar(tone) }}>{note}</div>
-    </div>
-  );
+  const avgUtil = util.length ? Math.round(util.reduce((n, u) => n + u.pct, 0) / util.length) : 0;
+  const feeTotals = new Map<CurrencyCode, number>();
+  for (const b of bookings) if (b.status === 'confirmed' || b.status === 'completed') { const c = b.feeCurrency ?? 'NGN'; feeTotals.set(c, (feeTotals.get(c) ?? 0) + (b.feeMinor ?? 0)); }
+  const fees = feeTotals.size > 1 ? `${feeTotals.size} currencies` : feeTotals.size ? [...feeTotals].map(([c, n]) => money(n, c))[0] : money(0);
+  const visible = bookings.filter((b) => (status === 'all' || b.status === status) && `${b.amenity} ${b.residentName} ${b.id}`.toLowerCase().includes(query.trim().toLowerCase()));
+  function openReview(booking: BookingView, action: InlineEvent) { setError(null); setReview({ booking, action }); }
+  function confirm() {
+    if (!canMutate || !review || pending) return;
+    setError(null); start(async () => {
+      try {
+        const r = await transition('booking', review.booking.id, review.action.event);
+        if (!r.ok) { setError(r.error); return; }
+        setFeedback(`${review.booking.amenity} · ${review.action.label} recorded.`); setReview(null); router.refresh();
+      } catch { setError('The booking could not be updated. Please try again.'); }
+    });
+  }
+  function actions(b: BookingView) {
+    return canMutate && b.actions.length ? <div className={styles.actionRow}>{b.actions.map((a) => <Button key={a.event} variant={a.variant === 'primary' ? 'primary' : 'secondary'} disabled={pending} className={a.variant === 'danger' ? 'text-negative' : undefined} aria-label={`Review ${a.label.toLowerCase()} for ${b.residentName} at ${b.amenity}`} onClick={() => openReview(b, a)}>{a.label}</Button>)}</div> : <span className={layout.metadata}>{canMutate ? 'No actions available' : 'Read-only access'}</span>;
+  }
+  return <div className={layout.layout}>
+    <div className={layout.context}><p className={layout.metadata}>Amenity booking snapshot · all slot times in WAT</p><StatusPill status={canMutate ? 'Manager controls' : 'Read-only access'} tone={canMutate ? 'info' : 'muted'} /></div>
+    {feedback && <div role="status" className={`${layout.feedback} ${styles.feedback}`}><CheckCircle2 size={18} /><span>{feedback}</span><IconButton aria-label="Dismiss booking update" onClick={() => setFeedback(null)}><X size={16} /></IconButton></div>}
+    {conf.length > 0 && <div className={layout.notice}><AlertTriangle size={18} className="text-warning" aria-hidden="true" /><div><p className={layout.title}>{conf.length} potential scheduling conflict{conf.length === 1 ? '' : 's'}</p><p className={layout.body}>{[...new Set(conf.map((c) => c.amenity))].join(', ')} has overlapping two-hour booking windows. Review affected records before confirming.</p></div></div>}
+    <PageTabs label="Amenity booking sections" items={[
+      { id: 'overview', label: 'Overview', content: <div className={layout.layout}>
+        <div className={layout.metrics}><KpiCard label="Booking records" value={String(bookings.length)} icon={<CalendarCheck size={18} />} /><KpiCard label="Awaiting approval" value={String(queue.length)} icon={<Clock size={18} />} /><KpiCard label="Confirmed & completed fees" value={fees} icon={<Wallet size={18} />} /><KpiCard label="Indicative utilisation" value={`${avgUtil}%`} icon={<Gauge size={18} />} /></div>
+        <div className={layout.analytics}><Card><CardHeader title="Booking overview" subtitle="Current records, not a live availability feed." /><dl className={styles.facts}><div><dt>Amenities configured</dt><dd>{AMENITIES.length}</dd></div><div><dt>Requested bookings</dt><dd>{queue.length}</dd></div><div><dt>Confirmed bookings</dt><dd>{bookings.filter((b) => b.status === 'confirmed').length}</dd></div><div><dt>Potential conflicts</dt><dd>{conf.length}</dd></div></dl></Card><Card><CardHeader title="Fee summary" subtitle="Recorded amounts, not proof of payment or settlement." />{feeTotals.size ? <dl className={styles.facts}>{[...feeTotals].map(([currency, minor]) => <div key={currency}><dt>{currency}</dt><dd>{money(minor, currency)}</dd></div>)}</dl> : <EmptyState icon={<Wallet size={24} />} title="No confirmed fees" description="Confirmed and completed booking amounts will appear here." />}<p className={layout.footnote}>Different currencies remain separate. No exchange rate or conversion is applied.</p></Card></div>
+      </div> },
+      ...(queue.length > 0 ? [{ id: 'approvals', label: 'Approval queue', count: queue.length, content: <div className={layout.layout}><Card padded={false}><div className={layout.registerHeader}><CardHeader title="Approval queue" subtitle="Rules are advisory. Review each booking and resolve conflicts before approval." action={<ListChecks size={20} className="text-primary" />} /></div><div className={styles.approvalList}>{queue.map((b) => { const rule = wouldAutoApprove(b.amenity, b.slot); return <div key={b.id} className={styles.approval}><Avatar name={b.residentName} size={40} /><div className={styles.approvalIdentity}><div className={layout.title}>{b.amenity} · {b.residentName}</div><p className={layout.metadata}>{fmtSlot(b.slot)}</p><p className={layout.body}>{b.feeMinor === null ? 'No fee recorded' : b.feeMinor === 0 ? 'Free' : money(b.feeMinor, b.feeCurrency)}</p><div className={styles.rule}><Info size={16} /><span>{rule.auto ? 'Rule suggests approval' : 'Manager review required'} · {rule.reason}</span></div></div>{actions(b)}</div>; })}</div></Card></div> }] : []),
+      { id: 'availability', label: 'Availability', content: <div className={layout.layout}>
+        <div className={layout.notice}><Info size={18} aria-hidden="true" /><p className={layout.body}>Illustrative demand only. The weekly grid is a deterministic demonstration, not availability calculated from booking records. Check the register before offering a slot.</p></div>
+        <div className={layout.analytics}><Card className={layout.panel}><CardHeader title="Weekly demand illustration" subtitle="Sample demand bands for the selected amenity." action={<select className={layout.select} aria-label="Amenity demand illustration" value={amenity} onChange={(e) => setAmenity(e.target.value)}>{AMENITIES.map((a) => <option key={a.name}>{a.name}</option>)}</select>} /><div className="pb-table-scroll" role="region" aria-label={`Illustrative weekly demand for ${amenity}`} tabIndex={0}><table className={styles.heatmap}><caption className="sr-only">Illustrative demand, zero to four. Not live slot availability.</caption><thead><tr><th scope="col">Day</th>{BANDS.map((b) => <th key={b} scope="col">{b}</th>)}</tr></thead><tbody>{heat.map((row, d) => <tr key={DAYS[d]}><th scope="row">{DAYS[d]}</th>{row.map((v, t) => <td key={t} style={{ background: v === 0 ? 'var(--surface-3)' : `color-mix(in srgb, ${toneVar(v >= 3 ? 'warn' : 'progress')} ${12 + v * 9}%, var(--surface))` }} aria-label={`${DAYS[d]} ${BANDS[t]}: illustrative demand ${v} of 4`}>{v}</td>)}</tr>)}</tbody></table></div><div className={styles.heatmapLegend}><span>0 low demand</span><span>4 high demand</span><span>Capacity {amenityOf(amenity).capacity} · {RULE_LABEL[amenityOf(amenity).autoApprove]}</span></div></Card>
+        <Card className={layout.panel}><CardHeader title="Indicative utilisation" subtitle="Demo-scaled against nominal weekly capacity; not a measured occupancy rate." /><div className={styles.utilList}>{util.map((u) => <button key={u.amenity} type="button" className={styles.utilButton} aria-pressed={amenity === u.amenity} onClick={() => setAmenity(u.amenity)}><div className={styles.demandLabel}><span>{u.amenity}</span><span>{u.pct}%</span></div><div className={styles.progress}><span style={{ width: `${u.pct}%`, background: toneVar(u.tone) }} /></div><div className={layout.metadata}>{u.bookings} active records · {RULE_LABEL[u.rule]}</div></button>)}</div></Card></div>
+      </div> },
+      { id: 'register', label: 'Booking register', content: <div className={layout.layout}><Card padded={false}><div className={layout.registerHeader}><CardHeader title="Booking register" subtitle="Review every booking, slot, status and available workflow action." /><div className={layout.toolbar}><label className={layout.search}><Search size={16} aria-hidden="true" /><input type="search" aria-label="Search bookings" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search amenities, residents or references" /></label><select className={layout.select} aria-label="Booking status" value={status} onChange={(e) => setStatus(e.target.value)}><option value="all">All statuses</option>{[...new Set(bookings.map((b) => b.status))].map((s) => <option key={s} value={s}>{s.replaceAll('_', ' ')}</option>)}</select></div></div>
+        {visible.length ? <div className="pb-table-scroll" role="region" aria-label="Booking register" tabIndex={0}><table className={`pb-data-table ${layout.table} ${styles.bookingTable}`}><thead><tr>{['Amenity', 'Resident', 'Status', 'Slot', 'Fee', 'Actions'].map((h) => <th key={h} scope="col">{h}</th>)}</tr></thead><tbody>{visible.map((b) => <tr key={b.id}><td><div className={layout.title}>{b.amenity}</div><div className={layout.metadata}>{b.id}</div></td><td><div className={layout.person}><Avatar name={b.residentName} size={32} /><span>{b.residentName}</span></div></td><td><DomainStatus type="booking" status={b.status} /></td><td>{fmtSlot(b.slot)}</td><td className={styles.numeric}>{b.feeMinor === null ? 'Not recorded' : b.feeMinor === 0 ? 'Free' : money(b.feeMinor, b.feeCurrency)}</td><td>{actions(b)}</td></tr>)}</tbody></table></div> : <EmptyState icon={<CalendarCheck size={24} />} title={bookings.length ? 'No matching bookings' : 'No bookings yet'} description={bookings.length ? 'Try another search or status filter.' : 'Booking records in your scope will appear here.'} />}<div className={layout.registerFooter}>Showing {visible.length} of {bookings.length} booking records · Times in WAT</div>
+      </Card></div> },
+    ]} />
+    <p className={layout.metadata}>Approval rules are advisory and available actions follow your role. Booking fees shown here do not prove collection, gateway payment or settlement.</p>
+    {canMutate && review && <PortalDialog label="Review booking action" onClose={() => setReview(null)} canClose={!pending} width={540}><div className={layout.modal}><div className={layout.dialogHeader}><h2 className={layout.dialogTitle}>Review booking action</h2><IconButton aria-label="Close booking confirmation" disabled={pending} onClick={() => setReview(null)}><X size={18} /></IconButton></div><div className={layout.dialogBody}><p className={layout.body}>Confirm this workflow update after reviewing the booking and any scheduling conflicts. This does not initiate or verify a payment.</p><dl className={styles.facts}><div><dt>Amenity</dt><dd>{review.booking.amenity}</dd></div><div><dt>Resident</dt><dd>{review.booking.residentName}</dd></div><div><dt>Slot</dt><dd>{fmtSlot(review.booking.slot)}</dd></div><div><dt>Current status</dt><dd><DomainStatus type="booking" status={review.booking.status} /></dd></div><div><dt>Action</dt><dd>{review.action.label}</dd></div></dl>{error && <p role="alert" className={layout.feedback}>{error}</p>}<div className={layout.actions}><Button disabled={pending} onClick={() => setReview(null)}>Cancel</Button><Button variant="primary" disabled={pending} onClick={confirm}>{pending ? 'Saving…' : `Confirm ${review.action.label.toLowerCase()}`}</Button></div></div></div></PortalDialog>}
+  </div>;
 }

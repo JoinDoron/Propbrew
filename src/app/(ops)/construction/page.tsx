@@ -1,5 +1,5 @@
 import { requireCapability } from '@/server/guard';
-import { effectiveLevel } from '@/lib/authz';
+import { can } from '@/lib/authz';
 import { constructionWorld, signalStates } from '@/server/reads/construction';
 import { NOW, NOW_MS } from '@/domain/ppm';
 import {
@@ -14,8 +14,8 @@ const OPEN_PO = ['issued', 'acknowledged', 'part_delivered', 'approved'];
  *  index, a ₦-at-risk-ranked attention feed from the deterministic risk radar,
  *  per-project earned-value sparklines, and today's delivery radar. */
 export default async function ConstructionPage() {
-  const { actor } = await requireCapability('reports_analytics');
-  const canMutate = ['F', 'M'].includes(effectiveLevel(actor, 'reports_analytics'));
+  const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
+  const canMutate = can(actor, 'reports_analytics', 'update').allowed;
 
   const world = constructionWorld(actor);
 
@@ -50,7 +50,7 @@ export default async function ConstructionPage() {
   const onSite = world.attendance.filter((a) => a.dateISO === today && a.status === 'present').length;
 
   return (
-    <div className="max-w-[1080px] mx-auto">
+    <div className="pb-page">
       <CommandCenter
         confidence={portfolioConfidence(world.projects, world.costCodes, signals)}
         projects={projectRows}

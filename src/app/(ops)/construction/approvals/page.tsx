@@ -1,5 +1,5 @@
 import { requireCapability } from '@/server/guard';
-import { effectiveLevel } from '@/lib/authz';
+import { can } from '@/lib/authz';
 import { constructionWorld, actorName } from '@/server/reads/construction';
 import { NOW_MS } from '@/domain/ppm';
 import { canApprove, overdueSteps, approvalProgress, reasonsFor } from '@/domain/construction';
@@ -10,8 +10,8 @@ import { ApprovalsWorkspace, type ReqView, type RuleView, type ReasonOption, typ
  *  (a requester can never approve their own transaction). Rejections require a
  *  coded reason so the Pareto downstream is real. */
 export default async function ConstructionApprovalsPage() {
-  const { actor } = await requireCapability('reports_analytics');
-  const canMutate = ['F', 'M'].includes(effectiveLevel(actor, 'reports_analytics'));
+  const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
+  const canMutate = can(actor, 'reports_analytics', 'update').allowed;
   const world = constructionWorld(actor);
   const myName = actorName(actor);
   const myRoles = actor.roles as string[];
@@ -39,7 +39,7 @@ export default async function ConstructionApprovalsPage() {
 
   const inFlight = requests.filter((r) => r.status === 'in_flight');
   return (
-    <div className="max-w-[1000px] mx-auto">
+    <div className="pb-page">
       <ApprovalsWorkspace
         requests={requests} rules={rules} reasons={reasons}
         kpis={{

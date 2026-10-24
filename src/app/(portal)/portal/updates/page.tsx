@@ -1,3 +1,4 @@
+import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
 import { InvestorUpdatesWorkspace } from '@/components/portal/investor-updates-workspace';
@@ -11,8 +12,11 @@ export default async function InvestorUpdatesPage() {
   const projects = [...repos.investorProjects.list(actor).items];
 
   return (
-    <div className="max-w-[640px] mx-auto">
+    <div className="pb-page">
+      <PageHeader title="Project updates" subtitle="Construction milestones and documents for your investments." />
+      <div className="w-full min-w-0 flex flex-col gap-6">
       <InvestorUpdatesWorkspace projects={projects} />
+      </div>
     </div>
   );
 }
