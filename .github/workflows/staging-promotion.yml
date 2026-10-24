@@ -30,4 +30,5 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_SCOPE: ${{ secrets.VERCEL_SCOPE }}
       - name: Rollback command
-        run: echo 'Rollback: set VERCEL_TOKEN in the environment, then run npx vercel@latest rollback --scope="$VERCEL_SCOPE"'
+        run: |
+          echo 'Rollback: set VERCEL_TOKEN in the environment, then run npx vercel@latest rollback --scope="$VERCEL_SCOPE"'
