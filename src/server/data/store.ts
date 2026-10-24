@@ -9,8 +9,10 @@ import 'server-only';
  * talk to `db` and the history map, never to a fixture directly, so swapping
  * this file for a Prisma/SQL client changes nothing above it.
  *
- * Dev caveat: module state resets on server restart / HMR reload — fine for a
- * demo, and the reset is itself a reminder that this is not persistence.
+ * Next may evaluate this source in separate server-action and API bundles.
+ * They must share one process working set, including creator receipts and
+ * history. A restart or another process still has separate demonstration data;
+ * this is not durable storage or a substitute for the production adapter.
  */
 
 import * as seed from './seed/fixtures';
@@ -23,8 +25,8 @@ import type { SystemActor } from '@/domain/workflows';
 
 const clone = <T>(arr: readonly T[]): T[] => arr.map((x) => ({ ...x }));
 
-/** Mutable working set, cloned from the immutable seed. */
-export const db = {
+/** Construct a working set only when this Node process has no existing one. */
+const createWorkingSet = () => ({
   sites: clone(seed.sites),
   buildings: clone(seed.buildings),
   units: clone(seed.units),
@@ -159,7 +161,21 @@ export const db = {
   syncLedger: [] as { tenantId: string; opId: string; actorId: string; kind: string; payloadHash: string; status: 'pending' | 'applied' | 'abandoned'; appliedISO: string; ref?: string }[],
   // Copilot threads for the construction assistant (per-actor).
   constructionCopilotUsage: [{ tenantId: 't-lekki', requests: 11, inputTokens: 9200, outputTokens: 3100, costMinorNgn: 9840 }] as { tenantId: string; requests: number; inputTokens: number; outputTokens: number; costMinorNgn: number }[],
+});
+
+type ProcessMemoryStore = {
+  db: ReturnType<typeof createWorkingSet>;
+  history: Map<string, HistoryEntry[]>;
+  initialized: boolean;
+  proxyReturnNoticeSequence: number;
 };
+const processGlobal = globalThis as typeof globalThis & { __propbrewMemoryStoreV1?: ProcessMemoryStore };
+const processStore = processGlobal.__propbrewMemoryStoreV1 ??= {
+  db: createWorkingSet(), history: new Map<string, HistoryEntry[]>(), initialized: false, proxyReturnNoticeSequence: 0,
+};
+
+/** Shared only within this server process; all reads still require actor scope. */
+export const db = processStore.db;
 
 export type HistoryEntry = {
   seq: number;
@@ -175,7 +191,7 @@ export type HistoryEntry = {
 
 /** Audit trail keyed by `${machineKey}:${rowId}` (§10: every transition
  *  timestamped + attributed). One map serves all five machines. */
-const history = new Map<string, HistoryEntry[]>();
+const history = processStore.history;
 
 const key = (machine: MachineKey, id: string) => `${machine}:${id}`;
 
@@ -191,9 +207,8 @@ export function getHistory(machine: MachineKey, id: string): HistoryEntry[] {
 
 /** Notify a resident their proxy was returned — writes the portal-hub banner
  *  ledger AND mirrors it into the global 🔔 bell (SC-09). */
-let prnSeq = 0;
 export function recordProxyReturnNotice(userId: string, m: { id: string; ref: string; title: string } | undefined, reason: string): void {
-  db.proxyReturnNotices.unshift({ id: `prn-${++prnSeq}`, userId, motionId: m?.id ?? '', motionRef: m?.ref ?? '', motionTitle: m?.title ?? '', reason, atISO: '2026-07-26T09:00:00Z', seen: false });
+  db.proxyReturnNotices.unshift({ id: `prn-${++processStore.proxyReturnNoticeSequence}`, userId, motionId: m?.id ?? '', motionRef: m?.ref ?? '', motionTitle: m?.title ?? '', reason, atISO: '2026-07-26T09:00:00Z', seen: false });
   pushNotification(userId, ['resident'], {
     title: 'Proxy returned',
     body: `${reason} Your vote${m ? ` on ${m.ref}` : ''} is yours again.`,
@@ -251,7 +266,6 @@ function settleAllUnits() {
   const unitIds = Array.from(new Set(db.wallets.map((w) => w.unitId)));
   for (const u of unitIds) settleUnitFromWallet(u, '2026-07-25T20:00:00Z');
 }
-settleAllUnits();
 
 /** Flatten the entire audit trail across every machine — the SC-10 admin view.
  *  Platform-Admin-only in practice (the page gates it). */
@@ -314,7 +328,11 @@ function seedWorkOrderHistory() {
     });
   }
 }
-seedWorkOrderHistory();
+if (!processStore.initialized) {
+  settleAllUnits();
+  seedWorkOrderHistory();
+  processStore.initialized = true;
+}
 
 
 /**

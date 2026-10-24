@@ -44,7 +44,7 @@ const coverage = [
   ['safety', 'safety-workspace', ['permits', 'events', 'overview']],
   ['schedule', 'schedule-workspace', ['network', 'milestones', 'overview']],
   ['simulator', 'simulator-workspace', ['assumptions', 'impact']],
-  ['site', 'site-workspace', ['reports', 'issues', 'overview']],
+  ['site', 'site-workspace', ['reports', 'issues', 'diary', 'overview']],
   ['stock', 'stock-workspace', ['stock', 'counts', 'ledger', 'overview']],
   ['timesheets', 'timesheets-workspace', ['sheets', 'costs', 'overview']],
   ['twin', 'twin-workspace', ['building', 'overview']],

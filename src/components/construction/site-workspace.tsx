@@ -18,12 +18,18 @@ export type ReportRow = {
   deliveries: string[]; incidents: string[]; constraints: string[]; photos: number; status: string;
   band: Tone; completenessPct: number; missing: string[]; attendanceCount: number; inconsistent: boolean;
 };
+export type SiteIssueRow = {
+  id: string; projectName: string; category: string; title: string; severity: string;
+  owner: string; raisedISO: string; dueISO: string; status: string; correctiveAction?: string;
+};
 
 const NEXT: Record<string, string> = { draft: 'Submit', returned: 'Resubmit', submitted: 'Review', reviewed: 'Approve' };
+const ISSUE_TONE: Record<string, Tone> = { low: 'info', medium: 'warn', high: 'danger', critical: 'danger' };
+const ISSUE_STATUS_TONE: Record<string, Tone> = { open: 'warn', in_progress: 'progress', resolved: 'success' };
 const displayDate = (value: string) => new Date(value).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Africa/Lagos' });
 
-export function SiteWorkspace({ reports, gaps, kpis, canMutate }: {
-  reports: ReportRow[]; gaps: string[];
+export function SiteWorkspace({ reports, issues = [], gaps, kpis, canMutate }: {
+  reports: ReportRow[]; issues?: SiteIssueRow[]; gaps: string[];
   kpis: { approved: number; pending: number; coverage: number; incidents: number };
   canMutate: boolean;
 }) {
@@ -91,7 +97,14 @@ export function SiteWorkspace({ reports, gaps, kpis, canMutate }: {
           </div>
         },
         {
-          id: 'issues', label: 'Site issues', content: <div className={styles.stack}>
+          id: 'issues', label: 'Site issues', count: issues.length, content: <div className={styles.stack}>
+            <ConstructionPanel><div className={styles.header}><CardHeader title="Site issue register" subtitle="Captured and escalated issues in your authorised projects" /></div><div className={styles.body}><p className={styles.notice}>This register is read-only. Review the owner and proposed corrective action; status changes are not available in this view.</p></div></ConstructionPanel>
+            {issues.map((issue) => <ConstructionPanel key={issue.id}><div className={styles.header}><CardHeader title={issue.title} subtitle={`${issue.projectName} · ${issue.category || 'Uncategorised'}`} action={<div className={styles.inline}><StatusPill status={humanizeStatus(issue.severity)} tone={ISSUE_TONE[issue.severity] ?? 'muted'} /><StatusPill status={humanizeStatus(issue.status)} tone={ISSUE_STATUS_TONE[issue.status] ?? 'muted'} /></div>} /></div><div className={`${styles.body} ${styles.stack}`}><dl className={`${styles.facts} ${styles.factsFour}`}><div><dt>Issue reference</dt><dd>{issue.id}</dd></div><div><dt>Recorded owner</dt><dd>{issue.owner || 'Not assigned'}</dd></div><div><dt>Raised · WAT</dt><dd><time dateTime={issue.raisedISO}>{displayDate(issue.raisedISO)}</time></dd></div><div><dt>Due · WAT</dt><dd><time dateTime={issue.dueISO}>{displayDate(issue.dueISO)}</time></dd></div></dl><section className={styles.fieldSection}><h3 className={styles.title}>Proposed corrective action</h3><p className={styles.text}>{issue.correctiveAction || 'No corrective action recorded.'}</p></section></div></ConstructionPanel>)}
+            {issues.length === 0 && <ConstructionEmpty title="No site issues recorded" description="Synced field captures and escalated risk issues will appear here when recorded in your authorised projects." />}
+          </div>
+        },
+        {
+          id: 'diary', label: 'Approved diary', content: <div className={styles.stack}>
             <ConstructionPanel >
               <div className={styles.header}><CardHeader title="Site diary" subtitle="Approved records only · newest report first" /></div>
               <div>

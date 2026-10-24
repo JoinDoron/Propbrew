@@ -57,7 +57,7 @@ describe('Construction delivery Clinexa composition', () => {
   });
 
   it.each([
-    ['schedule-workspace', ['network', 'milestones', 'overview']], ['site-workspace', ['reports', 'issues', 'overview']],
+    ['schedule-workspace', ['network', 'milestones', 'overview']], ['site-workspace', ['reports', 'issues', 'diary', 'overview']],
     ['twin-workspace', ['building', 'overview']], ['projects-workspace', ['register', 'overview']],
     ['field-capture', ['report', 'issue', 'progress', 'attendance', 'queue']], ['safety-workspace', ['permits', 'events', 'overview']],
     ['workforce-workspace', ['attendance', 'overview']], ['timesheets-workspace', ['sheets', 'costs', 'overview']],
@@ -67,7 +67,7 @@ describe('Construction delivery Clinexa composition', () => {
   });
 
   it('keeps all 23 delivery panels mounted with honest recorded snapshot context', () => {
-    const screens = [[renderToStaticMarkup(createElement(ScheduleWorkspace, schedule)), 3], [renderToStaticMarkup(createElement(SiteWorkspace, site)), 3], [renderToStaticMarkup(createElement(TwinWorkspace, twin)), 2], [renderToStaticMarkup(createElement(ProjectsWorkspace, projects)), 2], [renderToStaticMarkup(createElement(FieldCapture, field)), 5], [renderToStaticMarkup(createElement(SafetyWorkspace, safety)), 3], [renderToStaticMarkup(createElement(WorkforceWorkspace, workforce)), 2], [renderToStaticMarkup(createElement(TimesheetsWorkspace, timesheets)), 3]] as const;
+    const screens = [[renderToStaticMarkup(createElement(ScheduleWorkspace, schedule)), 3], [renderToStaticMarkup(createElement(SiteWorkspace, site)), 4], [renderToStaticMarkup(createElement(TwinWorkspace, twin)), 2], [renderToStaticMarkup(createElement(ProjectsWorkspace, projects)), 2], [renderToStaticMarkup(createElement(FieldCapture, field)), 5], [renderToStaticMarkup(createElement(SafetyWorkspace, safety)), 3], [renderToStaticMarkup(createElement(WorkforceWorkspace, workforce)), 2], [renderToStaticMarkup(createElement(TimesheetsWorkspace, timesheets)), 3]] as const;
     for (const [html, count] of screens) { expect(html.match(/role="tabpanel"/g)).toHaveLength(count); expect(html.match(/hidden=""/g)).toHaveLength(count - 1); expect(html).toContain('Recorded snapshot'); expect(html).toContain('WAT'); expect(html).not.toMatch(/NaN|Infinity|undefined/); }
   });
 

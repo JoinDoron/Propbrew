@@ -3,7 +3,7 @@ import { can } from '@/lib/authz';
 import { constructionWorld } from '@/server/reads/construction';
 import { NOW_MS } from '@/domain/ppm';
 import { reportBand, reportCompleteness, coverageGaps } from '@/domain/construction';
-import { SiteWorkspace, type ReportRow } from '@/components/construction/site-workspace';
+import { SiteWorkspace, type ReportRow, type SiteIssueRow } from '@/components/construction/site-workspace';
 
 /** Daily Site Log — the PRD report state machine (draft → submitted → reviewed →
  *  approved, or returned with a reason), a completeness ring with missing-field
@@ -30,6 +30,13 @@ export default async function ConstructionSitePage() {
         band: reportBand(r.status), completenessPct: c.pct, missing: c.missing, attendanceCount, inconsistent,
       };
     });
+  const issues: SiteIssueRow[] = [...world.issues]
+    .sort((a, b) => Date.parse(b.raisedISO) - Date.parse(a.raisedISO))
+    .map((issue) => ({
+      id: issue.id, projectName: nameOf(issue.projectId), category: issue.category,
+      title: issue.title, severity: issue.severity, owner: issue.owner, raisedISO: issue.raisedISO,
+      dueISO: issue.dueISO, status: issue.status, correctiveAction: issue.correctiveAction,
+    }));
 
   // Coverage gaps for the busiest reporting project.
   const counts = new Map<string, number>();
@@ -41,6 +48,7 @@ export default async function ConstructionSitePage() {
     <div className="pb-page">
       <SiteWorkspace
         reports={reports}
+        issues={issues}
         gaps={gaps}
         kpis={{
           approved: reports.filter((r) => r.status === 'approved').length,
