@@ -1,8 +1,10 @@
 import { test, expect } from '@playwright/test';
 
 test('legacy dashboard opens the workspace chooser', async ({ page }) => {
+  test.setTimeout(60_000);
   await page.goto('/dashboard');
-  await expect(page).toHaveURL(/\/workspaces$/);
+  // The first development request compiles both routes before its redirect completes.
+  await expect(page).toHaveURL(/\/workspaces$/, { timeout: 30_000 });
   await expect(page.getByRole('heading', { name: 'Choose your workspace', exact: true })).toBeVisible();
   await expect(page.getByRole('main')).toBeVisible();
   await expect(page.getByRole('link', { name: 'Enter Estate workspace', exact: true })).toHaveAttribute('href', '/estate');
