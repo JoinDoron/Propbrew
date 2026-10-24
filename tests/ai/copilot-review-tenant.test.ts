@@ -5,14 +5,14 @@ import type { CopilotContext, CopilotEvent, CopilotModule } from '@/lib/ai/copil
 import { identityByKey } from '@/server/identities';
 
 const boundary = vi.hoisted(() => ({
-  session: vi.fn(), reviewMode: vi.fn(), reviewActor: vi.fn(), ledgerTenant: vi.fn(),
+  session: vi.fn(), reviewMode: vi.fn(), reviewOrigin: vi.fn(), reviewActor: vi.fn(), ledgerTenant: vi.fn(),
   rate: vi.fn(), model: vi.fn(), record: vi.fn(), control: vi.fn(), reserve: vi.fn(), finish: vi.fn(),
   resolve: vi.fn(), stream: vi.fn(), guard: vi.fn(), list: vi.fn(), usage: vi.fn(), workspace: vi.fn<(props: unknown) => null>(() => null),
 }));
 vi.mock('@/server/session', () => ({ getSession: boundary.session }));
 vi.mock('@/server/review-auth', () => ({
   ReviewConfigurationError: class ReviewConfigurationError extends Error {},
-  reviewModeEnabled: boundary.reviewMode, isReviewActor: boundary.reviewActor, reviewLedgerTenantId: boundary.ledgerTenant,
+  reviewModeEnabled: boundary.reviewMode, reviewOriginAllowed: boundary.reviewOrigin, isReviewActor: boundary.reviewActor, reviewLedgerTenantId: boundary.ledgerTenant,
 }));
 vi.mock('@/server/copilot/metering', () => ({ checkRate: boundary.rate, getTenantModel: boundary.model, dailyCapMinorNgn: () => 500000, recordUsage: boundary.record }));
 vi.mock('@/server/ai/durable', () => ({ featureControl: boundary.control }));
@@ -43,6 +43,7 @@ beforeEach(() => {
   boundary.session.mockResolvedValue({ key: 'private-review', actor });
   boundary.guard.mockResolvedValue({ actor });
   boundary.reviewMode.mockReturnValue(true);
+  boundary.reviewOrigin.mockReturnValue(true);
   boundary.reviewActor.mockImplementation((current: Actor) => current.userId === 'propbrew-private-review-estate-manager' && current.tenantId === 't-lekki');
   boundary.ledgerTenant.mockReturnValue(ledgerTenantId);
   boundary.rate.mockReturnValue({ allowed: true, retryAfterS: 0 });
@@ -129,7 +130,7 @@ describe('private review Copilot ledger scope', () => {
     expect((await handleCopilot(request(), 'estate', vi.fn())).status).toBe(401);
     boundary.session.mockResolvedValueOnce({ key: 'clerk', actor: identityByKey('resident').actor });
     expect((await handleCopilot(request(), 'estate', vi.fn())).status).toBe(403);
-    expect(boundary.reviewMode).not.toHaveBeenCalled();
+    expect(boundary.reviewActor).not.toHaveBeenCalled();
     expect(boundary.ledgerTenant).not.toHaveBeenCalled();
     expect(boundary.stream).not.toHaveBeenCalled();
   });

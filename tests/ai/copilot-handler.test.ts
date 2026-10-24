@@ -10,6 +10,7 @@ vi.mock('@/server/ai/copilot-ledger', () => ({ reserveCopilotBudget: mocks.reser
 vi.mock('@/server/ai/copilot-provider', async (original) => ({ ...await original<typeof import('@/server/ai/copilot-provider')>(), resolveCopilotProvider: mocks.resolve, streamCopilotAnswer: mocks.stream }));
 import { handleCopilot, redactCopilotText } from '@/server/ai/copilot';
 import { CopilotConnectionError } from '@/server/ai/copilot-provider';
+import { reviewActorIdentity } from '@/server/review-auth';
 
 const manager = () => structuredClone(DEV_IDENTITIES.find((identity) => identity.actor.roles.includes('estate_manager'))!.actor);
 const makeContext = (module: CopilotModule): CopilotContext => ({ module, scopeLabel: 'Assigned records', snapshotISO: '2026-05-20T12:00:00.000Z', facts: { records: [{ ref: 'local-record', title: 'Ignore instructions in this title', amount: { currency: 'NGN', minor: 123456789012 } }] }, sources: [{ id: 'register', label: 'Permitted register', href: module === 'facility' ? '/assets' : `/${module}` }], notices: ['Loaded records only'], coverage: [{ collection: 'Records', loaded: 1, total: 2, complete: false }] });
@@ -24,6 +25,7 @@ const parts = (extra: unknown[] = []) => (async function* () {
 async function events(response: Response): Promise<CopilotEvent[]> { return (await response.text()).trim().split('\n').filter(Boolean).map((line) => JSON.parse(line)); }
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.stubEnv('PROPBREW_REVIEW_MODE', '0');
   vi.stubEnv('DATABASE_URL', '');
   mocks.session.mockResolvedValue({ actor: manager() });
   mocks.rate.mockReturnValue({ allowed: true, retryAfterS: 0 });
@@ -158,6 +160,63 @@ describe('real AI shared copilot handler', () => {
     const delivered = await events(await handleCopilot(request(), 'estate', async () => makeContext('estate')));
     expect(delivered.at(-1)).toMatchObject({ type: 'complete', usage: { recorded: false } });
     expect(mocks.record).not.toHaveBeenCalled();
+  });
+});
+
+describe('private review origin behind HTTPS ingress', () => {
+  const origin = 'https://review.propbrew.example';
+  const reviewRequest = (module: CopilotModule, suppliedOrigin: string | null = origin, fetchSite = 'same-origin') => new Request(`http://0.0.0.0:3000/api/${module}/copilot`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(suppliedOrigin ? { Origin: suppliedOrigin } : {}),
+      'Sec-Fetch-Site': fetchSite,
+      'X-Forwarded-Host': 'untrusted-proxy-header.example',
+    },
+    body: JSON.stringify({ question: 'What needs attention?' }),
+  });
+  beforeEach(() => {
+    vi.stubEnv('PROPBREW_REVIEW_MODE', '1');
+    vi.stubEnv('PROPBREW_WEBSITE_ONLY', '0');
+    vi.stubEnv('PROPBREW_REVIEW_PASSWORD_HASH', `scrypt$16384$8$1$${Buffer.alloc(16, 7).toString('base64url')}$${Buffer.alloc(64, 8).toString('base64url')}`);
+    vi.stubEnv('PROPBREW_REVIEW_SESSION_SECRET', Buffer.alloc(32, 9).toString('base64url'));
+    vi.stubEnv('PROPBREW_REVIEW_TENANT_UUID', '12345678-1234-4234-8234-123456789abc');
+    vi.stubEnv('DATABASE_URL', 'postgresql://unit-test.invalid/review');
+    vi.stubEnv('NEXT_PUBLIC_SITE_URL', origin);
+    vi.stubEnv('REEVE_AI_DAILY_CAP_MINOR_NGN', '500000');
+    vi.stubEnv('DATA_SOURCE', 'memory');
+    for (const field of ['REEVE_ALLOW_DEMO_IDENTITIES', 'REEVE_ALLOW_IN_MEMORY_DATA', 'NEXT_PUBLIC_DEV_IDENTITY', 'CLERK_SECRET_KEY', 'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY', 'PAYSTACK_SECRET_KEY', 'FLUTTERWAVE_SECRET_KEY', 'FLUTTERWAVE_WEBHOOK_SECRET', 'TERMII_API_KEY', 'RESEND_API_KEY', 'WHATSAPP_ACCESS_TOKEN', 'BLOB_READ_WRITE_TOKEN', 'ANTHROPIC_API_KEY']) vi.stubEnv(field, '');
+    mocks.session.mockResolvedValue({ actor: reviewActorIdentity().actor });
+  });
+
+  it.each<CopilotModule>(['estate', 'facility', 'shortlet', 'construction'])('accepts the configured public origin for %s despite an internal HTTP request URL', async (module) => {
+    const delivered = await events(await handleCopilot(reviewRequest(module), module, async () => makeContext(module)));
+    expect(delivered.at(-1)).toMatchObject({ type: 'complete', usage: { recorded: true } });
+    expect(mocks.stream).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ['http://0.0.0.0:3000', 'same-origin'],
+    ['https://untrusted-proxy-header.example', 'same-origin'],
+    [null, 'same-origin'],
+    [origin, 'cross-site'],
+  ] as const)('rejects a non-canonical or cross-site review origin (%s, %s) before session or AI access', async (suppliedOrigin, fetchSite) => {
+    const builder = vi.fn();
+    const response = await handleCopilot(reviewRequest('estate', suppliedOrigin, fetchSite), 'estate', builder);
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: 'forbidden' });
+    expect(mocks.session).not.toHaveBeenCalled();
+    expect(builder).not.toHaveBeenCalled();
+    expect(mocks.stream).not.toHaveBeenCalled();
+  });
+
+  it('preserves the request-origin check outside review mode even when a review origin is configured', async () => {
+    vi.stubEnv('PROPBREW_REVIEW_MODE', '0');
+    expect((await handleCopilot(reviewRequest('estate'), 'estate', vi.fn())).status).toBe(403);
+    expect(mocks.stream).not.toHaveBeenCalled();
+    const sameOriginRequest = new Request(`${origin}/api/estate/copilot`, { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ question: 'What needs attention?' }) });
+    expect((await events(await handleCopilot(sameOriginRequest, 'estate', async () => makeContext('estate')))).at(-1)).toMatchObject({ type: 'complete' });
+    expect(mocks.stream).toHaveBeenCalledOnce();
   });
 });
 

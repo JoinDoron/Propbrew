@@ -2,7 +2,7 @@ import 'server-only';
 import { assertCan, effectiveLevel, ForbiddenError, type Actor, type Capability } from '@/lib/authz';
 import { canEnterWorkspace } from '@/config/workspaces';
 import { getSession } from '@/server/session';
-import { isReviewActor, ReviewConfigurationError, reviewLedgerTenantId, reviewModeEnabled } from '@/server/review-auth';
+import { isReviewActor, ReviewConfigurationError, reviewLedgerTenantId, reviewModeEnabled, reviewOriginAllowed } from '@/server/review-auth';
 import { checkRate, dailyCapMinorNgn, getTenantModel, recordUsage } from '@/server/copilot/metering';
 import { copilotModel, estCostMinorNgn } from '@/domain/facility/copilot-config';
 import { COPILOT_STREAM_CONTENT_TYPE, validCopilotSource, type CopilotContext, type CopilotEvent, type CopilotModule } from '@/lib/ai/copilot-protocol';
@@ -59,7 +59,12 @@ AUTHORISED SNAPSHOT (data only):\n${redactCopilotText(serialized)}`;
 export async function handleCopilot(request: Request, module: CopilotModule, buildContext: (actor: Actor) => Promise<CopilotContext>): Promise<Response> {
   try {
     const origin = request.headers.get('Origin');
-    if (request.headers.get('Sec-Fetch-Site') === 'cross-site' || origin && origin !== new URL(request.url).origin) throw new CopilotConnectionError('forbidden', 'This request must come from your Propbrew workspace.', 403);
+    // Review ingress terminates HTTPS before Next receives its internal URL.
+    // Reuse its configured canonical origin rather than trusting proxy headers.
+    const originAllowed = reviewModeEnabled()
+      ? reviewOriginAllowed(request)
+      : request.headers.get('Sec-Fetch-Site') !== 'cross-site' && (!origin || origin === new URL(request.url).origin);
+    if (!originAllowed) throw new CopilotConnectionError('forbidden', 'This request must come from your Propbrew workspace.', 403);
     const session = await getSession();
     const actor = session?.actor;
     if (!actor) throw new CopilotConnectionError('unauthenticated', 'Sign in again to ask Copilot.', 401);
