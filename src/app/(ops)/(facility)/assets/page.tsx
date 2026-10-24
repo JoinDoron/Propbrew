@@ -7,6 +7,8 @@ import { ScopeBanner } from '@/components/domain';
 import { facilityMoney } from '@/components/facility/facility-format';
 import { AssetsExplorer, type AssetHealth } from '@/components/assets/assets-explorer';
 import { withDurableRead } from '@/server/data/durable-records';
+import { currentRecordContext } from '@/server/data/record-context';
+import { nativeAuthEnabled } from '@/server/auth/mode';
 
 /** FM-01 — asset register. Facility Manager can add (M); Executive/Technician are
  *  view-only (V). Assets are archived, never deleted. The register is
@@ -16,6 +18,7 @@ export default async function AssetsPage() {
   return withDurableRead(async () => {
   const { actor } = await requireCapability('assets_ppm', 'read', 'facility');
   const canMutate = ['F', 'M'].includes(effectiveLevel(actor, 'assets_ppm'));
+  const registrationReady = nativeAuthEnabled() && Boolean(actor.companyAccess) && currentRecordContext()?.domainTenantId === actor.tenantId;
   const assets = repos.assets.list(actor).items;
   const ppm = repos.ppmPlans.list(actor).items;
 
@@ -38,6 +41,8 @@ export default async function AssetsPage() {
         jobs={jobs}
         health={health}
         canMutate={canMutate}
+        registrationReady={registrationReady}
+        locations={repos.sites.list(actor, { limit: 200 }).items.map((site) => ({ id: String(site.id), label: site.name }))}
       />
     </div>
   );

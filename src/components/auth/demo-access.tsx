@@ -20,8 +20,8 @@ export function DemoAccess({ disabled = false }: { disabled?: boolean }) {
   useEffect(() => { if (state.error) feedback.current?.focus(); }, [state]);
 
   return <section className={styles.demo} aria-labelledby={`${prefix}-title`} aria-describedby={`${prefix}-description`}>
-    <div className={styles.heading}><h2 id={`${prefix}-title`}>Explore a demo</h2><span className={styles.badge}>View only</span></div>
-    <p id={`${prefix}-description`} className={styles.description}>Step into a workspace with sample data. No sign-up required.</p>
+    <div className={styles.heading}><h2 id={`${prefix}-title`}>Explore a demo</h2><span className={styles.badge}>Private sandbox</span></div>
+    <p id={`${prefix}-description`} className={styles.description}>Add, edit and try workflows with sample data. Your changes stay in your own sandbox. No sign-up required.</p>
     <form action={action} aria-label="Demo workspaces" aria-busy={pending}>
       <fieldset className={styles.grid} disabled={disabled || pending}><legend className="sr-only">Choose a demo workspace</legend>
         {WORKSPACES.map(({ id, name, detail, icon: Icon }) => <button key={id} type="submit" name="module" value={id} className={styles.workspace} aria-label={`Explore ${name} demo`} onClick={() => setSelected(id)}>

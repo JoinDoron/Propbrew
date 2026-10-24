@@ -16,7 +16,7 @@ export function isDemoAccount(userId: string): boolean {
 }
 
 export function assertNotDemoAccount(userId: string): void {
-  if (isDemoAccount(userId)) throw new Error('Demo accounts are view-only. Create your own account to save changes.');
+  if (isDemoAccount(userId)) throw new Error('Demo access requires your own private sandbox. Company account controls are protected.');
 }
 
 export function assertDemoCompany(userId: string, companyId: string): void {

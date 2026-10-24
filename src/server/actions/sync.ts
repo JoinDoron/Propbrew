@@ -3,7 +3,7 @@
 import { operatingDateISO, operatingNowISO } from '@/server/operating-clock';
 
 import { withDurableMutation } from '@/server/data/durable-records';
-import { retainPendingSyncReceipt } from '@/server/data/record-context';
+import { currentRecordContext, retainPendingSyncReceipt } from '@/server/data/record-context';
 
 import { revalidatePath } from 'next/cache';
 import { getActor } from '@/server/session';
@@ -37,6 +37,11 @@ export async function syncOperation(raw: SyncInput): Promise<SyncOutcome> {
   const parsed = syncInputSchema.safeParse(raw);
   if (!parsed.success) return fail('Review the captured fields, dates, numbers and uploaded attachments before syncing.');
   const input = parsed.data, p = input.payload;
+  const recordContext = currentRecordContext();
+  const resetAt = recordContext?.companyPrincipal?.sandbox ? recordContext.state.auxiliary.demoResetAt : undefined;
+  if (typeof resetAt === 'string' && (!Number.isFinite(Date.parse(resetAt)) || Date.parse(input.capturedISO) <= Date.parse(resetAt))) {
+    return conflict('This capture predates your sandbox reset. Discard the old copy and capture a new record.', 'Sandbox reset');
+  }
   const project = scopedMutableGet(actor, 'reports_analytics', db.constructionProjects, p.projectId, 'read');
   if (!project) return fail('That project is not available to this account.');
   if (input.kind === 'task_progress') {

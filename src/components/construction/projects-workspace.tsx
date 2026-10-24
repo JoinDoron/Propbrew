@@ -7,10 +7,10 @@ import styles from './construction-delivery-polish.module.css';
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Building2, Plus, Check, TrendingUp, Flag, ExternalLink } from 'lucide-react';
+import { Building2, Plus, Check, TrendingUp, Flag, ExternalLink, Pencil } from 'lucide-react';
 import { humanizeStatus, toneVar, type Tone } from '@/lib/status-tones';
 
-import { createProject, type ProjectInput } from '@/server/actions/construction';
+import { createProject, updateProjectDetails, type ProjectInput } from '@/server/actions/construction';
 import { PageTabs } from '@/components/ui/page-tabs';
 import { PageHeader } from '@/components/ui/page-header';
 
@@ -32,6 +32,7 @@ export function ProjectsWorkspace({ projects, kpis, canMutate }: {
   canMutate: boolean;
 }) {
   const [showNew, setShowNew] = useState(false);
+  const [editing, setEditing] = useState<ProjectCard | null>(null);
   const [query, setQuery] = useState('');
   const shown = projects.filter((project) => `${project.name} ${project.code} ${project.location} ${project.clientName} ${project.pmName}`.toLowerCase().includes(query.trim().toLowerCase()));
   const [toast, setToast] = useState<string | null>(null);
@@ -48,7 +49,7 @@ export function ProjectsWorkspace({ projects, kpis, canMutate }: {
             <div className={styles.stack}>
               {shown.map((p) => (
                 <ConstructionPanel key={p.id}>
-                  <div className={styles.header}><CardHeader title={p.name} subtitle={`${p.code} · ${p.location}`} action={<div className={styles.inline}><StatusPill status={humanizeStatus(p.status)} tone={STATUS_TONE[p.status] ?? 'muted'} /><HealthRing score={p.healthScore} band={p.healthBand} label={p.healthLabel} /></div>} /></div>
+                  <div className={styles.header}><CardHeader title={p.name} subtitle={`${p.code} · ${p.location}`} action={<div className={styles.inline}>{canMutate && !['completed','closing'].includes(p.status) && <Button type="button" onClick={() => setEditing(p)} aria-label={`Edit project ${p.name}`}><Pencil size={14} aria-hidden="true" />Edit</Button>}<StatusPill status={humanizeStatus(p.status)} tone={STATUS_TONE[p.status] ?? 'muted'} /><HealthRing score={p.healthScore} band={p.healthBand} label={p.healthLabel} /></div>} /></div>
                   <div className={`${styles.body} ${styles.stack}`}>
                   <dl className={styles.facts}><div><dt>Client</dt><dd>{p.clientName}</dd></div><div><dt>Project manager</dt><dd>{p.pmName}</dd></div></dl>
                   {p.investorProjectId && <Link href="/investors" className={styles.link}><ExternalLink size={16} /> Linked to the off-plan sales portfolio</Link>}
@@ -102,9 +103,26 @@ export function ProjectsWorkspace({ projects, kpis, canMutate }: {
       ]} />
 
       {showNew && <NewProjectDialog onClose={() => setShowNew(false)} onDone={(n) => { setShowNew(false); flash(`Project created · ${n}`); }} />}
+      {editing && <EditProjectDialog project={editing} onClose={() => setEditing(null)} onDone={(name) => { setEditing(null); flash(`Project updated · ${name}`); }} />}
       {toast && <ConstructionToast>{toast}</ConstructionToast>}
     </ConstructionFrame>
   );
+}
+
+function EditProjectDialog({ project, onClose, onDone }: { project: ProjectCard; onClose: () => void; onDone: (name: string) => void }) {
+  const router = useRouter();
+  const [form, setForm] = useState({ name: project.name, location: project.location, clientName: project.clientName });
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useConstructionSave(setError);
+  const submit = () => start(async () => { const result = await updateProjectDetails(project.id, form); if (!result.ok) { setError(result.error); return; } router.refresh(); onDone(result.ref ?? form.name); });
+  return <ConstructionDialog title="Edit project" onClose={onClose} pending={pending}><div className={styles.stack}>
+    <label className={styles.field}>Project name<input aria-label="Project name" maxLength={120} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></label>
+    <label className={styles.field}>Location<input aria-label="Location" maxLength={200} value={form.location} onChange={(event) => setForm({ ...form, location: event.target.value })} /></label>
+    <label className={styles.field}>Client<input aria-label="Client" maxLength={120} value={form.clientName} onChange={(event) => setForm({ ...form, clientName: event.target.value })} /></label>
+    <p className={styles.notice}>Update the project identity. Contract values, approved budgets and workflow states retain their recorded approvals.</p>
+    {error && <p role="alert" className={styles.error}>{error}</p>}
+    <div className={styles.actions}><Button type="button" disabled={pending} onClick={onClose}>Cancel</Button><Button type="button" variant="primary" disabled={pending || Object.values(form).some((value) => value.trim().length < 2)} onClick={submit}>{pending ? 'Saving…' : 'Save project'}</Button></div>
+  </div></ConstructionDialog>;
 }
 
 function NewProjectDialog({ onClose, onDone }: { onClose: () => void; onDone: (n: string) => void }) {

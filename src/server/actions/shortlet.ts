@@ -4,7 +4,7 @@ import { operatingNowISO } from '@/server/operating-clock';
 
 import { withDurableMutation } from '@/server/data/durable-records';
 
-import { nextRecordSequence } from '@/server/data/record-context';
+import { getRecordAuxiliary, nextRecordSequence } from '@/server/data/record-context';
 
 /**
  * Short-Let PMS server actions (new module, gated by the §7 bookings capability).
@@ -15,16 +15,18 @@ import { nextRecordSequence } from '@/server/data/record-context';
 
 import { revalidatePath } from 'next/cache';
 import { randomUUID } from 'node:crypto';
+import { z } from 'zod';
 import { getActor } from '@/server/session';
 import { ForbiddenError, assertCan, type Role } from '@/lib/authz';
 import { repos, scopedMutableGet } from '@/server/data';
 import { db, recordHistory } from '@/server/data/store';
 import { money } from '@/domain/primitives';
+import { asId, type TenantId } from '@/domain/ids';
 
 import { nightsBetween, planFor } from '@/domain/shortlet';
 import { shortletSettings } from '@/server/shortlet-settings';
 import { shortletBookingMachine } from '@/domain/workflows';
-import type { SlBooking, SlInspection, InspectionItem, ExpenseCategory, BookingSource, Channel } from '@/domain/shortlet/types';
+import type { SlProperty, Apartment, SlBooking, SlInspection, InspectionItem, ExpenseCategory, BookingSource, Channel } from '@/domain/shortlet/types';
 import type { PlanKey, TeamRole, TeamMember } from '@/domain/shortlet/plan';
 import { suggestPriority, ISSUE_NEXT, type RuleType, type IssuePriority, type PricingRule, type MaintenanceIssue, type Agent } from '@/domain/shortlet/operations';
 import { nowISO } from '@/server/clock';
@@ -48,6 +50,96 @@ const sources: readonly string[] = ['direct', 'airbnb', 'booking_com', 'whatsapp
 const teamRoles: readonly string[] = ['manager', 'housekeeper', 'accountant'];
 function overlaps(actor: Awaited<ReturnType<typeof getActor>>, apartmentId: string, checkIn: string, checkOut: string, exceptId?: string): boolean {
   return repos.shortletBookings.list(actor, { limit: Number.MAX_SAFE_INTEGER }).items.some((booking) => booking.id !== exceptId && booking.apartmentId === apartmentId && booking.status !== 'cancelled' && Date.parse(booking.checkIn) < Date.parse(checkOut) && Date.parse(booking.checkOut) > Date.parse(checkIn));
+}
+
+const accommodationName = z.string().trim().min(2).max(120);
+const propertyDetails = z.object({ name: accommodationName, city: z.string().trim().min(2).max(80), area: z.string().trim().min(2).max(120) }).strict();
+const apartmentDetails = z.object({
+  name: accommodationName, type: z.string().trim().min(2).max(80),
+  nightlyRateNaira: z.number().finite().positive().refine((value) => {
+    const scaled = value * 100;
+    return Number.isSafeInteger(Math.round(scaled)) && Math.abs(scaled - Math.round(scaled)) < 0.000001;
+  }, 'Enter a valid rate with up to two decimal places.'),
+  status: z.enum(['active', 'inactive']),
+  wifiSsid: z.string().trim().max(120), wifiPassword: z.string().max(128).optional(),
+  accessInstructions: z.string().trim().max(2000),
+  houseRules: z.array(z.string().trim().min(1).max(240)).max(30),
+  amenities: z.array(z.string().trim().min(1).max(120)).max(50),
+}).strict();
+export type PropertyDetailsInput = z.input<typeof propertyDetails>;
+export type ApartmentDetailsInput = z.input<typeof apartmentDetails>;
+
+function accommodationAudit(actor: Awaited<ReturnType<typeof getActor>>, kind: string, entityId: string, fields: string[]) {
+  const audit = getRecordAuxiliary<{ tenantId: string; actorId: string; kind: string; entityId: string; fields: string[]; at: string }[]>('shortlet:accommodation:audit', () => []);
+  audit.push({ tenantId: actor.tenantId!, actorId: actor.userId, kind, entityId, fields, at: nowISO() });
+}
+
+/** Property registration records accommodation only; it does not configure a gateway or bank account. */
+export async function createProperty(input: PropertyDetailsInput): Promise<Res> {
+  return withDurableMutation(async () => {
+    const g = await gate('create'); if ('ok' in g) return g;
+    const parsed = propertyDetails.safeParse(input);
+    if (!parsed.success || !g.actor.tenantId) return { ok: false, error: 'Enter a property name, city and area within the allowed lengths.' };
+    const details = parsed.data;
+    if (repos.shortletProperties.list(g.actor, { limit: Number.MAX_SAFE_INTEGER }).items.some((property) => property.name.toLowerCase() === details.name.toLowerCase() && property.city.toLowerCase() === details.city.toLowerCase() && property.area.toLowerCase() === details.area.toLowerCase())) return { ok: false, error: 'This property is already recorded.' };
+    const id = `sl-property-${randomUUID()}`;
+    const property: SlProperty = { ...details, tenantId: asId<TenantId>(g.actor.tenantId), id, bankName: '', accountName: '', accountNumber: '' };
+    db.shortletProperties.unshift(property);
+    accommodationAudit(g.actor, 'property.created', id, Object.keys(details));
+    revalidate(); return { ok: true, ref: id };
+  }, 'shortlet');
+}
+
+export async function updateProperty(id: string, input: PropertyDetailsInput): Promise<Res> {
+  return withDurableMutation(async () => {
+    const g = await gate('update'); if ('ok' in g) return g;
+    const parsed = propertyDetails.safeParse(input);
+    if (!parsed.success) return { ok: false, error: 'Enter a property name, city and area within the allowed lengths.' };
+    const property = scopedMutableGet(g.actor, 'bookings_amenities', db.shortletProperties, id, 'update');
+    if (!property) return { ok: false, error: 'Property not found.' };
+    const details = parsed.data;
+    if (repos.shortletProperties.list(g.actor, { limit: Number.MAX_SAFE_INTEGER }).items.some((other) => other.id !== id && other.name.toLowerCase() === details.name.toLowerCase() && other.city.toLowerCase() === details.city.toLowerCase() && other.area.toLowerCase() === details.area.toLowerCase())) return { ok: false, error: 'Another property already uses these details.' };
+    Object.assign(property, details);
+    accommodationAudit(g.actor, 'property.updated', id, Object.keys(details));
+    revalidate(); return { ok: true, ref: id };
+  }, 'shortlet');
+}
+
+export async function createApartment(propertyId: string, input: ApartmentDetailsInput): Promise<Res> {
+  return withDurableMutation(async () => {
+    const g = await gate('create'); if ('ok' in g) return g;
+    const parsed = apartmentDetails.safeParse(input);
+    if (!parsed.success || !g.actor.tenantId) return { ok: false, error: 'Review the apartment details and enter a positive NGN rate with up to two decimal places.' };
+    const property = scopedMutableGet(g.actor, 'bookings_amenities', db.shortletProperties, propertyId, 'create');
+    if (!property) return { ok: false, error: 'Property not found.' };
+    const apartments = repos.shortletApartments.list(g.actor, { limit: Number.MAX_SAFE_INTEGER });
+    if (apartments.total >= planFor(shortletSettings(g.actor.tenantId).planKey).apartmentCap) return { ok: false, error: 'This portfolio has reached its apartment limit. Review the selected Shortlet plan first.' };
+    const details = parsed.data;
+    if (apartments.items.some((apartment) => apartment.propertyId === propertyId && apartment.name.toLowerCase() === details.name.toLowerCase())) return { ok: false, error: 'An apartment with this name already exists at the property.' };
+    const id = `sl-apartment-${randomUUID()}`;
+    const { nightlyRateNaira, ...record } = details;
+    const apartment: Apartment = { ...record, id, tenantId: asId<TenantId>(g.actor.tenantId), propertyId, nightlyRate: money(Math.round(nightlyRateNaira * 100), 'NGN'), wifiPassword: details.wifiPassword ?? '', channels: [] };
+    db.shortletApartments.unshift(apartment);
+    accommodationAudit(g.actor, 'apartment.created', id, Object.keys(details));
+    revalidate(); return { ok: true, ref: id };
+  }, 'shortlet');
+}
+
+export async function updateApartment(id: string, input: ApartmentDetailsInput): Promise<Res> {
+  return withDurableMutation(async () => {
+    const g = await gate('update'); if ('ok' in g) return g;
+    const parsed = apartmentDetails.safeParse(input);
+    if (!parsed.success) return { ok: false, error: 'Review the apartment details and enter a positive NGN rate with up to two decimal places.' };
+    const apartment = scopedMutableGet(g.actor, 'bookings_amenities', db.shortletApartments, id, 'update');
+    if (!apartment) return { ok: false, error: 'Apartment not found.' };
+    if (apartment.nightlyRate.currency !== 'NGN') return { ok: false, error: 'This editor records NGN rates. A different currency needs a separate conversion workflow.' };
+    const details = parsed.data;
+    if (repos.shortletApartments.list(g.actor, { limit: Number.MAX_SAFE_INTEGER }).items.some((other) => other.id !== id && other.propertyId === apartment.propertyId && other.name.toLowerCase() === details.name.toLowerCase())) return { ok: false, error: 'Another apartment already uses this name at the property.' };
+    const { nightlyRateNaira, wifiPassword, ...record } = details;
+    Object.assign(apartment, record, { nightlyRate: money(Math.round(nightlyRateNaira * 100), 'NGN') }, wifiPassword === undefined ? {} : { wifiPassword });
+    accommodationAudit(g.actor, 'apartment.updated', id, Object.keys(details));
+    revalidate(); return { ok: true, ref: id };
+  }, 'shortlet');
 }
 
 /* --- create a booking (FR-BM-01) ------------------------------------------ */

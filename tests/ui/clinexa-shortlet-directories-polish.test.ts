@@ -24,7 +24,7 @@ const guests = [
 ];
 beforeEach(() => {
   vi.clearAllMocks();
-  data.guard.mockResolvedValue({ actor: { tenantId: 'tenant-test' } });
+  data.guard.mockResolvedValue({ actor: { tenantId: 'tenant-test', roles: [], estateIds: [], allEstates: false } });
   data.properties.mockReturnValue({ items: [{ id: 'property-1', name: 'Lekki Suites', area: 'Lekki Phase 1', city: 'Lagos', bankName: 'Sample Bank', accountName: 'Lekki Suites Limited', accountNumber: '0000000000' }] });
   data.apartments.mockReturnValue({ items: [{ id: 'apartment-1', propertyId: 'property-1', name: 'Penthouse A', type: '2-bed', status: 'active', nightlyRate: { minor: 12000001, currency: 'NGN' }, wifiSsid: 'Guest-network', accessInstructions: 'Call the host and collect the sealed key at the reception desk; do not share the access code.' }] });
   data.bookings.mockReturnValue({ items: [] });

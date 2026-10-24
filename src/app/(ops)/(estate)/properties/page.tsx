@@ -46,6 +46,7 @@ export default async function EstatePropertiesPage() {
 
   return <EstatePropertiesWorkspace
     properties={properties}
+    canEdit={native && canRegisterEstateRecords(actor)}
     demo={demo}
     persistent={persistent}
     actions={<EstateCreateActions canAddProperty={canRegisterEstateRecords(actor) && (!actor.companyAccess || native)} canAddTenant={false} units={[]} persistent={persistent} demo={localDemo} native={native} asOfDate={asOfDate} />}

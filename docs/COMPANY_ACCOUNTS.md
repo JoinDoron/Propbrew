@@ -55,31 +55,57 @@ Before changing the live auth mode, back up the current database and verify an i
 Rollback must use a compatible database-backed application version and preserve the new auth tables. Do not switch real company records to a development memory adapter. A rollback to review mode must not expose or reassign native company records.
 
 Before adding account email in a later release, require verified mailbox ownership before company creation or recipient-bound invitation acceptance. Verification must not create a full session that bypasses an enrolled authenticator; require the normal password/MFA sign-in afterward or explicitly enforce the second factor. Include existing unverified sessions in that migration plan. Keep delivery receipts free of addresses, credentials, message bodies and tokens, and distinguish provider acceptance from inbox delivery.
-# Temporary public demo access
+## Editable private demo sandboxes
 
-The native sign-up and login screens can show four one-click demo accounts:
-Estate, Facility, Shortlet and Construction. Each uses a real Better Auth
-session, restricted to the reserved demo company, with view access to all four
-modules. They never inherit a customer's company or the private review records.
-The sample data comes only from repository fixtures. A persistent notice labels
-the workspace as sample data and offers an **Exit demo** action.
+Sign-up and login offer Estate, Facility, Shortlet and Construction demo entry.
+Every verified demo session receives its own PostgreSQL tenant, populated only
+from repository sample fixtures. Two visitors using the same demo sign-in have
+different sandbox tenants. Switching modules preserves the visitor's edits;
+refreshing or restarting the application does not reseed an existing sandbox.
+Sessions last up to 24 hours. Exit demo ends that session; entering again starts
+a fresh sandbox. Do not enter private customer information in demos.
 
-Demo sessions last at most one hour. Company creation, invitation acceptance,
-record mutations (including read markers), password/MFA changes and access to
-other demo visitors' sessions are blocked on the server. Real account login and
-company permissions are unchanged. Demo AI calls use the existing provider and
-global budget controls, plus a shared cap of ₦500 per feature per UTC day.
+All four modules have manage access inside the verified sandbox. Demo operators
+also have sandbox-only technician and security roles, so they can assign work
+to themselves and exercise the normal work-order and SOS state machines. Real
+company roles, approval rules and terminal states are unchanged. Added editors
+support Estate properties/residents, Facility assets/work-order creation,
+Shortlet properties/apartments, and Construction project identity details.
+Approved construction financial values retain their approval workflows.
+The sandbox's sample Shortlet subscription removes apartment-count paywalls;
+this does not subscribe or bill a real company.
 
-Enable only after provisioning: set server-only `PROPBREW_DEMO_ACCOUNTS=1` and
-`PROPBREW_DEMO_PASSWORD` to a generated random secret of 32–128 characters. Keep
-the legacy development identity bypasses disabled. The password never appears
-in the browser. Setting `PROPBREW_DEMO_ACCOUNTS=0` closes demo entry and access
-through existing demo sessions; real company accounts remain available.
+The notice offers **Reset sample data** with explicit confirmation. Reset replaces
+only that session's operational sample state across all four modules, retains
+its tenant identity and durable audit/AI ledgers, and clears its owned offline
+queue. A database-owned reset timestamp rejects older Construction captures,
+preventing queued pre-reset edits from reappearing. Other visitors and customer
+companies are unaffected. Credentials/MFA, company creation, membership changes,
+foreign-company selection and invitations remain protected.
 
-Generate the sample workspace with
-`node scripts/provision-demo-accounts.mjs --write-state <private-state.json>`.
-Then run the same script with `--confirm-demo-seed --state-file <private-state.json>`
-and either `--database-env <ADMIN_URL_ENV_NAME>` or `--write-sql <private-seed.sql>`
-for execution inside the database service. The guarded transaction checks the
-reserved identities, creates four accounts and view-only memberships, and
-preserves an existing demo workspace. Never commit generated secrets or SQL.
+Payment and external messaging workflows are simulated/local record operations;
+provider, webhook and upload endpoints remain closed in native mode. Copilots
+use real AI through the existing provider and durable controls. All private demo
+sandboxes share a conservative 100,000-kobo (₦1,000) reservation ceiling per UTC
+day, in addition to per-feature allowances and the existing 500,000-kobo native
+platform ceiling. Reset does not refund or clear any AI allowance.
+
+Deployment requires migration 011_demo_sandboxes.sql. Its registry binds
+sandbox tenant + authenticated user + authenticated session, enforced by
+restrictive RLS policies for reads and writes. Application and AI transactions
+propagate both verified identity fields. The former shared demo template stays
+immutable; valid older demo sessions upgrade on their next request.
+
+Keep server-only `PROPBREW_DEMO_ACCOUNTS=1` and a generated 32–128-character
+`PROPBREW_DEMO_PASSWORD`; no credential is sent to the browser. Legacy development
+identity bypasses stay disabled. Set the demo flag to 0 to close both new entry
+and access through existing demo sessions; real accounts remain available.
+
+The guarded `scripts/provision-demo-accounts.mjs` still provisions only the four
+restricted sign-in identities and immutable source template. Export source data
+with `--write-state <private-state.json>`, then use `--confirm-demo-seed
+--state-file <private-state.json>` with either `--database-env <ADMIN_URL_ENV_NAME>`
+or `--write-sql <private-seed.sql>` inside the database service. Never commit
+credentials or generated provisioning SQL. Private operational sandboxes are
+created only by the verified-session factory, never by a client-supplied company
+ID or by copying existing customer/review records.

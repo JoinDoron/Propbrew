@@ -8,6 +8,7 @@ import { activateCompany, provisionCompany } from '@/server/auth/company';
 
 const database = vi.hoisted(() => ({ withAuthTransaction: vi.fn(), authDatabasePool: vi.fn() }));
 vi.mock('@/server/auth/database', () => database);
+vi.mock('@/server/auth/demo-sandbox', () => ({ findDemoSandbox: vi.fn(async () => ({ id: 'b7eef53c-5ab8-48d1-9486-67d3f3571e8d' })), ensureDemoSandbox: vi.fn() }));
 vi.mock('next/headers', () => ({ headers: async () => new Headers(), cookies: vi.fn() }));
 
 const DEMO_COMPANY = '6b20d921-50a1-4ccb-9018-d6f80204e223';
@@ -40,7 +41,7 @@ function principal(userId: string): CompanyPrincipal {
     companyRole: 'owner' as const, modules: { estate: 'manage' as const, facility: 'manage' as const, shortlet: 'manage' as const, construction: 'manage' as const },
     estateIds: [], allEstates: true, status: 'active' as const, companyStatus: 'active' as const,
   };
-  return { ...identity(userId), actor: actorForCompanyMember(membership, userId)!, company: { id: DEMO_COMPANY, name: 'Isolated demonstration' }, membership: { ...membership, version: '1' } };
+  return { ...identity(userId), sandbox: undefined, actor: actorForCompanyMember(membership, userId)!, company: { id: DEMO_COMPANY, name: 'Isolated demonstration' }, membership: { ...membership, version: '1' } };
 }
 
 function sampleState(): WorkspaceRecordState {

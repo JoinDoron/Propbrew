@@ -69,6 +69,7 @@ export async function withWorkspaceState<T>(
   const canonicalTenantId = tenantId.toLowerCase();
   if (mode === 'read') {
     const payload = await withTenantTransaction(canonicalTenantId, async (client) => {
+      if (authorize) await authorize(client);
       const row = await select(client, canonicalTenantId);
       return detached((row ? checked(row, domainTenantId) : await locked(client, canonicalTenantId, domainTenantId, initialize)).payload);
     });
@@ -76,8 +77,11 @@ export async function withWorkspaceState<T>(
   }
   try {
     return await withTenantTransaction(canonicalTenantId, async (client) => {
-      const row = await locked(client, canonicalTenantId, domainTenantId, initialize);
+      // Membership changes and sandbox resets use this same lock. Check the
+      // verified session before reading even the first stored record.
+      await client.query('select pg_advisory_xact_lock(hashtextextended($1, 812649))', [canonicalTenantId]);
       if (authorize) await authorize(client);
+      const row = await locked(client, canonicalTenantId, domainTenantId, initialize);
       const payload = detached(row.payload);
       const outcome = await fn(payload);
       if (outcome.commit === false) throw new DeclinedWorkspace(outcome.value);

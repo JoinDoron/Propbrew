@@ -12,49 +12,104 @@ async function assertDemoChoices(page: Page) {
   const chooser = page.getByRole('form', { name: 'Demo workspaces', exact: true });
   await expect(chooser).toBeVisible();
   for (const workspace of workspaces) await expect(chooser.getByRole('button', { name: `Explore ${workspace.name} demo`, exact: true })).toBeVisible();
-  await expect(page.getByText('Step into a workspace with sample data. No sign-up required.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Add, edit and try workflows with sample data. Your changes stay in your own sandbox. No sign-up required.', { exact: true })).toBeVisible();
+}
+
+async function exerciseShortletAccommodation(page: Page) {
+  const suffix = Date.now().toString(36);
+  const propertyName = `Sandbox Court ${suffix}`;
+  const updatedPropertyName = `Sandbox Court Updated ${suffix}`;
+  const apartmentName = `Sandbox Studio ${suffix}`;
+  const guestName = `Sandbox Booking Guest ${suffix}`;
+  await page.goto('/shortlet/properties');
+  await page.getByRole('button', { name: 'Add property', exact: true }).click();
+  const property = page.getByRole('dialog', { name: 'Add property', exact: true });
+  await property.getByLabel('Property name', { exact: true }).fill(propertyName);
+  await property.getByLabel('City', { exact: true }).fill('Abuja');
+  await property.getByLabel('Area / neighbourhood', { exact: true }).fill('Maitama');
+  await property.getByRole('button', { name: 'Add property', exact: true }).click();
+  await expect(property).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: propertyName, exact: true })).toBeVisible();
+  await page.getByRole('button', { name: `Add apartment to ${propertyName}`, exact: true }).click();
+  const apartment = page.getByRole('dialog', { name: 'Add apartment', exact: true });
+  await apartment.getByLabel('Apartment name', { exact: true }).fill(apartmentName);
+  await apartment.getByLabel('Apartment type', { exact: true }).fill('Studio');
+  await apartment.getByLabel('Nightly rate (₦)', { exact: true }).fill('10000.50');
+  await apartment.getByRole('button', { name: 'Add apartment', exact: true }).click();
+  await expect(apartment).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: apartmentName, exact: true })).toBeVisible();
+  await page.reload();
+  await page.getByRole('button', { name: `Edit ${apartmentName} apartment`, exact: true }).click();
+  const apartmentEdit = page.getByRole('dialog', { name: 'Edit apartment', exact: true });
+  await apartmentEdit.getByLabel('Nightly rate (₦)', { exact: true }).fill('12500.25');
+  await apartmentEdit.getByRole('button', { name: 'Save apartment', exact: true }).click();
+  await expect(apartmentEdit).toHaveCount(0);
+  await expect(page.getByRole('region', { name: `${apartmentName} apartment details`, exact: true })).toContainText('₦12,500.25');
+  await page.getByRole('button', { name: `Edit ${propertyName} property`, exact: true }).click();
+  const propertyEdit = page.getByRole('dialog', { name: 'Edit property', exact: true });
+  await propertyEdit.getByLabel('Property name', { exact: true }).fill(updatedPropertyName);
+  await propertyEdit.getByRole('button', { name: 'Save property', exact: true }).click();
+  await expect(propertyEdit).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: updatedPropertyName, exact: true })).toBeVisible();
+
+  await page.goto('/shortlet/bookings');
+  await page.getByRole('button', { name: 'New booking', exact: true }).click();
+  const booking = page.getByRole('dialog', { name: 'Create a booking', exact: true });
+  await booking.getByLabel('Guest name *', { exact: true }).fill(guestName);
+  await booking.getByLabel('Apartment *', { exact: true }).selectOption({ label: `${apartmentName} · ${updatedPropertyName} · ₦12,500.25/night` });
+  await booking.getByLabel('Check-in *', { exact: true }).fill('2028-02-01');
+  await booking.getByLabel('Check-out *', { exact: true }).fill('2028-02-04');
+  await booking.getByRole('checkbox', { name: 'I have reviewed these details and approve this record change.', exact: true }).check();
+  await booking.getByRole('button', { name: 'Confirm booking', exact: true }).click();
+  await expect(booking).toHaveCount(0);
+  await expect(page.getByText(guestName, { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByText(guestName, { exact: true })).toBeVisible();
 }
 
 for (const workspace of workspaces) {
-  test(`public ${workspace.name} demo opens populated sample records with view-only access and exits cleanly`, async ({ page }) => {
+  test(`public ${workspace.name} demo opens an editable private sandbox and exits cleanly`, async ({ page }) => {
     await page.goto(workspace.entry);
     await assertDemoChoices(page);
     await page.getByRole('button', { name: `Explore ${workspace.name} demo`, exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/${workspace.module}$`));
     await expect(page.getByRole('navigation', { name: `${workspace.name} navigation`, exact: true })).toBeVisible();
     const notice = page.getByRole('complementary', { name: 'Demo account notice', exact: true });
-    await expect(notice).toContainText('Sample data');
-    await expect(notice).toContainText('View only');
+    await expect(notice).toContainText('Private demo sandbox');
+    await expect(notice).toContainText('Your changes stay here');
+    await expect(notice.getByRole('button', { name: 'Reset sample data', exact: true })).toBeEnabled();
 
     if (workspace.module === 'estate') {
       await page.getByRole('button', { name: 'Notifications', exact: true }).click();
       await expect(page.getByText('You’re all caught up.', { exact: true })).toBeVisible();
-      await expect(page.getByRole('button', { name: 'Mark all read', exact: true })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Mark all read', exact: true })).toBeEnabled();
+      await page.getByRole('button', { name: 'Mark all read', exact: true }).click();
       await page.getByRole('button', { name: 'Notifications', exact: true }).click();
       await page.getByRole('button', { name: 'Messages', exact: true }).click();
       await expect(page.getByText('No conversations yet.', { exact: true })).toBeVisible();
       await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveCount(0);
       await page.getByRole('button', { name: 'Messages', exact: true }).click();
-      await expect(page.getByRole('button', { name: 'Add property', exact: true })).toHaveCount(0);
-      await expect(page.getByRole('button', { name: 'Add tenant', exact: true })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Add property', exact: true })).toBeEnabled();
+      await expect(page.getByRole('button', { name: 'Add tenant', exact: true })).toBeEnabled();
       await page.goto('/properties');
       await expect(page.getByRole('table', { name: 'Property list', exact: true })).toContainText('Lekki Gardens Estate');
     } else if (workspace.module === 'facility') {
       await expect(page.getByRole('heading', { name: 'Diesel tank — Block C', exact: true })).toBeVisible();
       await page.getByRole('tab', { name: /^Alarms(?: \d+)?$/ }).click();
       await expect(page.getByText('Coolant temperature high — sustained overheating', { exact: true })).toBeVisible();
-      await expect(page.getByRole('button', { name: 'Create work order', exact: true })).toHaveCount(0);
-      await expect(page.getByRole('button', { name: 'Acknowledge', exact: true })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Create work order', exact: true }).first()).toBeEnabled();
+      await expect(page.getByRole('button', { name: 'Acknowledge', exact: true }).first()).toBeEnabled();
     } else if (workspace.module === 'shortlet') {
       await page.getByRole('tab', { name: 'Availability', exact: true }).click();
       await expect(page.getByRole('region', { name: 'Next seven nights apartment occupancy calendar', exact: true })).toContainText('Marina Suites');
       await page.goto('/shortlet/bookings');
       await expect(page.getByText('SL-4200 · Unit 1A · Marina Suites', { exact: true })).toBeVisible();
-      await expect(page.getByRole('button', { name: 'New booking', exact: true })).toBeDisabled();
+      await expect(page.getByRole('button', { name: 'New booking', exact: true })).toBeEnabled();
+      await exerciseShortletAccommodation(page);
     } else {
       await page.goto('/construction/projects');
       await expect(page.getByRole('heading', { name: 'Marina Heights', exact: true })).toBeVisible();
-      await expect(page.getByRole('button', { name: 'New project', exact: true })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'New project', exact: true })).toBeEnabled();
     }
 
     await notice.getByRole('button', { name: 'Exit demo', exact: true }).click();

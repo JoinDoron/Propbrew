@@ -127,7 +127,8 @@ async function createDemoVisitor(): Promise<Browser> {
   expect(signedIn.response.status).toBe(200);
   const session = await http(browser, '/get-session');
   const result = { ...browser, identity: session.data as NativeIdentity, email: account.email };
-  await selectedPrincipal(result, DEMO_TENANT_ID);
+  expect(await companyPrincipalFor(result.identity)).not.toBeNull();
+  result.identity = (await http(result, '/get-session')).data as NativeIdentity;
   return result;
 }
 
@@ -469,8 +470,8 @@ describe.skipIf(!testUrl)('native company accounts with real restricted PostgreS
     demoVisitor = await createDemoVisitor();
     const session = (await http(demoVisitor, '/get-session')).data;
     expect(session.user.id).toBe(DEMO_ACCOUNTS[0].userId);
-    expect(Date.parse(session.session.expiresAt) - Date.now()).toBeLessThanOrEqual(3600_000);
-    expect(Date.parse(session.session.expiresAt) - Date.now()).toBeGreaterThan(3500_000);
+    expect(Date.parse(session.session.expiresAt) - Date.now()).toBeLessThanOrEqual(86400_000);
+    expect(Date.parse(session.session.expiresAt) - Date.now()).toBeGreaterThan(86300_000);
     const sessionCount = (await admin.query('select count(*)::int n from auth_sessions where "userId"=$1::uuid', [demoVisitor.identity.user.id])).rows[0].n;
     const accountBefore = (await admin.query('select password from auth_accounts where "userId"=$1::uuid', [demoVisitor.identity.user.id])).rows[0].password;
     const blocked: [string, Record<string, unknown> | undefined][] = [
@@ -491,15 +492,15 @@ describe.skipIf(!testUrl)('native company accounts with real restricted PostgreS
       expect(response.response.status, `demo path ${path}`).toBe(403);
     }
     const headers = new Headers({ origin, cookie: cookieHeader(demoVisitor) });
-    await expect(getNativeAuth().api.changePassword({ headers, body: { currentPassword: demoPassword, newPassword: 'Attempted-server-api-password-123' } })).rejects.toThrow(/view.only/i);
-    await expect(getNativeAuth().api.enableTwoFactor({ headers, body: { password: demoPassword, method: 'totp' } })).rejects.toThrow(/view.only/i);
+    await expect(getNativeAuth().api.changePassword({ headers, body: { currentPassword: demoPassword, newPassword: 'Attempted-server-api-password-123' } })).rejects.toThrow(/protected|private.sandbox/i);
+    await expect(getNativeAuth().api.enableTwoFactor({ headers, body: { password: demoPassword, method: 'totp' } })).rejects.toThrow(/protected|private.sandbox/i);
     expect((await admin.query('select password from auth_accounts where "userId"=$1::uuid', [demoVisitor.identity.user.id])).rows[0].password).toBe(accountBefore);
     expect((await admin.query('select "twoFactorEnabled" from auth_users where id=$1::uuid', [demoVisitor.identity.user.id])).rows[0].twoFactorEnabled).toBe(false);
     expect((await admin.query('select id from auth_two_factor where "userId"=$1::uuid', [demoVisitor.identity.user.id])).rows).toEqual([]);
     expect((await admin.query('select count(*)::int n from auth_sessions where "userId"=$1::uuid', [demoVisitor.identity.user.id])).rows[0].n).toBe(sessionCount);
   });
 
-  it('rejects company creation, external selection, invitations and even read-marker writes from a demo session', async () => {
+  it('rejects company creation, external selection and invitations while permitting owned sandbox changes', async () => {
     const actions = await import('@/server/actions/companies');
     const create = await import('@/app/api/companies/route');
     const { withDurableMutation } = await import('@/server/data/durable-records');
@@ -507,8 +508,8 @@ describe.skipIf(!testUrl)('native company accounts with real restricted PostgreS
     const invitation = await invite(demoVisitor.email, { estate: 'manage' });
     const companyCount = (await admin.query('select count(*)::int n from tenants')).rows[0].n;
     const before = (await admin.query('select version,payload from workspace_records where tenant_id=$1::uuid', [DEMO_TENANT_ID])).rows[0];
-    await expect(provisionCompany(demoVisitor.identity, 'Forbidden demo company')).rejects.toThrow(/view.only/i);
-    await expect(activateCompany(demoVisitor.identity, companyA)).rejects.toThrow(/unavailable/i);
+    await expect(provisionCompany(demoVisitor.identity, 'Forbidden demo company')).rejects.toThrow(/protected|private.sandbox/i);
+    await expect(activateCompany(demoVisitor.identity, companyA)).rejects.toThrow(/private.demo.sandbox|unavailable/i);
     const form = new FormData(); form.set('token', invitation.token);
     expect(await actions.acceptCompanyInvite(form)).toHaveProperty('error');
     expect((await admin.query('select id from company_memberships where tenant_id=$1::uuid and user_id=$2::uuid', [companyA, demoVisitor.identity.user.id])).rows).toEqual([]);
@@ -516,9 +517,9 @@ describe.skipIf(!testUrl)('native company accounts with real restricted PostgreS
     const response = await create.POST(new Request(`${origin}/api/companies`, { method: 'POST', headers: { origin, 'content-type': 'application/json' }, body: JSON.stringify({ companyName: 'Forbidden API demo company' }) }));
     expect(response.status).toBeGreaterThanOrEqual(400);
     expect((await admin.query('select count(*)::int n from tenants')).rows[0].n).toBe(companyCount);
-    const mutation = vi.fn(async () => 'must not execute');
-    await expect(withDurableMutation(mutation, ['estate', 'facility', 'shortlet', 'construction'], 'read')).rejects.toThrow(/view.only/i);
-    expect(mutation).not.toHaveBeenCalled();
+    const mutation = vi.fn(async () => 'own sandbox mutation');
+    await expect(withDurableMutation(mutation, ['estate', 'facility', 'shortlet', 'construction'], 'read')).resolves.toBe('own sandbox mutation');
+    expect(mutation).toHaveBeenCalledOnce();
     expect((await admin.query('select version,payload from workspace_records where tenant_id=$1::uuid', [DEMO_TENANT_ID])).rows[0]).toEqual(before);
     request.headers = new Headers();
   });
@@ -527,10 +528,11 @@ describe.skipIf(!testUrl)('native company accounts with real restricted PostgreS
     expect(await listCompanies(ownerA.identity)).not.toEqual(expect.arrayContaining([expect.objectContaining({ id: DEMO_TENANT_ID })]));
     await expect(activateCompany(ownerA.identity, DEMO_TENANT_ID)).rejects.toThrow(/unavailable/i);
     const principal = await companyPrincipalFor(demoVisitor.identity);
-    expect(principal?.company.id).toBe(DEMO_TENANT_ID);
+    expect(principal?.company.id).not.toBe(DEMO_TENANT_ID);
+    expect(principal?.sandbox?.id).toBe(principal?.company.id);
     for (const workspace of ['estate', 'facility', 'shortlet', 'construction'] as const) {
       expect(canUseCompanyModule(principal!.actor, workspace, 'read')).toBe(true);
-      expect(canUseCompanyModule(principal!.actor, workspace, 'update')).toBe(false);
+      expect(canUseCompanyModule(principal!.actor, workspace, 'update')).toBe(true);
     }
     vi.stubEnv('PROPBREW_DEMO_ACCOUNTS', '0');
     try {

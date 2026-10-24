@@ -50,7 +50,7 @@ function configuredAuth() {
         || context.path === '/sign-in/email';
       if (!demoSafePath) {
         const session = await getSessionFromCtx(context);
-        if (session && isDemoAccount(session.user.id)) throw new APIError('FORBIDDEN', { message: 'Demo accounts are view-only. Sign out to use your own account.' });
+        if (session && isDemoAccount(session.user.id)) throw new APIError('FORBIDDEN', { message: 'Demo account credentials and access settings are protected. Sign out to use your own account.' });
       }
       if (context.path === '/sign-in/email' && demoEmail && !demoAccountsEnabled()) throw new APIError('FORBIDDEN', { message: 'Demo access is unavailable.' });
       try {
@@ -68,7 +68,7 @@ function configuredAuth() {
         create: { before: async (session) => {
           if (!isDemoAccount(session.userId)) return;
           if (!demoAccountsEnabled()) throw new APIError('FORBIDDEN', { message: 'Demo access is unavailable.' });
-          return { data: { ...session, expiresAt: new Date(Date.now() + 3600_000) } };
+          return { data: { ...session, expiresAt: new Date(Date.now() + 24 * 3600_000) } };
         }, after: async (session) => { await withAuthTransaction(session.userId, (client) => client.query('insert into auth_security_events(user_id,event) values($1::uuid,$2)', [session.userId, 'session.created'])); } },
         delete: { after: async (session) => { await withAuthTransaction(session.userId, (client) => client.query('insert into auth_security_events(user_id,event) values($1::uuid,$2)', [session.userId, 'session.revoked'])); } },
       },

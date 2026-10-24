@@ -13,13 +13,15 @@ export function authDatabasePool(): Pool {
   return pool;
 }
 
-export async function withAuthTransaction<T>(userId: string, fn: (client: PoolClient) => Promise<T>): Promise<T> {
+export async function withAuthTransaction<T>(userId: string, fn: (client: PoolClient) => Promise<T>, sessionId?: string): Promise<T> {
   if (!/^[0-9a-f-]{36}$/i.test(userId)) throw new Error('A verified account is required.');
+  if (sessionId !== undefined && !/^[0-9a-f-]{36}$/i.test(sessionId)) throw new Error('A verified session is required.');
   const client = await authDatabasePool().connect();
   let destroy = false;
   try {
     await client.query('BEGIN');
     await client.query("select set_config('app.auth_user_id', $1, true)", [userId]);
+    await client.query("select set_config('app.auth_session_id', $1, true)", [sessionId ?? '']);
     const result = await fn(client);
     const completion = await client.query('COMMIT');
     if (completion.command !== 'COMMIT') throw new Error('The account change did not commit.');

@@ -1,22 +1,25 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DEMO_ACCOUNTS, DEMO_TENANT_ID } from '@/server/auth/demo-config';
+import { DEMO_ACCOUNTS } from '@/server/auth/demo-config';
 
 const boundary = vi.hoisted(() => ({
   getIdentity: vi.fn(), activateCompany: vi.fn(), signIn: vi.fn(),
   pool: vi.fn(), query: vi.fn(), consume: vi.fn(), headers: vi.fn(),
-  auth: vi.fn(), redirect: vi.fn(),
+  auth: vi.fn(), redirect: vi.fn(), ensureSandbox: vi.fn(), resetSandbox: vi.fn(), revalidate: vi.fn(),
 }));
 vi.mock('next/headers', () => ({ headers: boundary.headers }));
 vi.mock('next/navigation', () => ({ redirect: boundary.redirect }));
+vi.mock('next/cache', () => ({ revalidatePath: boundary.revalidate }));
+vi.mock('@/server/auth/demo-sandbox', () => ({ ensureDemoSandbox: boundary.ensureSandbox, resetDemoSandboxFor: boundary.resetSandbox }));
 vi.mock('@/server/auth/auth', () => ({ getNativeAuth: boundary.auth }));
 vi.mock('@/server/auth/database', () => ({ authDatabasePool: boundary.pool }));
 vi.mock('@/server/auth/company', () => ({ getNativeIdentity: boundary.getIdentity, activateCompany: boundary.activateCompany }));
 vi.mock('@/server/auth/rate-limit', () => ({ consumeAuthAttempt: boundary.consume }));
 
-import { enterDemoAccount } from '@/server/actions/demo-auth';
+import { enterDemoAccount, resetDemoSandbox } from '@/server/actions/demo-auth';
 
 const PASSWORD = 'server-only-demo-fixture-credential-00001';
 const SESSION_ID = 'cba55389-e0dc-4f0c-8a74-fbf5981f0824';
+const SANDBOX_ID = '68449456-7aeb-4093-9c94-06c45638d133';
 const TOKEN = 'synthetic-demo-session-token';
 const headers = new Headers({ origin: 'https://propbrew.example.test' });
 const userFor = (account: typeof DEMO_ACCOUNTS[number]) => ({ id: account.userId, name: account.name, email: account.email });
@@ -31,6 +34,8 @@ beforeEach(() => {
   boundary.headers.mockResolvedValue(headers);
   boundary.consume.mockResolvedValue(undefined);
   boundary.activateCompany.mockResolvedValue(undefined);
+  boundary.ensureSandbox.mockResolvedValue({ id: SANDBOX_ID, expiresAt: '2026-10-25T12:00:00.000Z' });
+  boundary.resetSandbox.mockResolvedValue(undefined);
   boundary.auth.mockReturnValue({ api: { signInEmail: boundary.signIn } });
   boundary.pool.mockReturnValue({ query: boundary.query });
   boundary.query.mockResolvedValue({ rowCount: 1, rows: [{ id: SESSION_ID }] });
@@ -59,7 +64,7 @@ describe('demo entry server action', () => {
     expect(boundary.pool).not.toHaveBeenCalled(); expect(boundary.activateCompany).not.toHaveBeenCalled();
   });
 
-  it.each(DEMO_ACCOUNTS)('opens only the configured $module demo account and reserved company', async (account) => {
+  it.each(DEMO_ACCOUNTS)('opens the configured $module account inside a server-allocated private sandbox', async (account) => {
     const user = userFor(account);
     boundary.signIn.mockResolvedValue({ token: TOKEN, user });
     const form = formFor(account.module);
@@ -68,9 +73,10 @@ describe('demo entry server action', () => {
     form.set('redirect', 'https://attacker.example.invalid'); form.set('role', 'owner');
     await expect(enterDemoAccount({}, form)).rejects.toThrow(`REDIRECT:/${account.module}`);
     expect(boundary.consume).toHaveBeenCalledExactlyOnceWith('demo-entry-global', 'public-demo', 60, 3600);
-    expect(boundary.signIn).toHaveBeenCalledExactlyOnceWith({ headers, body: { email: account.email, password: PASSWORD, rememberMe: false } });
+    expect(boundary.signIn).toHaveBeenCalledExactlyOnceWith({ headers, body: { email: account.email, password: PASSWORD, rememberMe: true } });
     expect(boundary.query).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('auth_sessions'), [TOKEN, account.userId]);
-    expect(boundary.activateCompany).toHaveBeenCalledExactlyOnceWith({ user, session: { id: SESSION_ID } }, DEMO_TENANT_ID);
+    expect(boundary.ensureSandbox).toHaveBeenCalledExactlyOnceWith({ user, session: { id: SESSION_ID } });
+    expect(boundary.activateCompany).toHaveBeenCalledExactlyOnceWith({ user, session: { id: SESSION_ID } }, SANDBOX_ID);
     expect(boundary.redirect).toHaveBeenCalledExactlyOnceWith(`/${account.module}`);
   });
 
@@ -79,7 +85,9 @@ describe('demo entry server action', () => {
     const account = DEMO_ACCOUNTS[3];
     boundary.signIn.mockResolvedValue({ token: TOKEN, user: userFor(account) });
     await expect(enterDemoAccount({}, formFor(account.module))).rejects.toThrow('REDIRECT:/construction');
-    expect(boundary.activateCompany).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ user: userFor(account) }), DEMO_TENANT_ID);
+    expect(boundary.signIn).not.toHaveBeenCalled();
+    expect(boundary.consume).not.toHaveBeenCalled();
+    expect(boundary.activateCompany).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ user: userFor(DEMO_ACCOUNTS[0]), session: { id: SESSION_ID } }), SANDBOX_ID);
   });
 
   it('fails closed when authentication returns a different account', async () => {
@@ -119,5 +127,27 @@ describe('demo entry server action', () => {
     boundary.activateCompany.mockRejectedValue(new Error('membership unavailable'));
     await expect(enterDemoAccount({}, formFor('estate'))).resolves.toEqual({ error: expect.stringMatching(/busy|unavailable/) });
     expect(boundary.redirect).not.toHaveBeenCalled();
+  });
+});
+
+describe('private demo reset', () => {
+  it('requires confirmation before reading a session or changing records', async () => {
+    await expect(resetDemoSandbox({}, new FormData())).resolves.toHaveProperty('error');
+    expect(boundary.getIdentity).not.toHaveBeenCalled(); expect(boundary.resetSandbox).not.toHaveBeenCalled();
+  });
+  it('refuses real-company accounts even with a forged sandbox ID', async () => {
+    boundary.getIdentity.mockResolvedValue({ user: { id: '9d91d49f-f40d-4a4d-935b-04635d510e7c' }, session: { id: SESSION_ID } });
+    const form = new FormData(); form.set('confirm', 'reset-own-demo'); form.set('tenantId', SANDBOX_ID);
+    await expect(resetDemoSandbox({}, form)).resolves.toHaveProperty('error');
+    expect(boundary.resetSandbox).not.toHaveBeenCalled();
+  });
+  it('resets only the verified session mapping and never trusts a submitted company', async () => {
+    const identity = { user: userFor(DEMO_ACCOUNTS[0]), session: { id: SESSION_ID } };
+    boundary.getIdentity.mockResolvedValue(identity);
+    const form = new FormData(); form.set('confirm', 'reset-own-demo'); form.set('tenantId', 'forged-other-company');
+    await expect(resetDemoSandbox({}, form)).resolves.toHaveProperty('message');
+    expect(boundary.consume).toHaveBeenCalledExactlyOnceWith('demo-reset', SESSION_ID, 5, 3600);
+    expect(boundary.resetSandbox).toHaveBeenCalledExactlyOnceWith(identity);
+    expect(boundary.revalidate).toHaveBeenCalledWith('/', 'layout');
   });
 });

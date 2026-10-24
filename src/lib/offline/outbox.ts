@@ -3,15 +3,15 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { applyOutcome, dueOps, enqueue, prunable, type OutboxOp, type OpKind, type SyncOutcome } from '@/domain/sync';
 import { syncOperation, abandonOperation } from '@/server/actions/sync';
-import { idbAvailable, idbGetOps, idbPutOps, idbPutBlob, idbDeleteBlobsFor, idbBlobsFor, idbLegacyHasPending } from './idb';
+import { idbAvailable, idbGetOps, idbPutOps, idbPutBlob, idbDeleteBlobsFor, idbBlobsFor, idbLegacyHasPending, idbClearOwner } from './idb';
 
 const LEGACY_KEY = 'vesta.outbox.v1';
 const key = (owner: string) => `propbrew.outbox.v2:${encodeURIComponent(owner)}`;
 const EMPTY: OutboxOp[] = [];
-const stores = new Map<string, { cache: OutboxOp[] | null; hydrated: boolean; listeners: Set<() => void> }>();
+const stores = new Map<string, { cache: OutboxOp[] | null; hydrated: boolean; generation: number; listeners: Set<() => void> }>();
 function store(owner: string) {
   let current = stores.get(owner);
-  if (!current) { current = { cache: null, hydrated: false, listeners: new Set() }; stores.set(owner, current); }
+  if (!current) { current = { cache: null, hydrated: false, generation: 0, listeners: new Set() }; stores.set(owner, current); }
   return current;
 }
 function read(owner: string): OutboxOp[] {
@@ -39,8 +39,10 @@ function commit(owner: string, next: OutboxOp[]): void {
 export async function hydrateFromIdb(owner?: string): Promise<void> {
   if (!owner || store(owner).hydrated || !idbAvailable()) return;
   store(owner).hydrated = true;
+  const generation = store(owner).generation;
   try {
     const stored = await idbGetOps<OutboxOp>(owner);
+    if (store(owner).generation !== generation) return;
     const merged = new Map(snapshot(owner).map((o) => [o.id, o]));
     // Interrupted sends are safe to retry, using the same owner/content receipt.
     for (const op of stored) if (!merged.has(op.id)) merged.set(op.id, op.status === 'sending' ? { ...op, status: 'queued' } : op);
@@ -85,9 +87,14 @@ export function useOutbox(owner?: string): OutboxOp[] {
 export async function capture(owner: string | undefined, kind: OpKind, label: string, payload: Record<string, unknown>, attachments: readonly File[] = []): Promise<OutboxOp> {
   if (!owner) throw new Error('Sign in to a tenant workspace before capturing work.');
   if (attachments.length && !idbAvailable()) throw new Error('This device cannot store photos offline. Keep the form open and retry when storage is available.');
+  const generation = store(owner).generation;
   const op: OutboxOp = { id: crypto.randomUUID(), kind, label, payload, capturedISO: new Date().toISOString(), attachments: attachments.length, status: 'queued', attempts: 0 };
   // Do not publish a drainable record until all file transactions have completed.
   for (const [i, file] of attachments.entries()) await idbPutBlob({ id: `${op.id}-${i}`, opId: op.id, name: file.name, type: file.type, size: file.size, blob: file }, owner);
+  if (store(owner).generation !== generation) {
+    if (idbAvailable()) await idbDeleteBlobsFor(op.id, owner);
+    throw new Error('The sandbox changed before capture completed. This record was not queued.');
+  }
   commit(owner, enqueue(snapshot(owner), op));
   return op;
 }
@@ -98,6 +105,20 @@ export function removeOp(owner: string | undefined, id: string): void {
   if (idbAvailable()) void idbDeleteBlobsFor(id, owner).catch(() => {});
 }
 export function clearSynced(owner?: string): void { if (owner) commit(owner, snapshot(owner).filter((op) => op.status !== 'synced')); }
+
+/** A successful sandbox reset invalidates only its own retained device work. */
+export async function clearOwnerOutbox(owner: string): Promise<void> {
+  let identity: unknown;
+  try { identity = JSON.parse(owner); } catch { throw new Error('An owned device queue is required.'); }
+  if (!Array.isArray(identity) || identity.length !== 2 || identity.some((value) => typeof value !== 'string' || !value.trim() || value.length > 200)) throw new Error('An owned device queue is required.');
+  const current = store(owner);
+  current.generation += 1; current.cache = []; current.hydrated = true;
+  let failed = false;
+  try { window.localStorage.removeItem(key(owner)); } catch { failed = true; }
+  current.listeners.forEach((listener) => listener());
+  if (idbAvailable()) { try { await idbClearOwner(owner); } catch { failed = true; } }
+  if (failed) throw new Error('This device could not fully clear its owned offline queue.');
+}
 export async function abandon(owner: string | undefined, id: string): Promise<void> {
   if (!owner) throw new Error('Sign in before discarding captured work.');
   const op = snapshot(owner).find((o) => o.id === id);
@@ -115,12 +136,13 @@ export function useOutboxSync(owner?: string): void {
   const busy = useRef(false), lastAttempt = useRef<Record<string, number>>({});
   const drain = useCallback(async () => {
     if (!owner || currentOwner.current !== owner || busy.current || !onlineSnapshot()) return;
+    const generation = store(owner).generation;
     const due = dueOps(snapshot(owner), Date.now(), lastAttempt.current);
     if (!due.length) return;
     busy.current = true;
     try {
       for (const op of due) {
-        if (currentOwner.current !== owner || !onlineSnapshot()) break;
+        if (currentOwner.current !== owner || store(owner).generation !== generation || !onlineSnapshot()) break;
         commit(owner, snapshot(owner).map((o) => o.id === op.id ? { ...o, status: 'sending' } : o));
         lastAttempt.current[op.id] = Date.now();
         let outcome: SyncOutcome;
@@ -132,7 +154,7 @@ export function useOutboxSync(owner?: string): void {
             if (blobs.length !== op.attachments) throw new Error('Some attached files are missing from device storage. The record was kept and has not been sent.');
             const mediaRefs: string[] = [];
             for (const stored of blobs) {
-              if (currentOwner.current !== owner) throw new Error('The signed-in account changed. Your original device copy was kept.');
+              if (currentOwner.current !== owner || store(owner).generation !== generation) throw new Error('The signed-in account or sandbox changed.');
               const form = new FormData(); form.append('file', stored.blob, stored.name); form.append('purpose', `offline-${op.kind}`);
               const upload = await fetch('/api/upload', { method: 'POST', body: form, headers: { 'idempotency-key': `${op.id}:${stored.id}` } });
               if (!upload.ok) throw new Error(`Photo upload unavailable (${upload.status}). Your record and files remain on this device.`);
@@ -144,11 +166,12 @@ export function useOutboxSync(owner?: string): void {
             // Persist returned references before sync so ambiguous network retries keep identical content.
             commit(owner, snapshot(owner).map((o) => o.id === op.id ? { ...o, payload } : o));
           }
-          if (currentOwner.current !== owner) throw new Error('The signed-in account changed. Your original device copy was kept.');
+          if (currentOwner.current !== owner || store(owner).generation !== generation) throw new Error('The signed-in account or sandbox changed.');
           outcome = await syncOperation({ owner, id: op.id, kind: op.kind, capturedISO: op.capturedISO, payload });
         } catch (error) {
           outcome = { ok: false, id: op.id, conflict: false, error: error instanceof Error ? error.message : 'Unable to connect. Your record remains on this device for retry.' };
         }
+        if (store(owner).generation !== generation) break;
         commit(owner, snapshot(owner).map((o) => o.id === op.id ? applyOutcome(o, outcome, new Date().toISOString()) : o));
         if (outcome.ok && idbAvailable()) await idbDeleteBlobsFor(op.id, owner);
       }

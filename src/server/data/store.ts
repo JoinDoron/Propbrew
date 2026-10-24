@@ -46,7 +46,7 @@ const createWorkingSet = () => ({
   }[],
   /** Attributed record-creation events; contains no contact details. */
   estateRegistrationAudit: [] as {
-    tenantId: string; actorId: string; action: 'property.created' | 'resident.created';
+    tenantId: string; actorId: string; action: 'property.created' | 'resident.created' | 'property.updated' | 'resident.updated';
     entityId: string; siteId: string; unitId?: string; at: string;
   }[],
   workOrders: clone(seed.workOrders),

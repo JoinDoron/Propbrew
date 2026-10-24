@@ -23,6 +23,7 @@ describe.skipIf(!testUrl)('native Postgres migrations and tenant isolation', () 
     await admin.query(`create role ${runtimeRole} login nosuperuser nocreatedb nocreaterole`);
     await admin.query(`grant usage on schema public to ${runtimeRole}`);
     await admin.query(`grant select, insert, update, delete on all tables in schema public to ${runtimeRole}`);
+    await admin.query(`grant execute on function demo_sandbox_access(uuid,boolean) to ${runtimeRole}`);
     await admin.query('insert into tenants(id, name) values ($1, $2), ($3, $4)', [tenantA, 'Review A', tenantB, 'Review B']);
     const runtimeUrl = new URL(testUrl!);
     runtimeUrl.username = runtimeRole;
@@ -39,8 +40,8 @@ describe.skipIf(!testUrl)('native Postgres migrations and tenant isolation', () 
   it('applies all migrations and reruns without replaying them', async () => {
     await runMigrations({ url: testUrl });
     const migrations = await admin.query('select filename from schema_migrations order by filename');
-    expect(migrations.rows).toHaveLength(9);
-    expect(migrations.rows.at(-1)?.filename).toBe('010_company_ai_platform_budget.sql');
+    expect(migrations.rows).toHaveLength(10);
+    expect(migrations.rows.at(-1)?.filename).toBe('011_demo_sandboxes.sql');
     const functions = await admin.query("select proname from pg_proc where proname in ('reserve_copilot_budget', 'finish_copilot_budget')");
     expect(functions.rows).toHaveLength(2);
   });

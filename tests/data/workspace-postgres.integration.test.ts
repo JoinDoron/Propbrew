@@ -42,6 +42,7 @@ describe.skipIf(!testUrl)('durable transactional workspace records', () => {
     // Another integration worker may have migrated before this test role was
     // created; production provisions the role before applying migration 008.
     await admin.query(`grant select, insert, update on workspace_records to ${role}`);
+    await admin.query(`grant execute on function demo_sandbox_access(uuid,boolean) to ${role}`);
     const url = new URL(testUrl!); url.username = role;
     vi.stubEnv('DATABASE_URL', url.toString());
   });

@@ -71,8 +71,9 @@ describe('company account and access presentation', () => {
   it('offers four clearly labelled demo workspaces without exposing or prefilling credentials', () => {
     for (const mode of ['signup', 'login'] as const) {
       const html = renderToStaticMarkup(createElement(AccountForm, { mode, action, demoEnabled: true }));
-      expect(html).toContain('Explore a demo'); expect(html).toContain('View only');
+      expect(html).toContain('Explore a demo'); expect(html).toContain('Private sandbox');
       expect(html).toContain('sample data'); expect(html).toContain('No sign-up required');
+      expect(html).toContain('Add, edit and try workflows'); expect(html).toContain('Your changes stay in your own sandbox');
       for (const workspace of ['Estate', 'Facility', 'Shortlet', 'Construction']) expect(html).toContain(`aria-label="Explore ${workspace} demo"`);
       expect([...html.matchAll(/<button[^>]+>/g)].map(([tag]) => tag).filter((tag) => tag.includes('name="module"')).map((tag) => /value="([^"]+)"/.exec(tag)?.[1])).toEqual(['estate', 'facility', 'shortlet', 'construction']);
       expect(html).not.toContain('@example.invalid'); expect(html).not.toContain('value="demo');

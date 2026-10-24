@@ -11,6 +11,8 @@ import { operatingClock } from '@/server/operating-clock';
 import { occupancyRate, suggestNightlyRate } from '@/domain/shortlet';
 import { Building2, Wifi, KeyRound, Sparkles, Landmark, BedDouble } from 'lucide-react';
 import { withDurableRead } from '@/server/data/durable-records';
+import { can } from '@/lib/authz';
+import { ApartmentEditorButton, PropertyEditorButton } from '@/components/shortlet/accommodation-editor';
 
 /** Scoped property records and operator-reviewed rate suggestions. No automatic repricing. */
 export default async function ShortletPropertiesPage() {
@@ -18,6 +20,8 @@ export default async function ShortletPropertiesPage() {
   const { dateISO: TODAY } = operatingClock();
   const NOW_MS = Date.parse(TODAY);
   const { actor } = await requireCapability('bookings_amenities', 'read', 'shortlet');
+  const canCreate = can(actor, 'bookings_amenities', 'create').allowed;
+  const canEdit = can(actor, 'bookings_amenities', 'update').allowed;
   const props = repos.shortletProperties.list(actor).items;
   const apts = repos.shortletApartments.list(actor).items;
   const bookings = repos.shortletBookings.list(actor).items;
@@ -27,17 +31,17 @@ export default async function ShortletPropertiesPage() {
   const nextSat = new Date(NOW_MS + ((6 - now.getUTCDay() + 7) % 7 || 7) * 24 * 3600 * 1000).toISOString().slice(0, 10);
   const snapshot = now.toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Africa/Lagos' });
   return <div className="pb-page">
-    <PageHeader title="Shortlet properties" subtitle="Manage apartments, guest access and advisory nightly rates." />
+    <PageHeader title="Shortlet properties" subtitle="Manage apartments, guest access and advisory nightly rates." actions={<PropertyEditorButton allowed={canCreate} />} />
     <PageTabs label="Shortlet property sections" items={[
       { id: 'apartments', label: 'Apartments & access', content: <div className={styles.stack}>
         <div className={shortletStyles.columns}><ShortletMetric label="Properties" value={String(props.length)} icon={<Building2 size={18} />} /><ShortletMetric label="Apartments" value={String(apts.length)} icon={<BedDouble size={18} />} /><ShortletMetric label="Active apartments" value={String(apts.filter((apt) => apt.status === 'active').length)} note="Recorded apartment status, not current availability" /></div>
         {props.length ? props.map((property) => {
           const apartments = apts.filter((apt) => apt.propertyId === property.id);
           return <Card key={property.id} padded={false}>
-            <div className={styles.header}><CardHeader title={property.name} subtitle={property.area + ', ' + property.city + ' · ' + apartments.length + ' apartments'} action={<Building2 size={20} className="text-primary" />} /></div>
-            <div className={styles.body}><dl className={styles.facts}><div><dt><Landmark size={16} aria-hidden="true" /> Recorded settlement account</dt><dd>{property.bankName} · {property.accountNumber}</dd></div><div><dt>Account name</dt><dd>{property.accountName}</dd></div></dl><p className={styles.metadata + ' mt-4'}>Account details are recorded references, not verification of account ownership, gateway configuration or settlement.</p></div>
+            <div className={styles.header}><CardHeader title={property.name} subtitle={property.area + ', ' + property.city + ' · ' + apartments.length + ' apartments'} action={<div className={styles.inline}><PropertyEditorButton allowed={canEdit} property={{ id: property.id, name: property.name, city: property.city, area: property.area }} /><ApartmentEditorButton allowed={canCreate} propertyId={property.id} propertyName={property.name} /></div>} /></div>
+            <div className={styles.body}><dl className={styles.facts}><div><dt><Landmark size={16} aria-hidden="true" /> Recorded settlement account</dt><dd>{property.bankName || property.accountNumber ? `${property.bankName} · ${property.accountNumber}` : 'No settlement account reference recorded'}</dd></div><div><dt>Account name</dt><dd>{property.accountName || 'Not recorded'}</dd></div></dl><p className={styles.metadata + ' mt-4'}>Account details are recorded references, not verification of account ownership, gateway configuration or settlement.</p></div>
             {apartments.length ? apartments.map((apartment) => <section key={apartment.id} className={styles.apartment} aria-label={apartment.name + ' apartment details'}>
-              <header><div><h3>{apartment.name}</h3><p className={styles.metadata}>{apartment.type}</p></div><StatusPill status={apartment.status} tone={apartment.status === 'active' ? 'success' : 'neutral'} /></header>
+              <header><div><h3>{apartment.name}</h3><p className={styles.metadata}>{apartment.type}</p></div><div className={styles.inline}><StatusPill status={apartment.status} tone={apartment.status === 'active' ? 'success' : 'neutral'} /><ApartmentEditorButton allowed={canEdit} propertyId={property.id} propertyName={property.name} apartment={{ id: apartment.id, name: apartment.name, type: apartment.type, nightlyMinor: apartment.nightlyRate.minor, status: apartment.status, wifiSsid: apartment.wifiSsid, accessInstructions: apartment.accessInstructions, houseRules: apartment.houseRules, amenities: apartment.amenities }} /></div></header>
               <dl className={styles.facts}><div><dt>Recorded nightly rate · NGN</dt><dd className={styles.amount}>{shortletMoney(apartment.nightlyRate.minor)} / night</dd></div><div><dt>Recorded occupancy this month</dt><dd>{occupancyRate(bookings, apartment.id, mStart, mEnd)}%</dd></div><div><dt><Wifi size={16} aria-hidden="true" /> Wi-Fi network</dt><dd>{apartment.wifiSsid || 'No network recorded'}</dd></div><div><dt><KeyRound size={16} aria-hidden="true" /> Guest access instructions</dt><dd>{apartment.accessInstructions || 'No instructions recorded'}</dd></div></dl>
             </section>) : <div className={styles.body}><EmptyState title="No apartments linked" description="No apartment records are linked to this property in the current scope." /></div>}
             <p className={styles.footer}>Snapshot · {snapshot} · WAT. Rates are recorded in NGN; access instructions should be shared only through an approved guest process.</p>

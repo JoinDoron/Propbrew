@@ -8,6 +8,7 @@ import { withAuthTransaction } from './database';
 import { nativeAuthEnabled } from './mode';
 import { blankCompanyWorkspaceState } from '@/server/data/store';
 import { assertDemoCompany, assertNotDemoAccount, demoAccountsEnabled, DEMO_TENANT_ID, isDemoAccount } from './demo-config';
+import { ensureDemoSandbox, findDemoSandbox } from './demo-sandbox';
 export { consumeAuthAttempt } from './rate-limit';
 
 export type NativeUser = { id: string; name: string; email: string; twoFactorEnabled?: boolean | null };
@@ -26,19 +27,23 @@ export async function getNativeIdentity(): Promise<NativeIdentity | null> {
 
 export async function companyPrincipalFor(identity: NativeIdentity) {
   if (isDemoAccount(identity.user.id) && !demoAccountsEnabled()) return null;
+  const sandbox = isDemoAccount(identity.user.id) ? await ensureDemoSandbox(identity) : undefined;
   return withAuthTransaction(identity.user.id, async (client) => {
-    const selected = identity.session.activeCompanyId;
+    const selected = sandbox?.id ?? identity.session.activeCompanyId;
     if (selected && !/^[0-9a-f-]{36}$/i.test(selected)) return null;
     const result = await client.query<MembershipRow>(membershipSql + " where m.user_id=$1::uuid and m.status='active' and t.status='active'" + (selected ? ' and m.tenant_id=$2::uuid' : ' order by m.created_at limit 2'), selected ? [identity.user.id, selected] : [identity.user.id]);
     if (result.rows.length !== 1) return null;
     const row = result.rows[0];
     if (row.tenant_id === DEMO_TENANT_ID && !isDemoAccount(identity.user.id)) return null;
-    if (isDemoAccount(identity.user.id) && (row.tenant_id !== DEMO_TENANT_ID || row.company_role !== 'member'
-      || Object.keys(row.modules).length !== 4 || Object.values(row.modules).some((access) => access !== 'view'))) return null;
-    const actor = actorForCompanyMember(membershipDto(row), identity.user.id);
-    if (!actor) return null;
-    return { ...identity, actor, company: { id: row.tenant_id, name: row.name }, membership: { ...membershipDto(row), version: row.version } };
-  });
+    if (isDemoAccount(identity.user.id) && (!sandbox || row.tenant_id !== sandbox.id || row.company_role !== 'member'
+      || Object.keys(row.modules).length !== 4 || Object.values(row.modules).some((access) => access !== 'manage'))) return null;
+    const projected = actorForCompanyMember(membershipDto(row), identity.user.id);
+    if (!projected) return null;
+    // Sandbox operators can exercise normal field-team transitions after
+    // assigning work to themselves. These roles never reach a real company.
+    const actor = sandbox ? Object.freeze({ ...projected, roles: Object.freeze([...new Set([...projected.roles, 'technician' as const, 'security' as const])]) }) : projected;
+    return { ...identity, actor, sandbox, company: { id: row.tenant_id, name: row.name }, membership: { ...membershipDto(row), version: row.version } };
+  }, identity.session.id);
 }
 export async function getCompanyPrincipal() {
   const identity = await getNativeIdentity();
@@ -48,6 +53,12 @@ export type CompanyPrincipal = NonNullable<Awaited<ReturnType<typeof getCompanyP
 
 export async function recheckCompanyMembership(client: PoolClient, principal: CompanyPrincipal): Promise<void> {
   await client.query("select set_config('app.auth_user_id',$1,true)", [principal.user.id]);
+  await client.query("select set_config('app.auth_session_id',$1,true)", [principal.session.id]);
+  if (isDemoAccount(principal.user.id)) {
+    if (!demoAccountsEnabled() || !principal.sandbox || principal.sandbox.id !== principal.company.id) throw new Error('Your private demo sandbox is unavailable.');
+    const mapped = await client.query<{ id: string }>('select tenant_id id from current_demo_sandbox()');
+    if (mapped.rows[0]?.id !== principal.company.id) throw new Error('Your private demo sandbox is unavailable.');
+  }
   // The caller already holds the company advisory lock, shared by membership
   // management. Row-locking here would invoke UPDATE RLS and exclude members.
   const result = await client.query<MembershipRow>(membershipSql + " where m.id=$1::uuid and m.user_id=$2::uuid and m.tenant_id=$3::uuid and m.status='active' and t.status='active'", [principal.membership.membershipId, principal.user.id, principal.company.id]);
@@ -55,16 +66,23 @@ export async function recheckCompanyMembership(client: PoolClient, principal: Co
 }
 
 export async function listCompanies(identity: NativeIdentity) {
-  return withAuthTransaction(identity.user.id, async (client) => (await client.query<MembershipRow>(membershipSql + " where m.user_id=$1::uuid and m.status='active' and t.status='active' order by t.name", [identity.user.id])).rows.map((row) => ({ id: row.tenant_id, name: row.name, role: row.company_role, modules: Object.keys(row.modules) })));
+  if (isDemoAccount(identity.user.id)) {
+    const principal = await companyPrincipalFor(identity);
+    return principal ? [{ id: principal.company.id, name: principal.company.name, role: principal.membership.companyRole, modules: Object.keys(principal.membership.modules ?? {}) }] : [];
+  }
+  return withAuthTransaction(identity.user.id, async (client) => (await client.query<MembershipRow>(membershipSql + " where m.user_id=$1::uuid and m.status='active' and t.status='active' order by t.name", [identity.user.id])).rows.map((row) => ({ id: row.tenant_id, name: row.name, role: row.company_role, modules: Object.keys(row.modules) })), identity.session.id);
 }
 export async function activateCompany(identity: NativeIdentity, companyId: string): Promise<void> {
-  assertDemoCompany(identity.user.id, companyId);
+  if (isDemoAccount(identity.user.id)) {
+    const sandbox = demoAccountsEnabled() ? await findDemoSandbox(identity) : null;
+    if (!sandbox || sandbox.id !== companyId) throw new Error('Choose your own private demo sandbox.');
+  } else assertDemoCompany(identity.user.id, companyId);
   await withAuthTransaction(identity.user.id, async (client) => {
     const result = await client.query(membershipSql + " where m.user_id=$1::uuid and m.tenant_id=$2::uuid and m.status='active' and t.status='active'", [identity.user.id, companyId]);
     if (result.rowCount !== 1) throw new Error('That company is unavailable.');
     const saved = await client.query('update auth_sessions set "activeCompanyId"=$1,"updatedAt"=now() where id=$2::uuid and "userId"=$3::uuid', [companyId, identity.session.id, identity.user.id]);
     if (saved.rowCount !== 1) throw new Error('Sign in again to choose your company.');
-  });
+  }, identity.session.id);
 }
 
 export async function provisionCompany(identity: NativeIdentity, name: string): Promise<string> {

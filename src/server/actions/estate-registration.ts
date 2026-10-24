@@ -6,6 +6,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { getSession, devIdentityEnabled } from '@/server/session';
+import { assertCan } from '@/lib/authz';
 import { db } from '@/server/data/store';
 import { scopedMutableGet } from '@/server/data';
 import { canRegisterEstateRecords, withCreatedEstateAssignments } from '@/server/data/estate-creation-scope';
@@ -155,5 +156,50 @@ export async function addEstateTenant(input: unknown): Promise<RegistrationResul
   refresh();
   return { ok: true, ...result };
 
+  }, 'estate');
+}
+
+/** Correct property details without changing inventory, tenancy or ownership. */
+export async function updateEstateProperty(input: unknown): Promise<RegistrationResult> {
+  return withDurableMutation(async () => {
+    const gate = await registrationActor(); if (!gate.ok) return gate;
+    assertCan(gate.actor, 'users_roles', 'update');
+    const parsed = z.object({ id: text(1, 160), name: text(2, 120), address: z.preprocess((value) => typeof value === 'string' ? value.replace(/\r\n?|\n/g, ' ') : value, text(5, 500)) }).strict().safeParse(input);
+    if (!parsed.success) return { ok: false, error: 'Enter a valid property name and address. Ownership and unit inventory cannot be changed by this form.' };
+    const site = scopedMutableGet(gate.actor, 'users_roles', db.sites.map((row) => ({ ...row, siteId: row.id })), parsed.data.id, 'update');
+    const live = site && db.sites.find((row) => row.id === site.id && row.tenantId === gate.actor.tenantId && row.kind === 'estate');
+    if (!live) return { ok: false, error: 'Choose an estate property available to your account.' };
+    live.name = parsed.data.name; live.address = parsed.data.address;
+    db.estateRegistrationAudit.push({ tenantId: gate.actor.tenantId!, actorId: gate.actor.userId, action: 'property.updated', entityId: live.id, siteId: live.id, at: new Date().toISOString() });
+    refresh(); return { ok: true, id: String(live.id), name: live.name };
+  }, 'estate');
+}
+
+/** Edit contact/household records; authentication and historical bills are unchanged. */
+export async function updateEstateTenant(input: unknown): Promise<RegistrationResult> {
+  return withDurableMutation(async () => {
+    const gate = await registrationActor(); if (!gate.ok) return gate;
+    assertCan(gate.actor, 'users_roles', 'update');
+    const parsed = tenantSchema.omit({ moveInDate: true, idempotencyKey: true }).extend({ id: text(1, 160) }).strict().safeParse(input);
+    if (!parsed.success) return { ok: false, error: 'Enter valid resident contact details, household size and a permitted unit.' };
+    const resident = scopedMutableGet(gate.actor, 'users_roles', db.residents, parsed.data.id, 'update');
+    if (!resident) return { ok: false, error: 'This resident is unavailable in your estate scope.' };
+    if (!['active', 'invited'].includes(resident.status)) return { ok: false, error: 'A moved-out resident needs a new tenancy before being assigned an active unit.' };
+    const destination = scopedMutableGet(gate.actor, 'users_roles', db.units.map((row) => ({ ...row, unitId: row.id })), parsed.data.unitId, 'update');
+    const unit = destination && db.units.find((row) => row.id === destination.id && row.tenantId === gate.actor.tenantId);
+    const property = unit && db.sites.find((row) => row.id === unit.siteId && row.tenantId === gate.actor.tenantId && row.kind === 'estate');
+    if (!unit || !property) return { ok: false, error: 'Choose an authorised estate unit.' };
+    const moving = unit.id !== resident.unitId;
+    if (moving && (unit.occupancy !== 'vacant' || db.residents.some((row) => row.tenantId === gate.actor.tenantId && row.unitId === unit.id && row.id !== resident.id && ['active', 'invited'].includes(row.status)))) return { ok: false, error: 'The selected unit is already occupied, reserved or unavailable.' };
+    const oldUnitId = resident.unitId;
+    resident.name = parsed.data.name; resident.email = parsed.data.email; resident.phone = parsed.data.phone; resident.household = parsed.data.household;
+    resident.unitId = unit.id; resident.siteId = unit.siteId;
+    if (moving) {
+      const previous = db.units.find((row) => row.tenantId === gate.actor.tenantId && row.id === oldUnitId);
+      if (previous && previous.occupancy !== 'unavailable' && !db.residents.some((row) => row.tenantId === gate.actor.tenantId && row.unitId === oldUnitId && ['active', 'invited'].includes(row.status))) previous.occupancy = 'vacant';
+      unit.occupancy = resident.status === 'invited' ? 'reserved' : 'occupied';
+    }
+    db.estateRegistrationAudit.push({ tenantId: gate.actor.tenantId!, actorId: gate.actor.userId, action: 'resident.updated', entityId: resident.id, siteId: unit.siteId, unitId: unit.id, at: new Date().toISOString() });
+    refresh(); return { ok: true, id: String(resident.id), name: resident.name };
   }, 'estate');
 }

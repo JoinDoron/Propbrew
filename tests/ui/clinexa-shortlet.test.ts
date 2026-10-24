@@ -75,7 +75,8 @@ describe('Complete Shortlet Clinexa design coverage', () => {
     });
     expect([...actual].sort()).toEqual([...routes].sort());
     const components = readdirSync(resolve(process.cwd(), 'src/components/shortlet')).filter((name) => name.endsWith('.tsx'));
-    expect(components.filter((name) => !['reference-ui.tsx', 'guest-directory.tsx'].includes(name))).toHaveLength(cases.length);
+    expect(components.filter((name) => !['reference-ui.tsx', 'guest-directory.tsx', 'accommodation-editor.tsx'].includes(name))).toHaveLength(cases.length);
+    expect(component('accommodation-editor')).toContain('ShortletDialog');
     expect(components).toContain('reference-ui.tsx');
     expect(components).toContain('guest-directory.tsx');
     const serverPanels = ['guests', 'properties', 'reviews'].reduce((count, route) => count + (read(`src/app/(ops)/shortlet/${route}/page.tsx`).match(/id: ["']/g)?.length ?? 0), 0);

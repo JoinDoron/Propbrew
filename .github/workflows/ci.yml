@@ -42,7 +42,7 @@ jobs:
       - name: Real PostgreSQL migrations, rollback and persistence (release gate)
         env:
           PROPBREW_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/propbrew_integration
-        run: npx vitest run --no-file-parallelism tests/data/native-postgres.integration.test.ts tests/data/workspace-postgres.integration.test.ts tests/data/company-accounts.integration.test.ts tests/data/company-ai-budget.integration.test.ts
+        run: npx vitest run --no-file-parallelism tests/data/native-postgres.integration.test.ts tests/data/workspace-postgres.integration.test.ts tests/data/company-accounts.integration.test.ts tests/data/company-ai-budget.integration.test.ts tests/data/demo-sandboxes.integration.test.ts
 
   verify:
     runs-on: ubuntu-latest

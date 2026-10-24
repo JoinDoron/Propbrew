@@ -59,7 +59,7 @@ describe('authenticated durable record boundaries', () => {
       return getActor();
     });
     expect(actor.tenantId).toBe(domain);
-    expect(backend.repository).toHaveBeenCalledWith(canonical, domain, 'read', expect.any(Function), expect.any(Function));
+    expect(backend.repository).toHaveBeenCalledWith(canonical, domain, 'read', expect.any(Function), expect.any(Function), undefined);
     expect(() => db.sites).toThrow('authenticated record context');
     expect(() => getHistory('work-order', 'any')).toThrow('record context');
     expect(() => getRecordAuxiliary('outside', () => ({}))).toThrow('record context');

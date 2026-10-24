@@ -14,6 +14,7 @@ import { PageTabs } from '@/components/ui/page-tabs';
 import { ReadOnlyChip } from '@/components/domain';
 import { humanizeStatus, statusTone, toneVar, type Tone } from '@/lib/status-tones';
 import { EXPECTED_LIFE_YEARS } from '@/domain/ppm';
+import { AssetEditor, type AssetLocationOption } from '@/components/facility/asset-editor';
 
 export type AssetRow = { id: string; name: string; category: string; serial: string; locationLabel: string; status: string; purchaseDate: string; warrantyExpiry: string };
 export type PpmRow = { id: string; assetId: string; frequency: string; nextDue: string; overdue: boolean; checklistItems: number; assignee: string };
@@ -43,7 +44,7 @@ function lifecycle(purchaseDate: string, category: string) {
 /** FM-01 — interactive asset register. Filter by status/category, search, and
  *  drill into an asset to see its PPM plans and full work-order service history —
  *  the "service history viewable per asset" the requirement calls for. */
-export function AssetsExplorer({ assets, ppm, jobs, health, canMutate }: { assets: AssetRow[]; ppm: PpmRow[]; jobs: AssetJobRow[]; health: Record<string, AssetHealth>; canMutate: boolean }) {
+export function AssetsExplorer({ assets, ppm, jobs, health, canMutate, registrationReady = false, locations = [] }: { assets: AssetRow[]; ppm: PpmRow[]; jobs: AssetJobRow[]; health: Record<string, AssetHealth>; canMutate: boolean; registrationReady?: boolean; locations?: AssetLocationOption[] }) {
   const detailsId = useId();
   const [status, setStatus] = useState<string>('all');
   const [category, setCategory] = useState<string>('all');
@@ -110,7 +111,7 @@ export function AssetsExplorer({ assets, ppm, jobs, health, canMutate }: { asset
             <Search size={16} className="text-text-3" aria-hidden="true" />
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search assets…" className="w-40 bg-transparent outline-none" aria-label="Search assets" />
           </div>
-          {canMutate ? <Button variant="primary" disabled title="Asset registration is not connected" icon={<Plus size={15} />}>Add asset · unavailable</Button> : <ReadOnlyChip />}
+          {canMutate ? registrationReady ? <AssetEditor locations={locations} /> : <Button variant="primary" disabled title="Asset registration is not connected" icon={<Plus size={15} />}>Add asset · unavailable</Button> : <ReadOnlyChip />}
         </div>
       </div>
 
@@ -138,6 +139,7 @@ export function AssetsExplorer({ assets, ppm, jobs, health, canMutate }: { asset
         {selected && (
           <section id={detailsId} aria-label={`${selected.name} asset details`}><Card className={polish.detailPanel}>
   <CardHeader title={selected.name} subtitle={`${selected.category} · ${selected.locationLabel}`} action={<StatusPill status={humanizeStatus(selected.status)} tone={STATUS_TONE[selected.status] ?? 'neutral'} />} />
+  {canMutate && registrationReady && <div className="my-4"><AssetEditor asset={selected} /></div>}
   <dl className={polish.facts}><div><dt>Serial number</dt><dd>{selected.serial}</dd></div><div><dt>Purchase date</dt><dd>{selected.purchaseDate}</dd></div><div><dt>Warranty expiry</dt><dd className={warrantyExpired ? 'text-negative' : undefined}>{selected.warrantyExpiry}</dd></div></dl>
   {warrantyExpired && <p className="text-sm text-negative">Warranty expiry is recorded before the reference date. Check cover and repair terms before approving expenditure.</p>}
   {selHealth && <div className={polish.notice}><div className="relative flex-none w-[56px] h-[56px]"><svg width={56} height={56} viewBox="0 0 36 36" role="img" aria-label={`Rules-based asset health index ${100 - selHealth.score} out of 100`} className="-rotate-90"><circle cx="18" cy="18" r="15" fill="none" stroke="var(--border)" strokeWidth="3" /><circle cx="18" cy="18" r="15" fill="none" stroke={toneVar(BAND_TONE[selHealth.band] ?? 'neutral')} strokeWidth="3" strokeLinecap="round" strokeDasharray={`${((100 - selHealth.score) / 100) * 94.2} 94.2`} /></svg><span aria-hidden="true" className="absolute inset-0 grid place-items-center text-lg font-medium tabular-nums">{100 - selHealth.score}</span></div><div><h4 className="text-sm font-medium">Rules-based asset health · {selHealth.band}</h4><p className={polish.body}>Top driver: {selHealth.topDriver}.</p><p className={polish.metadata}>{selHealth.confidence < .6 ? 'Incomplete signals · shadow mode. ' : ''}Advisory index, not a calibrated failure probability or an automatic repair approval.</p><p className={`${polish.metadata} mt-3`}>Illustrative downtime exposure: {facilityMoney(exposureNaira(selected.category, selHealth.band) * 100)}. Trade and risk-band assumptions, not a booked cost.</p></div></div>}
@@ -146,7 +148,7 @@ export function AssetsExplorer({ assets, ppm, jobs, health, canMutate }: { asset
   <Section title={`Service history (${selJobs.length})`}>{selJobs.length ? <ul className="m-0 p-0 list-none">{selJobs.map((job) => <li key={job.id}><Link href={`/work-orders/${job.ref}`} className={polish.row}><div><span className="text-sm font-medium text-primary">{job.ref}</span><p className={polish.body}>{job.title}</p><p className={polish.metadata}>{job.costLabel}</p></div><StatusPill status={humanizeStatus(job.status)} tone={statusTone('work-order', job.status)} /></Link></li>)}</ul> : <p className={polish.body}>No work orders recorded.</p>}</Section>
   <Section title="Document references"><ul className="m-0 p-0 list-none">{['Warranty certificate', 'Service manual', 'Purchase invoice'].map((document) => <li key={document} className={polish.row}><FileText size={18} className="text-text-3" /><div><p className="text-sm">{document}</p><p className={polish.metadata}>Reference only · no verified file attached in this view</p></div></li>)}</ul></Section>
   <div className={layout.filters}><Link href="/work-orders" className={polish.link}>View work order register <ArrowUpRight size={16} /></Link><Button onClick={() => setShowQr(true)} icon={<QrCode size={18} />}>Asset label</Button></div>
-  <p className={polish.metadata}>Reference snapshot: {NOW} · WAT. Asset registration remains unavailable until its persistence workflow is connected.</p>
+  <p className={polish.metadata}>Reference snapshot: {NOW} · WAT. {registrationReady ? 'Changes are saved to this workspace. Assets are archived rather than deleted.' : 'Asset registration remains unavailable until its persistence workflow is connected.'}</p>
 </Card></section>
         )}
       </div>

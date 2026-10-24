@@ -8,6 +8,9 @@ import { WorkOrdersBoard } from '@/components/work-orders/work-orders-board';
 import { WorkOrdersIntel } from '@/components/work-orders/work-orders-intel';
 import { operatingClock } from '@/server/operating-clock';
 import { withDurableRead } from '@/server/data/durable-records';
+import { FacilityWorkOrderCreate } from '@/components/work-orders/facility-work-order-create';
+import { currentRecordContext } from '@/server/data/record-context';
+import { nativeAuthEnabled } from '@/server/auth/mode';
 
 const CLOSED = ['closed', 'cancelled', 'rejected', 'verified'];
 
@@ -20,6 +23,9 @@ export default async function WorkOrdersPage() {
   const clock = operatingClock();
   const boardNowMs = clock.native ? clock.nowMs : Date.parse('2026-07-26T09:00:00Z');
   const canMutate = ['F', 'M'].includes(effectiveLevel(actor, 'work_orders'));
+  const registrationReady = nativeAuthEnabled() && Boolean(actor.companyAccess) && currentRecordContext()?.domainTenantId === actor.tenantId;
+  const locations = registrationReady && canMutate ? repos.sites.list(actor, { limit: 200 }).items.map((site) => ({ id: String(site.id), label: site.name })) : [];
+  const assets = registrationReady && canMutate ? repos.assets.list(actor, { limit: 500 }).items.filter((asset) => asset.status !== 'archived').map((asset) => ({ id: String(asset.id), siteId: String(asset.siteId), label: asset.name })) : [];
   const rows = repos.workOrders.list(actor).items;
   const wos = [...rows];
   const open = rows.filter((w) => !CLOSED.includes(w.status)).length;
@@ -44,7 +50,7 @@ export default async function WorkOrdersPage() {
         scope={<ScopeBanner label={actor.allEstates ? 'all estates' : `${actor.estateIds.length} estate(s)`} />}
       />
       <PageTabs label="Work order sections" defaultTab="register" items={[
-        { id: 'register', label: 'Work order register', count: rows.length, content: <WorkOrdersBoard rows={boardRows} canMutate={canMutate} /> },
+        { id: 'register', label: 'Work order register', count: rows.length, content: <WorkOrdersBoard rows={boardRows} canMutate={canMutate} createAction={registrationReady && canMutate ? <FacilityWorkOrderCreate locations={locations} assets={assets} /> : undefined} /> },
         { id: 'intelligence', label: 'SLA & AI intelligence', content: <WorkOrdersIntel wos={wos} nowMs={clock.nowMs} canMutate={canMutate} /> },
       ]} />
     </div>

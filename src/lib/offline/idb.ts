@@ -79,6 +79,20 @@ export async function idbPutOps<T extends { id: string }>(ops: readonly T[], own
   });
 }
 
+/** Clear only one verified owner's queue and media in a single device transaction. */
+export async function idbClearOwner(owner: string): Promise<void> {
+  if (typeof owner !== 'string' || !owner.trim()) throw new Error('An owned device queue is required.');
+  const db = await open(owner);
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction([OPS, BLOBS], 'readwrite');
+    transaction.objectStore(OPS).clear();
+    transaction.objectStore(BLOBS).clear();
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error ?? new Error('Device queue reset failed.'));
+    transaction.onabort = () => reject(transaction.error ?? new Error('Device queue reset was interrupted.'));
+  });
+}
+
 /* --- blobs ---------------------------------------------------------------- */
 
 export async function idbPutBlob(rec: StoredBlob, owner: string): Promise<void> {

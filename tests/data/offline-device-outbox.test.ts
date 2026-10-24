@@ -5,7 +5,7 @@ const fake = vi.hoisted(() => ({
   effects: [] as (() => unknown)[],
   ops: new Map<string, OutboxOp[]>(),
   blobs: new Map<string, { opId: string; id: string; blob: Blob; name: string }[]>(),
-  putBlob: vi.fn(), deleteBlobs: vi.fn(), sync: vi.fn(), abandon: vi.fn(),
+  putBlob: vi.fn(), deleteBlobs: vi.fn(), sync: vi.fn(), abandon: vi.fn(), getOps: vi.fn(), clearOwner: vi.fn(),
 }));
 vi.mock('react', () => ({
   useCallback: (fn: unknown) => fn,
@@ -17,12 +17,13 @@ vi.mock('react', () => ({
 vi.mock('@/server/actions/sync', () => ({ syncOperation: fake.sync, abandonOperation: fake.abandon }));
 vi.mock('@/lib/offline/idb', () => ({
   idbAvailable: () => true,
-  idbGetOps: async (owner: string) => fake.ops.get(owner) ?? [],
+  idbGetOps: fake.getOps,
   idbPutOps: async (ops: OutboxOp[], owner: string) => { fake.ops.set(owner, structuredClone(ops)); },
   idbPutBlob: fake.putBlob,
   idbDeleteBlobsFor: fake.deleteBlobs,
   idbBlobsFor: async (opId: string, owner: string) => (fake.blobs.get(owner) ?? []).filter((file) => file.opId === opId),
   idbLegacyHasPending: async () => false,
+  idbClearOwner: fake.clearOwner,
 }));
 const ownerA = JSON.stringify(['t-lekki', 'manager-A']), ownerB = JSON.stringify(['t-ikoyi', 'manager-B']);
 let local: Map<string, string>;
@@ -34,6 +35,8 @@ beforeEach(() => {
   vi.stubGlobal('window', { localStorage: { getItem: (key: string) => local.get(key) ?? null, setItem: (key: string, value: string) => local.set(key, value), removeItem: (key: string) => local.delete(key) }, addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: vi.fn() });
   vi.stubGlobal('navigator', { onLine: true });
   fake.putBlob.mockImplementation(async (file, owner) => { fake.blobs.set(owner, [...(fake.blobs.get(owner) ?? []), file]); });
+  fake.getOps.mockImplementation(async (owner) => fake.ops.get(owner) ?? []);
+  fake.clearOwner.mockImplementation(async (owner) => { fake.ops.set(owner, []); fake.blobs.set(owner, []); });
   fake.deleteBlobs.mockImplementation(async (opId, owner) => { fake.blobs.set(owner, (fake.blobs.get(owner) ?? []).filter((f) => f.opId !== opId)); });
   fake.sync.mockImplementation(async (op) => ({ ok: true, id: op.id, duplicate: false })); fake.abandon.mockResolvedValue({ ok: true });
 });
@@ -86,9 +89,59 @@ describe('account-bound durable device capture', () => {
     const outbox = await import('@/lib/offline/outbox'); await outbox.hydrateFromIdb(ownerA);
     expect(outbox.useOutbox(ownerA)[0].status).toBe('queued'); expect(outbox.useOutbox(ownerB)).toEqual([]);
   });
+  it('resets only the requested owner including queued media while preserving other and unowned work', async () => {
+    local.set('vesta.outbox.v1', JSON.stringify([pending({ label: 'Unverified legacy record' })]));
+    const outbox = await import('@/lib/offline/outbox');
+    await outbox.capture(ownerA, 'daily_report', 'A photo', { photos: 1 }, [new File(['a'], 'a.jpg')]);
+    await outbox.capture(ownerB, 'daily_report', 'B photo', { photos: 1 }, [new File(['b'], 'b.jpg')]);
+    fake.blobs.get(ownerA)!.push({ opId: 'orphan-a', id: 'orphan-a-1', name: 'orphan.jpg', blob: new Blob(['orphan']) });
+    await outbox.clearOwnerOutbox(ownerA);
+    expect(outbox.useOutbox(ownerA)).toEqual([]); expect(fake.ops.get(ownerA)).toEqual([]); expect(fake.blobs.get(ownerA)).toEqual([]);
+    expect(outbox.useOutbox(ownerB)).toHaveLength(1); expect(fake.ops.get(ownerB)).toHaveLength(1); expect(fake.blobs.get(ownerB)).toHaveLength(1);
+    expect(fake.clearOwner).toHaveBeenCalledExactlyOnceWith(ownerA);
+    expect(local.get('vesta.outbox.v1')).toContain('Unverified legacy record');
+    await expect(outbox.clearOwnerOutbox('')).rejects.toThrow('owned device queue');
+    expect(fake.clearOwner).toHaveBeenCalledTimes(1);
+  });
+  it('does not rehydrate old work that finishes loading after its owner was reset', async () => {
+    let release!: (value: OutboxOp[]) => void;
+    fake.getOps.mockImplementationOnce(() => new Promise<OutboxOp[]>((resolve) => { release = resolve; }));
+    const outbox = await import('@/lib/offline/outbox');
+    const hydrating = outbox.hydrateFromIdb(ownerA);
+    await outbox.clearOwnerOutbox(ownerA);
+    release([pending()]); await hydrating;
+    expect(outbox.useOutbox(ownerA)).toEqual([]); expect(fake.ops.get(ownerA)).toEqual([]);
+  });
+  it('rejects a photo capture that completes after its sandbox reset instead of republishing it', async () => {
+    let release!: () => void;
+    fake.putBlob.mockImplementationOnce(() => new Promise<void>((resolve) => { release = resolve; }));
+    const outbox = await import('@/lib/offline/outbox');
+    const capturing = outbox.capture(ownerA, 'daily_report', 'Old photo', { photos: 1 }, [new File(['a'], 'a.jpg')]);
+    await outbox.clearOwnerOutbox(ownerA); release();
+    await expect(capturing).rejects.toThrow('sandbox changed');
+    expect(outbox.useOutbox(ownerA)).toEqual([]); expect(fake.ops.get(ownerA)).toEqual([]);
+    expect(fake.deleteBlobs).toHaveBeenCalledWith(expect.any(String), ownerA);
+  });
+  it('reports device cleanup failure without deleting another owner queue', async () => {
+    const outbox = await import('@/lib/offline/outbox');
+    await outbox.capture(ownerA, 'site_issue', 'A', payload); await outbox.capture(ownerB, 'site_issue', 'B', payload);
+    fake.clearOwner.mockRejectedValueOnce(new Error('Device transaction refused'));
+    await expect(outbox.clearOwnerOutbox(ownerA)).rejects.toThrow('could not fully clear');
+    expect(outbox.useOutbox(ownerA)).toEqual([]); expect(outbox.useOutbox(ownerB)).toHaveLength(1);
+  });
 });
 
 describe('offline transport keeps evidence until server acknowledgement', () => {
+  it('does not republish an old transport acknowledgement after that sandbox owner was reset', async () => {
+    let release!: (value: { ok: true; id: string; duplicate: boolean }) => void;
+    fake.ops.set(ownerA, [pending()]); fake.ops.set(ownerB, [pending({ label: 'B pending' })]);
+    fake.sync.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+    const outbox = await import('@/lib/offline/outbox'); outbox.useOutboxSync(ownerA); fake.effects[0](); fake.effects[1](); await tick(); await tick();
+    expect(fake.sync).toHaveBeenCalledOnce();
+    await outbox.clearOwnerOutbox(ownerA); release({ ok: true, id: 'pending-id', duplicate: false }); await tick(); await tick();
+    expect(outbox.useOutbox(ownerA)).toEqual([]); expect(fake.ops.get(ownerA)).toEqual([]);
+    expect(fake.ops.get(ownerB)?.[0].label).toBe('B pending');
+  });
   it('syncs a no-photo capture with its owner and deletes no foreign files', async () => {
     fake.ops.set(ownerA, [pending()]);
     const outbox = await import('@/lib/offline/outbox'); outbox.useOutboxSync(ownerA); fake.effects[0](); fake.effects[1](); await tick(); await tick();

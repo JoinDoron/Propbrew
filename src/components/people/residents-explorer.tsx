@@ -9,11 +9,12 @@ import { PageTabs } from '@/components/ui/page-tabs';
 import { humanizeStatus, statusTone, toneVar, type Tone } from '@/lib/status-tones';
 import { tenure, paymentReliability, engagementScore, engagementTone, riskFlags, type EngagementInput } from '@/domain/residents';
 import styles from './residents-explorer.module.css';
+import { EstateResidentEditor, type EstateUnitOption } from '@/components/workspaces/estate-record-editors';
 
 const NOW_MS = Date.parse('2026-07-26');
 const STATUSES = ['all', 'active', 'invited', 'moved_out'];
 
-export type ResidentRow = { id: string; userId: string; name: string; email?: string; unitId: string; unitLabel: string; unitType: string; status: string; household: number; balanceLabel: string; balanceOwed: boolean; moveInDate: string };
+export type ResidentRow = { id: string; userId: string; name: string; email?: string; phone?: string; unitId: string; unitLabel: string; unitType: string; status: string; household: number; balanceLabel: string; balanceOwed: boolean; moveInDate: string };
 export type BillRow = { id: string; ref: string; ownerUserId: string; unitId: string; status: string; amountLabel: string; dueDate: string };
 export type RequestRow = { id: string; ref: string; requesterUserId: string; unitId?: string; title: string; status: string };
 export type BookingRow = { id: string; ownerUserId: string; amenity: string; status: string; slot: string };
@@ -30,10 +31,11 @@ function dateLabel(value: string): string {
 /** Related records are supplied by the permission-gated server route.
  * Hidden capabilities never render a panel or financial advisory signal. */
 export function ResidentsExplorer({
-  residents, bills, requests, bookings, seesBills, seesRequests, seesBookings, canMutate,
+  residents, bills, requests, bookings, seesBills, seesRequests, seesBookings, canMutate, canEditRecords = false, units = [],
 }: {
   residents: ResidentRow[]; bills: BillRow[]; requests: RequestRow[]; bookings: BookingRow[];
   seesBills: boolean; seesRequests: boolean; seesBookings: boolean; canMutate: boolean;
+  canEditRecords?: boolean; units?: EstateUnitOption[];
 }) {
   const instance = useId();
   const [section, setSection] = useState('directory');
@@ -115,7 +117,7 @@ export function ResidentsExplorer({
                         <td><span className={styles.householdCount}>{resident.household} {resident.household === 1 ? 'person' : 'people'}</span></td>
                         <td><StatusPill status={humanizeStatus(resident.status)} tone={RESIDENT_TONE[resident.status] ?? 'neutral'} /></td>
                         {seesBills ? <td className={styles.amount}><span className={resident.balanceOwed ? styles.owed : styles.balance}>{resident.balanceLabel}</span></td> : null}
-                        <td className={styles.rowAction}><Button type="button" variant="ghost" aria-label={'View profile for ' + resident.name} onClick={() => { setSelectedId(resident.id); setSection('profile'); }}>View profile <ArrowUpRight size={14} aria-hidden="true" /></Button></td>
+                        <td className={styles.rowAction}><div className="flex items-center gap-2">{canMutate && canEditRecords && ['active', 'invited'].includes(resident.status) && <EstateResidentEditor resident={resident} units={units} />}<Button type="button" variant="ghost" aria-label={'View profile for ' + resident.name} onClick={() => { setSelectedId(resident.id); setSection('profile'); }}>View profile <ArrowUpRight size={14} aria-hidden="true" /></Button></div></td>
                       </tr>
                     ))}
                     {visible.length === 0 ? <tr><td colSpan={seesBills ? 6 : 5}><Empty title="No residents match." detail={residents.length ? 'Try another name, email, unit or status.' : 'Residents will appear here when they are added to this estate.'} /></td></tr> : null}

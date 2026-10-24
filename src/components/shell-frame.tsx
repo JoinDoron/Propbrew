@@ -13,6 +13,7 @@ import { withDurableRead } from '@/server/data/durable-records';
 import { canManageCompanyMembers } from '@/lib/auth/company-policy';
 import { isDemoAccount } from '@/server/auth/demo-config';
 import { DemoNotice } from '@/components/auth/demo-notice';
+import { currentRecordContext } from '@/server/data/record-context';
 
 /**
  * Server frame for an authenticated route group. Redirects to /login when there
@@ -43,7 +44,7 @@ export async function ShellFrame({ expected, workspace, children }: { expected: 
     outboxOwner: actor.tenantId ? JSON.stringify([actor.tenantId, actor.userId]) : undefined,
     companyAccount: Boolean(actor.companyAccess),
     canManageTeam: Boolean(actor.companyAccess) && canManageCompanyMembers(actor),
-    demoAccount: isDemoAccount(actor.userId),
+    demoAccount: isDemoAccount(actor.userId) && !currentRecordContext()?.companyPrincipal?.sandbox,
   };
 
   const canReadWorkOrders = can(actor, 'work_orders', 'read').allowed;
@@ -71,7 +72,7 @@ export async function ShellFrame({ expected, workspace, children }: { expected: 
       unreadMessages={unreadMessages}
       devSwitcher={devIdentityEnabled() ? <RoleSwitcher currentKey={session.key} /> : undefined}
     >
-      {isDemoAccount(actor.userId) && <DemoNotice />}
+      {isDemoAccount(actor.userId) && <DemoNotice editable={Boolean(currentRecordContext()?.companyPrincipal?.sandbox)} outboxOwner={currentRecordContext()?.companyPrincipal?.sandbox ? identity.outboxOwner : undefined} />}
       {children}
     </AppShell>
   );

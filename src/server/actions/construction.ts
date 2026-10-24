@@ -17,6 +17,7 @@ import { nextRecordSequence } from '@/server/data/record-context';
 
 import { revalidatePath } from 'next/cache';
 import { randomUUID } from 'node:crypto';
+import { z } from 'zod';
 import { getActor } from '@/server/session';
 import { ForbiddenError, assertCan, type Actor } from '@/lib/authz';
 import { db } from '@/server/data/store';
@@ -317,6 +318,21 @@ export async function createProject(input: ProjectInput): Promise<Res> {
   db.constructionProjects.unshift({ tenantId: g.actor.tenantId, id, projectId: id, code: `NEW-${projSeq}`, name: input.name.trim(), location: input.location.trim() || 'Lagos', clientName: input.clientName.trim() || 'Not recorded', pmName: nameOf(g.actor), status: 'planning', contractValue: money(Math.round((input.contractNaira || 0) * 100)), approvedBudget: money(Math.round((input.budgetNaira || 0) * 100)), startISO: operatingDateISO(), plannedFinishISO: input.plannedFinishISO || daysISO(operatingDateISO(), 540), plannedPercent: 0, percentComplete: 0 } as (typeof db.constructionProjects)[number]);
   revalidate(); return { ok: true, ref: input.name.trim() };
 
+  }, 'construction');
+}
+
+export async function updateProjectDetails(id: string, input: { name: string; location: string; clientName: string }): Promise<Res> {
+  return withDurableMutation(async () => {
+    const g = await gate('update'); if (!g.ok) return g;
+    const parsed = z.object({ name: z.string().trim().min(2).max(120), location: z.string().trim().min(2).max(200), clientName: z.string().trim().min(2).max(120) }).strict().safeParse(input);
+    if (!parsed.success) return { ok: false, error: 'Enter a project name, location and client within the stated limits.' };
+    const project = scopedMutableGet(g.actor, 'reports_analytics', db.constructionProjects, id, 'update');
+    if (!project) return { ok: false, error: 'Project not found.' };
+    if (project.status === 'completed' || project.status === 'closing') return { ok: false, error: 'Closed projects retain their recorded details.' };
+    const before = JSON.stringify({ name: project.name, location: project.location, clientName: project.clientName });
+    Object.assign(project, parsed.data);
+    audit(g.actor, { action: 'override', entity: 'project_details', entityRef: project.code, projectId: project.id, summary: 'Updated project identity details', before, after: JSON.stringify(parsed.data) });
+    revalidate(); return { ok: true, ref: project.name };
   }, 'construction');
 }
 

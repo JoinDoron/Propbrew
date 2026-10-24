@@ -79,6 +79,7 @@ export default async function PeoplePage() {
       userId: r.userId,
       name: r.name,
       email: r.email,
+      phone: r.phone,
       unitId: r.unitId,
       unitLabel: unit?.label ?? r.unitId,
       unitType: unit?.type ?? '',
@@ -106,6 +107,8 @@ export default async function PeoplePage() {
         seesRequests={seesRequests}
         seesBookings={seesBookings}
         canMutate={canMutate}
+        canEditRecords={native && canMutate}
+        units={units.map((unit) => ({ id: String(unit.id), occupancy: unit.occupancy, label: `${sites.find((site) => site.id === unit.siteId)?.name ?? 'Property'} · ${unit.label}` }))}
       />
     </div>
   );
