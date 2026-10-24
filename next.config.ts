@@ -16,7 +16,8 @@ import { websiteOnlyEnabled } from './src/lib/website-release';
  */
 const clerkEnabled = Boolean(process.env.CLERK_SECRET_KEY && process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY)
   && !websiteOnlyEnabled(process.env.PROPBREW_WEBSITE_ONLY, process.env.NODE_ENV);
-const csp = contentSecurityPolicy(clerkEnabled ? process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY : undefined);
+// React/webpack development debugging requires eval; production keeps it disabled.
+const csp = contentSecurityPolicy(clerkEnabled ? process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY : undefined, process.env.NODE_ENV);
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,

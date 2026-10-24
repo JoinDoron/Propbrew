@@ -25,6 +25,15 @@ describe('owner signup security headers', () => {
     expect(policy).not.toMatch(/(?:^|\s)http:(?:\s|;|$)/);
   });
 
+  it('allows React debugging eval only in explicit development mode', () => {
+    expect(contentSecurityPolicy(undefined, 'development')).toContain("script-src 'self' 'unsafe-inline' 'unsafe-eval';");
+    expect(contentSecurityPolicy(key('sample.clerk.accounts.dev'), 'development')).toContain("'unsafe-eval'");
+    for (const environment of [undefined, 'production', 'test', '']) {
+      expect(contentSecurityPolicy(undefined, environment)).not.toContain('unsafe-eval');
+      expect(contentSecurityPolicy(key('sample.clerk.accounts.dev'), environment)).not.toContain('unsafe-eval');
+    }
+  });
+
   it('supports a configured custom Clerk domain', () => {
     expect(clerkFrontendApiOrigin(key('clerk.propbrew.example'))).toBe('https://clerk.propbrew.example');
   });

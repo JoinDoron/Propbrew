@@ -17,11 +17,11 @@ export function clerkFrontendApiOrigin(publishableKey: string): string {
  * https://clerk.com/docs/guides/secure/best-practices/csp-headers
  * No global https:/http: source or production unsafe-eval is introduced.
  */
-export function contentSecurityPolicy(clerkPublishableKey?: string): string {
+export function contentSecurityPolicy(clerkPublishableKey?: string, nodeEnv?: string): string {
   const origin = clerkPublishableKey ? clerkFrontendApiOrigin(clerkPublishableKey) : null;
   return [
     "default-src 'self'",
-    `script-src 'self' 'unsafe-inline'${origin ? ` ${origin} https://challenges.cloudflare.com https://*.protect.clerk.com` : ''}`,
+    `script-src 'self' 'unsafe-inline'${nodeEnv === 'development' ? " 'unsafe-eval'" : ''}${origin ? ` ${origin} https://challenges.cloudflare.com https://*.protect.clerk.com` : ''}`,
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com data:",
     `img-src 'self' data: blob:${origin ? ' https://img.clerk.com' : ''}`,
