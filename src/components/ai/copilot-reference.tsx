@@ -103,12 +103,24 @@ export function CopilotAnswer({ text }: { text: string }) {
     }
     const plain: string[] = [];
     const kind = answerLineKind(lines[position]);
-    while (position < lines.length && lines[position].trim()) {
+    while (position < lines.length) {
+      if (!lines[position].trim()) {
+        // Models commonly separate numbered actions with blank lines. Keep one
+        // native list until a different block begins, rather than restarting at 1.
+        if (kind !== 'ordered') break;
+        let next = position + 1;
+        while (next < lines.length && !lines[next].trim()) next++;
+        if (next === lines.length || answerLineKind(lines[next]) !== kind || answerTableHeader(lines, next)) break;
+        position = next;
+      }
       if (plain.length && (answerLineKind(lines[position]) !== kind || answerTableHeader(lines, position) || /^\s*```|^#{1,4} /.test(lines[position]))) break;
       plain.push(lines[position++]);
     }
     if (plain.every((line) => /^[-*] /.test(line))) blocks.push(<ul key={key}>{plain.map((line, row) => <li key={row}>{inline(line.slice(2))}</li>)}</ul>);
-    else if (plain.every((line) => /^\d+[.)] /.test(line))) blocks.push(<ol key={key}>{plain.map((line, row) => <li key={row}>{inline(line.replace(/^\d+[.)] /, ''))}</li>)}</ol>);
+    else if (plain.every((line) => /^\d+[.)] /.test(line))) {
+      const start = Number(/^\d+/.exec(plain[0])![0]);
+      blocks.push(<ol key={key} start={Number.isSafeInteger(start) && start !== 1 ? start : undefined}>{plain.map((line, row) => <li key={row}>{inline(line.replace(/^\d+[.)] /, ''))}</li>)}</ol>);
+    }
     else blocks.push(<p key={key}>{inline(plain.join('\n'))}</p>);
   }
   return <div className={styles.formattedAnswer}>{blocks}</div>;

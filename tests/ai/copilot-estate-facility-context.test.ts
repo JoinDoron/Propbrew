@@ -136,6 +136,49 @@ describe('Estate conversational context', () => {
 });
 
 describe('Facility conversational context', () => {
+  it('preserves later observation timestamps and explicitly separates them from snapshot evidence', async () => {
+    const row = (id: string, values: Record<string, unknown>) => ({ id, tenantId: 'tenant-a', siteId: 'estate-a', ...values });
+    fixture.rows.buildingSystems = [row('system-a', { name: 'Pump', lastCheckISO: '2026-07-28T08:40:00Z' }), row('system-b', { name: 'Lift', lastCheckISO: '2026-07-29T08:40:00Z' })];
+    fixture.rows.facilityAlarms = [row('alarm-a', { system: 'Pump', atISO: '2026-07-28T08:12:00Z' })];
+    fixture.rows.facilityGenerators = [row('generator-a', { name: 'Generator', lastRefuelISO: '2026-07-28', runtimeHoursMonth: 10, litresPerHour: 3 })];
+    fixture.rows.facilityMeters = [row('meter-a', { label: 'Water', atISO: '2026-07-28' })];
+    fixture.rows.facilityIncidents = [row('incident-a', { category: 'Recorded incident', atISO: '2026-07-28' })];
+    fixture.rows.assets = [row('asset-a', { name: 'Pump', purchaseDate: '2026-07-28', archivedAt: '2026-07-29', warrantyExpiry: '2026-10-31' })];
+    fixture.rows.ppmPlans = [row('plan-a', { assetName: 'Pump', lastServicedAt: '2026-07-28', nextDue: '2026-10-31', statutoryDeadline: '2026-10-31' })];
+    fixture.rows.workOrders = [row('work-a', { ref: 'WO-1', createdAt: '2026-07-27', updatedAt: '2026-07-28', respondDueAt: '2026-10-31', resolveDueAt: '2026-10-31' })];
+    fixture.rows.inspections = [row('inspection-a', { ref: 'INS-1', completedDate: '2026-07-28', scheduledDate: '2026-10-31', raisedWorkOrderRefs: [] })];
+    fixture.rows.facilityPermits = [row('permit-a', { ref: 'PTW-1', validFromISO: '2026-10-31', validToISO: '2026-11-01' })];
+    const context = await buildFacilityContext(facilityManager);
+    const warning = context.notices.find((notice) => notice.startsWith('Temporal limitation:'));
+    expect(context.snapshotISO).toBe('2026-07-26T00:00:00.000Z');
+    expect(context.facts.systems).toContainEqual(expect.objectContaining({ lastCheckISO: '2026-07-28T08:40:00Z' }));
+    expect(context.facts.alarms).toContainEqual(expect.objectContaining({ atISO: '2026-07-28T08:12:00Z' }));
+    expect(warning).toContain('Building system checks: 2 timestamp(s), 2026-07-28T08:40:00.000Z to 2026-07-29T08:40:00.000Z');
+    for (const label of ['Alarm observations', 'Recorded generator refuels', 'Meter readings', 'Recorded incidents', 'Asset purchase and archive events', 'Recorded maintenance services', 'Work-order creation and updates', 'Completed inspections']) expect(warning).toContain(label);
+    expect(warning).toContain('exclude these later observations from historical conclusions');
+    expect(warning).toContain('actual dates');
+    expect(warning).not.toContain('2026-10-31');
+    expect(warning).not.toContain('2026-11-01');
+  });
+
+  it('does not flag future planned dates or out-of-scope observations as later evidence', async () => {
+    const row = (id: string, values: Record<string, unknown>) => ({ id, tenantId: 'tenant-a', siteId: 'estate-a', ...values });
+    fixture.rows.buildingSystems = [row('system-a', { lastCheckISO: '2026-07-26T00:00:00Z' }), row('other-site', { siteId: 'estate-b', lastCheckISO: '2040-01-01' }), row('other-tenant', { tenantId: 'tenant-b', lastCheckISO: '2040-01-01' })];
+    fixture.rows.facilityGenerators = [row('generator-a', { lastRefuelISO: '2026-07-25', runtimeHoursMonth: 10, litresPerHour: 3 })];
+    fixture.rows.assets = [row('asset-a', { purchaseDate: '2026-01-01', warrantyExpiry: '2027-01-01' })];
+    fixture.rows.facilityContracts = [row('contract-a', { startISO: '2026-08-01', endISO: '2027-08-01', value: { minor: 100, currency: 'NGN' } })];
+    fixture.rows.facilityPermits = [row('permit-a', { validFromISO: '2026-08-01', validToISO: '2026-08-02' })];
+    fixture.rows.ppmPlans = [row('plan-a', { lastServicedAt: '2026-07-25', nextDue: '2026-08-01', statutoryDeadline: '2026-09-01' })];
+    fixture.rows.workOrders = [row('work-a', { createdAt: '2026-07-25', updatedAt: '2026-07-25', respondDueAt: '2026-08-01', resolveDueAt: '2026-08-02' })];
+    fixture.rows.inspections = [row('inspection-a', { scheduledDate: '2026-08-01', completedDate: null, raisedWorkOrderRefs: [] })];
+    fixture.rows.sustainabilityTargets = [row('target-a', { dueISO: '2027-01-01' })];
+    const context = await buildFacilityContext(facilityManager);
+    expect(context.notices.some((notice) => notice.startsWith('Temporal limitation:'))).toBe(false);
+    expect(context.facts.permits).toContainEqual(expect.objectContaining({ validFromISO: '2026-08-01', validToISO: '2026-08-02' }));
+    expect(context.facts.ppmPlans).toContainEqual(expect.objectContaining({ nextDue: '2026-08-01' }));
+    expect(JSON.stringify(context)).not.toContain('2040-01-01');
+  });
+
   it('provides raw permitted facts for arbitrary questions, not just a keyword answer or priority slice', async () => {
     fixture.rows.buildingSystems = [{ id: 'system-a', tenantId: 'tenant-a', siteId: 'estate-a', name: 'Recorded pump', category: 'water', status: 'standby', detail: 'Inspection awaiting review', lastCheckISO: '2026-07-25T09:00:00Z' }];
     fixture.rows.facilitySensors = [{ id: 'sensor-a', tenantId: 'tenant-a', siteId: 'estate-a', name: 'Water level', kind: 'water_tank', value: 45, unit: '%', low: 20, high: 90 }];

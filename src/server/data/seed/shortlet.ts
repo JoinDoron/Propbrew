@@ -103,7 +103,7 @@ export const shortletExpenses: SlExpense[] = [
 
 export const shortletInspections: SlInspection[] = [
   {
-    tenantId: A, id: 'si-1', bookingId: 'slb-ap-6-4211', apartmentId: 'ap-6', inspectorName: 'Housekeeping · Ada', at: '2026-07-24T11:30:00Z',
+    tenantId: A, id: 'si-1', bookingId: 'slb-ap-6-4212', apartmentId: 'ap-6', inspectorName: 'Housekeeping · Ada', at: '2026-07-24T11:30:00Z',
     items: [
       { label: 'Living room', condition: 'ok' },
       { label: 'Kitchen & appliances', condition: 'ok' },
@@ -148,10 +148,10 @@ export const shortletAgents: Agent[] = [
 ] as unknown as Agent[];
 
 export const shortletReviews: Review[] = [
-  { tenantId: A, id: 'rv-1', bookingId: 'slb-ap-1-4212', apartmentId: 'ap-1', guestName: 'Michael Ade', rating: 5, comment: 'Spotless and great location. WiFi was fast. Will rebook!', tags: ['Clean', 'Location', 'WiFi'], atISO: '2026-07-17' },
-  { tenantId: A, id: 'rv-2', bookingId: 'slb-ap-6-4211', apartmentId: 'ap-6', guestName: 'Emeka Obi', rating: 3, comment: 'Nice space but AC struggled and check-in was slow.', tags: ['AC', 'Check-in'], atISO: '2026-07-25' },
-  { tenantId: A, id: 'rv-3', bookingId: 'slb-ap-4-4214', apartmentId: 'ap-4', guestName: 'James Bello', rating: 4, comment: 'Comfortable and quiet. Host very responsive on WhatsApp.', tags: ['Host', 'Quiet'], atISO: '2026-07-27' },
-  { tenantId: A, id: 'rv-4', bookingId: 'slb-ap-3-4215', apartmentId: 'ap-3', guestName: 'Ngozi Peters', rating: 5, comment: 'The penthouse view is unreal. Worth every naira.', tags: ['View', 'Luxury'], atISO: '2026-06-26' },
+  { tenantId: A, id: 'rv-1', bookingId: 'slb-ap-1-4213', apartmentId: 'ap-1', guestName: 'Michael Ade', rating: 5, comment: 'Spotless and great location. WiFi was fast. Will rebook!', tags: ['Clean', 'Location', 'WiFi'], atISO: '2026-07-17' },
+  { tenantId: A, id: 'rv-2', bookingId: 'slb-ap-6-4212', apartmentId: 'ap-6', guestName: 'Emeka Obi', rating: 3, comment: 'Nice space but AC struggled and check-in was slow.', tags: ['AC', 'Check-in'], atISO: '2026-07-25' },
+  { tenantId: A, id: 'rv-3', bookingId: 'slb-ap-4-4211', apartmentId: 'ap-4', guestName: 'James Bello', rating: 4, comment: 'Comfortable and quiet. Host very responsive on WhatsApp.', tags: ['Host', 'Quiet'], atISO: '2026-07-27' },
+  { tenantId: A, id: 'rv-4', bookingId: 'slb-ap-3-4214', apartmentId: 'ap-3', guestName: 'Ngozi Peters', rating: 5, comment: 'The penthouse view is unreal. Worth every naira.', tags: ['View', 'Luxury'], atISO: '2026-06-26' },
 ] as unknown as Review[];
 
 export const shortletBookingPage: BookingPageConfig = {

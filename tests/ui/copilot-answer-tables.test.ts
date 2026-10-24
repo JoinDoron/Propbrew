@@ -100,3 +100,39 @@ describe('Safe native tables in streamed Copilot answers', () => {
     expect(html.match(/<th\b/g)).toHaveLength(3); expect(html.match(/<td\b/g)).toHaveLength(6);
   });
 });
+
+describe('Numbered actions in streamed Copilot answers', () => {
+  it('renders blank-line-separated numbered actions as one native list with consecutive numbering', () => {
+    const html = render('1. **Verify the delivery**\n\n2. Review the recorded quantities\n   \n\n3) Escalate the remaining shortage\n\n4. Confirm the next approved step');
+    expect(html.match(/<ol\b/g)).toHaveLength(1);
+    expect(html.match(/<li\b/g)).toHaveLength(4);
+    expect(html).toContain('<ol><li><strong>Verify the delivery</strong></li><li>Review the recorded quantities</li><li>Escalate the remaining shortage</li><li>Confirm the next approved step</li></ol>');
+    expect(html).not.toContain('start="1"');
+  });
+
+  it('keeps intervening prose as a paragraph and preserves a new list that resumes at five', () => {
+    const html = render('1. Inspect the record\n\n2. Review evidence\n\nPause here for manager approval.\n\n5. Record the approved outcome\n\n6. Verify the audit trail');
+    expect(html.match(/<ol\b/g)).toHaveLength(2);
+    expect(html).toContain('<ol><li>Inspect the record</li><li>Review evidence</li></ol><p>Pause here for manager approval.</p><ol start="5"><li>Record the approved outcome</li><li>Verify the audit trail</li></ol>');
+  });
+
+  it('preserves table, heading, code and different-list boundaries between numbered sections', () => {
+    const html = render('1. First recorded action\n\n' + table + '\n\n5. Review the table\n\n# Manager checkpoint\n\n7. Confirm the scope\n\n```text\n8. Literal code action\n```\n\n9. Review the code\n\n- Separate supporting fact\n\n11. Final recorded action');
+    expect(html.match(/<ol\b/g)).toHaveLength(5);
+    expect(html.match(/<table\b/g)).toHaveLength(1);
+    expect(html).toContain('<ol start="5"><li>Review the table</li></ol>');
+    expect(html).toContain('<ol start="7"><li>Confirm the scope</li></ol><pre><code>8. Literal code action</code></pre><ol start="9">');
+    expect(html).toContain('<ul><li>Separate supporting fact</li></ul><ol start="11">');
+    expect(html).toContain('Manager checkpoint');
+  });
+
+  it('keeps partial numbered markers visible while every growing streamed prefix remains renderable', () => {
+    const text = '5. **Review quantities**\n\n6. Confirm the next recorded action\n\nCheck with the manager.\n\n9) Continue after approval';
+    for (let length = 0; length <= text.length; length++) expect(() => render(text.slice(0, length))).not.toThrow();
+    expect(render('5. First action\n\n6')).toContain('<ol start="5"><li>First action</li></ol><p>6</p>');
+    expect(render('5. First action\n\n6.')).toContain('<p>6.</p>');
+    const html = render(text);
+    expect(html).toContain('<ol start="5"><li><strong>Review quantities</strong></li><li>Confirm the next recorded action</li></ol>');
+    expect(html).toContain('<p>Check with the manager.</p><ol start="9"><li>Continue after approval</li></ol>');
+  });
+});

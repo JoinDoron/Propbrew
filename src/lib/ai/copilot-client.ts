@@ -70,6 +70,22 @@ export function completedCopilotTurns(exchanges: readonly CopilotExchange[]): Co
   return pairs.flat();
 }
 
+/** Fit whole completed pairs to the server's 32 KiB request boundary, including JSON escaping. */
+export function serializeCopilotRequest(question: string, exchanges: readonly CopilotExchange[]): string {
+  const maxBytes = 32_768;
+  const encoder = new TextEncoder();
+  let turns = completedCopilotTurns(exchanges);
+  const serialize = () => JSON.stringify({ question, ...(turns.length ? { turns } : {}) });
+  let body = serialize();
+  // Character limits alone do not bound UTF-8 or escaped control-character bytes.
+  // Questions already pass the 2,000-character guard; discard only older history.
+  while (turns.length && encoder.encode(body).byteLength > maxBytes) {
+    turns = turns.slice(2);
+    body = serialize();
+  }
+  return body;
+}
+
 async function responseFailure(response: Response): Promise<CopilotClientError> {
   let message = response.status === 429 ? 'The request limit has been reached. Please wait before retrying.' : response.status === 403 || response.status === 401 ? 'Your current access does not permit this Copilot request.' : 'The AI service could not answer this request. Please try again.';
   let code = `http_${response.status}`;

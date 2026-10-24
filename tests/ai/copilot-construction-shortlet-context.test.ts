@@ -138,6 +138,26 @@ describe('Construction AI context commercial and record boundaries', () => {
 });
 
 describe('Shortlet AI curated context and bounded coverage', () => {
+  it('links every seeded inspection and review to the booking in the same tenant and apartment', () => {
+    for (const row of [...seed.shortletInspections, ...seed.shortletReviews]) {
+      const booking = seed.shortletBookings.find((candidate) => candidate.id === row.bookingId && candidate.tenantId === row.tenantId);
+      expect(booking, `${row.id} must refer to an existing stay`).toBeDefined();
+      expect(booking?.apartmentId, `${row.id} must refer to the same apartment`).toBe(row.apartmentId);
+      if ('guestName' in row) expect(booking?.guestName).toBe(row.guestName);
+    }
+  });
+
+  it('uses the linked completed inspection for its stay without marking an unrelated checkout inspected', async () => {
+    const inspected = seed.shortletBookings.find((booking) => booking.ref === 'SL-4212')!;
+    const unrelated = seed.shortletBookings.find((booking) => booking.ref === 'SL-4213')!;
+    store.rows.shortletBookings = [inspected, unrelated].map((booking) => ({ ...booking, status: 'checked_out' }));
+    const context = await buildShortletCopilotContext(actor('estate_manager'));
+    expect(context.facts.bookings).toEqual([
+      expect.objectContaining({ ref: 'SL-4212', apartment: 'Diplomat Duplex', inspectionPending: false }),
+      expect.objectContaining({ ref: 'SL-4213', apartment: 'Unit 1A', inspectionPending: true }),
+    ]);
+  });
+
   it('loads all six authorised collections with the server actor and no intent matcher', async () => {
     const currentActor = actor('estate_manager'); const context = await buildShortletCopilotContext(currentActor);
     expect(context.module).toBe('shortlet'); expect(context.snapshotISO).toBe(NOW);

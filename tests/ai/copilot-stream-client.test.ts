@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { applyCopilotEvent, completedCopilotTurns, CopilotClientError, parseCopilotEvent, readCopilotStream, type CopilotExchange } from '@/lib/ai/copilot-client';
+import { applyCopilotEvent, completedCopilotTurns, CopilotClientError, parseCopilotEvent, readCopilotStream, serializeCopilotRequest, type CopilotExchange } from '@/lib/ai/copilot-client';
 import { COPILOT_MAX_HISTORY, COPILOT_MAX_HISTORY_CHARS, type CopilotEvent, type CopilotModule } from '@/lib/ai/copilot-protocol';
+import { parseCopilotRequest } from '@/lib/ai/copilot-request';
 import { useCopilotStream } from '@/components/ai/use-copilot-stream';
 
 const hooks = vi.hoisted(() => ({ active: false, cursor: 0, slots: [] as unknown[], cleanups: [] as (() => void)[] }));
@@ -131,6 +132,55 @@ describe('Copilot exchange state and bounded conversation context', () => {
     expect(completedCopilotTurns([exchange({ status: 'stopped', text: 'partial' }), exchange({ status: 'error', text: 'failed' }), exchange({ status: 'complete', text: 'x'.repeat(COPILOT_MAX_HISTORY_CHARS) })])).toEqual([]);
     expect(turns.every((turn) => Object.keys(turn).sort().join(',') === 'content,role')).toBe(true);
   });
+
+  it.each([
+    ['Yoruba', 'ẹ'],
+    ['JSON-escaped controls', '\u0000\\"\n'],
+  ])('keeps the newest whole completed pairs within the actual request byte limit for %s', (_, unit) => {
+    const history = Array.from({ length: 6 }, (_, index) => exchange({
+      id: String(index), question: `Q${index} ${unit.repeat(1000).slice(0, 997)}`,
+      text: `A${index} ${unit.repeat(1600).slice(0, 1597)}`, status: 'complete',
+    }));
+    const question = `Review ${unit.repeat(1000).slice(0, 1000)}.`;
+    const originalTurns = completedCopilotTurns(history);
+    expect(originalTurns).toHaveLength(12);
+    expect(Buffer.byteLength(JSON.stringify({ question, turns: originalTurns }))).toBeGreaterThan(32_768);
+    const body = serializeCopilotRequest(question, history);
+    const parsed = JSON.parse(body);
+    expect(Buffer.byteLength(body)).toBeLessThanOrEqual(32_768);
+    expect(parseCopilotRequest(parsed)).not.toBeNull();
+    expect(parsed.question).toBe(question);
+    expect(parsed.turns.length).toBeGreaterThan(0);
+    expect(parsed.turns.length).toBeLessThan(originalTurns.length);
+    expect(parsed.turns.length % 2).toBe(0);
+    expect(parsed.turns).toEqual(originalTurns.slice(-parsed.turns.length));
+    const withNextOlderPair = originalTurns.slice(-(parsed.turns.length + 2));
+    expect(Buffer.byteLength(JSON.stringify({ question, turns: withNextOlderPair }))).toBeGreaterThan(32_768);
+    expect(history).toHaveLength(6);
+    expect(history[0].text).toContain('A0 ');
+  });
+
+  it('preserves ordinary ASCII history and excludes failed or stopped exchanges from serialized follow-ups', () => {
+    const history = [
+      exchange({ question: 'First question', text: 'Completed answer', status: 'complete' }),
+      exchange({ question: 'Failed question', text: 'Partial failure', status: 'error' }),
+      exchange({ question: 'Stopped question', text: 'Stopped partial', status: 'stopped' }),
+      exchange({ question: 'Next question', text: 'Next completed answer', status: 'complete' }),
+    ];
+    const parsed = JSON.parse(serializeCopilotRequest('Follow up', history));
+    expect(parsed).toEqual({ question: 'Follow up', turns: completedCopilotTurns(history) });
+    expect(parseCopilotRequest(parsed)).toEqual(parsed);
+    expect(JSON.stringify(parsed)).not.toContain('Partial failure');
+    expect(JSON.stringify(parsed)).not.toContain('Stopped partial');
+  });
+
+  it('drops an oversized latest pair without splitting it or losing a maximum-length escaped question', () => {
+    const question = '\u0000'.repeat(2000);
+    const body = serializeCopilotRequest(question, [exchange({ question: 'Prior', text: '\u0000'.repeat(15000), status: 'complete' })]);
+    expect(JSON.parse(body)).toEqual({ question });
+    expect(Buffer.byteLength(body)).toBeLessThanOrEqual(32_768);
+    expect(parseCopilotRequest(JSON.parse(body))).not.toBeNull();
+  });
 });
 
 describe('Shared hook request lifecycle without a browser or provider', () => {
@@ -160,6 +210,25 @@ describe('Shared hook request lifecycle without a browser or provider', () => {
     expect(tree().exchanges.map((entry) => entry.question)).toEqual(['First question', 'Failed question', 'Follow-up question']);
     expect(tree().exchanges[1].error?.message).toBe('Provider unavailable.');
     expect(done).toHaveBeenCalledTimes(2);
+  });
+
+  it('submits a bounded Unicode follow-up after a long completed conversation', async () => {
+    for (let index = 0; index < 6; index++) {
+      network.mockResolvedValueOnce(response(events(`A${index} ${'ẹ'.repeat(1597)}`)));
+      await tree().submit(`Q${index} ${'ẹ'.repeat(997)}`);
+    }
+    const question = 'ẹ'.repeat(1000);
+    await tree().submit(question);
+    const body = network.mock.calls.at(-1)![1]!.body as string;
+    const parsed = JSON.parse(body);
+    expect(Buffer.byteLength(body)).toBeLessThanOrEqual(32_768);
+    expect(parseCopilotRequest(parsed)).not.toBeNull();
+    expect(parsed.question).toBe(question);
+    expect(parsed.turns).toHaveLength(6);
+    expect(parsed.turns[0].content).toBe(`Q3 ${'ẹ'.repeat(997)}`);
+    expect(parsed.turns.at(-1).content).toBe(`A5 ${'ẹ'.repeat(1597)}`);
+    expect(tree().exchanges).toHaveLength(7);
+    expect(tree().exchanges.at(-1)?.status).toBe('complete');
   });
 
   it('stops a partially streamed answer, aborts transport and retries only when explicitly requested', async () => {

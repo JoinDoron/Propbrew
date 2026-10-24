@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { COPILOT_MAX_QUESTION, type CopilotModule } from '@/lib/ai/copilot-protocol';
-import { applyCopilotEvent, completedCopilotTurns, CopilotClientError, readCopilotStream, type CopilotExchange } from '@/lib/ai/copilot-client';
+import { applyCopilotEvent, CopilotClientError, readCopilotStream, serializeCopilotRequest, type CopilotExchange } from '@/lib/ai/copilot-client';
 
 export type { CopilotExchange } from '@/lib/ai/copilot-client';
 /** Keep the log contained and follow streaming only while the reader remains near its end. */
@@ -41,13 +41,13 @@ export function useCopilotStream({ endpoint, module, onComplete }: { endpoint: s
     if (!query || question.length > COPILOT_MAX_QUESTION || active.current) return false;
     const id = `${module}-${++sequence.current}`;
     const controller = new AbortController();
-    const turns = completedCopilotTurns(records.current);
+    const body = serializeCopilotRequest(query, records.current);
     active.current = { id, controller };
     setBusy(true);
     update((current) => [...current, { id, question: query, text: '', status: 'submitted', activities: [], startedAt: Date.now(), ...(retryOf ? { retryOf } : {}) }]);
     const patch = (change: (exchange: CopilotExchange) => CopilotExchange) => update((current) => current.map((exchange) => exchange.id === id ? change(exchange) : exchange));
     try {
-      const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson' }, body: JSON.stringify({ question: query, ...(turns.length ? { turns } : {}) }), signal: controller.signal });
+      const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson' }, body, signal: controller.signal });
       await readCopilotStream(response, module, controller.signal, (event) => {
         if (!mounted.current || active.current?.id !== id || controller.signal.aborted) return;
         patch((exchange) => applyCopilotEvent(exchange, event));
