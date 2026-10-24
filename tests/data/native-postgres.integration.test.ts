@@ -36,11 +36,11 @@ describe.skipIf(!testUrl)('native Postgres migrations and tenant isolation', () 
     await admin?.end();
   });
 
-  it('applies all six migrations and reruns without replaying them', async () => {
+  it('applies all migrations and reruns without replaying them', async () => {
     await runMigrations({ url: testUrl });
     const migrations = await admin.query('select filename from schema_migrations order by filename');
-    expect(migrations.rows).toHaveLength(6);
-    expect(migrations.rows.at(-1)?.filename).toBe('006_copilot_usage.sql');
+    expect(migrations.rows).toHaveLength(7);
+    expect(migrations.rows.at(-1)?.filename).toBe('008_workspace_records.sql');
     const functions = await admin.query("select proname from pg_proc where proname in ('reserve_copilot_budget', 'finish_copilot_budget')");
     expect(functions.rows).toHaveLength(2);
   });

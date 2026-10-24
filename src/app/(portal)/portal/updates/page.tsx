@@ -2,12 +2,14 @@ import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
 import { InvestorUpdatesWorkspace } from '@/components/portal/investor-updates-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** SC-08 (investor view, §7 O) — Updates. Per-project construction progress, a
  *  milestone update feed, the handover countdown, and downloadable documents
  *  (allocation letter, SPA, receipts, construction report). Scoped to the
  *  investor's own projects. */
 export default async function InvestorUpdatesPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('investor_projects');
   const projects = [...repos.investorProjects.list(actor).items];
 
@@ -19,4 +21,5 @@ export default async function InvestorUpdatesPage() {
       </div>
     </div>
   );
+  });
 }

@@ -5,11 +5,13 @@ import { repos } from '@/server/data';
 import { NOW_MS } from '@/domain/ppm';
 import { gridReliancePct, dieselCost, costPerKwhMinor, co2Kg } from '@/domain/facility';
 import { EnergyWorkspace, type GenRow, type MeterRow } from '@/components/facility/energy-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** Energy & Utilities — Nigeria-first facility energy intelligence: generator
  *  runtime + fuel with AI refuel prediction and efficiency-anomaly detection,
  *  genset-vs-grid reliance, diesel spend + cost/kWh + carbon, and meter readings. */
 export default async function EnergyPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('assets_ppm', 'read', 'facility');
   const sites = new Map<string, string>(repos.sites.all(actor).map((s) => [s.id, s.name]));
   const generators = repos.facilityGenerators.list(actor).items;
@@ -32,4 +34,5 @@ export default async function EnergyPage() {
       />
     </div>
   );
+  });
 }

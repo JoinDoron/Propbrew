@@ -6,12 +6,14 @@ import { legalEvents } from '@/lib/legal-events';
 import { PageHeader } from '@/components/ui/page-header';
 import { ScopeBanner } from '@/components/domain';
 import { SosConsole, type SosView } from '@/components/security/sos-console';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** EM-06 — Security & SOS incident console. Alert age uses the recorded raised
  *  time against the sub-60-second target. Actions are the scoped §10 SOS machine,
  *  not a dispatch integration; visitor passes and patrols are labelled previews.
  *  No AI ever drives an SOS. */
 export default async function SecurityPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('security_sos', 'read', 'estate');
   const canMutate = ['F', 'M'].includes(effectiveLevel(actor, 'security_sos'));
 
@@ -37,4 +39,5 @@ export default async function SecurityPage() {
       <SosConsole events={events} canMutate={canMutate} />
     </div>
   );
+  });
 }

@@ -6,12 +6,14 @@ import { PageHeader } from '@/components/ui/page-header';
 import { ScopeBanner } from '@/components/domain';
 import { facilityMoney } from '@/components/facility/facility-format';
 import { AssetsExplorer, type AssetHealth } from '@/components/assets/assets-explorer';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** FM-01 — asset register. Facility Manager can add (M); Executive/Technician are
  *  view-only (V). Assets are archived, never deleted. The register is
  *  interactive: filter by status/category, search, and drill into an asset's PPM
  *  plans and full work-order service history. */
 export default async function AssetsPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('assets_ppm', 'read', 'facility');
   const canMutate = ['F', 'M'].includes(effectiveLevel(actor, 'assets_ppm'));
   const assets = repos.assets.list(actor).items;
@@ -39,4 +41,5 @@ export default async function AssetsPage() {
       />
     </div>
   );
+  });
 }

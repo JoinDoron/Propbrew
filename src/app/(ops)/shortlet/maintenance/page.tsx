@@ -5,10 +5,12 @@ import { repos } from '@/server/data';
 import { NOW_MS } from '@/domain/ppm';
 import { issueStats } from '@/domain/shortlet';
 import { MaintenanceWorkspace, type IssueRow } from '@/components/shortlet/maintenance-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** Maintenance issue tracker (flow idea) — log per-apartment issues with an
  *  auto-suggested priority, then drive Open → In progress → Resolved. */
 export default async function ShortletMaintenancePage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('bookings_amenities', 'read', 'shortlet');
   const apts = repos.shortletApartments.list(actor).items;
   const aptName = new Map(apts.map((a) => [a.id, a.name]));
@@ -24,4 +26,5 @@ export default async function ShortletMaintenancePage() {
       <MaintenanceWorkspace canCreate={can(actor, 'bookings_amenities', 'create').allowed} canUpdate={can(actor, 'bookings_amenities', 'update').allowed} issues={rows} apartments={apts.map((a) => ({ id: a.id, name: a.name }))} stats={issueStats(issues, NOW_MS)} />
     </div>
   );
+  });
 }

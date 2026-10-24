@@ -2,11 +2,13 @@ import { requireCapability } from '@/server/guard';
 import { constructionWorld } from '@/server/reads/construction';
 import { scoreSubcontractors } from '@/domain/construction';
 import { LeagueWorkspace, type LeagueRow } from '@/components/construction/league-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** Subcontractor League — one transparent composite (delivery 45%, quality 30%,
  *  safety 25%) applied identically to every trade, so performance is comparable
  *  and a firm can audit its own score before the next award decision. */
 export default async function ConstructionLeaguePage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const world = constructionWorld(actor);
   const nameOf = (id: string) => world.projects.find((p) => p.id === id)?.name ?? id;
@@ -32,4 +34,5 @@ export default async function ConstructionLeaguePage() {
       />
     </div>
   );
+  });
 }

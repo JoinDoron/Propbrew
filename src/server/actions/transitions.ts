@@ -1,5 +1,7 @@
 'use server';
 
+import { withDurableMutation } from '@/server/data/durable-records';
+
 /**
  * Transition actions for the role-driven machines (booking, SOS, marketplace)
  * plus the special billing/create actions. Same contract as the work-order
@@ -46,6 +48,7 @@ function displayName(userId: string, role: Role): string {
 
 /** Generic role-driven transition for booking / SOS / marketplace. */
 export async function transition(machineKey: 'booking' | 'sos-event' | 'marketplace-order', id: string, event: string): Promise<TxResult> {
+  return withDurableMutation(async () => {
   const actor = await getActor();
   const reg = REGISTRY[machineKey];
 
@@ -95,6 +98,8 @@ export async function transition(machineKey: 'booking' | 'sos-event' | 'marketpl
 
   reg.paths.forEach((p) => revalidatePath(p));
   return { ok: true, to: t.to };
+
+  });
 }
 
 function readerFor(machineKey: 'booking' | 'sos-event' | 'marketplace-order'): 'bookings' | 'sosEvents' | 'marketplaceOrders' {
@@ -105,6 +110,7 @@ function readerFor(machineKey: 'booking' | 'sos-event' | 'marketplace-order'): '
 
 /** Manager issues a draft charge (Draft → Issued). */
 export async function issueInvoice(ref: string): Promise<TxResult> {
+  return withDurableMutation(async () => {
   const actor = await getActor();
   try {
     assertCan(actor, 'charges_invoicing', 'transition');
@@ -121,6 +127,8 @@ export async function issueInvoice(ref: string): Promise<TxResult> {
   recordHistory('service-charge', live.id, hist('ISSUE', inv.status, t, actor.userId, firing(actor.roles as Role[], ['estate_manager'])));
   ['/billing', '/estate', '/dashboard'].forEach((p) => revalidatePath(p));
   return { ok: true, to: t };
+
+  });
 }
 
 // Resident payment lives in resident-home.ts (`payChargeFromWallet`): the wallet
@@ -131,6 +139,7 @@ export async function issueInvoice(ref: string): Promise<TxResult> {
 
 /** Resident raises an SOS (EM-06). Creates a new event in `raised`. */
 export async function raiseSos(): Promise<TxResult> {
+  return withDurableMutation(async () => {
   const actor = await getActor();
   try {
     assertCan(actor, 'security_sos', 'create');
@@ -172,6 +181,8 @@ export async function raiseSos(): Promise<TxResult> {
   });
   ['/portal/security', '/security', '/estate', '/dashboard'].forEach((p) => revalidatePath(p));
   return { ok: true, to: 'raised' };
+
+  });
 }
 
 /* --- helpers -------------------------------------------------------------- */

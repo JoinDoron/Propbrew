@@ -8,6 +8,7 @@ import 'server-only';
  */
 
 import { db } from '@/server/data/store';
+import { withDurableMutation } from '@/server/data/durable-records';
 import {
   DEFAULT_COPILOT_MODEL, COPILOT_MODELS, COPILOT_RATE_PER_MIN, COPILOT_WINDOW_MS,
   copilotModel, estCostMinorNgn, pruneWindow, rateAllows, type CopilotModelId,
@@ -44,11 +45,13 @@ export function getUsage(tenantId: string): CopilotUsage {
   return row ? { requests: row.requests, inputTokens: row.inputTokens, outputTokens: row.outputTokens, costMinorNgn: row.costMinorNgn } : { requests: 0, inputTokens: 0, outputTokens: 0, costMinorNgn: 0 };
 }
 
-export function recordUsage(tenantId: string, inputTokens: number, outputTokens: number, modelId: string): void {
+export async function recordUsage(tenantId: string, inputTokens: number, outputTokens: number, modelId: string): Promise<void> {
+  return withDurableMutation(async () => {
   const cost = estCostMinorNgn(inputTokens, outputTokens, copilotModel(modelId));
   const row = db.copilotUsage.find((r) => r.tenantId === tenantId);
   if (row) { row.requests += 1; row.inputTokens += inputTokens; row.outputTokens += outputTokens; row.costMinorNgn += cost; }
   else db.copilotUsage.push({ tenantId, requests: 1, inputTokens, outputTokens, costMinorNgn: cost });
+  });
 }
 
 /* --- sliding-window rate limiter (ephemeral) ------------------------------ */

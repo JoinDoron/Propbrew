@@ -1,0 +1,55 @@
+import { readFileSync, readdirSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import ts from 'typescript';
+import { describe, expect, it } from 'vitest';
+
+const directory = resolve(process.cwd(), 'src/server/actions');
+const nonOperational = new Set([
+  'auth.ts:signOut', 'auth.ts:signInAs', 'dev-identity.ts:switchIdentity',
+  'owner-onboarding.ts:saveOwnerSetupAction', 'owner-onboarding.ts:completeOwnerSetupAction',
+]);
+const readOnly = new Set(['ask-data.ts:askData', 'documents.ts:searchDocuments']);
+const entries = readdirSync(directory).filter((file) => file.endsWith('.ts')).flatMap((file) => {
+  const ast = ts.createSourceFile(file, readFileSync(join(directory, file), 'utf8'), ts.ScriptTarget.Latest, true);
+  return ast.statements.filter((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node)
+    && Boolean(node.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)))
+    .map((fn) => ({ file, ast, fn, key: file + ':' + fn.name?.text }));
+});
+const operational = entries.filter(({ key }) => !nonOperational.has(key));
+
+describe('operational action durability coverage', () => {
+  it('accounts for all 140 operational actions and only the five separate identity/onboarding actions', () => {
+    expect(operational).toHaveLength(140);
+    expect(entries.filter(({ key }) => nonOperational.has(key)).map(({ key }) => key).sort()).toEqual([...nonOperational].sort());
+    expect(operational.filter(({ key }) => readOnly.has(key))).toHaveLength(2);
+  });
+
+  it.each(operational)('protects the entire authenticated $key body', ({ ast, fn, key }) => {
+    const expected = readOnly.has(key) ? 'withDurableRead' : 'withDurableMutation';
+    expect(fn.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword)).toBe(true);
+    const body = fn.body!.statements.filter((node) => !(ts.isExpressionStatement(node) && ts.isStringLiteral(node.expression)));
+    expect(body, key + ' must not read or mutate before its boundary').toHaveLength(1);
+    const returned = body[0];
+    if (!ts.isReturnStatement(returned) || !returned.expression || !ts.isCallExpression(returned.expression)) throw new Error(key + ' has no returned durability boundary.');
+    expect(returned.expression.expression.getText(ast)).toBe(expected);
+    expect(returned.expression.arguments).toHaveLength(1);
+    const callback = returned.expression.arguments[0];
+    expect(ts.isArrowFunction(callback) && ts.isBlock(callback.body)
+      && callback.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword)).toBe(true);
+    const imported = ast.statements.some((node) => ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)
+      && node.moduleSpecifier.text === '@/server/data/durable-records'
+      && node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings)
+      && node.importClause.namedBindings.elements.some((binding) => binding.name.text === expected && !binding.propertyName));
+    expect(imported, key + ' must use the actual server boundary').toBe(true);
+  });
+
+  it('does not leave reset-on-restart numeric identity counters at action-module scope', () => {
+    for (const file of readdirSync(directory).filter((file) => file.endsWith('.ts'))) {
+      const ast = ts.createSourceFile(file, readFileSync(join(directory, file), 'utf8'), ts.ScriptTarget.Latest, true);
+      for (const statement of ast.statements.filter(ts.isVariableStatement)) {
+        if (statement.declarationList.flags & ts.NodeFlags.Const) continue;
+        expect(statement.declarationList.declarations.filter((node) => node.initializer && ts.isNumericLiteral(node.initializer)), file).toHaveLength(0);
+      }
+    }
+  });
+});

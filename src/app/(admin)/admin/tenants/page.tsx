@@ -3,6 +3,7 @@ import { requireCapability } from '@/server/guard';
 import { seed } from '@/server/data';
 import { planFor, tenantHealth, tenantLabel } from '@/domain/platform-admin';
 import { TenantsWorkspace, type TenantDetail } from '@/components/admin/tenants-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 const OPEN_WO = (s: string) => !['closed', 'cancelled', 'rejected', 'verified'].includes(s);
 const ARREARS = ['overdue', 'in_arrears', 'escalated'];
@@ -11,6 +12,7 @@ const ARREARS = ['overdue', 'in_arrears', 'escalated'];
  *  tenants (§8.2). Per-tenant health, subscription/MRR and vitals; drill in to
  *  suspend/reactivate or onboard. Every cross-tenant read is an SC-10 event. */
 export default async function TenantsPage() {
+  return withDurableRead(async () => {
   await requireCapability('tenant_config');
 
   const tenantIds = Array.from(new Set(seed.sites.map((s) => s.tenantId)));
@@ -36,4 +38,5 @@ export default async function TenantsPage() {
       <TenantsWorkspace tenants={tenants} />
     </div>
   );
+  });
 }

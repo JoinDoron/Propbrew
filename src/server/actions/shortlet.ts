@@ -1,5 +1,9 @@
 'use server';
 
+import { withDurableMutation } from '@/server/data/durable-records';
+
+import { nextRecordSequence } from '@/server/data/record-context';
+
 /**
  * Short-Let PMS server actions (new module, gated by the §7 bookings capability).
  * Bookings are driven through the shortlet-booking §10 machine; payments and
@@ -36,7 +40,6 @@ async function gate(action: 'create' | 'update' | 'transition'): Promise<{ actor
   catch (e) { if (e instanceof ForbiddenError) return { ok: false, error: 'You cannot manage short-let bookings.' }; throw e; }
 }
 
-let seq = 5200;
 const validDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
 const minorAmount = (value: number) => Number.isFinite(value) && value >= 0 && Number.isSafeInteger(Math.round(value * 100)) ? Math.round(value * 100) : null;
 const sources: readonly string[] = ['direct', 'airbnb', 'booking_com', 'whatsapp', 'agent'];
@@ -47,6 +50,7 @@ function overlaps(actor: Awaited<ReturnType<typeof getActor>>, apartmentId: stri
 
 /* --- create a booking (FR-BM-01) ------------------------------------------ */
 export async function createBooking(input: { apartmentId: string; guestName: string; guestPhone: string; guestEmail?: string; checkIn: string; checkOut: string; source: BookingSource; agentName?: string; status?: string; cautionNaira: number; paidNaira?: number; specialRequests?: string }): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('create'); if ('ok' in g) return g;
   const apt = scopedMutableGet(g.actor, 'bookings_amenities', db.shortletApartments, input.apartmentId, 'create');
   if (!apt) return { ok: false, error: 'Apartment not found.' };
@@ -63,7 +67,7 @@ export async function createBooking(input: { apartmentId: string; guestName: str
   const nights = nightsBetween(input.checkIn, input.checkOut);
   const totalMinor = nights * apt.nightlyRate.minor;
   if (!Number.isSafeInteger(totalMinor) || totalMinor < 0 || paidMinor > totalMinor) return { ok: false, error: 'The payment cannot exceed the valid booking total.' };
-  const ref = `SL-${seq++}`;
+  const ref = `SL-${nextRecordSequence('shortlet:seq', 5200)}`;
   const status = input.status === 'confirmed' ? 'confirmed' : 'enquiry';
   const booking = {
     tenantId: g.actor.tenantId, id: `slb-new-${ref}`, ref, apartmentId: apt.id, propertyId: apt.propertyId,
@@ -78,10 +82,13 @@ export async function createBooking(input: { apartmentId: string; guestName: str
   recordHistory('shortlet-booking', booking.id, { at: nowISO(), event: 'CREATE', from: null, to: status, actorId: g.actor.userId, actorName: 'Operator', actorRole: (g.actor.roles[0] as Role) ?? 'estate_manager', note: `${apt.name} · ${nights} nights` });
   revalidate();
   return { ok: true, ref };
+
+  });
 }
 
 /* --- advance a booking through the machine (FR-BM / FR-CI) ----------------- */
 export async function advanceBooking(id: string, event: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('transition'); if ('ok' in g) return g;
   const live = scopedMutableGet(g.actor, 'bookings_amenities', db.shortletBookings, id, 'transition');
   if (!live) return { ok: false, error: 'Booking not found.' };
@@ -99,10 +106,13 @@ export async function advanceBooking(id: string, event: string): Promise<Res> {
   recordHistory('shortlet-booking', live.id, { at: nowISO(), event, from, to: t.to, actorId: g.actor.userId, actorName: 'Operator', actorRole: roles[0] ?? 'estate_manager' });
   revalidate();
   return { ok: true, ref: live.ref };
+
+  });
 }
 
 /* --- record an off-platform payment (FR-BM-02) ---------------------------- */
 export async function recordPayment(id: string, amountNaira: number): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if ('ok' in g) return g;
   const live = scopedMutableGet(g.actor, 'bookings_amenities', db.shortletBookings, id, 'update');
   if (!live) return { ok: false, error: 'Booking not found.' };
@@ -115,10 +125,13 @@ export async function recordPayment(id: string, amountNaira: number): Promise<Re
   recordHistory('shortlet-booking', live.id, { at: nowISO(), event: 'PAYMENT_RECORDED', from: live.status, to: live.status, actorId: g.actor.userId, actorName: 'Operator', actorRole: (g.actor.roles[0] as Role) ?? 'estate_manager', note: `₦${amountNaira.toLocaleString()} recorded` });
   revalidate();
   return { ok: true };
+
+  });
 }
 
 /* --- checkout inspection → caution decision (FR-CI) ----------------------- */
 export async function saveInspection(bookingId: string, items: InspectionItem[], inspectorName: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if ('ok' in g) return g;
   const live = scopedMutableGet(g.actor, 'bookings_amenities', db.shortletBookings, bookingId, 'update');
   if (!live) return { ok: false, error: 'Booking not found.' };
@@ -141,10 +154,13 @@ export async function saveInspection(bookingId: string, items: InspectionItem[],
   recordHistory('shortlet-booking', live.id, { at: nowISO(), event: 'CLOSE', from, to: live.status, actorId: g.actor.userId, actorName: 'Operator', actorRole: (g.actor.roles[0] as Role) ?? 'estate_manager', note: outcome === 'clear' ? 'Caution refunded in full' : `₦${(damageTotal / 100).toLocaleString()} deducted` });
   revalidate();
   return { ok: true };
+
+  });
 }
 
 /* --- FR-IC: connect / disconnect an iCal channel on an apartment ---------- */
 export async function toggleChannel(apartmentId: string, channel: Channel): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if ('ok' in g) return g;
   if (!['airbnb', 'booking_com', 'google'].includes(channel)) return { ok: false, error: 'Choose a supported channel.' };
   const live = scopedMutableGet(g.actor, 'bookings_amenities', db.shortletApartments, apartmentId, 'update');
@@ -152,30 +168,38 @@ export async function toggleChannel(apartmentId: string, channel: Channel): Prom
   live.channels = live.channels.includes(channel) ? live.channels.filter((c) => c !== channel) : [...live.channels, channel];
   revalidate();
   return { ok: true };
+
+  });
 }
 
 /* --- FR-PL: change subscription plan -------------------------------------- */
 export async function changePlan(planKey: PlanKey): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if ('ok' in g) return g;
   if (!['lite', 'starter', 'growth', 'pro', 'enterprise'].includes(planKey)) return { ok: false, error: 'Choose a valid plan.' };
   if (repos.shortletApartments.list(g.actor, { limit: Number.MAX_SAFE_INTEGER }).total > planFor(planKey).apartmentCap) return { ok: false, error: 'Select a plan that covers the recorded apartment count.' };
   shortletSettings(g.actor.tenantId).planKey = planKey;
   revalidate();
   return { ok: true };
+
+  });
 }
 
 /* --- FR-TM: team management ------------------------------------------------ */
-let tmSeq = 0;
 export async function inviteMember(input: { name: string; phone: string; role: TeamRole }): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('create'); if ('ok' in g) return g;
   if (!input.name.trim()) return { ok: false, error: 'Name is required.' };
   if (!teamRoles.includes(input.role)) return { ok: false, error: 'Choose a valid team role. Owner access cannot be assigned here.' };
-  db.shortletTeam.push({ tenantId: g.actor.tenantId, id: `tm-new-${++tmSeq}`, name: input.name.trim(), phone: input.phone.trim(), role: input.role, status: 'invited', lastActive: '—' } as unknown as TeamMember);
+  db.shortletTeam.push({ tenantId: g.actor.tenantId, id: `tm-new-${nextRecordSequence('shortlet:tmSeq', 0, true)}`, name: input.name.trim(), phone: input.phone.trim(), role: input.role, status: 'invited', lastActive: '—' } as unknown as TeamMember);
   revalidate();
   return { ok: true };
+
+  });
 }
 
 export async function setMemberRole(id: string, role: TeamRole): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if ('ok' in g) return g;
   const m = scopedMutableGet(g.actor, 'bookings_amenities', db.shortletTeam, id, 'update');
   if (!m) return { ok: false, error: 'Member not found.' };
@@ -184,9 +208,12 @@ export async function setMemberRole(id: string, role: TeamRole): Promise<Res> {
   m.role = role;
   revalidate();
   return { ok: true };
+
+  });
 }
 
 export async function removeMember(id: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if ('ok' in g) return g;
   const m = scopedMutableGet(g.actor, 'bookings_amenities', db.shortletTeam, id, 'update');
   if (!m) return { ok: false, error: 'Member not found.' };
@@ -194,42 +221,52 @@ export async function removeMember(id: string): Promise<Res> {
   db.shortletTeam = db.shortletTeam.filter((x) => x !== m);
   revalidate();
   return { ok: true };
+
+  });
 }
 
 /* --- dynamic pricing: seasonal rate rules --------------------------------- */
-let prSeq = 0;
 export async function addPricingRule(input: { apartmentId: string; label: string; fromISO: string; toISO: string; type: RuleType; amountNaira?: number; pct?: number }): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('create'); if ('ok' in g) return g;
   if (!scopedMutableGet(g.actor, 'bookings_amenities', db.shortletApartments, input.apartmentId, 'create')) return { ok: false, error: 'Apartment not found.' };
   if (!input.label.trim()) return { ok: false, error: 'Give the rule a label.' };
   if (!validDate(input.fromISO) || !validDate(input.toISO)) return { ok: false, error: 'Enter valid pricing-rule dates.' };
   if (Date.parse(input.toISO) < Date.parse(input.fromISO)) return { ok: false, error: 'End date must be after start date.' };
   if (!['fixed', 'increase', 'decrease'].includes(input.type) || input.type === 'fixed' && (minorAmount(input.amountNaira ?? NaN) === null || !(input.amountNaira! > 0)) || input.type !== 'fixed' && (!Number.isFinite(input.pct) || input.pct! < 0 || input.type === 'decrease' && input.pct! > 100)) return { ok: false, error: 'Enter a valid positive fixed rate or a finite percentage; discounts cannot exceed 100%.' };
-  db.shortletPricingRules.unshift({ tenantId: g.actor.tenantId, id: `pr-new-${++prSeq}`, apartmentId: input.apartmentId, label: input.label.trim(), fromISO: input.fromISO, toISO: input.toISO, type: input.type, amountMinor: input.type === 'fixed' ? Math.round((input.amountNaira ?? 0) * 100) : undefined, pct: input.type !== 'fixed' ? input.pct : undefined } as unknown as PricingRule);
+  db.shortletPricingRules.unshift({ tenantId: g.actor.tenantId, id: `pr-new-${nextRecordSequence('shortlet:prSeq', 0, true)}`, apartmentId: input.apartmentId, label: input.label.trim(), fromISO: input.fromISO, toISO: input.toISO, type: input.type, amountMinor: input.type === 'fixed' ? Math.round((input.amountNaira ?? 0) * 100) : undefined, pct: input.type !== 'fixed' ? input.pct : undefined } as unknown as PricingRule);
   revalidate();
   return { ok: true };
+
+  });
 }
 export async function removePricingRule(id: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if ('ok' in g) return g;
   const rule = scopedMutableGet(g.actor, 'bookings_amenities', db.shortletPricingRules, id, 'update');
   if (!rule) return { ok: false, error: 'Pricing rule not found.' };
   db.shortletPricingRules = db.shortletPricingRules.filter((r) => r !== rule);
   revalidate();
   return { ok: true };
+
+  });
 }
 
 /* --- maintenance issue tracker -------------------------------------------- */
-let miSeq = 0;
 export async function logIssue(input: { apartmentId: string; title: string; description: string; priority: IssuePriority }): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('create'); if ('ok' in g) return g;
   if (!input.title.trim()) return { ok: false, error: 'Describe the issue.' };
   if (!scopedMutableGet(g.actor, 'bookings_amenities', db.shortletApartments, input.apartmentId, 'create')) return { ok: false, error: 'Apartment not found.' };
   if (!['low', 'medium', 'high', 'urgent'].includes(input.priority)) return { ok: false, error: 'Choose a valid priority.' };
-  db.shortletIssues.unshift({ tenantId: g.actor.tenantId, id: `mi-new-${++miSeq}`, apartmentId: input.apartmentId, title: input.title.trim(), description: input.description.trim(), priority: input.priority ?? suggestPriority(input.title), status: 'open', createdAt: NOW } as unknown as MaintenanceIssue);
+  db.shortletIssues.unshift({ tenantId: g.actor.tenantId, id: `mi-new-${nextRecordSequence('shortlet:miSeq', 0, true)}`, apartmentId: input.apartmentId, title: input.title.trim(), description: input.description.trim(), priority: input.priority ?? suggestPriority(input.title), status: 'open', createdAt: NOW } as unknown as MaintenanceIssue);
   revalidate();
   return { ok: true };
+
+  });
 }
 export async function advanceIssue(id: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if ('ok' in g) return g;
   const issue = scopedMutableGet(g.actor, 'bookings_amenities', db.shortletIssues, id, 'update');
   if (!issue) return { ok: false, error: 'Issue not found.' };
@@ -239,17 +276,23 @@ export async function advanceIssue(id: string): Promise<Res> {
   if (next.to === 'resolved') issue.resolvedAt = NOW;
   revalidate();
   return { ok: true };
+
+  });
 }
 
 /* --- direct booking page -------------------------------------------------- */
 export async function toggleBookingPage(): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if ('ok' in g) return g;
   const config = shortletSettings(g.actor.tenantId).bookingPage;
   config.enabled = !config.enabled;
   revalidate();
   return { ok: true };
+
+  });
 }
 export async function saveBookingPage(input: { slug: string; cancellationPolicy: string; holdHours: number }): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if ('ok' in g) return g;
   const slug = input.slug.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
   if (!slug) return { ok: false, error: 'Choose a link name.' };
@@ -260,8 +303,11 @@ export async function saveBookingPage(input: { slug: string; cancellationPolicy:
   config.holdHours = Math.round(input.holdHours);
   revalidate();
   return { ok: true };
+
+  });
 }
 export async function addPromoCode(input: { code: string; pct: number }): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if ('ok' in g) return g;
   const code = input.code.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (!code) return { ok: false, error: 'Enter a code.' };
@@ -271,29 +317,37 @@ export async function addPromoCode(input: { code: string; pct: number }): Promis
   config.promoCodes.unshift({ code, pct: Math.round(input.pct), active: true });
   revalidate();
   return { ok: true };
+
+  });
 }
 export async function togglePromoCode(code: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if ('ok' in g) return g;
   const p = shortletSettings(g.actor.tenantId).bookingPage.promoCodes.find((x) => x.code === code);
   if (!p) return { ok: false, error: 'Code not found.' };
   p.active = !p.active;
   revalidate();
   return { ok: true };
+
+  });
 }
 
 /* --- agents --------------------------------------------------------------- */
-let agSeq = 0;
 export async function inviteAgent(input: { name: string; phone: string; commissionPct: number }): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('create'); if ('ok' in g) return g;
   if (!input.name.trim()) return { ok: false, error: 'Agent name is required.' };
   if (!Number.isFinite(input.commissionPct) || input.commissionPct < 0 || input.commissionPct > 30) return { ok: false, error: 'Enter a commission from 0% to 30%.' };
-  db.shortletAgents.push({ tenantId: g.actor.tenantId, id: `ag-new-${++agSeq}`, name: input.name.trim(), phone: input.phone.trim(), commissionPct: Math.max(0, Math.min(30, input.commissionPct || 0)), status: 'invited' } as unknown as Agent);
+  db.shortletAgents.push({ tenantId: g.actor.tenantId, id: `ag-new-${nextRecordSequence('shortlet:agSeq', 0, true)}`, name: input.name.trim(), phone: input.phone.trim(), commissionPct: Math.max(0, Math.min(30, input.commissionPct || 0)), status: 'invited' } as unknown as Agent);
   revalidate();
   return { ok: true };
+
+  });
 }
 
 /* --- log an expense (FR-EX-01) -------------------------------------------- */
 export async function logExpense(input: { propertyId: string; category: ExpenseCategory; amountNaira: number; date: string; note: string }): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('create'); if ('ok' in g) return g;
   const amountMinor = minorAmount(input.amountNaira);
   if (amountMinor === null || amountMinor <= 0) return { ok: false, error: 'Enter a finite amount greater than zero.' };
@@ -303,4 +357,6 @@ export async function logExpense(input: { propertyId: string; category: ExpenseC
   db.shortletExpenses.unshift({ tenantId: g.actor.tenantId, id: `se-new-${randomUUID()}`, propertyId: input.propertyId, category: input.category, amount: money(amountMinor, 'NGN'), date: input.date, note: input.note.trim() || input.category } as never);
   revalidate();
   return { ok: true };
+
+  });
 }

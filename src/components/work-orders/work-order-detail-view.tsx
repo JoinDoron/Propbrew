@@ -15,6 +15,7 @@ import { Timeline } from '@/components/work-orders/timeline';
 import { TransitionActions, type LegalEvent } from '@/components/work-orders/transition-actions';
 import layout from '@/components/ui/workspace-layout.module.css';
 import polish from '@/components/facility/facility-registers-polish.module.css';
+import { withDurableRead } from '@/server/data/durable-records';
 
 const NOW = '2026-07-26T09:00:00Z';
 const CLOSED = ['closed', 'cancelled', 'rejected', 'verified'];
@@ -34,7 +35,8 @@ const EVENT_META: Record<string, { label: string; variant: LegalEvent['variant']
   CANCEL: { label: 'Cancel', variant: 'danger', needsAssignee: false },
 };
 
-export function WorkOrderDetailView({ actor, wo, basePath }: { actor: Actor; wo: WorkOrder; basePath: '/work-orders' | '/estate/work-orders' }) {
+export async function WorkOrderDetailView({ actor, wo, basePath }: { actor: Actor; wo: WorkOrder; basePath: '/work-orders' | '/estate/work-orders' }) {
+  return withDurableRead(async () => {
   const canTransition = can(actor, 'work_orders', 'transition').allowed;
 
   // The legal events for THIS actor from the current state (deduped by event).
@@ -124,6 +126,7 @@ export function WorkOrderDetailView({ actor, wo, basePath }: { actor: Actor; wo:
       ]} />
     </div>
   );
+  });
 }
 
 function Field({ label, value }: { label: string; value: string }) {

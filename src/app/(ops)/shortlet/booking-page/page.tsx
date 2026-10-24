@@ -5,12 +5,14 @@ import { repos } from '@/server/data';
 import { shortletSettings } from '@/server/shortlet-settings';
 import { bookingPageFunnel, bookingPageByApartment } from '@/domain/shortlet';
 import { BookingPageWorkspace, type AptFunnel, type PreviewApt } from '@/components/shortlet/booking-page-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** Direct booking page (flow idea) — a public link where guests browse the
  *  operator's apartments and book direct (no OTA fees). Config (on/off, link,
  *  cancellation policy, hold window, promo codes) + a conversion funnel and
  *  per-apartment performance, with a live guest-facing preview. */
 export default async function ShortletBookingPagePage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('bookings_amenities', 'read', 'shortlet');
   const apts = repos.shortletApartments.list(actor).items;
   const props = new Map(repos.shortletProperties.list(actor).items.map((p) => [p.id, p.name]));
@@ -29,4 +31,5 @@ export default async function ShortletBookingPagePage() {
       <BookingPageWorkspace canUpdate={can(actor, 'bookings_amenities', 'update').allowed} config={shortletSettings(actor.tenantId).bookingPage} funnel={funnel} aptFunnels={aptFunnels} preview={preview} businessName={[...props.values()].join(' & ') || 'Your Shortlet portfolio'} />
     </div>
   );
+  });
 }

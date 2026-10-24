@@ -5,12 +5,14 @@ import { marketplaceOrderMachine } from '@/domain/workflows';
 import { can, type Role } from '@/lib/authz';
 import { ORDER_ACTIONS } from '@/domain/vendor-portal';
 import { VendorOrdersWorkspace, type OrderView } from '@/components/portal/vendor-orders-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** EM-09 (vendor view, §7 O via my_vendor_org) — Incoming Orders. Resident orders
  *  for the vendor's listings, driven through the §10 marketplace machine: Accept /
  *  Decline a placed order, then Mark fulfilled. Payment releases on fulfilment
  *  (SC-02). Orders are scoped to the vendor's org. */
 export default async function VendorOrdersPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('marketplace');
 
   const orders: OrderView[] = repos.marketplaceOrders.list(actor).items.map((o) => ({
@@ -29,4 +31,5 @@ export default async function VendorOrdersPage() {
       </div>
     </div>
   );
+  });
 }

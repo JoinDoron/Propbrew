@@ -1,5 +1,9 @@
 'use server';
 
+import { withDurableMutation } from '@/server/data/durable-records';
+
+import { nextRecordSequence } from '@/server/data/record-context';
+
 /**
  * Facility Intelligence actions (gated by the §7 assets_ppm capability — the
  * facility manager holds M). Acknowledge/dispatch alarms (a dispatch raises a
@@ -34,31 +38,35 @@ async function gate(action: 'create' | 'update' | 'transition'): Promise<{ actor
   catch (e) { if (e instanceof ForbiddenError) return { ok: false, error: 'You need facility-manager access for this.' }; throw e; }
 }
 
-let woSeq = 0;
 
 /* --- alarms --------------------------------------------------------------- */
 export async function acknowledgeAlarm(id: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if ('ok' in g) return g;
   const al = scopedMutableGet(g.actor, 'assets_ppm', db.facilityAlarms, id, 'update');
   if (!al) return { ok: false, error: 'Alarm not found.' };
   al.acknowledged = true;
   revalidate();
   return { ok: true };
+
+  });
 }
 
 /** Turn an alarm straight into a work order (the delight: one-tap dispatch). */
 export async function dispatchWoFromAlarm(id: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('create'); if ('ok' in g) return g;
   const al = scopedMutableGet(g.actor, 'assets_ppm', db.facilityAlarms, id, 'create');
   if (!al) return { ok: false, error: 'Alarm not found.' };
   if (al.woRef) return { ok: false, error: `Already dispatched as ${al.woRef}.` };
 
+  const woSeq = nextRecordSequence('facility:woSeq', 0, true);
   const ref = nextWorkOrderRef();
   const priority = al.severity === 'critical' ? 'emergency' : al.severity === 'warning' ? 'high' : 'routine';
   const hrs = (n: number) => new Date(NOW_MS + n * 3600 * 1000).toISOString();
   db.workOrders.unshift({
     tenantId: g.actor.tenantId, createdAt: NOW, createdBy: g.actor.userId, updatedAt: NOW, updatedBy: g.actor.userId,
-    id: `wo-alarm-${++woSeq}`, ref, title: `${al.system}: ${al.message}`, siteId: al.siteId, estateId: al.siteId, assetId: al.assetId,
+    id: `wo-alarm-${woSeq}`, ref, title: `${al.system}: ${al.message}`, siteId: al.siteId, estateId: al.siteId, assetId: al.assetId,
     status: 'new', priority, origin: 'sensor_alarm', requesterUserId: g.actor.userId, requesterName: 'Control Center', assigneeName: 'Unassigned',
     respondDueAt: hrs(priority === 'emergency' ? 1 : 4), resolveDueAt: hrs(priority === 'emergency' ? 8 : 48), cost: null,
   } as unknown as WorkOrder);
@@ -69,10 +77,13 @@ export async function dispatchWoFromAlarm(id: string): Promise<Res> {
   revalidatePath('/estate/work-orders');
   revalidatePath('/people');
   return { ok: true, ref };
+
+  });
 }
 
 /* --- energy --------------------------------------------------------------- */
 export async function logRefuel(generatorId: string, litres: number): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if ('ok' in g) return g;
   const gen = scopedMutableGet(g.actor, 'assets_ppm', db.facilityGenerators, generatorId, 'update');
   if (!gen) return { ok: false, error: 'Generator not found.' };
@@ -81,9 +92,12 @@ export async function logRefuel(generatorId: string, litres: number): Promise<Re
   gen.lastRefuelISO = NOW;
   revalidate();
   return { ok: true };
+
+  });
 }
 
 export async function logMeterReading(meterId: string, reading: number): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if ('ok' in g) return g;
   const m = scopedMutableGet(g.actor, 'assets_ppm', db.facilityMeters, meterId, 'update');
   if (!m) return { ok: false, error: 'Meter not found.' };
@@ -92,10 +106,13 @@ export async function logMeterReading(meterId: string, reading: number): Promise
   m.previous = m.reading; m.reading = reading; m.atISO = NOW;
   revalidate();
   return { ok: true };
+
+  });
 }
 
 /* --- inventory ------------------------------------------------------------ */
 export async function receiveStock(partId: string, qty: number): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if ('ok' in g) return g;
   const p = scopedMutableGet(g.actor, 'assets_ppm', db.facilityParts, partId, 'update');
   if (!p) return { ok: false, error: 'Part not found.' };
@@ -103,10 +120,13 @@ export async function receiveStock(partId: string, qty: number): Promise<Res> {
   p.stock += qty;
   revalidate();
   return { ok: true };
+
+  });
 }
 
 /* --- safety --------------------------------------------------------------- */
 export async function advancePermit(id: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if ('ok' in g) return g;
   const p = scopedMutableGet(g.actor, 'assets_ppm', db.facilityPermits, id, 'update');
   if (!p) return { ok: false, error: 'Permit not found.' };
@@ -114,20 +134,22 @@ export async function advancePermit(id: string): Promise<Res> {
   p.status = p.status === 'requested' ? 'active' : 'closed';
   revalidate();
   return { ok: true };
+
+  });
 }
 
 /* --- access & visitors ---------------------------------------------------- */
-let vpSeq = 0, aeSeq = 0;
 const nowIso = () => new Date(NOW_MS).toISOString();
 
 function logAccess(tenantId: string | null, siteId: string, pointName: string, kind: 'entry' | 'exit' | 'denied' | 'forced' | 'held', subjectName: string, credential: 'pass' | 'fob' | 'plate' | 'manual', passCode?: string) {
-  db.accessEvents.unshift({ tenantId: tenantId ?? 't-lekki', id: `ae-new-${++aeSeq}`, siteId, pointName, atISO: nowIso(), kind, subjectName, credential, passCode } as (typeof db.accessEvents)[number]);
+  db.accessEvents.unshift({ tenantId: tenantId ?? 't-lekki', id: `ae-new-${nextRecordSequence('facility:aeSeq', 0, true)}`, siteId, pointName, atISO: nowIso(), kind, subjectName, credential, passCode } as (typeof db.accessEvents)[number]);
 }
 
 export type PreRegisterInput = { visitorName: string; kind: 'guest' | 'contractor' | 'delivery' | 'ride_hail'; hostName: string; hostUnit: string; purpose: string; vehiclePlate?: string; validToISO?: string };
 
 /** Pre-register an expected visitor — issues a gate pass code the guard can match. */
 export async function preRegisterVisitor(input: PreRegisterInput): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('create'); if ('ok' in g) return g;
   if (!input.visitorName?.trim()) return { ok: false, error: 'Enter the visitor name.' };
   if (!['guest', 'contractor', 'delivery', 'ride_hail'].includes(input.kind)) return { ok: false, error: 'Choose a valid visitor type.' };
@@ -138,16 +160,19 @@ export async function preRegisterVisitor(input: PreRegisterInput): Promise<Res> 
   if (!site) return { ok: false, error: 'No authorised site is available for this visitor pass.' };
   const code = `VP-${4830 + db.visitorPasses.length}`;
   db.visitorPasses.unshift({
-    tenantId: site.tenantId, id: `vp-new-${++vpSeq}`, code, siteId: site.id,
+    tenantId: site.tenantId, id: `vp-new-${nextRecordSequence('facility:vpSeq', 0, true)}`, code, siteId: site.id,
     visitorName: input.visitorName.trim(), kind: input.kind, hostName: input.hostName.trim() || '—', hostUnit: input.hostUnit.trim() || '—',
     purpose: input.purpose.trim() || 'Visit', vehiclePlate: input.vehiclePlate?.trim() || undefined,
     status: 'expected', validFromISO: today, validToISO: validTo,
   } as (typeof db.visitorPasses)[number]);
   revalidate();
   return { ok: true, ref: code };
+
+  });
 }
 
 export async function checkInVisitor(id: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if ('ok' in g) return g;
   const p = scopedMutableGet(g.actor, 'assets_ppm', db.visitorPasses, id, 'update');
   if (!p) return { ok: false, error: 'Pass not found.' };
@@ -158,9 +183,12 @@ export async function checkInVisitor(id: string): Promise<Res> {
   logAccess(g.actor.tenantId, p.siteId, 'Main Gate', 'entry', p.visitorName, 'pass', p.code);
   revalidate();
   return { ok: true, ref: p.code };
+
+  });
 }
 
 export async function checkOutVisitor(id: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if ('ok' in g) return g;
   const p = scopedMutableGet(g.actor, 'assets_ppm', db.visitorPasses, id, 'update');
   if (!p) return { ok: false, error: 'Pass not found.' };
@@ -169,9 +197,12 @@ export async function checkOutVisitor(id: string): Promise<Res> {
   logAccess(g.actor.tenantId, p.siteId, 'Main Gate', 'exit', p.visitorName, 'pass', p.code);
   revalidate();
   return { ok: true, ref: p.code };
+
+  });
 }
 
 export async function setAccessPointMode(id: string, mode: 'secured' | 'unlocked' | 'lockdown'): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if ('ok' in g) return g;
   if (!['secured', 'unlocked', 'lockdown'].includes(mode)) return { ok: false, error: 'Choose a valid access-point mode.' };
   const ap = scopedMutableGet(g.actor, 'assets_ppm', db.accessPoints, id, 'update');
@@ -180,10 +211,13 @@ export async function setAccessPointMode(id: string, mode: 'secured' | 'unlocked
   if (mode === 'lockdown') { ap.status = 'online'; logAccess(g.actor.tenantId, ap.siteId, ap.name, 'held', 'Lockdown engaged', 'manual'); }
   revalidate();
   return { ok: true };
+
+  });
 }
 
 /** One-tap estate lockdown / release — sets every point at once (the red button). */
 export async function setEstateLockdown(on: boolean): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if ('ok' in g) return g;
   if (typeof on !== 'boolean') return { ok: false, error: 'Choose whether to engage or release lockdown.' };
   const visible = repos.accessPoints.list(g.actor, { limit: db.accessPoints.length }).items;
@@ -192,10 +226,13 @@ export async function setEstateLockdown(on: boolean): Promise<Res> {
   logAccess(g.actor.tenantId, visible[0]?.siteId ?? g.actor.estateIds[0] ?? 's-gardens', 'All points', 'held', on ? 'Estate lockdown engaged' : 'Lockdown released', 'manual');
   revalidate();
   return { ok: true };
+
+  });
 }
 
 /* --- copilot config (per-tenant model choice) ----------------------------- */
 export async function setCopilotModel(modelId: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const actor = await getActor();
   if (!actor.tenantId?.trim()) return { ok: false, error: 'An organisation is required to configure Copilot.' };
   try { assertCan(actor, 'reports_analytics', 'update'); }
@@ -211,10 +248,13 @@ export async function setCopilotModel(modelId: string): Promise<Res> {
   setTenantModel(actor.tenantId, modelId as CopilotModelId);
   ['/copilot', '/estate/copilot', '/shortlet/copilot', '/construction/copilot'].forEach((path) => revalidatePath(path));
   return { ok: true };
+
+  });
 }
 
 /* --- sustainability ------------------------------------------------------- */
 export async function setSustainabilityTarget(id: string, targetValue: number): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if ('ok' in g) return g;
   const t = scopedMutableGet(g.actor, 'assets_ppm', db.sustainabilityTargets, id, 'update');
   if (!t) return { ok: false, error: 'Target not found.' };
@@ -222,4 +262,6 @@ export async function setSustainabilityTarget(id: string, targetValue: number): 
   t.targetValue = Math.round(targetValue);
   revalidate();
   return { ok: true };
+
+  });
 }

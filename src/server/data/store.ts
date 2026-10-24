@@ -22,6 +22,7 @@ import { money } from '@/domain/primitives';
 import type { Role } from '@/domain/enums';
 import type { Resident } from '@/domain/entities';
 import type { SystemActor } from '@/domain/workflows';
+import { currentRecordContext, durableRecordsEnabled, nextRecordSequence, type WorkspaceRecordState } from './record-context';
 
 const clone = <T>(arr: readonly T[]): T[] => arr.map((x) => ({ ...x }));
 
@@ -165,6 +166,7 @@ const createWorkingSet = () => ({
 
 type ProcessMemoryStore = {
   db: ReturnType<typeof createWorkingSet>;
+  facade?: ReturnType<typeof createWorkingSet>;
   history: Map<string, HistoryEntry[]>;
   initialized: boolean;
   proxyReturnNoticeSequence: number;
@@ -174,8 +176,20 @@ const processStore = processGlobal.__propbrewMemoryStoreV1 ??= {
   db: createWorkingSet(), history: new Map<string, HistoryEntry[]>(), initialized: false, proxyReturnNoticeSequence: 0,
 };
 
-/** Shared only within this server process; all reads still require actor scope. */
-export const db = processStore.db;
+/** Synchronous domain logic operates only on its isolated database transaction. */
+function activeCollections(): typeof processStore.db {
+  const context = currentRecordContext();
+  if (context) return context.state.collections as typeof processStore.db;
+  if (durableRecordsEnabled() && processStore.initialized) throw new Error('Database records must be read inside an authenticated record context.');
+  return processStore.db;
+}
+// Accessors keep the facade cloneable for development fixtures while resolving
+// every property against the current isolated database working set.
+export const db = processStore.facade ??= Object.defineProperties({}, Object.fromEntries(Object.keys(processStore.db).map((property) => [property, {
+  enumerable: true, configurable: false,
+  get: () => Reflect.get(activeCollections(), property),
+  set: (value: unknown) => { Reflect.set(activeCollections(), property, value); },
+}]))) as typeof processStore.db;
 
 export type HistoryEntry = {
   seq: number;
@@ -194,21 +208,36 @@ export type HistoryEntry = {
 const history = processStore.history;
 
 const key = (machine: MachineKey, id: string) => `${machine}:${id}`;
+const durableHistoryKey = (machine: MachineKey, id: string) => `${currentRecordContext()!.domainTenantId}:${key(machine, id)}`;
 
 export function recordHistory(machine: MachineKey, id: string, entry: Omit<HistoryEntry, 'seq'>): void {
+  const context = currentRecordContext();
+  if (context) {
+    if (context.mode !== 'write') throw new Error('History changes require a database mutation.');
+    const historyKey = durableHistoryKey(machine, id);
+    const list = (context.state.history[historyKey] ?? []) as HistoryEntry[];
+    list.push({ ...entry, seq: list.length });
+    context.state.history[historyKey] = list;
+    return;
+  }
+  if (durableRecordsEnabled() && processStore.initialized) throw new Error('History requires a database record context.');
   const list = history.get(key(machine, id)) ?? [];
   list.push({ ...entry, seq: list.length });
   history.set(key(machine, id), list);
 }
 
 export function getHistory(machine: MachineKey, id: string): HistoryEntry[] {
+  const context = currentRecordContext();
+  if (context) return (context.state.history[durableHistoryKey(machine, id)] ?? []) as HistoryEntry[];
+  if (durableRecordsEnabled()) throw new Error('History requires a database record context.');
   return history.get(key(machine, id)) ?? [];
 }
 
 /** Notify a resident their proxy was returned — writes the portal-hub banner
  *  ledger AND mirrors it into the global 🔔 bell (SC-09). */
 export function recordProxyReturnNotice(userId: string, m: { id: string; ref: string; title: string } | undefined, reason: string): void {
-  db.proxyReturnNotices.unshift({ id: `prn-${++processStore.proxyReturnNoticeSequence}`, userId, motionId: m?.id ?? '', motionRef: m?.ref ?? '', motionTitle: m?.title ?? '', reason, atISO: '2026-07-26T09:00:00Z', seen: false });
+  const sequence = currentRecordContext() ? nextRecordSequence('store:proxy-notice', 0, true) : ++processStore.proxyReturnNoticeSequence;
+  db.proxyReturnNotices.unshift({ id: `prn-${sequence}`, userId, motionId: m?.id ?? '', motionRef: m?.ref ?? '', motionTitle: m?.title ?? '', reason, atISO: '2026-07-26T09:00:00Z', seen: false });
   pushNotification(userId, ['resident'], {
     title: 'Proxy returned',
     body: `${reason} Your vote${m ? ` on ${m.ref}` : ''} is yours again.`,
@@ -271,7 +300,10 @@ function settleAllUnits() {
  *  Platform-Admin-only in practice (the page gates it). */
 export function getAllHistory(): (HistoryEntry & { machine: string; recordId: string })[] {
   const out: (HistoryEntry & { machine: string; recordId: string })[] = [];
-  for (const [k, entries] of history) {
+  const context = currentRecordContext();
+  if (!context && durableRecordsEnabled()) throw new Error('History requires a database record context.');
+  const entriesByKey = context ? Object.entries(context.state.history).map(([k, entries]) => [k.slice(context.domainTenantId.length + 1), entries as HistoryEntry[]] as const) : history;
+  for (const [k, entries] of entriesByKey) {
     const [machine, recordId] = k.split(/:(.+)/);
     for (const e of entries) out.push({ ...e, machine, recordId });
   }
@@ -332,6 +364,42 @@ if (!processStore.initialized) {
   settleAllUnits();
   seedWorkOrderHistory();
   processStore.initialized = true;
+}
+
+/** One-time bootstrap. Existing database state is never merged with or reset to fixtures. */
+export function initialWorkspaceRecordState(domainTenantId: string): WorkspaceRecordState {
+  const collections: Record<string, unknown> = {};
+  const ownedAssetIds = new Set(seed.assets.filter((row) => row.tenantId === domainTenantId).map((row) => String(row.id)));
+  for (const [name, value] of Object.entries(processStore.db)) {
+    collections[name] = Array.isArray(value) ? value.filter((row: unknown) => {
+      if (!row || typeof row !== 'object') return true;
+      const item = row as Record<string, unknown>;
+      if (typeof item.tenantId === 'string') return item.tenantId === domainTenantId;
+      if (name === 'assetRuntime') return ownedAssetIds.has(String(item.assetId));
+      return true;
+    }) : value;
+  }
+  const ownedIds = new Set(Object.values(collections).flatMap((rows) => Array.isArray(rows) ? rows.flatMap((row) => row && typeof row === 'object' && 'id' in row ? [String(row.id)] : []) : []));
+  const tenantHistory: Record<string, unknown[]> = {};
+  for (const [k, entries] of history) {
+    const recordId = k.slice(k.indexOf(':') + 1);
+    if (ownedIds.has(recordId)) tenantHistory[`${domainTenantId}:${k}`] = entries;
+  }
+  return JSON.parse(JSON.stringify({ schemaVersion: 1, collections, history: tenantHistory, auxiliary: {}, sequences: {} })) as WorkspaceRecordState;
+}
+
+export function validateWorkspaceRecordState(value: unknown, domainTenantId: string): WorkspaceRecordState {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Stored workspace data is invalid.');
+  const state = value as WorkspaceRecordState;
+  if (state.schemaVersion !== 1 || !state.collections || !state.history || !state.auxiliary || !state.sequences) throw new Error('Stored workspace schema is unsupported.');
+  for (const name of Object.keys(processStore.db)) {
+    if (!Object.hasOwn(state.collections, name)) throw new Error('Stored workspace data is incomplete.');
+    const value = state.collections[name];
+    if (Array.isArray(processStore.db[name as keyof typeof processStore.db]) && !Array.isArray(value)) throw new Error('Stored record collection is invalid.');
+    if (Array.isArray(value) && value.some((row) => row && typeof row === 'object' && typeof row.tenantId === 'string' && row.tenantId !== domainTenantId)) throw new Error('Foreign tenant records cannot enter this workspace.');
+  }
+  if (Object.keys(state.history).some((key) => !key.startsWith(`${domainTenantId}:`))) throw new Error('Foreign tenant history cannot enter this workspace.');
+  return state;
 }
 
 

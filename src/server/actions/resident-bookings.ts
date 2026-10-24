@@ -1,5 +1,9 @@
 'use server';
 
+import { withDurableMutation } from '@/server/data/durable-records';
+
+import { nextRecordSequence } from '@/server/data/record-context';
+
 /**
  * Resident amenity booking (EM-05, §7 O). A resident may CREATE a booking for
  * their own account; the auto-approval RULE decides whether it lands approved
@@ -19,9 +23,9 @@ import { nowISO } from '@/server/clock';
 
 export type BookResult = { ok: true; status: string; auto: boolean } | { ok: false; error: string };
 
-let counter = 0;
 
 export async function createBooking(amenity: string, slotISO: string): Promise<BookResult> {
+  return withDurableMutation(async () => {
   const actor = await getActor();
   try {
     assertCan(actor, 'bookings_amenities', 'create'); // resident (§7 O)
@@ -40,7 +44,7 @@ export async function createBooking(amenity: string, slotISO: string): Promise<B
 
   const booking = {
     tenantId: actor.tenantId,
-    id: `bk-res-${++counter}`,
+    id: `bk-res-${nextRecordSequence('resident-bookings:counter', 0, true)}`,
     amenity,
     estateId,
     ownerUserId: actor.userId,
@@ -59,4 +63,6 @@ export async function createBooking(amenity: string, slotISO: string): Promise<B
 
   ['/portal/bookings', '/portal', '/bookings', '/estate'].forEach((p) => revalidatePath(p));
   return { ok: true, status, auto: rule.auto };
+
+  });
 }

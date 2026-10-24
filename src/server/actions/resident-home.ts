@@ -1,5 +1,7 @@
 'use server';
 
+import { withDurableMutation } from '@/server/data/durable-records';
+
 /**
  * Resident-home actions: the active-unit context and the wallet top-up.
  *
@@ -20,17 +22,21 @@ import { ACTIVE_UNIT_COOKIE } from '@/server/active-unit';
 import { nowISO } from '@/server/clock';
 
 export async function setActiveUnit(unitId: string): Promise<void> {
+  return withDurableMutation(async () => {
   const actor = await getActor();
   if (!actor.unitIds.includes(unitId)) return; // not yours — ignore
   const store = await cookies();
   store.set(ACTIVE_UNIT_COOKIE, unitId, { httpOnly: false, sameSite: 'lax', path: '/', maxAge: 60 * 60 * 24 * 30 });
   revalidatePath('/portal');
+
+  });
 }
 
 export type TopUpResult = { ok: true } | { ok: false; error: string };
 
 /** Fund the selected unit's wallet (card/transfer flow simulated). */
 export async function topUpWallet(unitId: string, amountNaira: number): Promise<TopUpResult> {
+  return withDurableMutation(async () => {
   const actor = await getActor();
   try {
     assertCan(actor, 'payments_in_app', 'create'); // resident-only (§7)
@@ -50,6 +56,8 @@ export async function topUpWallet(unitId: string, amountNaira: number): Promise<
 
   ['/portal', '/portal/bills', '/billing', '/estate', '/dashboard'].forEach((p) => revalidatePath(p));
   return { ok: true };
+
+  });
 }
 
 /**
@@ -59,6 +67,7 @@ export async function topUpWallet(unitId: string, amountNaira: number): Promise<
  * (SC-02). Net wallet change is zero; the money flows resident → wallet → charge.
  */
 export async function payChargeFromWallet(ref: string): Promise<TopUpResult> {
+  return withDurableMutation(async () => {
   const actor = await getActor();
   try {
     assertCan(actor, 'payments_in_app', 'create'); // resident-only (§7)
@@ -106,4 +115,6 @@ export async function payChargeFromWallet(ref: string): Promise<TopUpResult> {
 
   ['/portal/bills', '/portal', '/billing', '/estate', '/dashboard'].forEach((p) => revalidatePath(p));
   return { ok: true };
+
+  });
 }

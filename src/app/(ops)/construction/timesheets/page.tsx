@@ -3,12 +3,14 @@ import { can } from '@/lib/authz';
 import { constructionWorld } from '@/server/reads/construction';
 import { costTimesheets, labourPosture, labourByCostCode } from '@/domain/construction';
 import { TimesheetsWorkspace, type SheetRow, type CodeRow } from '@/components/construction/timesheets-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** Timesheets — labour hours costed off day rates (overtime at 1.5×) and, on
  *  approval, POSTED to the cost code's actual. That posting is the link the PRD
  *  asks for: until a sheet is approved its cost is invisible to earned value,
  *  so the page shows exactly how much real spend CPI cannot yet see. */
 export default async function ConstructionTimesheetsPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const canMutate = can(actor, 'reports_analytics', 'update').allowed;
   const world = constructionWorld(actor);
@@ -40,4 +42,5 @@ export default async function ConstructionTimesheetsPage() {
       <TimesheetsWorkspace sheets={sheets} byCode={byCode} posture={posture} projectName={project?.name ?? 'Project'} canMutate={canMutate} />
     </div>
   );
+  });
 }

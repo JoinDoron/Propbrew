@@ -1,5 +1,7 @@
 'use server';
 
+import { withDurableMutation } from '@/server/data/durable-records';
+
 import { createHash, randomUUID } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
@@ -10,6 +12,7 @@ import { canRegisterEstateRecords, withCreatedEstateAssignments } from '@/server
 import { NOW } from '@/domain/ppm';
 import { money } from '@/domain/primitives';
 import { assertReviewReadiness, isReviewActor, reviewModeEnabled } from '@/server/review-auth';
+import { currentRecordContext } from '@/server/data/record-context';
 import type { Actor } from '@/lib/authz';
 import type { Building, Resident, Site, Unit } from '@/domain/entities';
 
@@ -31,7 +34,8 @@ const tenantSchema = z.object({
 
 async function registrationActor(): Promise<{ ok: true; actor: Actor } | { ok: false; error: string }> {
   const review = reviewModeEnabled();
-  if ((!review && process.env.NODE_ENV === 'production') || (process.env.DATA_SOURCE && process.env.DATA_SOURCE !== 'memory')) {
+  const durableReview = review && process.env.DATA_SOURCE === 'postgres' && currentRecordContext()?.mode === 'write';
+  if ((!review && process.env.NODE_ENV === 'production') || (process.env.DATA_SOURCE && process.env.DATA_SOURCE !== 'memory' && !durableReview)) {
     return { ok: false, error: 'Property and tenant creation require the durable registration adapter in this environment. No record was created.' };
   }
   if (review) {
@@ -66,6 +70,7 @@ const refresh = () => ['/estate', '/properties', '/people', '/tenancy', '/spaces
 
 /** Sample record creation only: no infrastructure, subscription or billing changes. */
 export async function addEstateProperty(input: unknown): Promise<RegistrationResult> {
+  return withDurableMutation(async () => {
   const gate = await registrationActor();
   if (!gate.ok) return gate;
   const parsed = propertySchema.safeParse(input);
@@ -96,10 +101,13 @@ export async function addEstateProperty(input: unknown): Promise<RegistrationRes
   db.estateRegistrationAudit.push({ tenantId, actorId: gate.actor.userId, action: 'property.created', entityId: id, siteId: id, at });
   refresh();
   return { ok: true, ...result };
+
+  });
 }
 
 /** Add a scoped resident contact record; never creates an auth account or sends an invite. */
 export async function addEstateTenant(input: unknown): Promise<RegistrationResult> {
+  return withDurableMutation(async () => {
   const gate = await registrationActor();
   if (!gate.ok) return gate;
   const parsed = tenantSchema.safeParse(input);
@@ -134,4 +142,6 @@ export async function addEstateTenant(input: unknown): Promise<RegistrationResul
   db.estateRegistrationAudit.push({ tenantId, actorId: gate.actor.userId, action: 'resident.created', entityId: id, siteId: unit.siteId, unitId: unit.id, at });
   refresh();
   return { ok: true, ...result };
+
+  });
 }

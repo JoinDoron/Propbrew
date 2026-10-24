@@ -145,8 +145,8 @@ describe('Deep Facility register Clinexa polish', () => {
     expect(source('work-orders/work-orders-intel')).toContain('Restore dismissed suggestions');
   });
 
-  it('keeps work-order detail permissions, tab IDs and Estate back-navigation unchanged', () => {
-    const html = render(WorkOrderDetailView, { actor, wo: workOrder, basePath: '/estate/work-orders' });
+  it('keeps work-order detail permissions, tab IDs and Estate back-navigation unchanged', async () => {
+    const html = renderToStaticMarkup(await WorkOrderDetailView({ actor, wo: workOrder, basePath: '/estate/work-orders' }));
     expect(html.match(/role="tabpanel"/g)).toHaveLength(2);
     expect(html).toContain('href="/estate/work-orders"');
     expect(html).toContain('$123.45');

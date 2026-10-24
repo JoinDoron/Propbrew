@@ -16,6 +16,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { QuickActions } from '@/components/portal/quick-actions';
 import { EstateStatus, AttentionList, ActivityTimeline, type Attention, type Activity, type StatusChip } from '@/components/portal/home-hub';
 import { isRequestClosed, isOrderOpen } from '@/domain/resident-portal';
+import { withDurableRead } from '@/server/data/durable-records';
 
 const UNPAID = ['issued', 'partially_paid', 'overdue', 'in_arrears', 'escalated'];
 const DAY = 24 * 3600 * 1000;
@@ -28,6 +29,7 @@ const shortDate = (iso: string) => new Date(iso).toLocaleDateString('en-NG', { m
  * timeline. All personalised from the resident's own scoped records (§7 O).
  */
 export default async function ResidentHome() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('work_orders');
 
   const unitOptions = actor.unitIds
@@ -123,4 +125,5 @@ export default async function ResidentHome() {
       </div>
     </div>
   );
+  });
 }

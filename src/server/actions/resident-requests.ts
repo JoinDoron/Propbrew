@@ -1,5 +1,9 @@
 'use server';
 
+import { withDurableMutation } from '@/server/data/durable-records';
+
+import { nextRecordSequence } from '@/server/data/record-context';
+
 /**
  * Resident "raise a request" (EM-03, §7 O). A resident may CREATE a work order
  * against their own unit — nothing more; triage/assignment stay manager/tech
@@ -21,9 +25,9 @@ import { nowISO } from '@/server/clock';
 
 export type RaiseResult = { ok: true; ref: string } | { ok: false; error: string };
 
-let counter = 0;
 
 export async function raiseRequest(input: { title: string; description?: string }): Promise<RaiseResult> {
+  return withDurableMutation(async () => {
   const actor = await getActor();
   try {
     assertCan(actor, 'work_orders', 'create'); // resident (§7 O)
@@ -46,7 +50,7 @@ export async function raiseRequest(input: { title: string; description?: string 
   const wo = {
     tenantId: actor.tenantId,
     createdAt: NOW, createdBy: actor.userId, updatedAt: NOW, updatedBy: actor.userId,
-    id: `wo-res-${++counter}`,
+    id: `wo-res-${nextRecordSequence('resident-requests:counter', 0, true)}`,
     ref,
     title,
     // The typed detail reached triage and was then dropped, so the technician
@@ -75,4 +79,6 @@ export async function raiseRequest(input: { title: string; description?: string 
 
   ['/portal/requests', '/portal', '/work-orders', '/estate/work-orders', '/people', '/facility', '/estate', '/dashboard'].forEach((p) => revalidatePath(p));
   return { ok: true, ref };
+
+  });
 }

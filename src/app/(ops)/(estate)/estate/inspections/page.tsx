@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { ScopeBanner } from '@/components/domain';
 import { InspectionsWorkspace } from '@/components/inspections/inspections-workspace';
 import type { InspectionsData } from '@/components/inspections/types';
+import { withDurableRead } from '@/server/data/durable-records';
 
 function allRows<T>(read: (cursor?: string | null) => Page<T>): T[] {
   const rows: T[] = [];
@@ -25,6 +26,7 @@ const siteKey = (tenantId: string, siteId: string) => JSON.stringify([tenantId, 
 /** Estate-owned compliance: the existing inspection lifecycle, restricted to
  * authorised Estate properties and retaining the actor's existing grant. */
 export default async function EstateInspectionsPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('inspections_compliance', 'read', 'estate');
   const estateSites = listEstateWorkOrderSites(actor);
   const siteKeys = new Set(estateSites.map((site) => siteKey(site.tenantId, site.id)));
@@ -48,4 +50,5 @@ export default async function EstateInspectionsPage() {
       <InspectionsWorkspace {...data} />
     </div>
   );
+  });
 }

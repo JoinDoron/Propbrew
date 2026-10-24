@@ -9,6 +9,7 @@ import 'server-only';
  */
 
 import type { Role } from '@/domain/enums';
+import { getRecordAuxiliary, nextRecordSequence } from '@/server/data/record-context';
 
 export type NotifKind = 'info' | 'success' | 'warn' | 'danger';
 export type Notification = {
@@ -24,8 +25,10 @@ export type Notification = {
 export type ChatMessage = { mine: boolean; name: string; text: string; at: string };
 export type Thread = { id: string; withName: string; subject: string; messages: ChatMessage[]; lastReadSeq: number };
 
-const notifications = new Map<string, Notification[]>();
-const threads = new Map<string, Thread[]>();
+type InboxRecords = { notifications: Record<string, Notification[]>; threads: Record<string, Thread[]> };
+const inboxRecords = () => getRecordAuxiliary<InboxRecords>('inbox', () => ({ notifications: {}, threads: {} }));
+// Prefix keys so authenticated IDs such as "__proto__" remain ordinary data.
+const userKey = (userId: string) => `user:${userId}`;
 
 const BASE = Date.parse('2026-07-26T09:00:00Z');
 const at = (minsAgo: number) => new Date(BASE - minsAgo * 60_000).toISOString();
@@ -125,22 +128,17 @@ const GENERIC_THREAD: ThreadSeed = {
 /* --- seeding + accessors --------------------------------------------------- */
 
 function ensureSeeded(userId: string, role: Role): void {
-  if (!notifications.has(userId)) {
+  const records = inboxRecords(), key = userKey(userId);
+  if (!Object.hasOwn(records.notifications, key)) {
     const seeds = NOTIFS[role] ?? [[120, 'Welcome to Reeve', 'You’re all set. Notifications will appear here.', 'info']];
-    notifications.set(
-      userId,
-      seeds.map(([mins, title, body, kind, href], i) => ({ id: `n-${userId}-${i}`, title, body, kind, href, at: at(mins), read: i >= 3 })),
-    );
+    records.notifications[key] = seeds.map(([mins, title, body, kind, href], i) => ({ id: `n-${userId}-${i}`, title, body, kind, href, at: at(mins), read: i >= 3 }));
   }
-  if (!threads.has(userId)) {
+  if (!Object.hasOwn(records.threads, key)) {
     const seeds = THREADS[role] ?? [GENERIC_THREAD];
-    threads.set(
-      userId,
-      seeds.map((t) => {
+    records.threads[key] = seeds.map((t) => {
         const messages: ChatMessage[] = t.msgs.map(([mine, name, text, mins]) => ({ mine, name, text, at: at(mins) }));
         return { id: t.id, withName: t.withName, subject: t.subject, messages, lastReadSeq: Math.max(0, messages.length - t.unread) };
-      }),
-    );
+      });
   }
 }
 
@@ -148,32 +146,31 @@ const primaryRole = (roles: readonly Role[]): Role => roles[0] ?? 'resident';
 
 export function getNotifications(userId: string, roles: readonly Role[]): Notification[] {
   ensureSeeded(userId, primaryRole(roles));
-  return [...(notifications.get(userId) ?? [])].sort((a, b) => (a.at < b.at ? 1 : -1));
+  return [...(inboxRecords().notifications[userKey(userId)] ?? [])].sort((a, b) => (a.at < b.at ? 1 : -1));
 }
 
 export function unreadNotificationCount(userId: string, roles: readonly Role[]): number {
   ensureSeeded(userId, primaryRole(roles));
-  return (notifications.get(userId) ?? []).filter((n) => !n.read).length;
+  return (inboxRecords().notifications[userKey(userId)] ?? []).filter((n) => !n.read).length;
 }
 
 export function markAllNotificationsRead(userId: string, roles: readonly Role[]): void {
   ensureSeeded(userId, primaryRole(roles));
-  (notifications.get(userId) ?? []).forEach((n) => (n.read = true));
+  (inboxRecords().notifications[userKey(userId)] ?? []).forEach((n) => (n.read = true));
 }
 
-let pushSeq = 0;
 /** Push a live notification into a user's bell (SC-09). Used when an event needs
  *  to reach someone directly — e.g. a returned proxy. Seeds their inbox first so
  *  role templates aren't suppressed. */
 export function pushNotification(userId: string, roles: readonly Role[], n: { title: string; body: string; kind: NotifKind; href?: string }): void {
   ensureSeeded(userId, primaryRole(roles));
-  const list = notifications.get(userId)!;
-  list.unshift({ id: `n-${userId}-push-${++pushSeq}`, title: n.title, body: n.body, kind: n.kind, href: n.href, at: new Date(BASE).toISOString(), read: false });
+  const list = inboxRecords().notifications[userKey(userId)];
+  list.unshift({ id: `n-${userId}-push-${nextRecordSequence('inbox:pushSeq', 0, true)}`, title: n.title, body: n.body, kind: n.kind, href: n.href, at: new Date(BASE).toISOString(), read: false });
 }
 
 export function getThreads(userId: string, roles: readonly Role[]): Thread[] {
   ensureSeeded(userId, primaryRole(roles));
-  return threads.get(userId) ?? [];
+  return inboxRecords().threads[userKey(userId)] ?? [];
 }
 
 export function unreadThreadCount(userId: string, roles: readonly Role[]): number {

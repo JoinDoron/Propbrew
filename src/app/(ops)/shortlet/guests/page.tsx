@@ -9,8 +9,10 @@ import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
 import { guestProfiles } from '@/domain/shortlet';
 import { Users, Star, Repeat } from 'lucide-react';
+import { withDurableRead } from '@/server/data/durable-records';
 
 export default async function ShortletGuestsPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('bookings_amenities', 'read', 'shortlet');
   const guests = guestProfiles(repos.shortletBookings.list(actor).items);
   const repeatRate = guests.length ? Math.round((guests.filter((guest) => guest.repeat).length / guests.length) * 100) : 0;
@@ -25,4 +27,5 @@ export default async function ShortletGuestsPage() {
       </div> },
     ]} />
   </div>;
+  });
 }

@@ -3,12 +3,14 @@ import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
 import { InspectionsWorkspace, type PendingRow, type DoneRow } from '@/components/shortlet/inspections-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** FR-CI (Short-Let PMS) — checkout inspections. A checked-out booking is
  *  inspected against a structured checklist; the outcome drives the caution-fee
  *  decision (refund / deduct / forfeit) and closes the booking. Completed
  *  inspections are permanent dispute evidence (NFR-04), downloadable as a pack. */
 export default async function ShortletInspectionsPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('bookings_amenities', 'read', 'shortlet');
   const bookings = repos.shortletBookings.list(actor).items;
   const apts = new Map(repos.shortletApartments.list(actor).items.map((a) => [a.id, a]));
@@ -36,4 +38,5 @@ export default async function ShortletInspectionsPage() {
       <InspectionsWorkspace canUpdate={can(actor, 'bookings_amenities', 'update').allowed} pending={pending} done={done} />
     </div>
   );
+  });
 }

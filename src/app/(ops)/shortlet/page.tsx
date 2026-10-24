@@ -6,6 +6,7 @@ import { statusTone, type Tone } from '@/lib/status-tones';
 import { periodKpis, revenueVsExpense, movementsOn, calendarBars, turnovers, outstandingMinor } from '@/domain/shortlet';
 import { ShortletDashboard, type CalRow, type Attn } from '@/components/shortlet/dashboard';
 import { shortletDate, shortletMoney } from '@/components/shortlet/shortlet-format';
+import { withDurableRead } from '@/server/data/durable-records';
 
 const DAY = 24 * 3600 * 1000;
 const OPEN = ['enquiry', 'confirmed', 'checked_in'];
@@ -16,6 +17,7 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
  *  occupancy strip, revenue-vs-expense, and a smart attention feed
  *  (un-inspected checkouts, same-day turnover flips, balances, enquiries). */
 export default async function ShortletDashboardPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('bookings_amenities', 'read', 'shortlet');
   const apartments = repos.shortletApartments.list(actor).items;
   const bookings = repos.shortletBookings.list(actor).items;
@@ -67,4 +69,5 @@ export default async function ShortletDashboardPage() {
       />
     </div>
   );
+  });
 }

@@ -5,6 +5,7 @@ import { can } from '@/lib/authz';
 import { NOW_MS } from '@/domain/ppm';
 import { siteHealth, dieselCost, gridReliancePct, contractStatus, portfolioTotals } from '@/domain/facility';
 import { PortfolioWorkspace, type PortfolioEstateVitals } from '@/components/facility/portfolio-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 const OPEN_WO = new Set(['new', 'triaged', 'assigned', 'in_progress', 'on_hold', 'resolved']);
 const UNPAID = new Set(['issued', 'partially_paid', 'overdue', 'in_arrears', 'escalated']);
@@ -14,6 +15,7 @@ const UNPAID = new Set(['issued', 'partially_paid', 'overdue', 'in_arrears', 'es
  *  cleared roles — arrears), ranked worst-first with a composite estate index.
  *  Scope-aware: an executive sees the whole portfolio; an estate manager sees theirs. */
 export default async function PortfolioPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('reports_analytics', 'read', 'estate');
   const sites = repos.sites.all(actor);
   const systems = repos.buildingSystems.list(actor).items;
@@ -62,4 +64,5 @@ export default async function PortfolioPage() {
         loadedRecordCounts={{ estates: sites.length, systems: systems.length, alarms: alarms.length, generators: generators.length, contracts: contracts.length, workOrders: workOrders.length, invoices: canSeeMoney ? invoices.length : undefined }} />
     </div>
   );
+  });
 }

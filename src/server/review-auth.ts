@@ -7,6 +7,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import type { Actor } from '@/lib/authz';
 import { identityByKey, type DevIdentity } from '@/server/identities';
 import { trustedCreatedEstateIds } from '@/server/data/estate-creation-scope';
+import { currentRecordContext, durableRecordsEnabled } from '@/server/data/record-context';
 
 export const REVIEW_SESSION_COOKIE = '__Host-propbrew_review_session';
 export const REVIEW_CSRF_COOKIE = '__Host-propbrew_review_csrf';
@@ -35,8 +36,8 @@ function reviewConfiguration() {
   for (const field of ['REEVE_ALLOW_DEMO_IDENTITIES', 'REEVE_ALLOW_IN_MEMORY_DATA', 'NEXT_PUBLIC_DEV_IDENTITY']) {
     if (process.env[field] === '1') throw new ReviewConfigurationError(field);
   }
-  // This deployment deliberately uses sample records. It must never masquerade as a durable customer adapter.
-  if (process.env.DATA_SOURCE && process.env.DATA_SOURCE !== 'memory') throw new ReviewConfigurationError('DATA_SOURCE');
+  // Review identity remains separate from customer authentication even with durable records.
+  if (process.env.DATA_SOURCE && !['memory', 'postgres'].includes(process.env.DATA_SOURCE)) throw new ReviewConfigurationError('DATA_SOURCE');
   const parts = process.env.PROPBREW_REVIEW_PASSWORD_HASH?.split('$');
   const salt = parts?.length === 6 && parts.slice(0, 4).join('$') === 'scrypt$16384$8$1' ? decoded(parts[4], 16, 64) : null;
   const passwordHash = parts?.length === 6 ? decoded(parts[5], 64, 64) : null;
@@ -66,7 +67,7 @@ function reviewConfiguration() {
 
 export function assertReviewReadiness(): void { reviewConfiguration(); }
 
-/** A separate UUID is used only for the durable AI ledger; sample records retain their fixture tenant. */
+/** Canonical storage UUID; the review actor's logical tenant remains separate. */
 export function reviewLedgerTenantId(): string | null {
   return reviewModeEnabled() ? reviewConfiguration().tenantId : null;
 }
@@ -131,7 +132,12 @@ export function verifyReviewSession(token: string | undefined, now = Date.now())
 export async function getReviewSession(): Promise<DevIdentity | null> {
   if (!reviewModeEnabled()) return null;
   const token = (await cookies()).get(REVIEW_SESSION_COOKIE)?.value;
-  return verifyReviewSession(token) ? reviewActorIdentity() : null;
+  if (!verifyReviewSession(token)) return null;
+  if (durableRecordsEnabled() && !currentRecordContext()) {
+    const { withDurableRead } = await import('@/server/data/durable-records');
+    return withDurableRead(async () => reviewActorIdentity());
+  }
+  return reviewActorIdentity();
 }
 
 export function issueReviewCsrf(now = Date.now()): string {

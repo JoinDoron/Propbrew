@@ -1,5 +1,7 @@
 'use server';
 
+import { withDurableRead } from '@/server/data/durable-records';
+
 /**
  * AI-S-02 — natural-language search & reporting, demo engine.
  *
@@ -56,6 +58,7 @@ function currencyReview(base: { scopeLabel: string }): DataAnswer {
 }
 
 export async function askData(question: string): Promise<DataAnswer> {
+  return withDurableRead(async () => {
   const actor = await getActor();
   const q = question.toLowerCase().trim();
   const scopeLabel = actor.allEstates ? 'all your estates' : `your ${actor.estateIds.length} estate(s)`;
@@ -217,6 +220,8 @@ export async function askData(question: string): Promise<DataAnswer> {
     sources: [],
     confidence: 0,
   };
+
+  });
 }
 
 function noAccess(base: { scopeLabel: string }, what: string): DataAnswer {

@@ -3,11 +3,13 @@ import { can } from '@/lib/authz';
 import { constructionWorld } from '@/server/reads/construction';
 import { stockSignal, materialLeakage, moneyTrail } from '@/domain/construction';
 import { MaterialsWorkspace, type MaterialRow, type TrailNodeRow, type MovementRow } from '@/components/construction/materials-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** Materials & Money-Trail — stock positions with days-of-cover, the kobo money
  *  trail from approved budget through to booked cost, and leakage forensics
  *  (received − issued − on-hand) surfaced as an advisory variance to investigate. */
 export default async function ConstructionMaterialsPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const canMutate = can(actor, 'reports_analytics', 'update').allowed;
   const world = constructionWorld(actor);
@@ -63,4 +65,5 @@ export default async function ConstructionMaterialsPage() {
       />
     </div>
   );
+  });
 }

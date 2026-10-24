@@ -3,6 +3,7 @@ import { requireCapability } from '@/server/guard';
 import { REQUIREMENTS, AI_REQUIREMENTS, OPEN_QUESTIONS, PHASE_MAP } from '@/domain';
 import { Card, CardHeader, StatusPill } from '@/components/ui';
 import { PageTabs } from '@/components/ui/page-tabs';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /**
  * PRD traceability spine (§14 wants every metric reportable from the product;
@@ -11,6 +12,7 @@ import { PageTabs } from '@/components/ui/page-tabs';
  * cheapest defence during a five-business-day client review window.
  */
 export default async function RequirementsPage() {
+  return withDurableRead(async () => {
   await requireCapability('tenant_config');
 
   const all = [
@@ -105,4 +107,5 @@ export default async function RequirementsPage() {
 
     </div>
   );
+  });
 }

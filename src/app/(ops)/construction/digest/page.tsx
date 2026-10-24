@@ -4,11 +4,13 @@ import { constructionWorld } from '@/server/reads/construction';
 import { NOW, NOW_MS } from '@/domain/ppm';
 import { weeklyDigest, projectEVMOf } from '@/domain/construction';
 import { DigestWorkspace, type DigestView } from '@/components/construction/digest-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** AI Weekly Digest — a structured narrative compiled ONLY from approved records,
  *  with a source link on every section, per-section confidence, an honest
  *  coverage-gap guard, and an explicit human publish step. */
 export default async function ConstructionDigestPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const canMutate = can(actor, 'reports_analytics', 'update').allowed;
   const world = constructionWorld(actor);
@@ -36,4 +38,5 @@ export default async function ConstructionDigestPage() {
       <DigestWorkspace views={views} canMutate={canMutate} />
     </div>
   );
+  });
 }

@@ -4,6 +4,7 @@ import { repos } from '@/server/data';
 import { NOW_MS } from '@/domain/ppm';
 import { communityHealth, npsScore, sentimentBreakdown, complaintHotspots, churnRisk } from '@/domain/estate';
 import { CommunityPulse, type AtRisk } from '@/components/estate/community-pulse';
+import { withDurableRead } from '@/server/data/durable-records';
 
 const money = (m: number) => `₦${Math.round(m / 100).toLocaleString('en-NG')}`;
 
@@ -11,6 +12,7 @@ const money = (m: number) => `₦${Math.round(m / 100).toLocaleString('en-NG')}`
  *  engagement snapshot, complaint hotspots by building, and an AI-scored move-out
  *  risk list fusing arrears, complaints and disengagement. */
 export default async function CommunityPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('announcements', 'read', 'estate');
   const feedback = repos.residentFeedback.list(actor).items;
   const complaints = repos.complaints.list(actor).items;
@@ -54,4 +56,5 @@ export default async function CommunityPage() {
       />
     </div>
   );
+  });
 }

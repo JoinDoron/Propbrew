@@ -6,6 +6,7 @@ import { legalEvents } from '@/lib/legal-events';
 import { PageHeader } from '@/components/ui/page-header';
 import { ScopeBanner } from '@/components/domain';
 import { BookingsWorkspace, type BookingView } from '@/components/bookings/bookings-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** EM-05 — amenity bookings. An availability heatmap, per-amenity utilisation,
  *  auto-approval rule hints, conflict detection and an approval queue sit over
@@ -13,6 +14,7 @@ import { BookingsWorkspace, type BookingView } from '@/components/bookings/booki
  *  Completed). Rules are advisory — a manual amenity always needs manager
  *  sign-off; fees clear via SC-02 on confirmation. Scoped (§8.2). */
 export default async function BookingsPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('bookings_amenities', 'read', 'estate');
   const canMutate = can(actor, 'bookings_amenities', 'transition').allowed;
 
@@ -35,4 +37,5 @@ export default async function BookingsPage() {
       <BookingsWorkspace bookings={bookings} canMutate={canMutate} />
     </div>
   );
+  });
 }

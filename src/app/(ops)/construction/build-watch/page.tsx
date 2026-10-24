@@ -8,12 +8,14 @@ import {
   zoneProgress, zoneBand, milestoneBand,
 } from '@/domain/construction';
 import { BuildWatch, type WatchProject } from '@/components/construction/build-watch';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** Investor Build-Watch — the client-facing mirror of delivery. Progress,
  *  a build-confidence index (schedule, cost, reporting discipline, safety),
  *  floor-by-floor structure and site updates drawn only from APPROVED reports.
  *  Commercial detail is withheld from view-only stakeholders. */
 export default async function ConstructionBuildWatchPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const showCommercials = ['F', 'M'].includes(effectiveLevel(actor, 'reports_analytics'));
   const world = constructionWorld(actor);
@@ -60,4 +62,5 @@ export default async function ConstructionBuildWatchPage() {
       <BuildWatch projects={projects} showCommercials={showCommercials} />
     </div>
   );
+  });
 }

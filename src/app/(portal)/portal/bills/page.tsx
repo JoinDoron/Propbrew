@@ -4,11 +4,13 @@ import { repos } from '@/server/data';
 import { can } from '@/lib/authz';
 import { getActiveUnitId } from '@/server/active-unit';
 import { BillsWorkspace, type BillRow } from '@/components/portal/bills-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** EM-01 / SC-02 (resident view, §7 O) — My Bills. Charges settle from the unit
  *  wallet; a resident may pay one or pay all, toggle auto-pay, download receipts,
  *  and see a spend breakdown. Everything else is read. */
 export default async function MyBillsPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('charges_invoicing');
   const activeUnitId = await getActiveUnitId(actor.unitIds);
   const wallet = repos.wallets.list(actor).items.find((w) => w.unitId === activeUnitId) ?? repos.wallets.list(actor).items[0];
@@ -26,4 +28,5 @@ export default async function MyBillsPage() {
       </div>
     </div>
   );
+  });
 }

@@ -4,12 +4,14 @@ import { constructionWorld } from '@/server/reads/construction';
 import { NOW_MS } from '@/domain/ppm';
 import { suggestedQuestions } from '@/domain/construction';
 import { CopilotWorkspace } from '@/components/construction/copilot-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** Construction Copilot — permission-aware Q&A grounded in the project records.
  *  The deterministic engine computes the answer and is the ONLY context an LLM
  *  may write from, so it cannot invent state; every factual answer cites records.
  *  View-only stakeholders get commercial figures withheld. */
 export default async function ConstructionCopilotPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const canSeeCommercials = ['F', 'M'].includes(effectiveLevel(actor, 'reports_analytics'));
   const world = constructionWorld(actor);
@@ -19,4 +21,5 @@ export default async function ConstructionCopilotPage() {
       <CopilotWorkspace suggestions={suggestedQuestions(world, NOW_MS)} canSeeCommercials={canSeeCommercials} />
     </div>
   );
+  });
 }

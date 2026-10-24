@@ -31,16 +31,17 @@ function counts() {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  Object.assign(db, structuredClone(initialStore));
   vi.stubEnv('NODE_ENV', 'development');
   vi.stubEnv('DATA_SOURCE', '');
+  vi.stubEnv('PROPBREW_REVIEW_MODE', '0');
+  Object.assign(db, structuredClone(initialStore));
   actAs();
   boundary.devIdentityEnabled.mockReturnValue(true);
 });
 
 afterEach(() => {
-  Object.assign(db, structuredClone(initialStore));
   vi.unstubAllEnvs();
+  Object.assign(db, structuredClone(initialStore));
 });
 
 describe('demo estate property registration', () => {
@@ -302,11 +303,17 @@ describe('registration environment and authorization boundary', () => {
   });
 
   it.each(['http', 'postgres'])('fails closed for unconnected durable adapter %s', async (source) => {
-    vi.stubEnv('DATA_SOURCE', source);
     const before = counts();
-    expect(await addEstateProperty(property())).toMatchObject({ ok: false, error: expect.stringContaining('durable registration adapter') });
-    expect(await addEstateTenant(tenant())).toMatchObject({ ok: false });
+    vi.stubEnv('DATA_SOURCE', source);
+    if (source === 'postgres') {
+      await expect(addEstateProperty(property())).rejects.toThrow('Durable operational storage requires a configured, verified workspace identity.');
+      await expect(addEstateTenant(tenant())).rejects.toThrow('Durable operational storage requires a configured, verified workspace identity.');
+    } else {
+      expect(await addEstateProperty(property())).toMatchObject({ ok: false, error: expect.stringContaining('durable registration adapter') });
+      expect(await addEstateTenant(tenant())).toMatchObject({ ok: false });
+    }
     expect(boundary.getSession).not.toHaveBeenCalled();
+    vi.stubEnv('DATA_SOURCE', 'memory');
     expect(counts()).toEqual(before);
   });
 

@@ -7,6 +7,7 @@ import { ScopeBanner } from '@/components/domain';
 import { WorkOrdersBoard } from '@/components/work-orders/work-orders-board';
 import { WorkOrdersIntel } from '@/components/work-orders/work-orders-intel';
 import { NOW_MS } from '@/domain/ppm';
+import { withDurableRead } from '@/server/data/durable-records';
 
 const NOW = '2026-07-26T09:00:00Z';
 const CLOSED = ['closed', 'cancelled', 'rejected', 'verified'];
@@ -15,6 +16,7 @@ const CLOSED = ['closed', 'cancelled', 'rejected', 'verified'];
  *  toggle shows the §10 pipeline as a kanban. Managers (M) get a New button;
  *  view-only roles (Executive, V) get a Read-only chip. */
 export default async function WorkOrdersPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('work_orders', 'read', 'facility');
   const canMutate = ['F', 'M'].includes(effectiveLevel(actor, 'work_orders'));
   const rows = repos.workOrders.list(actor).items;
@@ -46,4 +48,5 @@ export default async function WorkOrdersPage() {
       ]} />
     </div>
   );
+  });
 }

@@ -4,12 +4,14 @@ import { constructionWorld } from '@/server/reads/construction';
 import { NOW_MS } from '@/domain/ppm';
 import { docRegister, rfiAgeing } from '@/domain/construction';
 import { DocumentsWorkspace, type RegisterRow, type RfiRow, type DocRev } from '@/components/construction/documents-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** Documents & RFIs — a controlled register with real revision control (PRD §12):
  *  revisions chain per document number, exactly one approved "current issue",
  *  approved revisions are superseded rather than overwritten, and every formal
  *  distribution is recorded as a transmittal. RFIs age against their due date. */
 export default async function ConstructionDocumentsPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const canMutate = can(actor, 'reports_analytics', 'update').allowed;
   const canCreate = can(actor, 'reports_analytics', 'create').allowed;
@@ -48,4 +50,5 @@ export default async function ConstructionDocumentsPage() {
       />
     </div>
   );
+  });
 }

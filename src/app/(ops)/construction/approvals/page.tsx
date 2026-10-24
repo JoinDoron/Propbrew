@@ -4,12 +4,14 @@ import { constructionWorld, actorName } from '@/server/reads/construction';
 import { NOW_MS } from '@/domain/ppm';
 import { canApprove, overdueSteps, approvalProgress, reasonsFor } from '@/domain/construction';
 import { ApprovalsWorkspace, type ReqView, type RuleView, type ReasonOption, type StepView } from '@/components/construction/approvals-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** Approvals — configurable routes selected by value and category, sequential
  *  AND parallel steps, SLA escalation, delegation, and segregation of duties
  *  (a requester can never approve their own transaction). Rejections require a
  *  coded reason so the Pareto downstream is real. */
 export default async function ConstructionApprovalsPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const canMutate = can(actor, 'reports_analytics', 'update').allowed;
   const world = constructionWorld(actor);
@@ -52,4 +54,5 @@ export default async function ConstructionApprovalsPage() {
       />
     </div>
   );
+  });
 }

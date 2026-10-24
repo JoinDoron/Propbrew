@@ -5,6 +5,7 @@ import type { Page } from '@/domain/primitives';
 import { ScopeBanner } from '@/components/domain';
 import { SpacesExplorer } from '@/components/spaces/spaces-explorer';
 import { PageHeader } from '@/components/ui/page-header';
+import { withDurableRead } from '@/server/data/durable-records';
 
 function allRows<T>(read: (cursor?: string | null) => Page<T>): T[] {
   const rows: T[] = [];
@@ -24,6 +25,7 @@ const keyFor = (tenantId: string, id: string) => JSON.stringify([tenantId, id]);
  *  buildings/units are filtered to those sites, and resident names are attached
  *  only if the actor may read them (§7). */
 export default async function SpacesPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('assets_ppm', 'read', 'facility');
   const sites = allRows((cursor) => repos.sites.list(actor, { cursor, limit: 200 }));
   const siteIds = new Set(sites.map((site) => keyFor(site.tenantId, site.id)));
@@ -59,4 +61,5 @@ export default async function SpacesPage() {
       />
     </div>
   );
+  });
 }

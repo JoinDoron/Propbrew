@@ -4,11 +4,13 @@ import { can } from '@/lib/authz';
 import { repos } from '@/server/data';
 import { NOW_MS } from '@/domain/ppm';
 import { GovernanceWorkspace, type MotionRow } from '@/components/estate/governance-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** Governance & e-voting — AGM motions with unit-weighted resident voting, live
  *  quorum and approval-threshold meters, and pass/fail resolution on close.
  *  Gated by announcements (the estate manager runs the AGM). */
 export default async function GovernancePage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('announcements', 'read', 'estate');
   const motions = repos.motions.list(actor).items;
 
@@ -25,4 +27,5 @@ export default async function GovernancePage() {
       <GovernanceWorkspace motions={rows} nowMs={NOW_MS} canMutate={can(actor, 'announcements', 'update').allowed} />
     </div>
   );
+  });
 }

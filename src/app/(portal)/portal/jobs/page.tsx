@@ -6,12 +6,14 @@ import { workOrderMachine } from '@/domain/workflows';
 import { NOW_MS } from '@/domain/ppm';
 import { JOB_ACTIONS } from '@/domain/vendor-portal';
 import { VendorJobsWorkspace, type JobView } from '@/components/portal/vendor-jobs-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** FM-05 / FM-03 (vendor view, §7 O via my_vendor_org) — My Jobs. Work assigned
  *  to the vendor's org, with live SLA countdowns and the vendor's own §10 actions
  *  (Start → Pause/Resume → Mark done), plus an earnings roll-up. The vendor drives
  *  its jobs; assignment stays manager work. */
 export default async function VendorJobsPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('work_orders');
   const canTransition = can(actor, 'work_orders', 'transition').allowed;
   const unitById = new Map(seed.units.map((u) => [u.id, u.label]));
@@ -38,4 +40,5 @@ export default async function VendorJobsPage() {
       </div>
     </div>
   );
+  });
 }

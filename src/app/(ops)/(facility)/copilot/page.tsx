@@ -7,12 +7,14 @@ import { getTenantModel, type CopilotUsage } from '@/server/copilot/metering';
 import { readCopilotLedgerUsage } from '@/server/ai/copilot-ledger';
 import { isReviewActor, reviewLedgerTenantId, reviewModeEnabled } from '@/server/review-auth';
 import type { CopilotWorld } from '@/domain/facility';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** AI Facility Copilot — reads across every facility signal (alarms, generators,
  *  inventory, contracts, permits, incidents) and fuses them into one ranked list
  *  of actionable priorities, plus a real AI conversation. Actions
  *  fire the real facility mutations (dispatch WO, refuel, receive stock, ack). */
 export default async function CopilotPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('assets_ppm', 'read', 'facility');
   const world: CopilotWorld = {
     systems: [...repos.buildingSystems.list(actor).items],
@@ -46,4 +48,5 @@ export default async function CopilotPage() {
       />
     </div>
   );
+  });
 }

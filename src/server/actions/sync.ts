@@ -1,5 +1,8 @@
 'use server';
 
+import { withDurableMutation } from '@/server/data/durable-records';
+import { retainPendingSyncReceipt } from '@/server/data/record-context';
+
 import { revalidatePath } from 'next/cache';
 import { getActor } from '@/server/session';
 import { ForbiddenError, assertCan, type Actor } from '@/lib/authz';
@@ -23,6 +26,7 @@ function permitted(actor: Actor, kind: OpKind): boolean {
 
 /** Re-check permission, payload and parent/child scope before recording a receipt. */
 export async function syncOperation(raw: SyncInput): Promise<SyncOutcome> {
+  return withDurableMutation(async () => {
   const id = typeof raw?.id === 'string' ? raw.id : '';
   const fail = (error: string): SyncOutcome => ({ ok: false, id, conflict: false, error });
   const conflict = (error: string, serverState: string): SyncOutcome => ({ ok: false, id, conflict: true, error, serverState });
@@ -53,6 +57,7 @@ export async function syncOperation(raw: SyncInput): Promise<SyncOutcome> {
     receipt = { tenantId: project.tenantId, actorId: actor.userId, opId: id, kind: input.kind, payloadHash, status: 'pending', appliedISO: NOW };
     db.syncLedger.push(receipt);
   }
+  retainPendingSyncReceipt(receipt);
   const rowId = `sync-${syncFingerprint([actor.tenantId, actor.userId, id]).slice(0, 32)}`;
   let ref: string | undefined;
   switch (input.kind) {
@@ -105,10 +110,13 @@ export async function syncOperation(raw: SyncInput): Promise<SyncOutcome> {
   receipt.status = 'applied'; receipt.ref = ref;
   PATHS.forEach((path) => revalidatePath(path));
   return { ok: true, id, duplicate: false, ref };
+
+  });
 }
 
 /** Only the authenticated author may discard their exact previously attempted copy. */
 export async function abandonOperation(input: SyncInput): Promise<{ ok: true } | { ok: false; error: string }> {
+  return withDurableMutation(async () => {
   const actor = await getActor();
   if (!permitted(actor, input?.kind) || input?.owner !== outboxOwnerKey(actor.tenantId, actor.userId)) return { ok: false, error: 'You no longer have permission to discard this record.' };
   const parsed = syncInputSchema.safeParse(input);
@@ -118,4 +126,6 @@ export async function abandonOperation(input: SyncInput): Promise<{ ok: true } |
   if (receipt.status === 'applied') return { ok: false, error: 'This record was already applied. Keep its receipt and use an approved adjustment.' };
   receipt.status = 'abandoned';
   return { ok: true };
+
+  });
 }

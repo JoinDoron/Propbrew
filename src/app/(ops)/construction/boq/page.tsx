@@ -2,11 +2,13 @@ import { requireCapability } from '@/server/guard';
 import { can } from '@/lib/authz';
 import { constructionWorld } from '@/server/reads/construction';
 import { BoqWorkspace, type BoqProject } from '@/components/construction/boq-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** BOQ import — paste a bill of quantities, validate it line by line, reconcile
  *  the total against the approved budget, preview exactly what will be written,
  *  then commit to cost codes. Invalid lines are excluded and reported. */
 export default async function ConstructionBoqPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const canMutate = can(actor, 'reports_analytics', 'create').allowed;
   const world = constructionWorld(actor);
@@ -22,4 +24,5 @@ export default async function ConstructionBoqPage() {
       <BoqWorkspace projects={projects} canMutate={canMutate} />
     </div>
   );
+  });
 }

@@ -6,11 +6,13 @@ import { repos } from '@/server/data';
 import { recoveryForecast } from '@/domain/estate';
 import { reviewCollectionInvoice } from '@/domain/estate/collection-review';
 import { CollectionsWorkspace, type CaseRow } from '@/components/estate/collections-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** Collections — arrears-recovery war room: debtor risk scoring, an expected-
  *  recovery forecast, a dunning ladder (reminder → notice → plan → escalated),
  *  and promise-to-pay tracking. Gated by charges_invoicing. */
 export default async function CollectionsPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('charges_invoicing', 'read', 'estate');
   const cases = repos.collectionCases.list(actor).items;
 
@@ -31,4 +33,5 @@ export default async function CollectionsPage() {
       <CollectionsWorkspace cases={rows} forecast={recoveryForecast(cases)} canMutate={can(actor, 'charges_invoicing', 'update').allowed} />
     </div>
   );
+  });
 }

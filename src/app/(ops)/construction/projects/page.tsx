@@ -4,11 +4,13 @@ import { constructionWorld } from '@/server/reads/construction';
 import { NOW_MS } from '@/domain/ppm';
 import { projectEVMOf, forecastFinishISO, projectHealth, projectCommittedMinor, projectActualMinor, milestoneBand } from '@/domain/construction';
 import { ProjectsWorkspace, type ProjectCard } from '@/components/construction/projects-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** Projects Register — the delivery side of the off-plan portfolio: contract vs
  *  budget vs committed vs actual, physical progress against the baseline, a
  *  composite health score, forecast finish and milestone status. */
 export default async function ConstructionProjectsPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const canMutate = can(actor, 'reports_analytics', 'create').allowed;
   const world = constructionWorld(actor);
@@ -44,4 +46,5 @@ export default async function ConstructionProjectsPage() {
       />
     </div>
   );
+  });
 }

@@ -1,5 +1,9 @@
 'use server';
 
+import { withDurableMutation } from '@/server/data/durable-records';
+
+import { nextRecordSequence } from '@/server/data/record-context';
+
 /**
  * PPM server actions (FM-02 / AI-F-01). Same contract as fireWoTransition: assert
  * the §7 assets_ppm capability (modify = Facility Manager only; V roles are
@@ -21,7 +25,6 @@ import { facilityAssignees, isFacilityDate } from '@/server/facility-guards';
 export type PpmResult = { ok: true; ref?: string } | { ok: false; error: string };
 
 const REVALIDATE = ['/ppm', '/work-orders', '/estate/work-orders', '/people', '/facility', '/dashboard', '/assets'];
-let woCounter = 0;
 
 function gate(actor: Actor): PpmResult | null {
   try {
@@ -42,6 +45,7 @@ function scopedOccurrence(actor: Actor, id: string) {
 /** Generate the work order for an occurrence. Idempotent: no-op if an open
  *  ppm_schedule WO already exists for the asset. */
 export async function generatePpmWorkOrder(occurrenceId: string): Promise<PpmResult> {
+  return withDurableMutation(async () => {
   const actor = await getActor();
   const denied = gate(actor);
   if (denied) return denied;
@@ -69,7 +73,7 @@ export async function generatePpmWorkOrder(occurrenceId: string): Promise<PpmRes
   }
 
   const assignment = facilityAssignees(occ.tenantId, occ.siteId).find((candidate) => candidate.assigneeName === plan.assignee);
-  const ref = `WO-P${9000 + woCounter++}`;
+  const ref = `WO-P${9000 + nextRecordSequence('ppm:woCounter', 0)}`;
   const now = new Date().toISOString();
   db.workOrders.push({
     tenantId: occ.tenantId,
@@ -99,11 +103,14 @@ export async function generatePpmWorkOrder(occurrenceId: string): Promise<PpmRes
   revalidate();
   revalidatePath('/estate');
   return { ok: true, ref };
+
+  });
 }
 
 /** Complete an occurrence. Server-side re-validation: every checklist item ticked
  *  and evidence attached when the plan requires it (never trust the client). */
 export async function completePpmOccurrence(occurrenceId: string, input: { checkedIds: string[]; photoCount: number }): Promise<PpmResult> {
+  return withDurableMutation(async () => {
   const actor = await getActor();
   const denied = gate(actor);
   if (denied) return denied;
@@ -133,10 +140,13 @@ export async function completePpmOccurrence(occurrenceId: string, input: { check
   recordHistory('ppm', String(occ.planId), hist('COMPLETE', 'in_progress', 'completed', actor, `Serviced with ${input.checkedIds.length} checks${plan.evidenceRequired ? ` and ${input.photoCount} photo(s)` : ''}`));
   revalidate();
   return { ok: true };
+
+  });
 }
 
 /** Reschedule an occurrence. Statutory occurrences clamp at their legal deadline. */
 export async function reschedulePpmOccurrence(occurrenceId: string, newDate: string): Promise<PpmResult> {
+  return withDurableMutation(async () => {
   const actor = await getActor();
   const denied = gate(actor);
   if (denied) return denied;
@@ -159,6 +169,8 @@ export async function reschedulePpmOccurrence(occurrenceId: string, newDate: str
   recordHistory('ppm', String(occ.planId), hist('RESCHEDULE', from, live.status, actor, `Rescheduled ${occ.assetName} to ${newDate}`));
   revalidate();
   return { ok: true };
+
+  });
 }
 
 /** HITL for an AI-F-01 suggestion. Approve pulls the plan forward and promotes
@@ -169,6 +181,7 @@ export async function decidePpmSuggestion(
   decision: 'approve' | 'override',
   input: { date?: string; reason?: string; confidence?: number; driver?: string },
 ): Promise<PpmResult> {
+  return withDurableMutation(async () => {
   const actor = await getActor();
   const denied = gate(actor);
   if (denied) return denied;
@@ -209,10 +222,13 @@ export async function decidePpmSuggestion(
   recordHistory('ppm', plan.id, hist('DISMISS', 'ai_draft', 'ai_draft', actor, `AI_OVERRIDDEN ${meta}`));
   revalidate();
   return { ok: true };
+
+  });
 }
 
 /** Log a fresh runtime reading (simulated sensor feed). Recomputes the projection. */
 export async function logRuntimeReading(assetId: string, addHours: number): Promise<PpmResult> {
+  return withDurableMutation(async () => {
   const actor = await getActor();
   const denied = gate(actor);
   if (denied) return denied;
@@ -227,6 +243,8 @@ export async function logRuntimeReading(assetId: string, addHours: number): Prom
   rt.lastReadingAt = NOW;
   revalidate();
   return { ok: true };
+
+  });
 }
 
 /* --- helpers -------------------------------------------------------------- */

@@ -1,5 +1,9 @@
 'use server';
 
+import { withDurableMutation } from '@/server/data/durable-records';
+
+import { nextRecordSequence } from '@/server/data/record-context';
+
 /**
  * Vendor listing management (EM-09, §7 O via my_vendor_org). A vendor may CREATE
  * a listing for its own org and toggle its own listings active/paused. Listings
@@ -17,9 +21,9 @@ import type { Listing } from '@/domain/entities';
 
 export type ListingResult = { ok: true } | { ok: false; error: string };
 
-let counter = 0;
 
 export async function createListing(input: { title: string; category: string; priceNaira: number }): Promise<ListingResult> {
+  return withDurableMutation(async () => {
   const actor = await getActor();
   try {
     assertCan(actor, 'marketplace', 'create');
@@ -39,7 +43,7 @@ export async function createListing(input: { title: string; category: string; pr
 
   db.listings.unshift({
     tenantId: actor.tenantId,
-    id: `lst-new-${++counter}`,
+    id: `lst-new-${nextRecordSequence('vendor-listings:counter', 0, true)}`,
     vendorOrgId: actor.vendorOrgId,
     vendorName,
     title,
@@ -51,9 +55,12 @@ export async function createListing(input: { title: string; category: string; pr
 
   ['/portal/listings', '/portal/marketplace', '/marketplace'].forEach((p) => revalidatePath(p));
   return { ok: true };
+
+  });
 }
 
 export async function toggleListing(listingId: string): Promise<ListingResult> {
+  return withDurableMutation(async () => {
   const actor = await getActor();
   try {
     assertCan(actor, 'marketplace', 'update');
@@ -70,4 +77,6 @@ export async function toggleListing(listingId: string): Promise<ListingResult> {
   live.status = live.status === 'active' ? 'paused' : 'active';
   ['/portal/listings', '/portal/marketplace', '/marketplace'].forEach((p) => revalidatePath(p));
   return { ok: true };
+
+  });
 }

@@ -1,5 +1,7 @@
 'use server';
 
+import { withDurableMutation } from '@/server/data/durable-records';
+
 /**
  * Resident-portal community actions — a resident acting on their OWN behalf.
  *
@@ -29,6 +31,7 @@ function requireResident(actor: Awaited<ReturnType<typeof getActor>>): Res | nul
 }
 
 export async function residentRsvp(eventId: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const actor = await getActor();
   try { assertCan(actor, 'bookings_amenities', 'create'); }
   catch (e) { if (e instanceof ForbiddenError) return { ok: false, error: 'You cannot RSVP.' }; throw e; }
@@ -39,9 +42,12 @@ export async function residentRsvp(eventId: string): Promise<Res> {
   e.rsvps += 1;
   paths();
   return { ok: true, ref: e.title };
+
+  });
 }
 
 export async function residentVote(motionId: string, choice: VoteChoice): Promise<Res> {
+  return withDurableMutation(async () => {
   const actor = await getActor();
   const notRes = requireResident(actor); if (notRes) return notRes;
   const m = db.motions.find((x) => x.id === motionId && x.tenantId === actor.tenantId);
@@ -54,12 +60,15 @@ export async function residentVote(motionId: string, choice: VoteChoice): Promis
   if (choice === 'for') m.forWeight += 1; else if (choice === 'against') m.againstWeight += 1; else m.abstainWeight += 1;
   paths();
   return { ok: true, ref: m.ref };
+
+  });
 }
 
 /** Hand your unit's vote to a holder (e.g. the Chair) with an instruction — for
  *  when you can't attend the EGM. One proxy per home per motion; mutually
  *  exclusive with voting directly. */
 export async function residentAssignProxy(motionId: string, holderName: string, direction: VoteChoice): Promise<Res> {
+  return withDurableMutation(async () => {
   const actor = await getActor();
   const notRes = requireResident(actor); if (notRes) return notRes;
   const m = db.motions.find((x) => x.id === motionId && x.tenantId === actor.tenantId);
@@ -81,9 +90,12 @@ export async function residentAssignProxy(motionId: string, holderName: string, 
   } as (typeof db.proxyAssignments)[number]);
   paths();
   return { ok: true, ref: holderName.trim() };
+
+  });
 }
 
 export async function residentRevokeProxy(motionId: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const actor = await getActor();
   const notRes = requireResident(actor); if (notRes) return notRes;
   const px = db.proxyAssignments.find((p) => p.motionId === motionId && p.grantorUserId === actor.userId && p.status === 'held');
@@ -95,20 +107,26 @@ export async function residentRevokeProxy(motionId: string): Promise<Res> {
   for (const c of cascaded) { c.status = 'revoked'; recordProxyReturnNotice(c.grantorUserId, m, `${px.grantorName}, who you delegated through, stepped out of the chain.`); }
   paths();
   return { ok: true, ref: cascaded.length ? `${cascaded.length} delegated ${cascaded.length === 1 ? 'proxy' : 'proxies'} returned` : undefined };
+
+  });
 }
 
 export async function dismissProxyNotice(id: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const actor = await getActor();
   const notRes = requireResident(actor); if (notRes) return notRes;
   const n = db.proxyReturnNotices.find((x) => x.id === id && x.userId === actor.userId);
   if (n) n.seen = true;
   paths();
   return { ok: true };
+
+  });
 }
 
 /** Cast a resident's single unit-weighted ballot for a candidate in the board
  *  election (proposed resident participation — role-checked, one vote per home). */
 export async function residentVoteCandidate(electionId: string, candidateId: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const actor = await getActor();
   const notRes = requireResident(actor); if (notRes) return notRes;
   const el = db.boardElections.find((x) => x.id === electionId && x.tenantId === actor.tenantId);
@@ -121,11 +139,14 @@ export async function residentVoteCandidate(electionId: string, candidateId: str
   cand.votes += 1;
   paths();
   return { ok: true, ref: cand.residentName };
+
+  });
 }
 
 /** Stand for the vacant board seat from the portal — a resident nominates
  *  themselves (name + unit from their record) with a short manifesto. */
 export async function residentSelfNominate(electionId: string, statement: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const actor = await getActor();
   const notRes = requireResident(actor); if (notRes) return notRes;
   const el = db.boardElections.find((x) => x.id === electionId && x.tenantId === actor.tenantId);
@@ -138,10 +159,13 @@ export async function residentSelfNominate(electionId: string, statement: string
   el.candidates.push({ id: `cand-self-${actor.userId}`, residentName: myName, unitLabel, statement: statement.trim() || 'Standing for the committee.', votes: 0 });
   paths();
   return { ok: true, ref: myName };
+
+  });
 }
 
 /** A resident confirms they've collected their own parcel — frees the locker. */
 export async function residentCollectParcel(parcelId: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const actor = await getActor();
   const notRes = requireResident(actor); if (notRes) return notRes;
   const myName = repos.residents.list(actor).items.find((r) => r.userId === actor.userId)?.name;
@@ -154,9 +178,12 @@ export async function residentCollectParcel(parcelId: string): Promise<Res> {
   if (locker) locker.parcelId = undefined;
   ['/portal/community', '/portal', '/parcels'].forEach((path) => revalidatePath(path));
   return { ok: true, ref: p.code };
+
+  });
 }
 
 export async function residentRedeem(perkId: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const actor = await getActor();
   const notRes = requireResident(actor); if (notRes) return notRes;
   const myName = repos.residents.list(actor).items.find((r) => r.userId === actor.userId)?.name;
@@ -169,4 +196,6 @@ export async function residentRedeem(perkId: string): Promise<Res> {
   me.points -= p.cost; p.stock -= 1;
   paths();
   return { ok: true, ref: p.title };
+
+  });
 }

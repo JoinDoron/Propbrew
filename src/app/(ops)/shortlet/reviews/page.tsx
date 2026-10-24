@@ -8,12 +8,14 @@ import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
 import { reviewStats, reviewsByApartment } from '@/domain/shortlet';
 import { Star, MessageSquare } from 'lucide-react';
+import { withDurableRead } from '@/server/data/durable-records';
 
 function Stars({ rating }: { rating: number }) {
   return <span className={styles.rating} role="img" aria-label={rating + ' out of 5 stars'}>{[1, 2, 3, 4, 5].map((value) => <Star key={value} size={16} aria-hidden="true" className={value <= Math.round(rating) ? 'fill-current' : 'text-border-2'} />)}<span aria-hidden="true" className={styles.metadata}>{rating} / 5</span></span>;
 }
 
 export default async function ShortletReviewsPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('bookings_amenities', 'read', 'shortlet');
   const reviews = repos.shortletReviews.list(actor).items;
   const apartments = new Map(repos.shortletApartments.list(actor).items.map((apartment) => [apartment.id, apartment.name]));
@@ -38,4 +40,5 @@ export default async function ShortletReviewsPage() {
     ]} />
     <p className={shortletStyles.metadata}>Review summaries use the records in your current Shortlet scope. Ratings are guest feedback, not independently verified service or safety scores.</p>
   </div>;
+  });
 }

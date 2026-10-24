@@ -6,6 +6,7 @@ import { getSession } from '@/server/session';
 import type { Page } from '@/domain/primitives';
 import { NOW_MS } from '@/domain/ppm';
 import { TechnicianWorkspace, type Job } from '@/components/facility/technician-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 function allRows<T>(read: (cursor?: string | null) => Page<T>): T[] {
   const rows: T[] = [];
@@ -24,6 +25,7 @@ const keyFor = (tenantId: string, id: string) => JSON.stringify([tenantId, id]);
  *  (scoped to assigned_to_me), grouped On now / Up next / Waiting / Done, with big
  *  tap targets that fire the real §10 work-order transitions and live SLA counts. */
 export default async function FieldPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('work_orders', 'read', 'facility');
   const jobs = allRows((cursor) => repos.workOrders.list(actor, { cursor, limit: 200 }));
   const seesSpaces = can(actor, 'assets_ppm', 'read').allowed;
@@ -46,4 +48,5 @@ export default async function FieldPage() {
       <TechnicianWorkspace jobs={rows} techName={techName} nowMs={NOW_MS} canTransition={can(actor, 'work_orders', 'transition').allowed} />
     </div>
   );
+  });
 }

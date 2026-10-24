@@ -9,6 +9,7 @@ import { getOwnerIdentity } from '@/server/onboarding/identity';
 import { requireOperatorSession } from '@/server/workspaces';
 import { canEnterWorkspace, workspaceById, type WorkspaceId } from '@/config/workspaces';
 import { can } from '@/lib/authz';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /**
  * Server frame for an authenticated route group. Redirects to /login when there
@@ -18,6 +19,7 @@ import { can } from '@/lib/authz';
  * per-page capability guard (`requireCapability`) is layered on top inside pages.
  */
 export async function ShellFrame({ expected, workspace, children }: { expected: Shell; workspace?: WorkspaceId; children: React.ReactNode }) {
+  return withDurableRead(async () => {
   const session = expected === 'ops' ? await requireOperatorSession() : await getSession();
   if (!session) {
     if (await getOwnerIdentity()) redirect('/onboarding');
@@ -66,4 +68,5 @@ export async function ShellFrame({ expected, workspace, children }: { expected: 
       {children}
     </AppShell>
   );
+  });
 }

@@ -4,11 +4,13 @@ import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
 import { stockSignal, stockValueMinor } from '@/domain/facility';
 import { InventoryWorkspace } from '@/components/facility/inventory-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** Inventory — spare-parts stock with stock-out forecasting and receive-to-stock.
  *  Below-reorder and soon-to-stock-out parts are flagged so nothing runs dry
  *  mid-repair. */
 export default async function InventoryPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('assets_ppm', 'read', 'facility');
   const parts = repos.facilityParts.list(actor).items;
 
@@ -27,4 +29,5 @@ export default async function InventoryPage() {
       />
     </div>
   );
+  });
 }

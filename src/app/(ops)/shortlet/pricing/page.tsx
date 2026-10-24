@@ -3,12 +3,14 @@ import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
 import { PricingWorkspace, type AptRow } from '@/components/shortlet/pricing-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** Dynamic pricing (flow idea) — operator-set seasonal rate rules per apartment
  *  (fixed / increase / decrease over a date range). Rules override the base rate
  *  for those dates; a 30-night strip shows where they bite. Operator-controlled,
  *  not algorithmic. */
 export default async function ShortletPricingPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('bookings_amenities', 'read', 'shortlet');
   const apts = repos.shortletApartments.list(actor).items;
   const props = new Map(repos.shortletProperties.list(actor).items.map((p) => [p.id, p.name]));
@@ -25,4 +27,5 @@ export default async function ShortletPricingPage() {
       <PricingWorkspace canCreate={can(actor, 'bookings_amenities', 'create').allowed} canUpdate={can(actor, 'bookings_amenities', 'update').allowed} apartments={apartments} />
     </div>
   );
+  });
 }

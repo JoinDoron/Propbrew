@@ -2,6 +2,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
 import { InvestorReturnsWorkspace } from '@/components/portal/investor-returns-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** SC-08 / AI-S-04 (investor view, §7 O) — Returns projector. An interactive
  *  model: pick a project or the whole portfolio, set the hold period,
@@ -9,6 +10,7 @@ import { InvestorReturnsWorkspace } from '@/components/portal/investor-returns-w
  *  income + total return. All estimates on the inputs — not financial advice.
  *  Scoped to the investor's own projects. */
 export default async function InvestorReturnsPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('investor_projects');
   const projects = [...repos.investorProjects.list(actor).items];
 
@@ -20,4 +22,5 @@ export default async function InvestorReturnsPage() {
       </div>
     </div>
   );
+  });
 }

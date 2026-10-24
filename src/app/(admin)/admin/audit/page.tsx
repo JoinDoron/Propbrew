@@ -4,6 +4,7 @@ import { getAllHistory } from '@/server/data/store';
 import { ROLE_LABELS, type Role } from '@/lib/authz';
 import { isSecurityEvent, isFinancialEvent } from '@/domain/platform-admin';
 import { AuditWorkspace, type AuditRow } from '@/components/admin/audit-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 const MACHINE_LABEL: Record<string, string> = { 'work-order': 'Work order', 'service-charge': 'Service charge', booking: 'Booking', 'sos-event': 'SOS', 'marketplace-order': 'Order' };
 
@@ -11,6 +12,7 @@ const MACHINE_LABEL: Record<string, string> = { 'work-order': 'Work order', 'ser
  *  machine this session. Search, filter by record type, a security/financial
  *  lens, and CSV export. Platform-Admin only, 12-month retention (proposed). */
 export default async function AuditPage() {
+  return withDurableRead(async () => {
   await requireCapability('tenant_config');
   const entries: AuditRow[] = getAllHistory().map((e) => ({
     machine: e.machine, machineLabel: MACHINE_LABEL[e.machine] ?? e.machine, recordId: e.recordId,
@@ -24,4 +26,5 @@ export default async function AuditPage() {
       <AuditWorkspace entries={entries} />
     </div>
   );
+  });
 }

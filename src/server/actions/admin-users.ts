@@ -1,5 +1,7 @@
 'use server';
 
+import { withDurableMutation } from '@/server/data/durable-records';
+
 /**
  * SC-01 — platform user administration. Only Platform Admin holds a cross-tenant
  * grant on users_roles; this action suspends or reactivates a user account.
@@ -15,6 +17,7 @@ import { db } from '@/server/data/store';
 export type UserAdminResult = { ok: true; status: string } | { ok: false; error: string };
 
 export async function setUserStatus(userId: string, next: 'active' | 'suspended'): Promise<UserAdminResult> {
+  return withDurableMutation(async () => {
   const actor = await getActor();
   try {
     assertCan(actor, 'users_roles', 'update');
@@ -30,4 +33,6 @@ export async function setUserStatus(userId: string, next: 'active' | 'suspended'
   revalidatePath('/admin/users');
   revalidatePath('/admin/overview');
   return { ok: true, status: next };
+
+  });
 }

@@ -8,11 +8,13 @@ import { ReadOnlyChip, ScopeBanner } from '@/components/domain';
 import { Info, ShieldCheck } from 'lucide-react';
 import styles from '@/components/ui/workspace-layout.module.css';
 import local from '@/components/estate/settings-reference.module.css';
+import { withDurableRead } from '@/server/data/durable-records';
 
 const LEVEL_LABEL: Record<Level, string> = { F: 'Full', M: 'Manage', V: 'View', O: 'Own records', none: 'No access' };
 const LEVEL_TONE: Record<Level, string> = { F: 'var(--tone-danger)', M: 'var(--tone-info)', V: 'var(--tone-neutral)', O: 'var(--tone-progress)', none: 'var(--text-3)' };
 
 export default async function SettingsPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('tenant_config', 'read', 'estate');
   return <div className="pb-page">
     <PageHeader title="Settings" subtitle="Organisation identity and the policies behind your workspace."
@@ -46,6 +48,7 @@ export default async function SettingsPage() {
       </div> },
     ]} />
   </div>;
+  });
 }
 
 function Field({ label, value, swatch }: { label: string; value: string; swatch?: string }) {

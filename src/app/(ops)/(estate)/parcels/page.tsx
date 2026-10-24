@@ -6,11 +6,13 @@ import { repos } from '@/server/data';
 import { NOW_MS } from '@/domain/ppm';
 import { parcelStats, lockerUtilization } from '@/domain/estate';
 import { ParcelsWorkspace, type LockerCell, type ParcelRow } from '@/components/estate/parcels-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** Parcels & Lockers — the smart parcel room: locker banks, incoming parcels with
  *  auto-assigned lockers + pickup codes, overdue-pickup flags, and collect/notify.
  *  Gated by security_sos (front desk / security run it). */
 export default async function ParcelsPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('security_sos', 'read', 'estate');
   const lockers = repos.lockers.list(actor).items;
   const parcels = repos.parcels.list(actor).items;
@@ -32,4 +34,5 @@ export default async function ParcelsPage() {
       />
     </div>
   );
+  });
 }

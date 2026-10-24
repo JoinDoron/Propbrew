@@ -3,12 +3,14 @@ import { can } from '@/lib/authz';
 import { constructionWorld } from '@/server/reads/construction';
 import { fxTable, fxExposure, fxPositions, fxUnrealizedMinor, fxMovementPct, type FxRate } from '@/domain/construction';
 import { FxWorkspace, type RatePanelRow } from '@/components/construction/fx-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** FX exposure — the last of the PRD's cost-control gaps. The books stay in NGN;
  *  foreign-denominated commitments are revalued on their outstanding balance as
  *  the naira moves, with a reporting-currency lens, sensitivity, and a repricing
  *  action that lands in the audit log + reason Pareto. */
 export default async function ConstructionFxPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const canMutate = can(actor, 'reports_analytics', 'update').allowed;
   const world = constructionWorld(actor);
@@ -39,4 +41,5 @@ export default async function ConstructionFxPage() {
       />
     </div>
   );
+  });
 }

@@ -5,6 +5,7 @@ import { repos } from '@/server/data';
 import { shortletBookingMachine } from '@/domain/workflows';
 import { outstandingMinor } from '@/domain/shortlet';
 import { BookingsWorkspace, type BookingRow, type AptOption } from '@/components/shortlet/bookings-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 const ACTION_LABEL: Record<string, string> = { CONFIRM: 'Confirm', CHECK_IN: 'Check in', CHECK_OUT: 'Check out', CANCEL: 'Cancel' };
 
@@ -12,6 +13,7 @@ const ACTION_LABEL: Record<string, string> = { CONFIRM: 'Confirm', CHECK_IN: 'Ch
  *  (confirm → check-in → check-out → close via inspection), record off-platform
  *  payments, and generate the personalised guest link + a professional receipt. */
 export default async function ShortletBookingsPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('bookings_amenities', 'read', 'shortlet');
   const roles = actor.roles as Role[];
   const canTransition = can(actor, 'bookings_amenities', 'transition').allowed;
@@ -50,4 +52,5 @@ export default async function ShortletBookingsPage() {
       <BookingsWorkspace canCreate={can(actor, 'bookings_amenities', 'create').allowed} canUpdate={can(actor, 'bookings_amenities', 'update').allowed} bookings={rows} apartments={aptOptions} />
     </div>
   );
+  });
 }

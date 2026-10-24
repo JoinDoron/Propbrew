@@ -3,11 +3,13 @@ import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
 import { NOW_MS } from '@/domain/ppm';
 import { CalendarWorkspace, type CalBooking, type CalApt } from '@/components/shortlet/calendar-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** FR-BM-04 (Short-Let PMS) — the multi-unit availability calendar. Week / 2-week
  *  / Month views, prev-next navigation, an apartment filter, a legend,
  *  same-day-turnover flags, and outbound .ics export. */
 export default async function ShortletCalendarPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('bookings_amenities', 'read', 'shortlet');
   const apts = repos.shortletApartments.list(actor).items;
   const props = new Map(repos.shortletProperties.list(actor).items.map((p) => [p.id, p.name]));
@@ -21,4 +23,5 @@ export default async function ShortletCalendarPage() {
       <CalendarWorkspace apartments={apartments} bookings={bookings} nowMs={NOW_MS} />
     </div>
   );
+  });
 }

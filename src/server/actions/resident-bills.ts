@@ -1,5 +1,7 @@
 'use server';
 
+import { withDurableMutation } from '@/server/data/durable-records';
+
 /**
  * Resident "pay all outstanding" (SC-02, §7 O). Clears every unpaid charge on
  * the resident's units from the unit wallet in one go — topping each unit wallet
@@ -20,6 +22,7 @@ const UNPAID = ['issued', 'partially_paid', 'overdue', 'in_arrears', 'escalated'
 export type PayAllResult = { ok: true; count: number; totalMinor: number; skipped?: number } | { ok: false; error: string };
 
 export async function payAllOutstanding(): Promise<PayAllResult> {
+  return withDurableMutation(async () => {
   const actor = await getActor();
   try {
     assertCan(actor, 'payments_in_app', 'create'); // resident (§7 O)
@@ -68,4 +71,6 @@ export async function payAllOutstanding(): Promise<PayAllResult> {
       ? `Not enough in your wallet to cover ${skipped === 1 ? 'that charge' : `those ${skipped} charges`}. Top up and try again.`
       : 'Nothing to pay.',
   };
+
+  });
 }

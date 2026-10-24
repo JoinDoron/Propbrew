@@ -2,12 +2,14 @@ import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { AI_REQUIREMENTS } from '@/domain';
 import { AiWorkspace, type AiFeature } from '@/components/admin/ai-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** AI-S-06 / §11.4 — AI architecture & guardrails console. Per-feature kill-switch
  *  (On / Shadow / Off), live billed-usage and cost vs cap. The feature list is the
  *  live AI requirements registry; toggling Off flips the kill-switch instantly and
  *  the usage/cost recompute. Platform-Admin only. */
 export default async function AiAdminPage() {
+  return withDurableRead(async () => {
   await requireCapability('tenant_config');
   const features: AiFeature[] = AI_REQUIREMENTS.map((f) => ({
     id: f.id, title: f.title, benchmark: f.benchmark, priority: f.priority,
@@ -20,4 +22,5 @@ export default async function AiAdminPage() {
       <AiWorkspace features={features} />
     </div>
   );
+  });
 }

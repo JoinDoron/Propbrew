@@ -4,12 +4,14 @@ import { constructionWorld, signalStates, signalEscalations } from '@/server/rea
 import { NOW_MS } from '@/domain/ppm';
 import { scanRisks } from '@/domain/construction';
 import { RiskRadar, type RadarSignal } from '@/components/construction/risk-radar';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** AI Risk Radar — nine deterministic detectors (schedule slip, cost overrun,
  *  late procurement, low stock, material leakage, missing reports, overdue RFIs,
  *  cert expiry, critical issues) each emitting evidence, confidence and ₦-at-risk.
  *  Advisory only: acknowledge, snooze, dismiss, or escalate into a real Issue. */
 export default async function ConstructionRiskPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const canMutate = can(actor, 'reports_analytics', 'update').allowed;
   const canCreate = can(actor, 'reports_analytics', 'create').allowed;
@@ -29,4 +31,5 @@ export default async function ConstructionRiskPage() {
       <RiskRadar signals={signals} canMutate={canMutate} canCreate={canCreate} />
     </div>
   );
+  });
 }

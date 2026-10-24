@@ -4,11 +4,13 @@ import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
 import { gridReliancePct, co2Kg, esgScore, reductionScenarios } from '@/domain/facility';
 import { SustainabilityWorkspace, type MonthPoint } from '@/components/facility/sustainability-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** Sustainability — Nigeria-first ESG: diesel carbon, grid-vs-genset mix, water,
  *  a 6-month carbon trend, modelled reduction pathways (solar/service/LED/gas with
  *  CO₂, ₦ savings and payback), and editable reduction targets. */
 export default async function SustainabilityPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('assets_ppm', 'read', 'facility');
   const generators = repos.facilityGenerators.list(actor).items;
   const months = repos.emissionMonths.list(actor).items;
@@ -33,4 +35,5 @@ export default async function SustainabilityPage() {
       />
     </div>
   );
+  });
 }

@@ -8,11 +8,13 @@ import { WORKSPACES, availableWorkspaces, canEnterWorkspace, workspaceById } fro
 import { requireOperatorSession } from '@/server/workspaces';
 import { devIdentityEnabled } from '@/server/session';
 import styles from '@/components/workspaces/workspace-chooser.module.css';
+import { withDurableRead } from '@/server/data/durable-records';
 
 export const metadata: Metadata = { title: 'Choose your workspace · Propbrew', robots: { index: false, follow: false } };
 export const dynamic = 'force-dynamic';
 
 export default async function WorkspacesPage({ searchParams }: { searchParams: Promise<{ from?: string | string[] }> }) {
+  return withDurableRead(async () => {
   const session = await requireOperatorSession();
   const { actor } = session;
   const from = (await searchParams).from;
@@ -66,4 +68,5 @@ export default async function WorkspacesPage({ searchParams }: { searchParams: P
       </div>
     </main>
   );
+  });
 }

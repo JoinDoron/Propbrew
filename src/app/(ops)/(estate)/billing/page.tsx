@@ -4,6 +4,7 @@ import { repos } from '@/server/data';
 import { PageHeader } from '@/components/ui/page-header';
 import { ScopeBanner } from '@/components/domain';
 import { BillingWorkspace } from '@/components/billing/billing-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** EM-01 / AI-E-03 — service charge & billing. A collections command surface:
  *  a defaulter-risk engine ranks residents by likelihood of non-payment, a
@@ -12,6 +13,7 @@ import { BillingWorkspace } from '@/components/billing/billing-workspace';
  *  approval and no penalty is ever automated (AI-E-03). Everything is scoped
  *  (§8.2); Estate Manager manages, others read. */
 export default async function BillingPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('charges_invoicing', 'read', 'estate');
   const canMutate = ['F', 'M'].includes(effectiveLevel(actor, 'charges_invoicing'));
   const invoices = [...repos.invoices.list(actor).items];
@@ -24,4 +26,5 @@ export default async function BillingPage() {
       <BillingWorkspace invoices={invoices} canMutate={canMutate} />
     </div>
   );
+  });
 }

@@ -7,6 +7,7 @@ import { ClerkProvider } from '@clerk/nextjs';
 import { clerkConfigured } from '@/server/onboarding/identity';
 import { websiteOnlyEnabled } from '@/lib/website-release';
 import { reviewModeEnabled } from '@/server/review-auth';
+import { durableRecordsEnabled } from '@/server/data/record-context';
 import './globals.css';
 import './review.css';
 import '@/components/ui/application-foundations.css';
@@ -36,6 +37,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const review = reviewModeEnabled();
+  const persistent = durableRecordsEnabled();
   const authEnabled = !review && clerkConfigured() && !websiteOnlyEnabled(process.env.PROPBREW_WEBSITE_ONLY, process.env.NODE_ENV);
   return (
     <html
@@ -44,7 +46,7 @@ export default function RootLayout({
       className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col" data-private-review={review ? 'true' : undefined}>
-        {review && <aside role="note" aria-label="Private review environment" className="propbrew-review-banner"><strong>Private review</strong><span>Sample data · Changes reset on restart · Do not enter customer information.</span></aside>}
+        {review && <aside role="note" aria-label="Private review environment" className="propbrew-review-banner"><strong>{persistent ? 'Database-backed review' : 'Private review'}</strong><span>{persistent ? 'Sample records · Saved to database · Do not enter customer information.' : 'Sample data · Changes reset on restart · Do not enter customer information.'}</span></aside>}
         {/* Runs before paint so the persisted theme never flashes. `next/script`
             with beforeInteractive is injected by Next into the document head and
             avoids React's "script tag in component" warning. */}

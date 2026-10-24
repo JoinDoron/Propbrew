@@ -6,12 +6,14 @@ import { residentCommunityData } from '@/server/reads/community';
 import { leaderboard } from '@/domain/estate';
 import { CommunityHub, type PMotion, type PEvent, type PPerk, type MyRewards, type PElection, type PParcel, type PNotice } from '@/components/portal/community-hub';
 import { isParcelOverdue, type VoteChoice } from '@/domain/estate';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** Resident community hub — vote on AGM motions, RSVP to events, and see/spend
  *  loyalty points, all from the resident's own shell. Reads ride announcements:V
  *  (estate-wide, no ownership filter); the mutations are resident-scoped
  *  (see server/actions/resident-community.ts). */
 export default async function ResidentCommunityPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('announcements');
   const { motions, events, parcels, rewardMembers, perks, myVotes, elections, myElectionVotes, myProxies, proxyNotices } = residentCommunityData(actor);
   const myName = repos.residents.list(actor).items.find((r) => r.userId === actor.userId)?.name;
@@ -58,4 +60,5 @@ export default async function ResidentCommunityPage() {
       </div>
     </div>
   );
+  });
 }

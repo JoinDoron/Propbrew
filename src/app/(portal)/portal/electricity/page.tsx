@@ -7,8 +7,10 @@ import { Button, Card, CardHeader, EmptyState, StatusPill } from '@/components/u
 import { PlugZap, ReceiptText, Zap } from 'lucide-react';
 import { portalMoney } from '@/components/portal/portal-patterns';
 import layout from '@/components/ui/workspace-layout.module.css';
+import { withDurableRead } from '@/server/data/durable-records';
 
 export default async function ElectricityPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('charges_invoicing');
   const activeUnitId = await getActiveUnitId(actor.unitIds);
   const unit = seed.units.find((record) => record.id === activeUnitId && record.tenantId === actor.tenantId && actor.unitIds.includes(record.id));
@@ -23,4 +25,5 @@ export default async function ElectricityPage() {
       { id: 'history', label: 'Purchase history', content: <Card><CardHeader title="Purchase history" subtitle="Verified electricity purchases and tokens only" /><EmptyState icon={<ReceiptText size={26} />} title="No connected purchase history" description="No provider-confirmed electricity purchases are available. Sample tokens are not valid payment or vending evidence." /></Card> },
     ]} />
   </div>;
+  });
 }

@@ -1,5 +1,9 @@
 'use server';
 
+import { withDurableMutation } from '@/server/data/durable-records';
+
+import { nextRecordSequence } from '@/server/data/record-context';
+
 /**
  * EM-04 / AI-E-04 announcement records. The hard rule lives here, server-side: an
  * AI-drafted announcement can NEVER be sent without an explicit manager approval
@@ -31,7 +35,6 @@ export type SendInput = {
 
 export type SendResult = { ok: true; reach: number; scheduled: boolean } | { ok: false; error: string };
 
-let counter = 0;
 const messageText = (max: number) => z.string().trim().min(1).max(max).refine((value) => !/[\u0000-\u0008\u000b-\u001f\u007f]/.test(value));
 const sendSchema = z.object({
   estateId: z.string().trim().min(1).max(160).optional(), title: messageText(160), body: messageText(10_000),
@@ -41,6 +44,7 @@ const sendSchema = z.object({
 }).strict();
 
 export async function sendAnnouncement(input: SendInput): Promise<SendResult> {
+  return withDurableMutation(async () => {
   const actor = await getActor();
   let scope: ScopeFilter;
   try {
@@ -68,7 +72,7 @@ export async function sendAnnouncement(input: SendInput): Promise<SendResult> {
 
   db.announcements.unshift({
     tenantId: estate.tenantId,
-    id: `an-new-${++counter}`,
+    id: `an-new-${nextRecordSequence('announcements:counter', 0, true)}`,
     title: data.title,
     body: data.body,
     estateId: estate.id,
@@ -85,4 +89,6 @@ export async function sendAnnouncement(input: SendInput): Promise<SendResult> {
   revalidatePath('/announcements');
   revalidatePath('/estate');
   return { ok: true, reach, scheduled };
+
+  });
 }

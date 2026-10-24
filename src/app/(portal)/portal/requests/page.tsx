@@ -3,12 +3,14 @@ import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
 import { can } from '@/lib/authz';
 import { RequestsWorkspace, type RequestRow } from '@/components/portal/requests-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** EM-03 (resident view) — My Requests. A resident may raise a request (create)
  *  and rate on resolution, but not drive the §10 machine. Each request shows a
  *  friendly Submitted → Resolved tracker; raising one runs deterministic triage
  *  (category · priority · ETA) and creates a real work order (§7 O). */
 export default async function MyRequestsPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('work_orders');
   const requests: RequestRow[] = repos.workOrders.list(actor).items.map((w) => ({
     id: w.id, ref: w.ref, title: w.title, status: w.status, priority: w.priority, assigneeName: w.assigneeName, createdAt: w.createdAt,
@@ -22,4 +24,5 @@ export default async function MyRequestsPage() {
       </div>
     </div>
   );
+  });
 }

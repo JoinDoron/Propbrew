@@ -6,11 +6,13 @@ import {
   criticalPath, taskDurationDays, slipPropagation, projectEVMOf, forecastFinishISO, milestoneBand,
 } from '@/domain/construction';
 import { ScheduleWorkspace, type GanttTask, type MilestoneRow } from '@/components/construction/schedule-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** Critical Path & Schedule — a real CPM forward/backward pass over the task DAG:
  *  earliest/latest times, total float, the zero-float critical chain, and a
  *  hover cascade showing exactly what slips when a task slips. */
 export default async function ConstructionSchedulePage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const canMutate = can(actor, 'reports_analytics', 'update').allowed;
   const canCreate = can(actor, 'reports_analytics', 'create').allowed;
@@ -65,4 +67,5 @@ export default async function ConstructionSchedulePage() {
       />
     </div>
   );
+  });
 }

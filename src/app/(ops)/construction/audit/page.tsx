@@ -2,6 +2,7 @@ import { requireCapability } from '@/server/guard';
 import { constructionWorld } from '@/server/reads/construction';
 import { auditSummary, sensitiveEntries, reasonPareto, type ReasonDomain } from '@/domain/construction';
 import { AuditWorkspace, type AuditRow, type ParetoRow } from '@/components/construction/audit-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 const DOMAINS: ReasonDomain[] = ['delay', 'rejection', 'variance', 'stock_adjust', 'stock_return'];
 
@@ -9,6 +10,7 @@ const DOMAINS: ReasonDomain[] = ['delay', 'rejection', 'variance', 'stock_adjust
  *  paired with a Pareto over the coded reasons. Together they answer both
  *  "who did what, when" and "what actually keeps going wrong". */
 export default async function ConstructionAuditPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const world = constructionWorld(actor);
 
@@ -41,4 +43,5 @@ export default async function ConstructionAuditPage() {
       <AuditWorkspace entries={entries} pareto={pareto} domains={DOMAINS} summary={auditSummary(world.audit)} />
     </div>
   );
+  });
 }

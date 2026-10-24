@@ -1,5 +1,7 @@
 'use server';
 
+import { withDurableMutation } from '@/server/data/durable-records';
+
 /**
  * Work-order transition — the one genuinely end-to-end write in the app.
  *
@@ -32,6 +34,7 @@ export async function fireWoTransition(
   event: string,
   opts?: { assignee?: string; note?: string },
 ): Promise<TransitionResult> {
+  return withDurableMutation(async () => {
   const actor = await getActor();
 
   // Gate 1 — capability. transition is not in the V action set, so view-only
@@ -95,4 +98,6 @@ export async function fireWoTransition(
   revalidatePath('/portal');
   revalidatePath('/portal/requests');
   return { ok: true, to: transition.to };
+
+  });
 }

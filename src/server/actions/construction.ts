@@ -1,5 +1,9 @@
 'use server';
 
+import { withDurableMutation } from '@/server/data/durable-records';
+
+import { nextRecordSequence } from '@/server/data/record-context';
+
 /**
  * Construction (ConstructionOS) actions. Every mutation re-checks the §7
  * reports_analytics capability server-side (estate_manager/facility_manager hold
@@ -47,18 +51,25 @@ const daysISO = (fromISO: string, days: number) => new Date(Date.parse(fromISO) 
 
 /* --- daily site reports (state machine) ----------------------------------- */
 export async function submitReport(id: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if (!g.ok) return g;
   const r = scopedMutableGet(g.actor, 'reports_analytics', db.constructionReports, id, 'update'); if (!r) return { ok: false, error: 'Report not found.' };
   if (r.status !== 'draft' && r.status !== 'returned') return { ok: false, error: 'Only a draft can be submitted.' };
   r.status = 'submitted'; revalidate(); return { ok: true, ref: r.dateISO };
+
+  });
 }
 export async function reviewReport(id: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if (!g.ok) return g;
   const r = scopedMutableGet(g.actor, 'reports_analytics', db.constructionReports, id, 'update'); if (!r) return { ok: false, error: 'Report not found.' };
   if (r.status !== 'submitted') return { ok: false, error: 'Only a submitted report can be reviewed.' };
   r.status = 'reviewed'; revalidate(); return { ok: true };
+
+  });
 }
 export async function approveDailyReport(id: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if (!g.ok) return g;
   const r = scopedMutableGet(g.actor, 'reports_analytics', db.constructionReports, id, 'update'); if (!r) return { ok: false, error: 'Report not found.' };
   if (r.status !== 'submitted' && r.status !== 'reviewed') return { ok: false, error: 'Only a submitted/reviewed report can be approved.' };
@@ -66,17 +77,23 @@ export async function approveDailyReport(id: string): Promise<Res> {
   const me = nameOf(g.actor).toLowerCase();
   if (me && r.officer.toLowerCase() === me) return { ok: false, error: 'You submitted this report — a different manager must approve it.' };
   r.status = 'approved'; revalidate(); return { ok: true, ref: r.dateISO };
+
+  });
 }
 export async function returnDailyReport(id: string, reason: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if (!g.ok) return g;
   const r = scopedMutableGet(g.actor, 'reports_analytics', db.constructionReports, id, 'update'); if (!r) return { ok: false, error: 'Report not found.' };
   if (!reason?.trim()) return { ok: false, error: 'A return reason is required.' };
   if (!['submitted', 'reviewed'].includes(r.status)) return { ok: false, error: 'Only a submitted or reviewed report can be returned. Approved reports require an adjustment.' };
   r.status = 'returned'; r.constraints = [...r.constraints, `Returned: ${reason.trim()}`]; revalidate(); return { ok: true };
+
+  });
 }
 
 /* --- schedule ------------------------------------------------------------- */
 export async function updateTaskProgress(id: string, pct: number): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if (!g.ok) return g;
   const t = scopedMutableGet(g.actor, 'reports_analytics', db.constructionTasks, id, 'update'); if (!t) return { ok: false, error: 'Task not found.' };
   if (!Number.isFinite(pct) || pct < 0 || pct > 100) return { ok: false, error: 'Enter progress from 0% to 100%.' };
@@ -87,31 +104,42 @@ export async function updateTaskProgress(id: string, pct: number): Promise<Res> 
   if (p > 0 && !t.actualStartISO) t.actualStartISO = NOW.slice(0, 10);
   if (p >= 100 && !t.actualFinishISO) t.actualFinishISO = NOW.slice(0, 10);
   revalidate(); return { ok: true, ref: t.name };
+
+  });
 }
 export async function advanceMilestone(id: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if (!g.ok) return g;
   const m = scopedMutableGet(g.actor, 'reports_analytics', db.constructionMilestones, id, 'update'); if (!m) return { ok: false, error: 'Milestone not found.' };
   if (m.status === 'accepted') return { ok: false, error: 'This milestone is already accepted.' };
   m.status = 'accepted'; revalidate(); return { ok: true, ref: m.name };
+
+  });
 }
-let issueSeq = 0;
 export async function escalateTaskToIssue(taskId: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('create'); if (!g.ok) return g;
   const t = scopedMutableGet(g.actor, 'reports_analytics', db.constructionTasks, taskId, 'create'); if (!t) return { ok: false, error: 'Task not found.' };
-  const id = `is-esc-${++issueSeq}`;
+  const id = `is-esc-${nextRecordSequence('construction:issueSeq', 0, true)}`;
   db.constructionIssues.unshift({ tenantId: g.actor.tenantId, id, projectId: t.projectId, category: 'Schedule', title: `Overdue task escalated: ${t.name}`, severity: 'high', owner: t.owner, raisedISO: NOW.slice(0, 10), dueISO: daysISO(NOW, 3), status: 'open', correctiveAction: 'Recovery plan required' } as (typeof db.constructionIssues)[number]);
   revalidate(); return { ok: true, ref: t.name };
+
+  });
 }
 
 /* --- procurement (PR → RFQ award → PO → delivery) ------------------------- */
 export async function approvePurchaseRequest(id: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if (!g.ok) return g;
   const pr = scopedMutableGet(g.actor, 'reports_analytics', db.constructionRequests, id, 'update'); if (!pr) return { ok: false, error: 'Request not found.' };
   if (pr.status !== 'pending' && pr.status !== 'draft') return { ok: false, error: 'Only a pending request can be approved.' };
   pr.status = 'approved'; revalidate(); return { ok: true, ref: pr.ref };
+
+  });
 }
 /** Award an RFQ to a vendor: issue a PO from the winning quote and commit budget. */
 export async function awardRfq(rfqId: string, vendorId: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('create'); if (!g.ok) return g;
   const rfq = scopedMutableGet(g.actor, 'reports_analytics', db.constructionRfqs, rfqId, 'create'); if (!rfq) return { ok: false, error: 'RFQ not found.' };
   if (rfq.status === 'awarded') return { ok: false, error: 'This RFQ is already awarded. Its order cannot be issued twice.' };
@@ -129,16 +157,21 @@ export async function awardRfq(rfqId: string, vendorId: string): Promise<Res> {
   req.status = 'ordered';
   cc.committed = addMinor(cc.committed, q.price.minor);
   revalidate(); return { ok: true, ref };
+
+  });
 }
 export async function approvePurchaseOrder(id: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if (!g.ok) return g;
   const po = scopedMutableGet(g.actor, 'reports_analytics', db.constructionOrders, id, 'update'); if (!po) return { ok: false, error: 'PO not found.' };
   if (!['draft', 'approved'].includes(po.status)) return { ok: false, error: 'Only a draft or approved order can advance to issue.' };
   po.status = po.status === 'draft' ? 'approved' : 'issued'; revalidate(); return { ok: true, ref: po.ref };
+
+  });
 }
-let movSeq = 0;
 /** Receive against a PO: advance delivery, book stock AND actual cost. */
 export async function receiveDelivery(poId: string, qty: number): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if (!g.ok) return g;
   const po = scopedMutableGet(g.actor, 'reports_analytics', db.constructionOrders, poId, 'update'); if (!po) return { ok: false, error: 'PO not found.' };
   if (!finiteQty(qty)) return { ok: false, error: 'Enter a finite quantity greater than zero.' };
@@ -164,13 +197,16 @@ export async function receiveDelivery(poId: string, qty: number): Promise<Res> {
     const st = repos.constructionStock.list(g.actor, { limit: Number.MAX_SAFE_INTEGER }).items.find((s) => s.materialId === mat.id && s.warehouseId === warehouse.id);
     if (st) { st.onHand += recv; st.inTransit = Math.max(0, st.inTransit - recv); }
     else db.constructionStock.push({ tenantId: g.actor.tenantId, id: `st-receive-${randomUUID()}`, materialId: mat.id, warehouseId: warehouse.id, onHand: recv, reserved: 0, inTransit: 0 } as (typeof db.constructionStock)[number]);
-    db.constructionMovements.unshift({ tenantId: g.actor.tenantId, id: `sm-new-${++movSeq}`, materialId: mat.id, kind: 'receipt', qty: recv, atISO: NOW.slice(0, 10), projectId: po.projectId, costCode: po.costCode, ref: po.ref, by: nameOf(g.actor) } as (typeof db.constructionMovements)[number]);
+    db.constructionMovements.unshift({ tenantId: g.actor.tenantId, id: `sm-new-${nextRecordSequence('construction:movSeq', 0, true)}`, materialId: mat.id, kind: 'receipt', qty: recv, atISO: NOW.slice(0, 10), projectId: po.projectId, costCode: po.costCode, ref: po.ref, by: nameOf(g.actor) } as (typeof db.constructionMovements)[number]);
   }
   revalidate(); return { ok: true, ref: `${recv} ${po.unit}` };
+
+  });
 }
 
 /* --- materials ------------------------------------------------------------ */
 export async function issueMaterials(materialId: string, qty: number, projectId: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if (!g.ok) return g;
   if (!scopedMutableGet(g.actor, 'reports_analytics', db.constructionProjects, projectId, 'update')) return { ok: false, error: 'Project not found.' };
   const stock = repos.constructionStock.list(g.actor, { limit: Number.MAX_SAFE_INTEGER }).items.filter((row) => row.materialId === materialId);
@@ -183,27 +219,36 @@ export async function issueMaterials(materialId: string, qty: number, projectId:
     row.onHand -= issued; row.reserved = Math.max(0, row.reserved - issued); remaining -= issued;
     if (remaining === 0) break;
   }
-  db.constructionMovements.unshift({ tenantId: g.actor.tenantId, id: `sm-new-${++movSeq}`, materialId, kind: 'issue', qty, atISO: NOW.slice(0, 10), projectId, ref: `MI-${470 + movSeq}`, by: nameOf(g.actor) } as (typeof db.constructionMovements)[number]);
+  const movSeq = nextRecordSequence('construction:movSeq', 0, true);
+  db.constructionMovements.unshift({ tenantId: g.actor.tenantId, id: `sm-new-${movSeq}`, materialId, kind: 'issue', qty, atISO: NOW.slice(0, 10), projectId, ref: `MI-${470 + movSeq}`, by: nameOf(g.actor) } as (typeof db.constructionMovements)[number]);
   revalidate(); return { ok: true };
+
+  });
 }
 
 /* --- cost control --------------------------------------------------------- */
-let varSeq = 0;
 export type VariationInput = { projectId: string; title: string; reason: string; costImpactNaira: number; scheduleImpactDays: number };
 export async function raiseVariation(input: VariationInput): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('create'); if (!g.ok) return g;
   if (!input.title?.trim()) return { ok: false, error: 'Enter a variation title.' };
   if (!scopedMutableGet(g.actor, 'reports_analytics', db.constructionProjects, input.projectId, 'create')) return { ok: false, error: 'Project not found.' };
   if (!Number.isFinite(input.costImpactNaira) || !Number.isSafeInteger(Math.round(input.costImpactNaira * 100)) || !Number.isFinite(input.scheduleImpactDays) || !Number.isSafeInteger(Math.round(input.scheduleImpactDays))) return { ok: false, error: 'Enter finite cost and schedule impacts.' };
-  const ref = `VO-${12 + db.constructionVariations.length + (++varSeq)}`;
+  const varSeq = nextRecordSequence('construction:varSeq', 0, true);
+  const ref = `VO-${12 + db.constructionVariations.length + (varSeq)}`;
   db.constructionVariations.unshift({ tenantId: g.actor.tenantId, id: `var-new-${varSeq}`, ref, projectId: input.projectId, title: input.title.trim(), reason: input.reason.trim() || 'Not stated', costImpact: money(Math.round((input.costImpactNaira || 0) * 100)), scheduleImpactDays: Math.round(input.scheduleImpactDays || 0), status: 'submitted', raisedISO: NOW.slice(0, 10) } as (typeof db.constructionVariations)[number]);
   revalidate(); return { ok: true, ref };
+
+  });
 }
 export async function approveVariation(id: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if (!g.ok) return g;
   const v = scopedMutableGet(g.actor, 'reports_analytics', db.constructionVariations, id, 'update'); if (!v) return { ok: false, error: 'Variation not found.' };
   if (v.status !== 'submitted') return { ok: false, error: 'Only a submitted variation can be approved.' };
   v.status = 'approved'; revalidate(); return { ok: true, ref: v.ref };
+
+  });
 }
 
 /* --- risk radar (advisory lifecycle) -------------------------------------- */
@@ -214,21 +259,31 @@ function setSignalState(actor: Actor, signalId: string, state: 'ack' | 'snoozed'
   db.constructionSignalStates.push(row); return row;
 }
 export async function acknowledgeSignal(signalId: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if (!g.ok) return g;
   if (!scanRisks(constructionWorld(g.actor), NOW_MS).some((signal) => signal.id === signalId)) return { ok: false, error: 'Signal not found in your authorised projects.' };
   setSignalState(g.actor, signalId, 'ack'); revalidate(); return { ok: true };
+
+  });
 }
 export async function snoozeSignal(signalId: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if (!g.ok) return g;
   if (!scanRisks(constructionWorld(g.actor), NOW_MS).some((signal) => signal.id === signalId)) return { ok: false, error: 'Signal not found in your authorised projects.' };
   setSignalState(g.actor, signalId, 'snoozed'); revalidate(); return { ok: true };
+
+  });
 }
 export async function dismissSignal(signalId: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if (!g.ok) return g;
   if (!scanRisks(constructionWorld(g.actor), NOW_MS).some((signal) => signal.id === signalId)) return { ok: false, error: 'Signal not found in your authorised projects.' };
   setSignalState(g.actor, signalId, 'dismissed'); revalidate(); return { ok: true };
+
+  });
 }
 export async function escalateSignalToIssue(signalId: string, projectId: string, title: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('create'); if (!g.ok) return g;
   if (!scopedMutableGet(g.actor, 'reports_analytics', db.constructionProjects, projectId, 'create')) return { ok: false, error: 'Project not found.' };
   const signal = scanRisks(constructionWorld(g.actor), NOW_MS).find((row) => row.id === signalId && row.projectId === projectId);
@@ -240,26 +295,32 @@ export async function escalateSignalToIssue(signalId: string, projectId: string,
     return { ok: true, ref: linked.id };
   }
   if (receipt?.state === 'escalated') return { ok: false, error: 'This signal has already been escalated.' };
-  const id = `is-esc-${++issueSeq}`;
+  const id = `is-esc-${nextRecordSequence('construction:issueSeq', 0, true)}`;
   db.constructionIssues.unshift({ tenantId: g.actor.tenantId, id, projectId, category: 'Risk', title: `Escalated: ${signal.title}`, severity: 'high', owner: nameOf(g.actor), raisedISO: NOW.slice(0, 10), dueISO: daysISO(NOW, 5), status: 'open', correctiveAction: 'From risk radar' } as (typeof db.constructionIssues)[number]);
   setSignalState(g.actor, signalId, 'escalated').escalatedIssueId = id; revalidate(); return { ok: true, ref: id };
+
+  });
 }
 
 /* --- projects ------------------------------------------------------------- */
-let projSeq = 0;
 export type ProjectInput = { name: string; location: string; clientName: string; contractNaira: number; budgetNaira: number; plannedFinishISO: string };
 export async function createProject(input: ProjectInput): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('create'); if (!g.ok) return g;
   if (!input.name?.trim()) return { ok: false, error: 'Enter a project name.' };
   if (!Number.isFinite(input.contractNaira) || !safeMinor(Math.round(input.contractNaira * 100)) || !Number.isFinite(input.budgetNaira) || !safeMinor(Math.round(input.budgetNaira * 100))) return { ok: false, error: 'Enter finite, non-negative NGN contract and budget amounts.' };
   if (input.plannedFinishISO && (!validDate(input.plannedFinishISO) || input.plannedFinishISO < NOW.slice(0, 10))) return { ok: false, error: 'Choose a valid planned finish on or after the project start.' };
-  const id = `cp-new-${++projSeq}`;
+  const projSeq = nextRecordSequence('construction:projSeq', 0, true);
+  const id = `cp-new-${projSeq}`;
   db.constructionProjects.unshift({ tenantId: g.actor.tenantId, id, projectId: id, code: `NEW-${projSeq}`, name: input.name.trim(), location: input.location.trim() || 'Lagos', clientName: input.clientName.trim() || '7 Fifteen Capital', pmName: nameOf(g.actor), status: 'planning', contractValue: money(Math.round((input.contractNaira || 0) * 100)), approvedBudget: money(Math.round((input.budgetNaira || 0) * 100)), startISO: NOW.slice(0, 10), plannedFinishISO: input.plannedFinishISO || daysISO(NOW, 540), plannedPercent: 0, percentComplete: 0 } as (typeof db.constructionProjects)[number]);
   revalidate(); return { ok: true, ref: input.name.trim() };
+
+  });
 }
 
 /* --- workforce ------------------------------------------------------------ */
 export async function clockWorker(workerId: string, projectId: string, present: boolean): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if (!g.ok) return g;
   const worker = scopedMutableGet(g.actor, 'reports_analytics', db.constructionWorkers, workerId, 'update');
   if (!worker || !scopedMutableGet(g.actor, 'reports_analytics', db.constructionProjects, projectId, 'update') || worker.projectId !== projectId) return { ok: false, error: 'Worker and project assignment not found.' };
@@ -269,23 +330,28 @@ export async function clockWorker(workerId: string, projectId: string, present: 
   if (existing) { existing.status = present ? 'present' : 'absent'; existing.clockIn = present ? '07:30' : undefined; existing.method = 'manual'; existing.withinGeofence = false; }
   else db.constructionAttendance.unshift({ tenantId: g.actor.tenantId, id: `at-new-${workerId}`, workerId, projectId, dateISO: today, clockIn: present ? '07:30' : undefined, hours: 0, overtime: 0, method: 'manual', withinGeofence: false, status: present ? 'present' : 'absent' } as (typeof db.constructionAttendance)[number]);
   revalidate(); return { ok: true };
+
+  });
 }
 
 /* --- digest --------------------------------------------------------------- */
 export async function publishDigest(projectId: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if (!g.ok) return g;
   const p = scopedMutableGet(g.actor, 'reports_analytics', db.constructionProjects, projectId, 'update'); if (!p) return { ok: false, error: 'Project not found.' };
   revalidate(); return { ok: true, ref: p.name };
+
+  });
 }
 
 /* --- document revision control -------------------------------------------- */
 
-let revSeq = 0;
 /** Issue a new revision over an existing one. The prior revision is marked
  *  superseded rather than edited — an approved issue is immutable, which is the
  *  whole point of a controlled register (PRD §12 "Prevent approved revisions
  *  from being overwritten"). */
 export async function issueRevision(docId: string, changeNote: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('create'); if (!g.ok) return g;
   const prior = scopedMutableGet(g.actor, 'reports_analytics', db.constructionDocs, docId, 'update');
   if (!prior) return { ok: false, error: 'Document not found.' };
@@ -294,7 +360,7 @@ export async function issueRevision(docId: string, changeNote: string): Promise<
 
   const revision = nextRevision(prior.revision);
   if (db.constructionDocs.some((doc) => doc.tenantId === prior.tenantId && doc.projectId === prior.projectId && doc.number === prior.number && doc.revision === revision)) return { ok: false, error: `Revision ${revision} already exists. Review that revision before issuing another.` };
-  const id = `doc-rev-${++revSeq}`;
+  const id = `doc-rev-${nextRecordSequence('construction:revSeq', 0, true)}`;
   db.constructionDocs.unshift({
     ...prior, id, revision, status: 'draft',
     effectiveISO: NOW.slice(0, 10), changeNote: changeNote.trim() || undefined,
@@ -306,9 +372,12 @@ export async function issueRevision(docId: string, changeNote: string): Promise<
   // until the replacement is itself approved. `approveRevision` does the swap.
   revalidate();
   return { ok: true, ref: `${prior.number} rev ${revision}` };
+
+  });
 }
 
 export async function approveRevision(docId: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if (!g.ok) return g;
   const doc = scopedMutableGet(g.actor, 'reports_analytics', db.constructionDocs, docId, 'update');
   if (!doc) return { ok: false, error: 'Document not found.' };
@@ -325,11 +394,13 @@ export async function approveRevision(docId: string): Promise<Res> {
   doc.status = 'approved'; doc.approvedBy = nameOf(g.actor); doc.approvedISO = NOW.slice(0, 10);
   revalidate();
   return { ok: true, ref: `${doc.number} rev ${doc.revision}` };
+
+  });
 }
 
-let trSeq = 0;
 /** Formally issue a revision to a party — the distribution record an audit asks for. */
 export async function sendTransmittal(docId: string, toParty: string, purpose: 'for_construction' | 'for_review' | 'for_information'): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('create'); if (!g.ok) return g;
   const doc = scopedMutableGet(g.actor, 'reports_analytics', db.constructionDocs, docId, 'update');
   if (!doc) return { ok: false, error: 'Document not found.' };
@@ -338,14 +409,17 @@ export async function sendTransmittal(docId: string, toParty: string, purpose: '
     return { ok: false, error: 'Only an approved revision can be issued for construction.' };
   }
   db.constructionTransmittals.unshift({
-    tenantId: g.actor.tenantId, id: `tr-new-${++trSeq}`, docId, docNumber: doc.number,
+    tenantId: g.actor.tenantId, id: `tr-new-${nextRecordSequence('construction:trSeq', 0, true)}`, docId, docNumber: doc.number,
     revision: doc.revision, toParty: toParty.trim(), sentISO: NOW.slice(0, 10), purpose,
   } as unknown as (typeof db.constructionTransmittals)[number]);
   revalidate();
   return { ok: true, ref: `${doc.number} rev ${doc.revision} → ${toParty.trim()}` };
+
+  });
 }
 
 export async function answerRfi(rfiId: string, answer: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if (!g.ok) return g;
   const r = scopedMutableGet(g.actor, 'reports_analytics', db.constructionRfis, rfiId, 'update');
   if (!r) return { ok: false, error: 'RFI not found.' };
@@ -354,9 +428,12 @@ export async function answerRfi(rfiId: string, answer: string): Promise<Res> {
   r.answer = answer.trim(); r.answeredISO = NOW.slice(0, 10); r.status = 'answered';
   revalidate();
   return { ok: true, ref: r.ref };
+
+  });
 }
 
 export async function closeRfi(rfiId: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if (!g.ok) return g;
   const r = scopedMutableGet(g.actor, 'reports_analytics', db.constructionRfis, rfiId, 'update');
   if (!r) return { ok: false, error: 'RFI not found.' };
@@ -364,17 +441,19 @@ export async function closeRfi(rfiId: string): Promise<Res> {
   r.status = 'closed';
   revalidate();
   return { ok: true, ref: r.ref };
+
+  });
 }
 
 /* --- BOQ import ------------------------------------------------------------ */
 
-let ccSeq = 0;
 export type BoqImportRow = { code: string; name: string; category: string; budgetMinor: number };
 
 /** Commit a parsed BOQ. Existing codes have their BUDGET updated (committed and
  *  actual are untouched — those are transaction history, not a spreadsheet's to
  *  overwrite); new codes are created. */
 export async function importBoq(projectId: string, rows: BoqImportRow[]): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('create'); if (!g.ok) return g;
   if (!scopedMutableGet(g.actor, 'reports_analytics', db.constructionProjects, projectId, 'create')) return { ok: false, error: 'Project not found.' };
   if (rows.length === 0) return { ok: false, error: 'Nothing to import.' };
@@ -390,7 +469,7 @@ export async function importBoq(projectId: string, rows: BoqImportRow[]): Promis
       updated += 1;
     } else {
       db.constructionCostCodes.push({
-        tenantId: g.actor.tenantId, id: `cc-boq-${++ccSeq}`, projectId,
+        tenantId: g.actor.tenantId, id: `cc-boq-${nextRecordSequence('construction:ccSeq', 0, true)}`, projectId,
         code: r.code, name: r.name, category: r.category,
         budget: money(r.budgetMinor), committed: money(0), actual: money(0),
         plannedPercent: 0, earnedPercent: 0,
@@ -400,11 +479,14 @@ export async function importBoq(projectId: string, rows: BoqImportRow[]): Promis
   }
   revalidate();
   return { ok: true, ref: `${created} created, ${updated} updated` };
+
+  });
 }
 
 /* --- timesheets → earned value -------------------------------------------- */
 
 export async function submitTimesheet(id: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if (!g.ok) return g;
   const ts = scopedMutableGet(g.actor, 'reports_analytics', db.constructionTimesheets, id, 'update');
   if (!ts) return { ok: false, error: 'Timesheet not found.' };
@@ -412,6 +494,8 @@ export async function submitTimesheet(id: string): Promise<Res> {
   ts.status = 'submitted';
   revalidate();
   return { ok: true, ref: ts.ref };
+
+  });
 }
 
 /**
@@ -420,6 +504,7 @@ export async function submitTimesheet(id: string): Promise<Res> {
  * posted so a re-approval can never double-count.
  */
 export async function approveTimesheet(id: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if (!g.ok) return g;
   const ts = scopedMutableGet(g.actor, 'reports_analytics', db.constructionTimesheets, id, 'update');
   if (!ts) return { ok: false, error: 'Timesheet not found.' };
@@ -440,9 +525,12 @@ export async function approveTimesheet(id: string): Promise<Res> {
   ts.status = 'approved'; ts.approvedBy = nameOf(g.actor); ts.approvedISO = NOW.slice(0, 10); ts.postedMinor = costMinor;
   revalidate();
   return { ok: true, ref: `${ts.ref} · ₦${Math.round(costMinor / 100).toLocaleString('en-NG')} posted to ${ts.costCode}` };
+
+  });
 }
 
 export async function rejectTimesheet(id: string, reason: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if (!g.ok) return g;
   const ts = scopedMutableGet(g.actor, 'reports_analytics', db.constructionTimesheets, id, 'update');
   if (!ts) return { ok: false, error: 'Timesheet not found.' };
@@ -451,6 +539,8 @@ export async function rejectTimesheet(id: string, reason: string): Promise<Res> 
   ts.status = 'rejected';
   revalidate();
   return { ok: true, ref: ts.ref };
+
+  });
 }
 
 /* --- audit trail ----------------------------------------------------------- */
@@ -490,16 +580,16 @@ const onHandOf = (actor: Actor, materialId: string, warehouseId?: string) =>
     .filter((s) => s.materialId === materialId && (!warehouseId || s.warehouseId === warehouseId))
     .reduce((n, s) => n + s.onHand, 0);
 
-let mvSeq = 0;
 function writeMovement(actor: Actor, kind: 'receipt' | 'issue' | 'transfer' | 'return' | 'adjust', materialId: string, qty: number, extra: { projectId?: string; costCode?: string; ref?: string } = {}): void {
   db.constructionMovements.unshift({
-    tenantId: actor.tenantId, id: `mv-${kind}-${++mvSeq}`, materialId, kind, qty,
+    tenantId: actor.tenantId, id: `mv-${kind}-${nextRecordSequence('construction:mvSeq', 0, true)}`, materialId, kind, qty,
     atISO: new Date(Date.parse(NOW)).toISOString(), by: nameOf(actor), ...extra,
   } as unknown as (typeof db.constructionMovements)[number]);
 }
 
 /** Move stock between stores. Never allowed to drive the source negative. */
 export async function transferStock(materialId: string, fromWarehouseId: string, toWarehouseId: string, qty: number): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if (!g.ok) return g;
   if (fromWarehouseId === toWarehouseId) return { ok: false, error: 'Pick two different stores.' };
   if (!finiteQty(qty)) return { ok: false, error: 'Enter a finite quantity greater than zero.' };
@@ -514,16 +604,19 @@ export async function transferStock(materialId: string, fromWarehouseId: string,
   from.onHand -= qty;
   const to = repos.constructionStock.list(g.actor, { limit: 1000 }).items.find((s) => s.materialId === materialId && s.warehouseId === toWarehouseId);
   if (to) to.onHand += qty;
-  else db.constructionStock.push({ tenantId: g.actor.tenantId, id: `st-tr-${++mvSeq}`, materialId, warehouseId: toWarehouseId, onHand: qty, reserved: 0, inTransit: 0 } as unknown as (typeof db.constructionStock)[number]);
+  else db.constructionStock.push({ tenantId: g.actor.tenantId, id: `st-tr-${nextRecordSequence('construction:mvSeq', 0, true)}`, materialId, warehouseId: toWarehouseId, onHand: qty, reserved: 0, inTransit: 0 } as unknown as (typeof db.constructionStock)[number]);
 
   writeMovement(g.actor, 'transfer', materialId, qty, { ref: `${fromWarehouseId}→${toWarehouseId}` });
   audit(g.actor, { action: 'stock_move', entity: 'material', entityRef: mat.name, summary: `Transferred ${qty} ${mat.unit} between stores`, amountMinor: qty * mat.unitCost.minor });
   revalidate();
   return { ok: true, ref: `${qty} ${mat.unit} moved` };
+
+  });
 }
 
 /** Surplus coming back from site — needs a coded reason so returns are analysable. */
 export async function returnStock(materialId: string, warehouseId: string, qty: number, reasonCodeId: string, note?: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if (!g.ok) return g;
   const mat = scopedMutableGet(g.actor, 'reports_analytics', db.constructionMaterials, materialId, 'read');
   if (!mat) return { ok: false, error: 'Material not found.' };
@@ -535,26 +628,29 @@ export async function returnStock(materialId: string, warehouseId: string, qty: 
 
   const line = repos.constructionStock.list(g.actor, { limit: 1000 }).items.find((s) => s.materialId === materialId && s.warehouseId === warehouseId);
   if (line) line.onHand += qty;
-  else db.constructionStock.push({ tenantId: g.actor.tenantId, id: `st-rt-${++mvSeq}`, materialId, warehouseId, onHand: qty, reserved: 0, inTransit: 0 } as unknown as (typeof db.constructionStock)[number]);
+  else db.constructionStock.push({ tenantId: g.actor.tenantId, id: `st-rt-${nextRecordSequence('construction:mvSeq', 0, true)}`, materialId, warehouseId, onHand: qty, reserved: 0, inTransit: 0 } as unknown as (typeof db.constructionStock)[number]);
 
   writeMovement(g.actor, 'return', materialId, qty, { ref: code.code });
   recordReason(g.actor, { domain: 'stock_return', codeId: reasonCodeId, subjectKind: 'material', subjectRef: materialId, note, impactMinor: qty * mat.unitCost.minor });
   audit(g.actor, { action: 'stock_move', entity: 'material', entityRef: mat.name, summary: `${qty} ${mat.unit} returned to store — ${code.label}`, amountMinor: qty * mat.unitCost.minor, reasonCodeId, note });
   revalidate();
   return { ok: true, ref: `${qty} ${mat.unit} returned` };
+
+  });
 }
 
-let scSeq = 0;
 /** Record a physical count. The variance is NOT written to stock until it is
  *  reconciled with a reason — counting and adjusting are deliberately separate. */
 export async function recordStockCount(materialId: string, warehouseId: string, countedQty: number): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('create'); if (!g.ok) return g;
   const mat = scopedMutableGet(g.actor, 'reports_analytics', db.constructionMaterials, materialId, 'read');
   if (!mat) return { ok: false, error: 'Material not found.' };
   if (!Number.isFinite(countedQty) || countedQty < 0) return { ok: false, error: 'A count must be finite and cannot be negative.' };
   if (!scopedMutableGet(g.actor, 'reports_analytics', db.constructionWarehouses, warehouseId, 'create')) return { ok: false, error: 'Store not found.' };
   const systemQty = onHandOf(g.actor, materialId, warehouseId);
-  const ref = `SC-${2040 + db.constructionStockCounts.length + (++scSeq)}`;
+  const scSeq = nextRecordSequence('construction:scSeq', 0, true);
+  const ref = `SC-${2040 + db.constructionStockCounts.length + (scSeq)}`;
   db.constructionStockCounts.unshift({
     tenantId: g.actor.tenantId!, id: `sc-${scSeq}`, ref, warehouseId, materialId,
     systemQty, countedQty, countedBy: nameOf(g.actor), countedISO: NOW.slice(0, 10), status: 'open',
@@ -562,11 +658,14 @@ export async function recordStockCount(materialId: string, warehouseId: string, 
   audit(g.actor, { action: 'stock_count', entity: 'material', entityRef: mat.name, summary: `Counted ${countedQty} vs ${systemQty} on system`, before: String(systemQty), after: String(countedQty) });
   revalidate();
   return { ok: true, ref };
+
+  });
 }
 
 /** Apply a count's variance to stock, with a mandatory coded reason. This is the
  *  only path by which a count can change the books. */
 export async function reconcileStockCount(countId: string, reasonCodeId: string, note?: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if (!g.ok) return g;
   const count = scopedMutableGet(g.actor, 'reports_analytics', db.constructionStockCounts, countId, 'update');
   if (!count) return { ok: false, error: 'Count not found.' };
@@ -582,7 +681,7 @@ export async function reconcileStockCount(countId: string, reasonCodeId: string,
   const adjustedQty = (line?.onHand ?? 0) + delta;
   if (adjustedQty < 0) return { ok: false, error: 'Stock changed after this count; record a fresh count before reconciling.' };
   if (line) line.onHand = adjustedQty;
-  else if (adjustedQty > 0) db.constructionStock.push({ tenantId: g.actor.tenantId, id: `st-sc-${++mvSeq}`, materialId: count.materialId, warehouseId: count.warehouseId, onHand: adjustedQty, reserved: 0, inTransit: 0 } as unknown as (typeof db.constructionStock)[number]);
+  else if (adjustedQty > 0) db.constructionStock.push({ tenantId: g.actor.tenantId, id: `st-sc-${nextRecordSequence('construction:mvSeq', 0, true)}`, materialId: count.materialId, warehouseId: count.warehouseId, onHand: adjustedQty, reserved: 0, inTransit: 0 } as unknown as (typeof db.constructionStock)[number]);
 
   if (delta !== 0) writeMovement(g.actor, 'adjust', count.materialId, delta, { ref: `${count.ref} · ${code.code}` });
   count.status = 'reconciled'; count.reasonCodeId = reasonCodeId; count.note = note; count.approvedBy = nameOf(g.actor);
@@ -591,18 +690,21 @@ export async function reconcileStockCount(countId: string, reasonCodeId: string,
   audit(g.actor, { action: 'stock_count', entity: 'material', entityRef: mat?.name ?? count.materialId, summary: `${count.ref} reconciled: ${delta >= 0 ? '+' : ''}${delta} ${mat?.unit ?? ''} — ${code.label}`, amountMinor: Math.abs(delta) * (mat?.unitCost.minor ?? 0), before: String(count.systemQty), after: String(count.countedQty), reasonCodeId, note });
   revalidate();
   return { ok: true, ref: `${count.ref} · ${delta >= 0 ? '+' : ''}${delta}` };
+
+  });
 }
 
 /* --- approval workflow ------------------------------------------------------ */
 
-let aprSeq = 0;
 /** Raise a request onto the route its value and category select. */
 export async function raiseApproval(subject: 'purchase_request' | 'variation' | 'timesheet' | 'stock_adjust' | 'budget_override', subjectRef: string, title: string, projectId: string, amountMinor: number, category?: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('create'); if (!g.ok) return g;
   if (!safeMinor(amountMinor) || !title?.trim() || !subjectRef?.trim() || !scopedMutableGet(g.actor, 'reports_analytics', db.constructionProjects, projectId, 'create')) return { ok: false, error: 'Choose an authorised project and enter a title, reference and valid whole-kobo amount.' };
   const rule = routeFor(repos.constructionApprovalRules.list(g.actor, { limit: Number.MAX_SAFE_INTEGER }).items, subject, amountMinor, category);
   if (!rule) return { ok: false, error: 'No approval route is configured for this.' };
-  const ref = `APR-${1050 + db.constructionApprovals.length + (++aprSeq)}`;
+  const aprSeq = nextRecordSequence('construction:aprSeq', 0, true);
+  const ref = `APR-${1050 + db.constructionApprovals.length + (aprSeq)}`;
   db.constructionApprovals.unshift({
     tenantId: g.actor.tenantId, id: `apr-new-${aprSeq}`, ref, subject, subjectRef, title, projectId,
     amountMinor, raisedBy: nameOf(g.actor), raisedISO: new Date(Date.parse(NOW)).toISOString(),
@@ -611,11 +713,14 @@ export async function raiseApproval(subject: 'purchase_request' | 'variation' | 
   audit(g.actor, { action: 'issue', entity: 'approval', entityRef: ref, projectId, summary: `Raised for approval on “${rule.name}”`, amountMinor });
   revalidate();
   return { ok: true, ref };
+
+  });
 }
 
 /** Approve or reject the step this actor actually owns. Segregation of duties and
  *  the parallel-step rule are enforced in the engine, not the UI. */
 export async function decideApproval(requestId: string, decision: 'approved' | 'rejected', comment?: string, reasonCodeId?: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if (!g.ok) return g;
   if (!['approved', 'rejected'].includes(decision)) return { ok: false, error: 'Choose approve or reject.' };
   const req = scopedMutableGet(g.actor, 'reports_analytics', db.constructionApprovals, requestId, 'update');
@@ -644,10 +749,13 @@ export async function decideApproval(requestId: string, decision: 'approved' | '
   });
   revalidate();
   return { ok: true, ref: `${req.ref} · ${next.status === 'in_flight' ? 'advanced' : next.status}` };
+
+  });
 }
 
 /** Hand a live step to a named person (PRD §15.3 delegation). */
 export async function delegateApproval(requestId: string, toName: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if (!g.ok) return g;
   const req = scopedMutableGet(g.actor, 'reports_analytics', db.constructionApprovals, requestId, 'update');
   if (!req) return { ok: false, error: 'Request not found.' };
@@ -662,6 +770,8 @@ export async function delegateApproval(requestId: string, toName: string): Promi
   audit(g.actor, { action: 'delegate', entity: 'approval', entityRef: req.ref, projectId: req.projectId, summary: `${mine.label} delegated to ${toName.trim()}`, amountMinor: req.amountMinor });
   revalidate();
   return { ok: true, ref: `${req.ref} → ${toName.trim()}` };
+
+  });
 }
 
 /* --- FX revaluation -------------------------------------------------------- */
@@ -674,6 +784,7 @@ export async function delegateApproval(requestId: string, toName: string): Promi
  * The reporting currency (NGN) cannot be repriced against itself.
  */
 export async function updateFxRate(currency: CurrencyCode, newRate: number): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('update'); if (!g.ok) return g;
   if (currency === 'NGN') return { ok: false, error: 'NGN is the reporting currency — it cannot be repriced.' };
   if (!finiteQty(newRate)) return { ok: false, error: 'Rate must be finite and greater than zero.' };
@@ -707,4 +818,6 @@ export async function updateFxRate(currency: CurrencyCode, newRate: number): Pro
   }
   revalidate();
   return { ok: true, ref: `${currency} → ₦${newRate}` };
+
+  });
 }

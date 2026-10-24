@@ -4,11 +4,13 @@ import { constructionWorld } from '@/server/reads/construction';
 import { NOW, NOW_MS } from '@/domain/ppm';
 import { attendanceSummary, labourCostMinor, certBand } from '@/domain/construction';
 import { WorkforceWorkspace, type WorkerRow } from '@/components/construction/workforce-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** Workforce — today's geofenced attendance board, trade mix vs allocation,
  *  labour cost for the day, and a certification-expiry watch that surfaces a
  *  lapsing ticket before it blocks certified work. */
 export default async function ConstructionWorkforcePage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const canMutate = can(actor, 'reports_analytics', 'update').allowed;
   const world = constructionWorld(actor);
@@ -57,4 +59,5 @@ export default async function ConstructionWorkforcePage() {
       />
     </div>
   );
+  });
 }

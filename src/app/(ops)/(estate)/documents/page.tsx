@@ -5,12 +5,14 @@ import { scopedDocumentRecords } from '@/server/reads/documents';
 import { NOW } from '@/domain/ppm';
 import { DocumentsWorkspace } from '@/components/documents/documents-workspace';
 import type { DocData } from '@/components/documents/types';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** EM-08 — document management + AI-S-03 document intelligence. Semantic search
  *  over OCR-extracted fields, an expiry radar cross-linked to the compliance
  *  register, and a "view as resident" audience lens. Every read is estate/tenant
  *  scoped (§8.2); managing is Estate/Facility-Manager-gated. */
 export default async function DocumentsPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('announcements', 'read', 'estate');
   const canMutate = can(actor, 'announcements', 'update').allowed;
 
@@ -27,4 +29,5 @@ export default async function DocumentsPage() {
       <DocumentsWorkspace {...data} />
     </div>
   );
+  });
 }

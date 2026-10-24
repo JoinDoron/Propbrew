@@ -2,6 +2,7 @@ import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
 import { projectEVMOf, forecastFinishISO, moneySCurve } from '@/domain/construction';
 import { EvmCockpit, type EvmView } from '@/components/construction/evm-cockpit';
+import { withDurableRead } from '@/server/data/durable-records';
 
 const OPEN_PO = ['issued', 'acknowledged', 'part_delivered', 'approved'];
 
@@ -9,6 +10,7 @@ const OPEN_PO = ['issued', 'acknowledged', 'part_delivered', 'approved'];
  *  CPI/SPI/CV/SV/EAC/ETC/VAC/TCPI), an S-curve with a forecast tail, budget vs
  *  committed vs actual by cost code, and the cash finance must fund. */
 export default async function ConstructionEvmPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const projects = repos.constructionProjects.list(actor).items;
   const costCodes = repos.constructionCostCodes.list(actor).items;
@@ -46,4 +48,5 @@ export default async function ConstructionEvmPage() {
       <EvmCockpit views={views} />
     </div>
   );
+  });
 }

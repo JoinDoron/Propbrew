@@ -159,7 +159,7 @@ export async function handleCopilot(request: Request, module: CopilotModule, bui
           activity('usage', 'Recording AI usage', 'active');
           const ledger = await finishCopilotBudget({ requestId, tenantId, inputTokens, outputTokens, costMinorNgn, status: 'complete', promptRedacted: redactCopilotText(body.question), outputRedacted: redactCopilotText(output), contextSummary });
           reserved = false;
-          if (ledger.recorded) recordUsage(actorTenantId, inputTokens, outputTokens, modelId);
+          if (ledger.recorded) await recordUsage(actorTenantId, inputTokens, outputTokens, modelId);
           activity('usage', ledger.recorded ? 'AI usage recorded' : 'AI usage could not be confirmed', ledger.recorded ? 'complete' : 'error');
           emit({ v: 1, type: 'complete', interactionId: requestId, usage: { inputTokens, outputTokens, estimatedCostMinorNgn: costMinorNgn, recorded: ledger.recorded } });
         } catch (error) {

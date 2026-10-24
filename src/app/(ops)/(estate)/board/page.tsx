@@ -6,11 +6,13 @@ import { repos } from '@/server/data';
 import { NOW_MS } from '@/domain/ppm';
 import { BoardWorkspace, type BoardRow, type MeetingRow, type ElectionRow, type EgmData } from '@/components/estate/board-workspace';
 import type { MotionStatus } from '@/domain/estate';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** Board & Committee — the residents' committee roster (roles, portfolios, term
  *  expiry), AGM/EGM/committee meetings, and motion authoring that feeds the
  *  Governance pipeline. Gated by announcements (the estate manager convenes it). */
 export default async function BoardPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('announcements', 'read', 'estate');
   const members = repos.boardMembers.list(actor).items;
   const meetings = repos.meetings.list(actor).items;
@@ -39,4 +41,5 @@ export default async function BoardPage() {
         canCreate={can(actor, 'announcements', 'create').allowed} canMutate={can(actor, 'announcements', 'update').allowed} />
     </div>
   );
+  });
 }

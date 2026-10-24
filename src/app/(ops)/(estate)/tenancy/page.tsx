@@ -6,12 +6,14 @@ import { repos } from '@/server/data';
 import { NOW_MS } from '@/domain/ppm';
 import { depositExposureMinor, leaseRunwayDays } from '@/domain/estate';
 import { TenancyWorkspace, type TenancyRow } from '@/components/estate/tenancy-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 const IN_MOTION = new Set(['approved', 'moving_in', 'notice', 'moving_out']);
 
 /** Tenancy — the move-in → move-out lifecycle: a stage pipeline, lease-renewal
  *  runway, deposit exposure and settlement. Gated by users_roles. */
 export default async function TenancyPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('users_roles', 'read', 'estate');
   const tenancies = repos.tenancies.list(actor).items;
 
@@ -37,4 +39,5 @@ export default async function TenancyPage() {
       />
     </div>
   );
+  });
 }

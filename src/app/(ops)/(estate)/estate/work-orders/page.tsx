@@ -1,3 +1,4 @@
+import { durableRecordsEnabled } from '@/server/data/record-context';
 import { requireCapability } from '@/server/guard';
 import { effectiveLevel } from '@/lib/authz';
 import { getSession, devIdentityEnabled } from '@/server/session';
@@ -11,11 +12,13 @@ import { WorkOrdersIntel } from '@/components/work-orders/work-orders-intel';
 import { EstateWorkOrderCreate } from '@/components/work-orders/estate-work-order-create';
 import { NOW_MS } from '@/domain/ppm';
 import { CLOSED } from '@/domain/work-orders';
+import { withDurableRead } from '@/server/data/durable-records';
 
 const BASE_PATH = '/estate/work-orders';
 
 /** Estate owns the complete register, request intake and follow-up journey. */
 export default async function EstateWorkOrdersPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('work_orders', 'read', 'estate');
   const session = await getSession();
   const canMutate = ['F', 'M'].includes(effectiveLevel(actor, 'work_orders'));
@@ -24,8 +27,9 @@ export default async function EstateWorkOrdersPage() {
   const sites = canMutate ? listEstateWorkOrderSites(actor).map((site) => ({ id: String(site.id), label: site.name })) : [];
   const units = canMutate ? listEstateWorkOrderUnits(actor).map((unit) => ({ id: String(unit.id), siteId: String(unit.siteId), label: unit.label })) : [];
   const memory = !process.env.DATA_SOURCE || process.env.DATA_SOURCE === 'memory';
+  const persistent = durableRecordsEnabled();
   const privateReview = session?.key === 'private-review' && isReviewActor(actor);
-  const demo = memory && (privateReview || process.env.NODE_ENV !== 'production' && devIdentityEnabled() && session?.key !== 'clerk');
+  const demo = (memory || persistent) && privateReview || memory && process.env.NODE_ENV !== 'production' && devIdentityEnabled() && session?.key !== 'clerk';
   const boardRows = rows.map((workOrder) => ({
     id: workOrder.id, ref: workOrder.ref, title: workOrder.title, origin: workOrder.origin,
     requesterName: workOrder.requesterName, status: workOrder.status, priority: workOrder.priority,
@@ -38,8 +42,9 @@ export default async function EstateWorkOrdersPage() {
     <PageHeader title="Estate work orders" subtitle={`${open} open · ${rows.length} total · manage requests, assignments and resolution without leaving Estate`}
       scope={<ScopeBanner label="Authorised estate properties only" />} />
     <PageTabs label="Estate work order sections" defaultTab="register" items={[
-      { id: 'register', label: 'Work order register', count: rows.length, content: <WorkOrdersBoard rows={boardRows} canMutate={canMutate} basePath={BASE_PATH} createAction={<EstateWorkOrderCreate sites={sites} units={units} demo={demo} />} /> },
+      { id: 'register', label: 'Work order register', count: rows.length, content: <WorkOrdersBoard rows={boardRows} canMutate={canMutate} basePath={BASE_PATH} createAction={<EstateWorkOrderCreate sites={sites} units={units} persistent={persistent} demo={demo} />} /> },
       { id: 'intelligence', label: 'SLA & AI intelligence', content: <WorkOrdersIntel wos={rows} nowMs={NOW_MS} canMutate={canMutate} basePath={BASE_PATH} /> },
     ]} />
   </div>;
+  });
 }

@@ -3,6 +3,7 @@ import { repos } from '@/server/data';
 import { PageHeader } from '@/components/ui/page-header';
 import { ScopeBanner } from '@/components/domain';
 import { InvestorWorkspace } from '@/components/investors/investor-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** SC-08 / AI-S-04 — investor projects, ops/exec view (portfolio-wide). A sales
  *  desk: per-project forecast (pace → sell-out date), ROI and revenue
@@ -11,6 +12,7 @@ import { InvestorWorkspace } from '@/components/investors/investor-workspace';
  *  its assumptions on show — never financial advice. Scoped (§7 O: investors see
  *  only their own projects). */
 export default async function InvestorsPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('investor_projects', 'read', 'estate');
   const projects = [...repos.investorProjects.list(actor).items];
 
@@ -22,4 +24,5 @@ export default async function InvestorsPage() {
       <InvestorWorkspace projects={projects} />
     </div>
   );
+  });
 }

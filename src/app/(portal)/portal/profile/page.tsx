@@ -6,8 +6,10 @@ import { brand } from '@/config/brand';
 import { Card, CardHeader, Avatar, EmptyState, StatusPill } from '@/components/ui';
 import { BadgeHelp, Home, UserRound } from 'lucide-react';
 import layout from '@/components/ui/workspace-layout.module.css';
+import { withDurableRead } from '@/server/data/durable-records';
 
 export default async function ProfilePage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('work_orders');
   const user = seed.users.find((record) => record.id === actor.userId && record.tenantId === actor.tenantId);
   const resident = seed.residents.find((record) => record.userId === actor.userId && record.tenantId === actor.tenantId && actor.unitIds.includes(record.unitId));
@@ -40,6 +42,7 @@ export default async function ProfilePage() {
       </Card> },
     ]} />
   </div>;
+  });
 }
 
 function Field({ label, value }: { label: string; value: string }) {

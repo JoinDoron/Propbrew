@@ -5,12 +5,14 @@ import { repos } from '@/server/data';
 import { channelSummary, detectConflicts, outboundFeedUrl } from '@/domain/shortlet';
 import { ChannelsWorkspace, type AptRow, type ConflictRow, type ChannelKey } from '@/components/shortlet/channels-workspace';
 import { shortletDate } from '@/components/shortlet/shortlet-format';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** FR-IC (Short-Let PMS, Growth tier+) — iCal channel sync. Connect per-apartment
  *  Airbnb / Booking.com / Google feeds; external bookings block availability. A
  *  double-booking guard detects overlapping stays (the residual risk iCal polling
  *  latency creates), and each apartment exposes an outbound iCal feed. */
 export default async function ShortletChannelsPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('bookings_amenities', 'read', 'shortlet');
   const apts = repos.shortletApartments.list(actor).items;
   const props = new Map(repos.shortletProperties.list(actor).items.map((p) => [p.id, p.name]));
@@ -30,4 +32,5 @@ export default async function ShortletChannelsPage() {
       <ChannelsWorkspace canUpdate={can(actor, 'bookings_amenities', 'update').allowed} apartments={apartments} summary={channelSummary(apts)} conflicts={conflicts} lastSync="No verified provider sync" />
     </div>
   );
+  });
 }

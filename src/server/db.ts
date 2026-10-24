@@ -1,6 +1,6 @@
 import 'server-only';
 import { neon } from '@neondatabase/serverless';
-import { Pool } from 'pg';
+import { Pool, type PoolClient } from 'pg';
 import { log } from '@/lib/logger';
 import { postgresConfig } from './postgres-config.mjs';
 
@@ -23,6 +23,28 @@ function nativePool(url: string): Pool {
   databaseGlobal.__propbrewPgPool = { url, pool };
   if (previous) void previous.pool.end().catch(() => {});
   return pool;
+}
+
+/** Interactive native transaction for atomic operational mutations. Unlike the
+ * HTTP statement helper, this keeps tenant context and every read/write on one
+ * checked-out connection until the callback has completed. */
+export async function withTenantTransaction<T>(tenantId: string, fn: (client: PoolClient) => Promise<T>): Promise<T> {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenantId)) throw new Error('A valid tenant UUID is required.');
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error('DATABASE_URL is required for the durable data adapter.');
+  const client = await nativePool(url).connect();
+  let destroy = false;
+  try {
+    await client.query('BEGIN');
+    await client.query("select set_config('app.tenant_id', $1, true)", [tenantId.toLowerCase()]);
+    const result = await fn(client);
+    const completion = await client.query('COMMIT');
+    if (completion.command !== 'COMMIT') throw new Error('The operational database transaction did not commit.');
+    return result;
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch { destroy = true; }
+    throw error;
+  } finally { client.release(destroy); }
 }
 
 /** Execute one parameterized statement with transaction-local tenant context. */

@@ -4,12 +4,14 @@ import { repos } from '@/server/data';
 import { NOW_MS } from '@/domain/ppm';
 import { revenueVsExpense, profitByProperty, occupancyRate, sourcePerformance } from '@/domain/shortlet';
 import { ShortletAnalytics, type AptOcc } from '@/components/shortlet/analytics';
+import { withDurableRead } from '@/server/data/durable-records';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** FR-AN (Short-Let PMS) — analytics: revenue-vs-expense, profit by property,
  *  occupancy per apartment, booking-source performance, CSV export. */
 export default async function ShortletAnalyticsPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('bookings_amenities', 'read', 'shortlet');
   const bookings = repos.shortletBookings.list(actor).items;
   const expenses = repos.shortletExpenses.list(actor).items;
@@ -32,4 +34,5 @@ export default async function ShortletAnalyticsPage() {
       <ShortletAnalytics revExp={revExp} propProfit={propProfit} occupancy={occupancy} sources={sources} />
     </div>
   );
+  });
 }

@@ -4,6 +4,7 @@ import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
 import { expenseInsights } from '@/domain/shortlet';
 import { ExpensesWorkspace, type ExpenseRow } from '@/components/shortlet/expenses-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 const REVENUE = ['confirmed', 'checked_in', 'checked_out', 'closed'];
 
@@ -11,6 +12,7 @@ const REVENUE = ['confirmed', 'checked_in', 'checked_out', 'closed'];
  *  (diesel-era categories) per property; the module computes profit and surfaces
  *  diesel as a share of revenue and cost per occupied night. */
 export default async function ShortletExpensesPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('bookings_amenities', 'read', 'shortlet');
   const bookings = repos.shortletBookings.list(actor).items;
   const expenses = repos.shortletExpenses.list(actor).items;
@@ -29,4 +31,5 @@ export default async function ShortletExpensesPage() {
       <ExpensesWorkspace canCreate={can(actor, 'bookings_amenities', 'create').allowed} expenses={rows} properties={props.map((p) => ({ id: p.id, name: p.name }))} insight={expenseInsights(bookings, expenses)} revenueMinor={revenueMinor} />
     </div>
   );
+  });
 }

@@ -1,5 +1,9 @@
 'use server';
 
+import { withDurableRead, withDurableMutation } from '@/server/data/durable-records';
+
+import { nextRecordSequence } from '@/server/data/record-context';
+
 /**
  * Document intelligence actions (EM-08 / AI-S-03). Search is read-only and runs
  * over the actor's SCOPED documents (§8.2 — a manager can never search another
@@ -24,11 +28,14 @@ export type DocActionResult = { ok: true; id?: string } | { ok: false; error: st
 
 /** AI-S-03 semantic search over the actor's scoped documents. */
 export async function searchDocuments(query: string): Promise<SearchResult> {
+  return withDurableRead(async () => {
   const actor = await getActor();
   if (typeof query !== 'string' || query.length > 2000) throw new Error('Enter a search query of up to 2,000 characters.');
   const docs = scopedDocumentRecords(actor);
   const scopeLabel = actor.allEstates ? 'all your estates' : `your ${actor.estateIds.length} estate(s)`;
   return { hits: searchDocs(docs, query), scopeLabel };
+
+  });
 }
 
 function gate(actor: Actor): DocActionResult | null {
@@ -60,6 +67,7 @@ function validFieldDates(fields: readonly ExtractedField[]): boolean {
 
 /** Save AI-extracted fields after the manager reviews/edits them (AI-S-03 HITL). */
 export async function saveDocumentFields(docId: string, fields: ExtractedField[]): Promise<DocActionResult> {
+  return withDurableMutation(async () => {
   const actor = await getActor();
   const denied = gate(actor);
   if (denied) return denied;
@@ -73,14 +81,16 @@ export async function saveDocumentFields(docId: string, fields: ExtractedField[]
   live.expiryDate = exp?.value || undefined;
   revalidatePath('/documents');
   return { ok: true };
+
+  });
 }
 
-let uploadCounter = 0;
 
 /** Save reviewed metadata only. This does not upload bytes or perform OCR. */
 export async function uploadDocument(input: {
   estateId?: string; name: string; folder: string; type: DocType; audience: string; extracted: ExtractedField[]; scanned: boolean;
 }): Promise<DocActionResult> {
+  return withDurableMutation(async () => {
   const actor = await getActor();
   const denied = gate(actor);
   if (denied) return denied;
@@ -91,7 +101,7 @@ export async function uploadDocument(input: {
   const estates = db.sites.filter((site) => site.kind === 'estate' && matchesScope({ ...site, siteId: site.id }, scope) && (!data.estateId || site.id === data.estateId));
   if (estates.length !== 1) return { ok: false, error: 'Choose one of your authorised estate properties for this document record.' };
   const estate = estates[0];
-  const id = `doc-up-${uploadCounter++}`;
+  const id = `doc-up-${nextRecordSequence('documents:uploadCounter', 0)}`;
   const exp = expiryField(data.extracted)?.value;
 
   db.documents.push({
@@ -115,4 +125,6 @@ export async function uploadDocument(input: {
 
   revalidatePath('/documents');
   return { ok: true, id };
+
+  });
 }

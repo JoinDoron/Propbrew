@@ -3,6 +3,7 @@ import { can } from '@/lib/authz';
 import { constructionWorld } from '@/server/reads/construction';
 import { NOW } from '@/domain/ppm';
 import { FieldCapture, type FieldProject, type FieldTask, type FieldWorker } from '@/components/construction/field-capture';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** Field Capture — the offline-first site app (PRD §7 "Mobile and offline",
  *  §17 acceptance: "no entered record or attachment is lost during
@@ -10,6 +11,7 @@ import { FieldCapture, type FieldProject, type FieldTask, type FieldWorker } fro
  *  written to a durable device outbox FIRST and drain themselves when signal
  *  returns; every op carries an idempotency key so a retry can't double-apply. */
 export default async function ConstructionFieldPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const world = constructionWorld(actor);
 
@@ -30,4 +32,5 @@ export default async function ConstructionFieldPage() {
       <FieldCapture owner={actor.tenantId ? JSON.stringify([actor.tenantId, actor.userId]) : undefined} projects={projects} tasks={tasks} workers={workers} todayISO={NOW.slice(0, 10)} canCapture={can(actor, 'reports_analytics', 'create').allowed} />
     </div>
   );
+  });
 }

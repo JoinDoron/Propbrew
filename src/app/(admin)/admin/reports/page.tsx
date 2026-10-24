@@ -4,11 +4,13 @@ import { seed } from '@/server/data';
 import { Card, CardHeader, KpiCard, Table, Td, Th, TableRow } from '@/components/ui';
 import { Building2, Users, Wrench } from 'lucide-react';
 import { PageTabs } from '@/components/ui/page-tabs';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** FM-07 (platform) — cross-tenant analytics. Platform Admin is the only reader
  *  allowed across tenant boundaries (§8.2); every other role's reports are
  *  tenant-scoped. */
 export default async function AdminReportsPage() {
+  return withDurableRead(async () => {
   await requireCapability('reports_analytics');
 
   const tenants = [...new Set(seed.sites.map((s) => s.tenantId))];
@@ -69,4 +71,5 @@ export default async function AdminReportsPage() {
 
     </div>
   );
+  });
 }

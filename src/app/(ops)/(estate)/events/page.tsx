@@ -6,11 +6,13 @@ import { repos } from '@/server/data';
 import { NOW_MS } from '@/domain/ppm';
 import { eventState, isEventFull, amenityLoad } from '@/domain/estate';
 import { EventsWorkspace, type EventRow, type AmenityRow } from '@/components/estate/events-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** Events & Amenities — the community programme: an events calendar with RSVP +
  *  capacity, amenity-demand ranking, and event creation. Gated by
  *  bookings_amenities (the estate manager programmes the estate). */
 export default async function EventsPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('bookings_amenities', 'read', 'estate');
   const events = repos.communityEvents.list(actor).items;
 
@@ -37,4 +39,5 @@ export default async function EventsPage() {
       />
     </div>
   );
+  });
 }

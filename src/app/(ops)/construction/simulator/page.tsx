@@ -4,12 +4,14 @@ import { criticalPath, taskDurationDays, projectEVMOf, forecastFinishISO } from 
 import { SimulatorWorkspace } from '@/components/construction/simulator-workspace';
 import { PageTabs } from '@/components/ui/page-tabs';
 import { PageHeader } from '@/components/ui/page-header';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** What-If Simulator — drive the shared CPM + earned-value engines with live
  *  assumptions (productivity, diesel shock, rain days, days to claw back). The
  *  recovery optimiser crashes only zero-float tasks, cheapest-first, and shows
  *  the bill. Everything is a calculation; nothing is saved. */
 export default async function ConstructionSimulatorPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const world = constructionWorld(actor);
 
@@ -44,4 +46,5 @@ export default async function ConstructionSimulatorPage() {
       />
     </div>
   );
+  });
 }

@@ -4,12 +4,14 @@ import { constructionWorld } from '@/server/reads/construction';
 import { NOW_MS } from '@/domain/ppm';
 import { reportBand, reportCompleteness, coverageGaps } from '@/domain/construction';
 import { SiteWorkspace, type ReportRow, type SiteIssueRow } from '@/components/construction/site-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** Daily Site Log — the PRD report state machine (draft → submitted → reviewed →
  *  approved, or returned with a reason), a completeness ring with missing-field
  *  nudges, cross-source consistency checks against geofenced attendance, and an
  *  immutable site diary compiled only from approved records. */
 export default async function ConstructionSitePage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const canMutate = can(actor, 'reports_analytics', 'update').allowed;
   const world = constructionWorld(actor);
@@ -60,4 +62,5 @@ export default async function ConstructionSitePage() {
       />
     </div>
   );
+  });
 }

@@ -3,12 +3,14 @@ import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
 import { can } from '@/lib/authz';
 import { SafetyWorkspace, type SosRow } from '@/components/portal/safety-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** EM-06 / EM-02 (resident view, §7 O) — Safety & SOS. A panic-countdown SOS
  *  (cancellable) starts the §10 flow; visitor passes generate a time-bound gate
  *  code; emergency contacts are one-tap callable; safety tips rotate. History is
  *  the resident's own events. */
 export default async function ResidentSecurityPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('security_sos');
   const targetUnitId = actor.unitIds[0];
   const targetUnit = repos.units.list(actor).items.find((unit) => unit.id === targetUnitId);
@@ -24,4 +26,5 @@ export default async function ResidentSecurityPage() {
       </div>
     </div>
   );
+  });
 }

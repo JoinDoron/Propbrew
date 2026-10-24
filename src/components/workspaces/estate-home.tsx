@@ -1,3 +1,4 @@
+import { durableRecordsEnabled } from '@/server/data/record-context';
 import { PageTabs } from '@/components/ui/page-tabs';
 import 'server-only';
 
@@ -17,6 +18,7 @@ import { isReviewActor, reviewModeEnabled } from '@/server/review-auth';
 import { EstateCreateActions } from './estate-create-actions';
 import { AskData } from '@/components/reports/ask-data';
 import styles from './estate-overview.module.css';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** Summary totals must include every scoped page, not just the first 50 rows. */
 function allRows<T>(readPage: (cursor?: string | null) => Page<T>): T[] {
@@ -44,6 +46,7 @@ function dateLabel(iso: string) {
 
 /** Estate overview: all reads stay capability-gated and actor-scoped. */
 export async function EstateHome({ currency = 'NGN' }: { currency?: CurrencyCode } = {}) {
+  return withDurableRead(async () => {
   const session = await requireOperatorSession();
   const { actor } = session;
   const access = {
@@ -68,6 +71,7 @@ export async function EstateHome({ currency = 'NGN' }: { currency?: CurrencyCode
 
   const review = session.key === 'private-review' && reviewModeEnabled() && isReviewActor(actor);
   const demo = review || session.key !== 'clerk' && devIdentityEnabled();
+  const persistent = durableRecordsEnabled();
   const canAdd = canRegisterEstateRecords(actor);
   const now = demo ? `${NOW}T09:00:00Z` : new Date().toISOString();
   const overview = buildEstateOverview({ sites, units, residents, invoices, workOrders, currency, now });
@@ -104,7 +108,7 @@ export async function EstateHome({ currency = 'NGN' }: { currency?: CurrencyCode
               <option value="NGN">NGN (₦)</option><option value="USD">USD ($)</option><option value="GHS">GHS (GH₵)</option><option value="KES">KES (KSh)</option>
             </select></label><button className={styles.button} type="submit">Apply</button>
           </form> : null}
-          <EstateCreateActions canAddProperty={canAdd} canAddTenant={canAdd} demo={review || demo && process.env.NODE_ENV !== 'production' && (!process.env.DATA_SOURCE || process.env.DATA_SOURCE === 'memory')} asOfDate={overview.asOfLagosDate ?? now.slice(0, 10)} units={availableUnits} />
+          <EstateCreateActions canAddProperty={canAdd} canAddTenant={canAdd} persistent={persistent} demo={review || demo && process.env.NODE_ENV !== 'production' && (!process.env.DATA_SOURCE || process.env.DATA_SOURCE === 'memory')} asOfDate={overview.asOfLagosDate ?? now.slice(0, 10)} units={availableUnits} />
         </div>
       </header>
 <p className={styles.scope}><ShieldCheck size={13} aria-hidden="true" />{session.tenantLabel} · only your authorised records<span aria-hidden="true">·</span><span>{demo ? 'Sample snapshot' : 'Snapshot'} as of {dateLabel(now)} · Lagos time</span>{demo ? <span className={styles.demo}>Demo data, not live operations</span> : null}</p>
@@ -206,6 +210,7 @@ export async function EstateHome({ currency = 'NGN' }: { currency?: CurrencyCode
 
 </div>
   );
+  });
 }
 
 function Metric({ title, displayTitle = title, value, note, icon, href, progress }: { title: string; displayTitle?: string; value: string; note: string; icon: ReactNode; href: string; progress?: { value: number; label: string; detail: string } }) {

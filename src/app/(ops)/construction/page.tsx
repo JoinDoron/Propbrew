@@ -7,6 +7,7 @@ import {
   deliveryRadar, attendanceSummary,
 } from '@/domain/construction';
 import { CommandCenter, type ProjectRow, type SignalRow, type DeliveryRow } from '@/components/construction/command-center';
+import { withDurableRead } from '@/server/data/durable-records';
 
 const OPEN_PO = ['issued', 'acknowledged', 'part_delivered', 'approved'];
 
@@ -14,6 +15,7 @@ const OPEN_PO = ['issued', 'acknowledged', 'part_delivered', 'approved'];
  *  index, a ₦-at-risk-ranked attention feed from the deterministic risk radar,
  *  per-project earned-value sparklines, and today's delivery radar. */
 export default async function ConstructionPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const canMutate = can(actor, 'reports_analytics', 'update').allowed;
 
@@ -67,4 +69,5 @@ export default async function ConstructionPage() {
       />
     </div>
   );
+  });
 }

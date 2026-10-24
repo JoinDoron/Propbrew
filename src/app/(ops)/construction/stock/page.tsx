@@ -4,12 +4,14 @@ import { constructionWorld } from '@/server/reads/construction';
 import { db } from '@/server/data/store';
 import { stockLedger, countVariance, reasonsFor } from '@/domain/construction';
 import { StockWorkspace, type StockLine, type CountRow, type LedgerRow, type ReasonOpt } from '@/components/construction/stock-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** Stock — the full movement set (receipt, issue, transfer, return, adjust), a
  *  perpetual ledger with running balances, and physical counts. Counting and
  *  adjusting are separate: a variance only moves the books once someone codes
  *  WHY, which is what makes the reason analytics real. */
 export default async function ConstructionStockPage() {
+  return withDurableRead(async () => {
   const { actor, scope } = await requireCapability('reports_analytics', 'read', 'construction');
   const canMutate = can(actor, 'reports_analytics', 'update').allowed;
   const canCreate = can(actor, 'reports_analytics', 'create').allowed;
@@ -79,4 +81,5 @@ export default async function ConstructionStockPage() {
       />
     </div>
   );
+  });
 }

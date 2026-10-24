@@ -1,5 +1,9 @@
 'use server';
 
+import { withDurableMutation } from '@/server/data/durable-records';
+
+import { nextRecordSequence } from '@/server/data/record-context';
+
 /**
  * Resident marketplace order (EM-09, §7 O). A resident may CREATE an order
  * against an approved, active listing on their own account. It lands `placed`
@@ -18,9 +22,9 @@ import { nowISO } from '@/server/clock';
 
 export type OrderResult = { ok: true; ref: string } | { ok: false; error: string };
 
-let counter = 0;
 
 export async function placeOrder(listingId: string): Promise<OrderResult> {
+  return withDurableMutation(async () => {
   const actor = await getActor();
   try {
     assertCan(actor, 'marketplace', 'create'); // resident (§7 O)
@@ -38,7 +42,7 @@ export async function placeOrder(listingId: string): Promise<OrderResult> {
 
   const order = {
     tenantId: actor.tenantId,
-    id: `ord-res-${++counter}`,
+    id: `ord-res-${nextRecordSequence('resident-orders:counter', 0, true)}`,
     ref,
     ownerUserId: actor.userId,
     vendorOrgId: listing.vendorOrgId,
@@ -59,4 +63,6 @@ export async function placeOrder(listingId: string): Promise<OrderResult> {
 
   ['/portal/marketplace', '/portal', '/marketplace'].forEach((p) => revalidatePath(p));
   return { ok: true, ref };
+
+  });
 }

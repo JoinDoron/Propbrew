@@ -5,11 +5,13 @@ import { repos } from '@/server/data';
 import { NOW_MS } from '@/domain/ppm';
 import { visitorStats, accessThreats } from '@/domain/facility';
 import { AccessWorkspace } from '@/components/facility/access-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** Access & Visitors — visitor passes with pre-registration and gate check-in/out,
  *  a live access-event feed, per-point secure/unlock control, and a one-tap estate
  *  lockdown. Overstays and forced/held/offline points are flagged. */
 export default async function AccessPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('assets_ppm', 'read', 'facility');
   const points = repos.accessPoints.list(actor).items;
   const passes = repos.visitorPasses.list(actor).items;
@@ -36,4 +38,5 @@ export default async function AccessPage() {
       />
     </div>
   );
+  });
 }

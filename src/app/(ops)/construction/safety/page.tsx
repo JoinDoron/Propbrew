@@ -3,11 +3,13 @@ import { constructionWorld } from '@/server/reads/construction';
 import { NOW_MS } from '@/domain/ppm';
 import { safetyStats, permitClashes, isOverdue } from '@/domain/construction';
 import { SafetyWorkspace, type PermitRow, type EventRow, type TalkRow } from '@/components/construction/safety-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** Site Safety & Permits — days since the last lost-time injury, the live
  *  permit-to-work register with lapse detection and same-place clash detection,
  *  the event log (near misses count as good reporting) and toolbox talks. */
 export default async function ConstructionSafetyPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const world = constructionWorld(actor);
 
@@ -50,4 +52,5 @@ export default async function ConstructionSafetyPage() {
       />
     </div>
   );
+  });
 }

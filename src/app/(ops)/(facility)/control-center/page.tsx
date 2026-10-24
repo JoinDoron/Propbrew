@@ -5,11 +5,13 @@ import { repos } from '@/server/data';
 import { NOW_MS } from '@/domain/ppm';
 import { siteHealth } from '@/domain/facility';
 import { ControlCenter, type SystemRow, type SensorRow, type AlarmRow } from '@/components/facility/control-center';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** Facility Control Center — a live building-operations command centre. Composite
  *  site health, live sensors (water/fuel/temp/power/occupancy), building-system
  *  status, and an active-alarm feed where one tap dispatches a work order. */
 export default async function ControlCenterPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('assets_ppm', 'read', 'facility');
   const sites = new Map<string, string>(repos.sites.all(actor).map((s) => [s.id, s.name]));
   const systems = repos.buildingSystems.list(actor).items;
@@ -39,4 +41,5 @@ export default async function ControlCenterPage() {
       />
     </div>
   );
+  });
 }

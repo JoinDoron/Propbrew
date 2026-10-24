@@ -10,9 +10,11 @@ import { repos } from '@/server/data';
 import { NOW_MS } from '@/domain/ppm';
 import { occupancyRate, suggestNightlyRate } from '@/domain/shortlet';
 import { Building2, Wifi, KeyRound, Sparkles, Landmark, BedDouble } from 'lucide-react';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** Scoped property records and operator-reviewed rate suggestions. No automatic repricing. */
 export default async function ShortletPropertiesPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('bookings_amenities', 'read', 'shortlet');
   const props = repos.shortletProperties.list(actor).items;
   const apts = repos.shortletApartments.list(actor).items;
@@ -51,4 +53,5 @@ export default async function ShortletPropertiesPage() {
     ]} />
     <p className={styles.metadata}>Recorded snapshot · {snapshot} · WAT. Rate suggestions are advisory—you set the price. Automated dynamic pricing is not enabled by this screen.</p>
   </div>;
+  });
 }

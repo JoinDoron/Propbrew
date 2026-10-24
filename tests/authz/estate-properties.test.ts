@@ -41,6 +41,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   vi.stubEnv('NODE_ENV', 'development');
   vi.stubEnv('DATA_SOURCE', 'memory');
+  vi.stubEnv('PROPBREW_REVIEW_MODE', '0');
   boundary.devIdentityEnabled.mockReturnValue(true);
   boundary.notFound.mockImplementation((): never => { throw new Error('not-found'); });
   boundary.requireWorkspace.mockImplementation(async (workspace: WorkspaceId) => {
@@ -52,10 +53,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   db.sites.splice(0, db.sites.length, ...originalSites);
   db.units.splice(0, db.units.length, ...originalUnits);
   vi.restoreAllMocks();
-  vi.unstubAllEnvs();
   vi.useRealTimers();
 });
 
@@ -143,7 +144,10 @@ describe('Estate Properties server boundary', () => {
   ])('never enables demo creation in %s with %s data source', async (environment, source) => {
     vi.stubEnv('NODE_ENV', environment);
     vi.stubEnv('DATA_SOURCE', source);
-    expect((await view()).actions.props.demo).toBe(false);
+    if (source === 'postgres') {
+      await expect(view()).rejects.toThrow('Durable operational storage requires a configured, verified workspace identity.');
+      expect(boundary.requireOperatorSession).not.toHaveBeenCalled();
+    } else expect((await view()).actions.props.demo).toBe(false);
   });
 
   it('does not enable local creation for a real Clerk identity or when demo identities are off', async () => {

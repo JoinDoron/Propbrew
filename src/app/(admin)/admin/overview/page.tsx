@@ -5,6 +5,7 @@ import { getAllHistory } from '@/server/data/store';
 import { planFor, tenantHealth, aiUsage, tenantLabel, isSecurityEvent, isFinancialEvent } from '@/domain/platform-admin';
 import { AI_REQUIREMENTS } from '@/domain';
 import { PlatformOverview, type TenantRow, type EventRow, type SystemRow } from '@/components/admin/platform-overview';
+import { withDurableRead } from '@/server/data/durable-records';
 
 const OPEN_WO = (s: string) => !['closed', 'cancelled', 'rejected', 'verified'].includes(s);
 const ARREARS = ['overdue', 'in_arrears', 'escalated'];
@@ -13,6 +14,7 @@ const ARREARS = ['overdue', 'in_arrears', 'escalated'];
  *  tenant health across every tenant (§8.2), AI spend vs cap, live security/audit
  *  feed and system status. Cross-tenant reads are legitimate here and only here. */
 export default async function AdminOverviewPage() {
+  return withDurableRead(async () => {
   await requireCapability('tenant_config');
 
   const tenantIds = Array.from(new Set(seed.sites.map((s) => s.tenantId)));
@@ -71,4 +73,5 @@ export default async function AdminOverviewPage() {
       />
     </div>
   );
+  });
 }

@@ -4,11 +4,13 @@ import { can } from '@/lib/authz';
 import { repos } from '@/server/data';
 import { tierFor, pointsIssued } from '@/domain/estate';
 import { RewardsWorkspace, type MemberRow, type PerkRow } from '@/components/estate/rewards-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** Rewards — a resident loyalty engine: points for on-time payments, event
  *  attendance and voting; tiers, a leaderboard, and a redeemable-perks catalog.
  *  Gated by announcements (a community-engagement programme). */
 export default async function RewardsPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('announcements', 'read', 'estate');
   const members = repos.rewardMembers.list(actor).items;
   const perks = repos.perks.list(actor).items;
@@ -32,4 +34,5 @@ export default async function RewardsPage() {
       />
     </div>
   );
+  });
 }

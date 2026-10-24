@@ -5,6 +5,7 @@ import { repos } from '@/server/data';
 import { PageHeader } from '@/components/ui/page-header';
 import { ScopeBanner } from '@/components/domain';
 import { AnnouncementsWorkspace } from '@/components/announcements/announcements-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** EM-04 / AI-E-04 — announcements. An AI composer drafts from a topic (with a
  *  Nigerian-Pidgin translation), estimates audience reach across channels, and
@@ -12,6 +13,7 @@ import { AnnouncementsWorkspace } from '@/components/announcements/announcements
  *  send is blocked until a manager approves it. Scoped (§8.2); managers publish,
  *  others read. */
 export default async function AnnouncementsPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('announcements', 'read', 'estate');
   const canMutate = can(actor, 'announcements', 'transition').allowed;
   const rows = [...repos.announcements.list(actor).items];
@@ -24,4 +26,5 @@ export default async function AnnouncementsPage() {
       <AnnouncementsWorkspace estates={can(actor, 'announcements', 'transition').allowed ? estateTargetOptions(actor, 'announcements', 'transition') : []} rows={rows} canMutate={canMutate} />
     </div>
   );
+  });
 }

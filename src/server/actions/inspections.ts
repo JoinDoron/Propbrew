@@ -1,5 +1,9 @@
 'use server';
 
+import { withDurableMutation } from '@/server/data/durable-records';
+
+import { nextRecordSequence } from '@/server/data/record-context';
+
 /**
  * Inspection & compliance actions (FM-06). Gated on inspections_compliance
  * (Facility Manager manages; Technician runs their own on mobile — matches
@@ -21,7 +25,6 @@ import { isFacilityDate } from '@/server/facility-guards';
 export type InspResult = { ok: true; raised?: number; passed?: boolean } | { ok: false; error: string };
 
 const REVALIDATE = ['/inspections', '/estate/inspections', '/work-orders', '/estate/work-orders', '/people', '/facility', '/dashboard'];
-let woCounter = 0;
 
 function gate(actor: Actor): InspResult | null {
   try {
@@ -37,6 +40,7 @@ export async function runInspection(
   inspectionId: string,
   input: { results: { itemId: string; result: 'pass' | 'fail' | 'na'; note?: string }[]; photoCount: number },
 ): Promise<InspResult> {
+  return withDurableMutation(async () => {
   const actor = await getActor();
   const denied = gate(actor);
   if (denied) return denied;
@@ -68,7 +72,7 @@ export async function runInspection(
   const refs: string[] = [];
   const now = new Date().toISOString();
   for (const item of failed) {
-    const ref = `WO-I${8500 + woCounter++}`;
+    const ref = `WO-I${8500 + nextRecordSequence('inspections:woCounter', 0)}`;
     db.workOrders.push({
       tenantId: live.tenantId,
       createdAt: now, createdBy: actor.userId, updatedAt: now, updatedBy: actor.userId,
@@ -111,13 +115,15 @@ export async function runInspection(
   REVALIDATE.forEach((p) => revalidatePath(p));
   if (refs.length > 0) revalidatePath('/estate');
   return { ok: true, raised: refs.length, passed: failed.length === 0 };
+
+  });
 }
 
-let inspCounter = 0;
 
 /** Schedule a NEW inspection against an obligation (FM-06 ad-hoc/scheduled runs).
  *  Builds a fresh checklist from the obligation's template. */
 export async function scheduleInspection(input: { obligationId: string; date: string; inspector: string }): Promise<InspResult> {
+  return withDurableMutation(async () => {
   const actor = await getActor();
   const denied = gate(actor);
   if (denied) return denied;
@@ -127,7 +133,7 @@ export async function scheduleInspection(input: { obligationId: string; date: st
   if (!isFacilityDate(input.date)) return { ok: false, error: 'Pick a valid inspection date.' };
 
   const template = INSPECTION_TEMPLATES[ob.templateKey] ?? INSPECTION_TEMPLATES.general;
-  const ref = `INS-${1300 + inspCounter++}`;
+  const ref = `INS-${1300 + nextRecordSequence('inspections:inspCounter', 0)}`;
   const status = Date.parse(input.date) < Date.parse(NOW) ? 'overdue' : 'scheduled';
 
   db.inspections.push({
@@ -153,10 +159,13 @@ export async function scheduleInspection(input: { obligationId: string; date: st
 
   REVALIDATE.forEach((p) => revalidatePath(p));
   return { ok: true };
+
+  });
 }
 
 /** Reschedule a scheduled/overdue inspection. */
 export async function rescheduleInspection(inspectionId: string, newDate: string): Promise<InspResult> {
+  return withDurableMutation(async () => {
   const actor = await getActor();
   const denied = gate(actor);
   if (denied) return denied;
@@ -169,4 +178,6 @@ export async function rescheduleInspection(inspectionId: string, newDate: string
   live.status = Date.parse(newDate) < Date.parse(NOW) ? 'overdue' : 'scheduled';
   REVALIDATE.forEach((p) => revalidatePath(p));
   return { ok: true };
+
+  });
 }

@@ -1,3 +1,4 @@
+import { durableRecordsEnabled } from '@/server/data/record-context';
 import { EstatePropertiesWorkspace } from '@/components/workspaces/estate-properties-workspace';
 import { EstateCreateActions } from '@/components/workspaces/estate-create-actions';
 import { buildEstateProperties } from '@/domain/estate/properties';
@@ -9,6 +10,7 @@ import { requireCapability } from '@/server/guard';
 import { devIdentityEnabled } from '@/server/session';
 import { requireOperatorSession } from '@/server/workspaces';
 import { isReviewActor, reviewModeEnabled } from '@/server/review-auth';
+import { withDurableRead } from '@/server/data/durable-records';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +27,7 @@ function allRows<T>(read: (cursor?: string | null) => Page<T>): T[] {
 
 /** Estate properties are independent of Facility spaces and expose no people or ledger data. */
 export default async function EstatePropertiesPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('assets_ppm', 'read', 'estate');
   const session = await requireOperatorSession();
   const sites = allRows((cursor) => repos.sites.list(actor, { cursor, limit: 200 }));
@@ -32,6 +35,7 @@ export default async function EstatePropertiesPage() {
   const properties = buildEstateProperties(sites, units);
   const review = session.key === 'private-review' && reviewModeEnabled() && isReviewActor(actor);
   const demo = review || session.key !== 'clerk' && devIdentityEnabled();
+  const persistent = durableRecordsEnabled();
   const localDemo = review || demo && process.env.NODE_ENV !== 'production' && (!process.env.DATA_SOURCE || process.env.DATA_SOURCE === 'memory');
   const now = demo ? new Date(`${NOW}T09:00:00Z`) : new Date();
   const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Lagos', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now);
@@ -41,6 +45,8 @@ export default async function EstatePropertiesPage() {
   return <EstatePropertiesWorkspace
     properties={properties}
     demo={demo}
-    actions={<EstateCreateActions canAddProperty={canRegisterEstateRecords(actor)} canAddTenant={false} units={[]} demo={localDemo} asOfDate={asOfDate} />}
+    persistent={persistent}
+    actions={<EstateCreateActions canAddProperty={canRegisterEstateRecords(actor)} canAddTenant={false} units={[]} persistent={persistent} demo={localDemo} asOfDate={asOfDate} />}
   />;
+  });
 }

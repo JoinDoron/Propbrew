@@ -1,5 +1,8 @@
 'use server';
 
+import { withDurableMutation } from '@/server/data/durable-records';
+import { currentRecordContext } from '@/server/data/record-context';
+
 import { createHash } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
@@ -30,6 +33,7 @@ const schema = z.object({
 
 /** Estate request creation in local/sample review workspaces; customer production still requires durable storage. */
 export async function createEstateWorkOrder(input: unknown): Promise<EstateWorkOrderResult> {
+  return withDurableMutation(async () => {
   const session = await requireWorkspace('estate');
   const actor = session.actor;
   try {
@@ -40,7 +44,8 @@ export async function createEstateWorkOrder(input: unknown): Promise<EstateWorkO
   }
 
   const privateReview = session.key === 'private-review' && isReviewActor(actor);
-  if ((process.env.DATA_SOURCE && process.env.DATA_SOURCE !== 'memory')
+  const durableReview = privateReview && process.env.DATA_SOURCE === 'postgres' && currentRecordContext()?.mode === 'write';
+  if ((process.env.DATA_SOURCE && process.env.DATA_SOURCE !== 'memory' && !durableReview)
     || !privateReview && (process.env.NODE_ENV === 'production' || session.key === 'clerk' || !devIdentityEnabled())) {
     return { ok: false, error: 'Durable estate work-order creation is not connected in this environment. No work order was created.' };
   }
@@ -93,4 +98,6 @@ export async function createEstateWorkOrder(input: unknown): Promise<EstateWorkO
   });
   for (const path of ['/estate/work-orders', `/estate/work-orders/${ref}`, '/work-orders', `/work-orders/${ref}`, '/estate', '/facility', '/dashboard', '/portal', '/portal/requests', '/people']) revalidatePath(path);
   return { ok: true, ref };
+
+  });
 }

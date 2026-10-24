@@ -12,6 +12,38 @@ on:
   pull_request:
 
 jobs:
+  postgres:
+    name: PostgreSQL persistence and tenant isolation
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: disposable-ci-only
+          POSTGRES_DB: propbrew_integration
+          # The suites create nonowner test roles. This isolated service accepts
+          # them only through the runner's loopback-bound disposable port.
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 127.0.0.1:5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d propbrew_integration"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Real PostgreSQL migrations, rollback and persistence (release gate)
+        env:
+          PROPBREW_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/propbrew_integration
+        run: npx vitest run --no-file-parallelism tests/data/native-postgres.integration.test.ts tests/data/workspace-postgres.integration.test.ts
+
   verify:
     runs-on: ubuntu-latest
     steps:

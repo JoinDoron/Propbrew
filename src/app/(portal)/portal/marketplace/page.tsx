@@ -3,12 +3,14 @@ import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
 import { can } from '@/lib/authz';
 import { MarketplaceWorkspace, type ListingCard, type OrderCard } from '@/components/portal/marketplace-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** EM-09 (resident view, §7 O) — browse approved listings, order, and track own
  *  orders. Ordering creates a real `placed` order in the shared store (visible to
  *  the marketplace desk); a Placed→Closed tracker shows progress; reorder repeats
  *  a past order. Search + category filter over active listings. */
 export default async function ResidentMarketplacePage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('marketplace');
   const listings: ListingCard[] = repos.listings.catalog(actor)
     .filter((l) => l.status === 'active')
@@ -24,4 +26,5 @@ export default async function ResidentMarketplacePage() {
       </div>
     </div>
   );
+  });
 }

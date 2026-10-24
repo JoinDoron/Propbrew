@@ -6,6 +6,7 @@ import { NOW_MS } from '@/domain/ppm';
 import { DEFAULT_TEMPLATES, renderTemplate, messageSchedule, whatsappStats } from '@/domain/shortlet';
 import { WhatsappWorkspace, type TimelineRow } from '@/components/shortlet/whatsapp-workspace';
 import { shortletDate, shortletMoney } from '@/components/shortlet/shortlet-format';
+import { withDurableRead } from '@/server/data/durable-records';
 
 const TEMPLATE_BY_KEY = new Map(DEFAULT_TEMPLATES.map((t) => [t.key, t.body]));
 
@@ -14,6 +15,7 @@ const TEMPLATE_BY_KEY = new Map(DEFAULT_TEMPLATES.map((t) => [t.key, t.body]));
  *  send schedule and status, plus delivery analytics. Advisory content; sent via
  *  the WhatsApp Business API from the operator's number. */
 export default async function ShortletWhatsappPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('bookings_amenities', 'read', 'shortlet');
   const bookings = repos.shortletBookings.list(actor).items;
   const apts = new Map(repos.shortletApartments.list(actor).items.map((a) => [a.id, a]));
@@ -47,4 +49,5 @@ export default async function ShortletWhatsappPage() {
       <WhatsappWorkspace canUpdate={can(actor, 'bookings_amenities', 'update').allowed} stats={whatsappStats(bookings, NOW_MS)} templates={DEFAULT_TEMPLATES} sampleVars={sampleVars} timeline={timeline} />
     </div>
   );
+  });
 }

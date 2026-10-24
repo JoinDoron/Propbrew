@@ -2,12 +2,14 @@ import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
 import { AnnouncementsWorkspace, type AnnRow } from '@/components/portal/announcements-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** EM-04 (resident view, §7 V) — announcements to my audience. Read/unread is
  *  tracked per device; important notices (water/power/security/billing) pin to
  *  the top and can be acknowledged; search + unread filter + category icons make
  *  the feed scannable. */
 export default async function ResidentAnnouncementsPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('announcements');
   const rows: AnnRow[] = repos.announcements.list(actor).items
     .filter((a) => a.sentAt)
@@ -21,4 +23,5 @@ export default async function ResidentAnnouncementsPage() {
       </div>
     </div>
   );
+  });
 }

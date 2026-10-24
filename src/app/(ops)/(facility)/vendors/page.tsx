@@ -5,11 +5,13 @@ import { PageHeader } from '@/components/ui/page-header';
 import { ScopeBanner } from '@/components/domain';
 import { VendorsExplorer } from '@/components/vendors/vendors-explorer';
 import { facilityMoney } from '@/components/facility/facility-format';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** FM-05 — vendor management. Document-expiry compliance drives an alert tone;
  *  performance metrics (jobs, SLA hit rate, rating) come straight off the org.
  *  The directory is interactive: filter, search, sort and drill into a profile. */
 export default async function VendorsPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('work_orders', 'read', 'facility');
   const canMutate = ['F', 'M'].includes(effectiveLevel(actor, 'work_orders'));
   const vendors = repos.vendors.list(actor).items;
@@ -45,4 +47,5 @@ export default async function VendorsPage() {
       />
     </div>
   );
+  });
 }

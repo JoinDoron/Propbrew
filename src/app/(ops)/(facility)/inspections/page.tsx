@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { ScopeBanner } from '@/components/domain';
 import { InspectionsWorkspace } from '@/components/inspections/inspections-workspace';
 import type { InspectionsData } from '@/components/inspections/types';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** FM-06 — inspections & compliance. A compliance-first workspace: the register
  *  shows every obligation's RAG status and expiry, an audit-readiness score rolls
@@ -13,6 +14,7 @@ import type { InspectionsData } from '@/components/inspections/types';
  *  order per failed item (FM-06 → FM-03). Everything is estate/tenant-scoped
  *  (§8.2); running/managing is Facility-Manager-gated, view is read-only. */
 export default async function InspectionsPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('inspections_compliance', 'read', 'facility');
   const canMutate = effectiveLevel(actor, 'inspections_compliance') === 'M' || effectiveLevel(actor, 'inspections_compliance') === 'F';
 
@@ -31,4 +33,5 @@ export default async function InspectionsPage() {
       <InspectionsWorkspace {...data} />
     </div>
   );
+  });
 }

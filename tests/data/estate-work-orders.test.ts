@@ -9,7 +9,7 @@ import type { Actor } from '@/lib/authz';
 const boundary = vi.hoisted(() => ({ requireWorkspace: vi.fn(), devIdentityEnabled: vi.fn(), reviewActor: vi.fn(), revalidatePath: vi.fn() }));
 vi.mock('@/server/workspaces', () => ({ requireWorkspace: boundary.requireWorkspace }));
 vi.mock('@/server/session', () => ({ devIdentityEnabled: boundary.devIdentityEnabled }));
-vi.mock('@/server/review-auth', () => ({ isReviewActor: boundary.reviewActor }));
+vi.mock('@/server/review-auth', () => ({ isReviewActor: boundary.reviewActor, reviewModeEnabled: () => false }));
 vi.mock('next/cache', () => ({ revalidatePath: boundary.revalidatePath }));
 import { createEstateWorkOrder } from '@/server/actions/estate-work-orders';
 
@@ -28,17 +28,17 @@ function actAs(key = 'estate_manager', overrides: Partial<Actor> = {}, sessionKe
 
 beforeEach(() => {
   vi.resetAllMocks();
-  db.workOrders.splice(0, db.workOrders.length, ...structuredClone(initialOrders));
   vi.stubEnv('NODE_ENV', 'development');
   vi.stubEnv('DATA_SOURCE', '');
+  db.workOrders.splice(0, db.workOrders.length, ...structuredClone(initialOrders));
   boundary.devIdentityEnabled.mockReturnValue(true);
   boundary.reviewActor.mockReturnValue(false);
   actAs();
 });
 
 afterEach(() => {
-  db.workOrders.splice(0, db.workOrders.length, ...structuredClone(initialOrders));
   vi.unstubAllEnvs();
+  db.workOrders.splice(0, db.workOrders.length, ...structuredClone(initialOrders));
 });
 
 describe('Estate-owned manager work-order creation', () => {
@@ -167,7 +167,11 @@ describe('Estate-owned manager work-order creation', () => {
 
   it.each(['http', 'postgres', 'unknown'])('refuses unsafe %s persistence rather than claiming a durable save', async (source) => {
     vi.stubEnv('DATA_SOURCE', source);
-    expect(await createEstateWorkOrder(request())).toMatchObject({ ok: false, error: expect.stringContaining('No work order was created') });
+    if (source === 'postgres') {
+      await expect(createEstateWorkOrder(request())).rejects.toThrow('Durable operational storage requires a configured, verified workspace identity.');
+      expect(boundary.requireWorkspace).not.toHaveBeenCalled();
+    } else expect(await createEstateWorkOrder(request())).toMatchObject({ ok: false, error: expect.stringContaining('No work order was created') });
+    vi.stubEnv('DATA_SOURCE', 'memory');
     expect(db.workOrders).toHaveLength(initialOrders.length);
   });
 

@@ -1,3 +1,4 @@
+import { durableRecordsEnabled } from '@/server/data/record-context';
 import { requireCapability } from '@/server/guard';
 import { can, effectiveLevel } from '@/lib/authz';
 import { repos } from '@/server/data';
@@ -11,6 +12,7 @@ import { devIdentityEnabled } from '@/server/session';
 import { requireOperatorSession } from '@/server/workspaces';
 import { NOW } from '@/domain/ppm';
 import { isReviewActor, reviewModeEnabled } from '@/server/review-auth';
+import { withDurableRead } from '@/server/data/durable-records';
 
 function allRows<T>(read: (cursor?: string | null) => Page<T>): T[] {
   const rows: T[] = [];
@@ -30,6 +32,7 @@ const keyFor = (tenantId: string, id: string) => JSON.stringify([tenantId, id]);
  *  section is fetched only if the viewer's role may read it (§7), so the profile
  *  adapts to the viewer. */
 export default async function PeoplePage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('users_roles', 'read', 'estate');
   const canMutate = ['F', 'M'].includes(effectiveLevel(actor, 'users_roles'));
   const residents = allRows((cursor) => repos.residents.list(actor, { cursor, limit: 200 }));
@@ -57,6 +60,7 @@ export default async function PeoplePage() {
   const session = canAddTenant ? await requireOperatorSession() : null;
   const review = session?.key === 'private-review' && reviewModeEnabled() && isReviewActor(actor);
   const demo = Boolean(review || session && session.key !== 'clerk' && devIdentityEnabled());
+  const persistent = durableRecordsEnabled();
   const localDemo = review || demo && process.env.NODE_ENV !== 'production' && (!process.env.DATA_SOURCE || process.env.DATA_SOURCE === 'memory');
   const now = demo ? new Date(`${NOW}T09:00:00Z`) : new Date();
   const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Lagos', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now);
@@ -89,7 +93,7 @@ export default async function PeoplePage() {
       <PageHeader title="Residents" subtitle="The people, households and tenancies across your estate."
         scope={<ScopeBanner label={actor.allEstates ? 'all estates' : `${actor.estateIds.length} estate(s)`} />}
         actions={canAddTenant ? <EstateCreateActions canAddProperty={false} canAddTenant units={availableUnits}
-          demo={localDemo} asOfDate={`${datePart('year')}-${datePart('month')}-${datePart('day')}`} /> : undefined}
+          persistent={persistent} demo={localDemo} asOfDate={`${datePart('year')}-${datePart('month')}-${datePart('day')}`} /> : undefined}
       />
       <ResidentsExplorer
         residents={rows}
@@ -103,4 +107,5 @@ export default async function PeoplePage() {
       />
     </div>
   );
+  });
 }

@@ -8,6 +8,7 @@ import { AskData } from '@/components/reports/ask-data';
 import { MetricsExplorer } from '@/components/reports/metrics-explorer';
 import { PageTabs } from '@/components/ui/page-tabs';
 import type { Dataset } from '@/domain/reports';
+import { withDurableRead } from '@/server/data/durable-records';
 
 /** FM-07 / AI-S-02 — reporting & analytics. The AI-S-02 NL-query card sits above
  *  a metrics explorer: a traceable KPI gallery (each metric → its §14 requirement
@@ -16,6 +17,7 @@ import type { Dataset } from '@/domain/reports';
  *  source list (§8.2); invoice-based metrics appear only if the actor may read
  *  billing. */
 export default async function ReportsPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('reports_analytics', 'read', 'estate');
   const seesInvoices = can(actor, 'charges_invoicing', 'read').allowed;
   const dataset: Dataset = {
@@ -34,4 +36,5 @@ export default async function ReportsPage() {
       ]} />
     </div>
   );
+  });
 }

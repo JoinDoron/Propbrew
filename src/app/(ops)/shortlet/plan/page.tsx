@@ -5,6 +5,7 @@ import { repos } from '@/server/data';
 import { shortletSettings } from '@/server/shortlet-settings';
 import { PLANS, entitlements, recommendPlan, type PlanKey } from '@/domain/shortlet';
 import { PlanWorkspace, type PlanCard } from '@/components/shortlet/plan-workspace';
+import { withDurableRead } from '@/server/data/durable-records';
 
 const ORDER: PlanKey[] = ['lite', 'starter', 'growth', 'pro', 'enterprise'];
 
@@ -12,6 +13,7 @@ const ORDER: PlanKey[] = ['lite', 'starter', 'growth', 'pro', 'enterprise'];
  *  apartment count + premium capabilities; current plan, usage vs cap, a smart
  *  recommendation, monthly/annual pricing, and self-serve upgrade/downgrade. */
 export default async function ShortletPlanPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('bookings_amenities', 'read', 'shortlet');
   const apts = repos.shortletApartments.list(actor).items;
   const currentKey = shortletSettings(actor.tenantId).planKey;
@@ -28,4 +30,5 @@ export default async function ShortletPlanPage() {
       <PlanWorkspace canUpdate={can(actor, 'bookings_amenities', 'update').allowed} plans={plans} currentKey={currentKey} apartmentCount={apts.length} recommendation={rec} order={ORDER} />
     </div>
   );
+  });
 }

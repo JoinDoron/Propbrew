@@ -10,10 +10,11 @@ import { createEstateWorkOrder } from '@/server/actions/estate-work-orders';
 export type EstateWorkOrderSiteOption = { id: string; label: string };
 export type EstateWorkOrderUnitOption = { id: string; siteId: string; label: string };
 
-export function EstateWorkOrderCreate({ sites, units = [], demo }: {
+export function EstateWorkOrderCreate({ sites, units = [], demo, persistent = false }: {
   sites: EstateWorkOrderSiteOption[];
   units?: EstateWorkOrderUnitOption[];
   demo: boolean;
+  persistent?: boolean;
 }) {
   const router = useRouter();
   const prefix = useId();
@@ -65,7 +66,7 @@ export function EstateWorkOrderCreate({ sites, units = [], demo }: {
           : !sites.length ? <div className="pb-section"><p className="text-[14px] text-text-2">There are no authorised estate properties available. Register an estate property before raising a work order.</p><Button type="button" onClick={() => setOpen(false)}>Close</Button></div>
             : <form onSubmit={submit} className="pb-section" aria-busy={pending}>
               <p className="text-[14px] text-text-2">Raise a maintenance request without leaving Estate. It starts as New and unassigned; triage and assignment remain human decisions.</p>
-              <p id={`${prefix}-demo`} className="rounded-lg border border-border bg-surface-2 p-3 text-[12px] text-text-3">Sample workspace · use sample information only. Records reset when the application restarts. For an immediate danger, follow your estate’s emergency procedure.</p>
+              <p id={`${prefix}-demo`} className="rounded-lg border border-border bg-surface-2 p-3 text-[12px] text-text-3">{persistent ? 'Database-backed review · use sample information only. Records are saved to the database.' : 'Sample workspace · use sample information only. Records reset when the application restarts.'} For an immediate danger, follow your estate’s emergency procedure.</p>
               <fieldset disabled={pending} className="grid gap-4 border-0 p-0 m-0 min-w-0" aria-describedby={`${prefix}-demo`}>
                 <div><label className="pb-form-label" htmlFor={`${prefix}-site`}>Estate property</label><select id={`${prefix}-site`} name="siteId" className="pb-form-control" value={siteId} onChange={(event) => setSiteId(event.target.value)} required>{sites.map((site) => <option key={site.id} value={site.id}>{site.label}</option>)}</select></div>
                 <div><label className="pb-form-label" htmlFor={`${prefix}-unit`}>Unit (optional)</label><select key={siteId} id={`${prefix}-unit`} name="unitId" className="pb-form-control" defaultValue=""><option value="">Common area / no unit</option>{units.filter((unit) => unit.siteId === siteId).map((unit) => <option key={unit.id} value={unit.id}>{unit.label}</option>)}</select></div>

@@ -11,12 +11,14 @@ import { contractStatus, coverageGap, CATEGORY_LABEL } from '@/domain/facility';
 import { toneVar } from '@/lib/status-tones';
 import { PageTabs } from '@/components/ui/page-tabs';
 import { FileText, CalendarClock, Wallet, Gauge, ShieldAlert } from 'lucide-react';
+import { withDurableRead } from '@/server/data/durable-records';
 
 
 /** Contracts & SLAs — service/AMC contracts with a renewal runway, SLA
  *  target-vs-actual, total commitment, and a coverage-gap radar (which system
  *  categories have no active contract). */
 export default async function ContractsPage() {
+  return withDurableRead(async () => {
   const { actor } = await requireCapability('assets_ppm', 'read', 'facility');
   const contracts = repos.facilityContracts.list(actor).items;
   const sites = new Map<string, string>(repos.sites.all(actor).map((s) => [s.id, s.name]));
@@ -88,6 +90,7 @@ export default async function ContractsPage() {
       ]} />
     </div>
   );
+  });
 }
 
 const Kpi = FacilityKpi;

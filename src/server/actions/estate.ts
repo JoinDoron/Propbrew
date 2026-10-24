@@ -1,5 +1,9 @@
 'use server';
 
+import { withDurableMutation } from '@/server/data/durable-records';
+
+import { nextRecordSequence } from '@/server/data/record-context';
+
 /**
  * Estate Experience actions. Each re-checks its §7 capability server-side
  * (deny-by-default): community feedback/complaints → announcements; collections
@@ -56,25 +60,32 @@ function collectionBalance(g: Gate, record: (typeof db.collectionCases)[number])
 
 /* --- community ------------------------------------------------------------ */
 export async function acknowledgeFeedback(id: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('announcements'); if (!g.ok) return g;
   const f = scoped(g, db.residentFeedback, id);
   if (!f) return { ok: false, error: 'Feedback not found.' };
   f.acknowledged = true;
   revalidate();
   return { ok: true };
+
+  });
 }
 
 export async function resolveComplaint(id: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('announcements'); if (!g.ok) return g;
   const c = scoped(g, db.complaints, id);
   if (!c) return { ok: false, error: 'Complaint not found.' };
   c.status = 'resolved';
   revalidate();
   return { ok: true };
+
+  });
 }
 
 /* --- collections ---------------------------------------------------------- */
 export async function sendReminder(caseId: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('charges_invoicing'); if (!g.ok) return g;
   const c = scoped(g, db.collectionCases, caseId);
   if (!c) return { ok: false, error: 'Case not found.' };
@@ -82,9 +93,12 @@ export async function sendReminder(caseId: string): Promise<Res> {
   c.remindersSent += 1; c.lastActionISO = NOW;
   revalidate();
   return { ok: true, ref: c.invoiceRef };
+
+  });
 }
 
 export async function advanceDunning(caseId: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('charges_invoicing'); if (!g.ok) return g;
   const c = scoped(g, db.collectionCases, caseId);
   if (!c) return { ok: false, error: 'Case not found.' };
@@ -93,9 +107,12 @@ export async function advanceDunning(caseId: string): Promise<Res> {
   c.stage = nextDunningStage(c.stage); c.lastActionISO = NOW;
   revalidate();
   return { ok: true, ref: c.invoiceRef };
+
+  });
 }
 
 export async function recordPromise(caseId: string, amountMajor: number, dueISO: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('charges_invoicing'); if (!g.ok) return g;
   const c = scoped(g, db.collectionCases, caseId);
   if (!c) return { ok: false, error: 'Case not found.' };
@@ -108,10 +125,13 @@ export async function recordPromise(caseId: string, amountMajor: number, dueISO:
   c.stage = 'plan'; c.lastActionISO = NOW;
   revalidate();
   return { ok: true, ref: c.invoiceRef };
+
+  });
 }
 
 /* --- tenancy -------------------------------------------------------------- */
 export async function advanceTenancy(id: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('users_roles'); if (!g.ok) return g;
   const t = scoped(g, db.tenancies, id);
   if (!t) return { ok: false, error: 'Tenancy not found.' };
@@ -121,9 +141,12 @@ export async function advanceTenancy(id: string): Promise<Res> {
   if (t.stage === 'moving_in' && t.depositStatus === 'pending') t.depositStatus = 'held';
   revalidate();
   return { ok: true };
+
+  });
 }
 
 export async function settleDeposit(id: string, refundMajor: number): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('users_roles'); if (!g.ok) return g;
   const t = scoped(g, db.tenancies, id);
   if (!t) return { ok: false, error: 'Tenancy not found.' };
@@ -134,13 +157,15 @@ export async function settleDeposit(id: string, refundMajor: number): Promise<Re
   t.depositStatus = refundMinor === 0 ? 'withheld' : refundMinor >= t.depositMinor ? 'refunded' : 'partially_refunded';
   revalidate();
   return { ok: true };
+
+  });
 }
 
 /* --- parcels -------------------------------------------------------------- */
-let pcSeq = 0;
 export type LogParcelInput = { estateId?: string; residentName: string; unitLabel: string; courier: string; size: 'S' | 'M' | 'L' };
 
 export async function logParcel(input: LogParcelInput): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('security_sos', 'create'); if (!g.ok) return g;
   if (!input || !validText(input.residentName, 120) || !input.residentName.trim() || !validText(input.unitLabel, 120) || !validText(input.courier, 120) || !['S', 'M', 'L'].includes(input.size)) return { ok: false, error: 'Enter a resident, unit, courier and valid parcel size.' };
   const estate = targetEstate(g, input.estateId);
@@ -149,7 +174,7 @@ export async function logParcel(input: LogParcelInput): Promise<Res> {
   // Prefer the smallest compatible free locker in this estate; otherwise use the desk.
   const sizes = ['S', 'M', 'L'];
   const locker = db.lockers.filter((row) => !row.parcelId && row.tenantId === estate.tenantId && row.estateId === estate.id && matchesScope(row, g.scope) && sizes.indexOf(row.size) >= sizes.indexOf(input.size)).sort((a, b) => sizes.indexOf(a.size) - sizes.indexOf(b.size))[0];
-  const id = `pc-new-${++pcSeq}`;
+  const id = `pc-new-${nextRecordSequence('estate:pcSeq', 0, true)}`;
   db.parcels.unshift({
     tenantId: estate.tenantId, id, estateId: estate.id,
     code, residentName: input.residentName.trim(), unitLabel: input.unitLabel.trim() || '—', courier: input.courier.trim() || 'Courier',
@@ -158,9 +183,12 @@ export async function logParcel(input: LogParcelInput): Promise<Res> {
   if (locker) locker.parcelId = id;
   revalidate();
   return { ok: true, ref: code };
+
+  });
 }
 
 export async function collectParcel(id: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('security_sos'); if (!g.ok) return g;
   const p = scoped(g, db.parcels, id);
   if (!p) return { ok: false, error: 'Parcel not found.' };
@@ -170,18 +198,24 @@ export async function collectParcel(id: string): Promise<Res> {
   if (locker) locker.parcelId = undefined;
   revalidate();
   return { ok: true, ref: p.code };
+
+  });
 }
 
 export async function notifyResident(id: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('security_sos'); if (!g.ok) return g;
   const p = scoped(g, db.parcels, id);
   if (!p) return { ok: false, error: 'Parcel not found.' };
   revalidate();
   return { ok: true, ref: p.code };
+
+  });
 }
 
 /* --- governance & e-voting ------------------------------------------------ */
 export async function openMotion(id: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('announcements'); if (!g.ok) return g;
   const m = scoped(g, db.motions, id);
   if (!m) return { ok: false, error: 'Motion not found.' };
@@ -189,10 +223,13 @@ export async function openMotion(id: string): Promise<Res> {
   m.status = 'open';
   revalidate();
   return { ok: true, ref: m.ref };
+
+  });
 }
 
 /** Record a unit's vote (unit-weighted). One click = one unit's weight. */
 export async function castVote(motionId: string, choice: VoteChoice): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('announcements'); if (!g.ok) return g;
   const m = scoped(g, db.motions, motionId);
   if (!m) return { ok: false, error: 'Motion not found.' };
@@ -202,9 +239,12 @@ export async function castVote(motionId: string, choice: VoteChoice): Promise<Re
   if (choice === 'for') m.forWeight += 1; else if (choice === 'against') m.againstWeight += 1; else m.abstainWeight += 1;
   revalidate();
   return { ok: true, ref: m.ref };
+
+  });
 }
 
 export async function closeMotion(id: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('announcements'); if (!g.ok) return g;
   const m = scoped(g, db.motions, id);
   if (!m) return { ok: false, error: 'Motion not found.' };
@@ -214,16 +254,17 @@ export async function closeMotion(id: string): Promise<Res> {
   revalidate();
   revalidatePath('/portal/announcements'); revalidatePath('/announcements');
   return { ok: true, ref: `${m.ref} ${m.status.replace('_', ' ')}` };
+
+  });
 }
 
 /** When a motion resolves, tell residents — an estate announcement of the AGM
  *  result lands in their portal automatically. */
-let anSeq = 0;
 function announceMotionOutcome(m: (typeof db.motions)[number]): void {
   const t = motionTally(m);
   const verdict = m.status === 'passed' ? 'has PASSED' : m.status === 'rejected' ? 'was REJECTED' : 'did NOT reach quorum';
   db.announcements.unshift({
-    tenantId: m.tenantId, id: `an-agm-${++anSeq}`,
+    tenantId: m.tenantId, id: `an-agm-${nextRecordSequence('estate:anSeq', 0, true)}`,
     title: `AGM result — ${m.title}`,
     body: `Motion ${m.ref} ${verdict}. Final turnout ${t.turnoutPct}% (quorum ${m.quorumPct}% required) with ${t.approvalPct}% in favour. Thank you to everyone who took part.`,
     estateId: m.estateId, scope: 'estate', audience: 'All residents', sentAt: NOW, delivered: 0, read: 0, aiDrafted: false,
@@ -232,6 +273,7 @@ function announceMotionOutcome(m: (typeof db.motions)[number]): void {
 
 /* --- events & amenities --------------------------------------------------- */
 export async function rsvpEvent(id: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('bookings_amenities'); if (!g.ok) return g;
   const e = scoped(g, db.communityEvents, id);
   if (!e) return { ok: false, error: 'Event not found.' };
@@ -241,9 +283,12 @@ export async function rsvpEvent(id: string): Promise<Res> {
   e.rsvps += 1;
   revalidate();
   return { ok: true };
+
+  });
 }
 
 export async function cancelRsvp(id: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('bookings_amenities'); if (!g.ok) return g;
   const e = scoped(g, db.communityEvents, id);
   if (!e) return { ok: false, error: 'Event not found.' };
@@ -251,11 +296,13 @@ export async function cancelRsvp(id: string): Promise<Res> {
   if (e.rsvps > 0) e.rsvps -= 1;
   revalidate();
   return { ok: true };
+
+  });
 }
 
-let evSeq = 0;
 export type CreateEventInput = { estateId?: string; title: string; category: 'social' | 'fitness' | 'kids' | 'meeting' | 'festive'; venue: string; host: string; startISO: string; capacity: number };
 export async function createEvent(input: CreateEventInput): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('bookings_amenities', 'create'); if (!g.ok) return g;
   if (!input || !validText(input.title, 160) || !input.title.trim() || !validText(input.venue, 200) || !validText(input.host, 120)) return { ok: false, error: 'Enter valid event details.' };
   if (!['social', 'fitness', 'kids', 'meeting', 'festive'].includes(input.category)) return { ok: false, error: 'Choose a valid event category.' };
@@ -266,25 +313,28 @@ export async function createEvent(input: CreateEventInput): Promise<Res> {
   const start = new Date(`${input.startISO}T18:00:00Z`).toISOString();
   const end = new Date(Date.parse(start) + 2 * 3600 * 1000).toISOString();
   db.communityEvents.unshift({
-    tenantId: estate.tenantId, id: `ev-new-${++evSeq}`, estateId: estate.id,
+    tenantId: estate.tenantId, id: `ev-new-${nextRecordSequence('estate:evSeq', 0, true)}`, estateId: estate.id,
     title: input.title.trim(), category: input.category, venue: input.venue.trim() || 'Clubhouse Hall', host: input.host.trim() || 'Estate Office',
     startISO: start, endISO: end, capacity: Math.round(input.capacity), rsvps: 0,
   } as (typeof db.communityEvents)[number]);
   revalidate();
   return { ok: true, ref: input.title.trim() };
+
+  });
 }
 
 /* --- board & committee ---------------------------------------------------- */
-let moSeq = 0;
 export type CreateMotionInput = { estateId?: string; title: string; summary: string; category: 'budget' | 'rule' | 'works' | 'board'; quorumPct: number; thresholdPct: number };
 export async function createMotion(input: CreateMotionInput): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('announcements', 'create'); if (!g.ok) return g;
   if (!input || !validText(input.title, 160) || !input.title.trim() || !validText(input.summary, 3000)) return { ok: false, error: 'Enter valid motion details.' };
   if (!['budget', 'rule', 'works', 'board'].includes(input.category) || !Number.isFinite(input.quorumPct) || !Number.isFinite(input.thresholdPct) || input.quorumPct < 1 || input.quorumPct > 100 || input.thresholdPct < 1 || input.thresholdPct > 100) return { ok: false, error: 'Choose a category and percentages between 1 and 100.' };
   const estate = targetEstate(g, input.estateId);
   if (!estate) return { ok: false, error: 'Choose one of your authorised estates before creating a motion.' };
   if (!Number.isSafeInteger(estate.unitCount) || estate.unitCount <= 0) return { ok: false, error: 'Verify the estate unit count before creating a unit-weighted motion.' };
-  const seq = db.motions.length + (++moSeq);
+  const moSeq = nextRecordSequence('estate:moSeq', 0, true);
+  const seq = db.motions.length + moSeq;
   db.motions.push({
     tenantId: estate.tenantId, id: `mo-new-${moSeq}`, estateId: estate.id,
     ref: `AGM-${String(seq).padStart(2, '0')}`, title: input.title.trim(), summary: input.summary.trim() || 'Motion tabled by the committee.',
@@ -294,9 +344,12 @@ export async function createMotion(input: CreateMotionInput): Promise<Res> {
   } as (typeof db.motions)[number]);
   revalidate();
   return { ok: true, ref: `AGM-${String(seq).padStart(2, '0')}` };
+
+  });
 }
 
 export async function recordMeetingHeld(id: string, attendees: number): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('announcements'); if (!g.ok) return g;
   const m = scoped(g, db.meetings, id);
   if (!m) return { ok: false, error: 'Meeting not found.' };
@@ -322,10 +375,13 @@ export async function recordMeetingHeld(id: string, attendees: number): Promise<
   if (lapsed > 0) parts.push(`${lapsed} proxies lapsed`);
   if (outcomes.length) parts.push(outcomes.join(', '));
   return { ok: true, ref: parts.join(' · ') };
+
+  });
 }
 
 /* --- loyalty & rewards ---------------------------------------------------- */
 export async function awardPoints(memberId: string, reason: EarnReason): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('announcements'); if (!g.ok) return g;
   const m = scoped(g, db.rewardMembers, memberId);
   if (!m) return { ok: false, error: 'Member not found.' };
@@ -337,9 +393,12 @@ export async function awardPoints(memberId: string, reason: EarnReason): Promise
   if (reason === 'poll') m.pollsVoted += 1;
   revalidate();
   return { ok: true };
+
+  });
 }
 
 export async function redeemPerk(memberId: string, perkId: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('announcements'); if (!g.ok) return g;
   const m = scoped(g, db.rewardMembers, memberId);
   const p = scoped(g, db.perks, perkId);
@@ -350,29 +409,34 @@ export async function redeemPerk(memberId: string, perkId: string): Promise<Res>
   const _tier = tierFor(m.points); void _tier;
   revalidate();
   return { ok: true, ref: p.title };
+
+  });
 }
 
 /* --- board election (vacant seat) ----------------------------------------- */
 const ELECTION_PATHS = ['/board', '/governance', '/portal/community'];
 const revalidateElection = () => ELECTION_PATHS.forEach((p) => revalidatePath(p));
 
-let candSeq = 0;
 export type NominateInput = { name: string; unitLabel: string; statement: string };
 
 /** Nominate a candidate for the seat (allowed while the election isn't decided). */
 export async function nominateCandidate(electionId: string, input: NominateInput): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('announcements', 'create'); if (!g.ok) return g;
   const el = scoped(g, db.boardElections, electionId);
   if (!el) return { ok: false, error: 'Election not found.' };
   if (el.status === 'decided') return { ok: false, error: 'This election is already decided.' };
   if (!input || !validText(input.name, 120) || !input.name.trim() || !validText(input.unitLabel, 120) || !validText(input.statement, 3000)) return { ok: false, error: 'Enter valid candidate details.' };
   if (el.candidates.some((c) => c.residentName.toLowerCase() === input.name.trim().toLowerCase())) return { ok: false, error: 'That resident is already standing.' };
-  el.candidates.push({ id: `cand-new-${++candSeq}`, residentName: input.name.trim(), unitLabel: input.unitLabel.trim() || '—', statement: input.statement.trim() || 'Standing for the committee.', votes: 0 });
+  el.candidates.push({ id: `cand-new-${nextRecordSequence('estate:candSeq', 0, true)}`, residentName: input.name.trim(), unitLabel: input.unitLabel.trim() || '—', statement: input.statement.trim() || 'Standing for the committee.', votes: 0 });
   revalidateElection();
   return { ok: true, ref: input.name.trim() };
+
+  });
 }
 
 export async function openElectionVoting(electionId: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('announcements'); if (!g.ok) return g;
   const el = scoped(g, db.boardElections, electionId);
   if (!el) return { ok: false, error: 'Election not found.' };
@@ -381,11 +445,14 @@ export async function openElectionVoting(electionId: string): Promise<Res> {
   el.status = 'voting';
   revalidateElection();
   return { ok: true, ref: el.ref };
+
+  });
 }
 
 /** Close voting: the plurality winner (if quorate, no tie) takes the seat and
  *  joins the committee roster. */
 export async function decideElection(electionId: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('announcements'); if (!g.ok) return g;
   const el = scoped(g, db.boardElections, electionId);
   if (!el) return { ok: false, error: 'Election not found.' };
@@ -402,12 +469,15 @@ export async function decideElection(electionId: string): Promise<Res> {
   } as (typeof db.boardMembers)[number]);
   revalidateElection();
   return { ok: true, ref: winner.residentName };
+
+  });
 }
 
 /* --- proxy voting (EGM) --------------------------------------------------- */
 /** The Chair casts the held proxy block onto the motion — each directed proxy
  *  adds its grantor's unit weight, then is marked exercised. */
 export async function exerciseProxies(motionId: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('announcements'); if (!g.ok) return g;
   const m = scoped(g, db.motions, motionId);
   if (!m) return { ok: false, error: 'Motion not found.' };
@@ -421,11 +491,14 @@ export async function exerciseProxies(motionId: string): Promise<Res> {
   }
   ['/governance', '/board', '/portal/community'].forEach((path) => revalidatePath(path));
   return { ok: true, ref: `${held.length} proxies` };
+
+  });
 }
 
 /** Revoke a single proxy in the register — and cascade to anyone who delegated
  *  through that grantor, returning their vote to them. */
 export async function revokeProxyLink(proxyId: string): Promise<Res> {
+  return withDurableMutation(async () => {
   const g = await gate('announcements'); if (!g.ok) return g;
   const px = scoped(g, db.proxyAssignments, proxyId);
   if (!px) return { ok: false, error: 'Proxy not found.' };
@@ -439,4 +512,6 @@ export async function revokeProxyLink(proxyId: string): Promise<Res> {
   for (const c of cascaded) { c.status = 'revoked'; recordProxyReturnNotice(c.grantorUserId, m, `${px.grantorName}, who you delegated through, was removed from the chain.`); }
   ['/board', '/governance', '/portal/community'].forEach((path) => revalidatePath(path));
   return { ok: true, ref: `${px.grantorName} withdrawn${cascaded.length ? ` · ${cascaded.length} cascaded` : ''}` };
+
+  });
 }
