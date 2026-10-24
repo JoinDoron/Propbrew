@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openDialog } from './dialog';
+import { openDialog, selectTab } from './dialog';
 
 async function enterDemo(page: Page, workspace: 'Estate' | 'Facility') {
   await page.goto('/login');
@@ -131,7 +131,7 @@ test('Facility sandbox creates and edits assets and completes the normal work-or
   await page.reload();
   await expect(page.getByRole('heading', { name: workOrderTitle, exact: true })).toBeVisible();
   await expect(page.getByText('No actions available to you from this state.', { exact: true })).toBeVisible();
-  await page.getByRole('tab', { name: /^Activity history(?: \d+)?$/ }).click();
+  await selectTab(page.getByRole('tab', { name: /^Activity history(?: \d+)?$/ }), page.getByRole('tabpanel', { name: /^Activity history(?: \d+)?$/ }));
   await expect(page.getByRole('tabpanel', { name: /^Activity history(?: \d+)?$/ })).toContainText('Demo operator');
   await page.goto('/work-orders');
   await expect(page.getByRole('row').filter({ hasText: workOrderTitle })).toContainText('Closed');

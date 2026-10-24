@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openDialog } from './dialog';
+import { openDialog, selectTab } from './dialog';
 
 const workspaces = [
   { module: 'estate', name: 'Estate', entry: '/sign-up' },
@@ -96,12 +96,12 @@ for (const workspace of workspaces) {
       await expect(page.getByRole('table', { name: 'Property list', exact: true })).toContainText('Lekki Gardens Estate');
     } else if (workspace.module === 'facility') {
       await expect(page.getByRole('heading', { name: 'Diesel tank — Block C', exact: true })).toBeVisible();
-      await page.getByRole('tab', { name: /^Alarms(?: \d+)?$/ }).click();
+      await selectTab(page.getByRole('tab', { name: /^Alarms(?: \d+)?$/ }), page.getByRole('tabpanel', { name: /^Alarms(?: \d+)?$/ }));
       await expect(page.getByText('Coolant temperature high — sustained overheating', { exact: true })).toBeVisible();
       await expect(page.getByRole('button', { name: 'Create work order', exact: true }).first()).toBeEnabled();
       await expect(page.getByRole('button', { name: 'Acknowledge', exact: true }).first()).toBeEnabled();
     } else if (workspace.module === 'shortlet') {
-      await page.getByRole('tab', { name: 'Availability', exact: true }).click();
+      await selectTab(page.getByRole('tab', { name: 'Availability', exact: true }), page.getByRole('tabpanel', { name: 'Availability', exact: true }));
       await expect(page.getByRole('region', { name: 'Next seven nights apartment occupancy calendar', exact: true })).toContainText('Marina Suites');
       await page.goto('/shortlet/bookings');
       await expect(page.getByText('SL-4200 · Unit 1A · Marina Suites', { exact: true })).toBeVisible();
