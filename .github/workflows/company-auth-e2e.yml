@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: native-company-browser-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   native-accounts:
     name: Real signup, company access and saved records

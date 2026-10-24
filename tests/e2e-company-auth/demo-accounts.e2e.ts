@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { openDialog } from './dialog';
 
 const workspaces = [
   { module: 'estate', name: 'Estate', entry: '/sign-up' },
@@ -22,16 +23,16 @@ async function exerciseShortletAccommodation(page: Page) {
   const apartmentName = `Sandbox Studio ${suffix}`;
   const guestName = `Sandbox Booking Guest ${suffix}`;
   await page.goto('/shortlet/properties');
-  await page.getByRole('button', { name: 'Add property', exact: true }).click();
   const property = page.getByRole('dialog', { name: 'Add property', exact: true });
+  await openDialog(page.getByRole('button', { name: 'Add property', exact: true }), property);
   await property.getByLabel('Property name', { exact: true }).fill(propertyName);
   await property.getByLabel('City', { exact: true }).fill('Abuja');
   await property.getByLabel('Area / neighbourhood', { exact: true }).fill('Maitama');
   await property.getByRole('button', { name: 'Add property', exact: true }).click();
   await expect(property).toHaveCount(0);
   await expect(page.getByRole('heading', { name: propertyName, exact: true })).toBeVisible();
-  await page.getByRole('button', { name: `Add apartment to ${propertyName}`, exact: true }).click();
   const apartment = page.getByRole('dialog', { name: 'Add apartment', exact: true });
+  await openDialog(page.getByRole('button', { name: `Add apartment to ${propertyName}`, exact: true }), apartment);
   await apartment.getByLabel('Apartment name', { exact: true }).fill(apartmentName);
   await apartment.getByLabel('Apartment type', { exact: true }).fill('Studio');
   await apartment.getByLabel('Nightly rate (₦)', { exact: true }).fill('10000.50');
@@ -39,22 +40,22 @@ async function exerciseShortletAccommodation(page: Page) {
   await expect(apartment).toHaveCount(0);
   await expect(page.getByRole('heading', { name: apartmentName, exact: true })).toBeVisible();
   await page.reload();
-  await page.getByRole('button', { name: `Edit ${apartmentName} apartment`, exact: true }).click();
   const apartmentEdit = page.getByRole('dialog', { name: 'Edit apartment', exact: true });
+  await openDialog(page.getByRole('button', { name: `Edit ${apartmentName} apartment`, exact: true }), apartmentEdit);
   await apartmentEdit.getByLabel('Nightly rate (₦)', { exact: true }).fill('12500.25');
   await apartmentEdit.getByRole('button', { name: 'Save apartment', exact: true }).click();
   await expect(apartmentEdit).toHaveCount(0);
   await expect(page.getByRole('region', { name: `${apartmentName} apartment details`, exact: true })).toContainText('₦12,500.25');
-  await page.getByRole('button', { name: `Edit ${propertyName} property`, exact: true }).click();
   const propertyEdit = page.getByRole('dialog', { name: 'Edit property', exact: true });
+  await openDialog(page.getByRole('button', { name: `Edit ${propertyName} property`, exact: true }), propertyEdit);
   await propertyEdit.getByLabel('Property name', { exact: true }).fill(updatedPropertyName);
   await propertyEdit.getByRole('button', { name: 'Save property', exact: true }).click();
   await expect(propertyEdit).toHaveCount(0);
   await expect(page.getByRole('heading', { name: updatedPropertyName, exact: true })).toBeVisible();
 
   await page.goto('/shortlet/bookings');
-  await page.getByRole('button', { name: 'New booking', exact: true }).click();
   const booking = page.getByRole('dialog', { name: 'Create a booking', exact: true });
+  await openDialog(page.getByRole('button', { name: 'New booking', exact: true }), booking);
   await booking.getByLabel('Guest name *', { exact: true }).fill(guestName);
   await booking.getByLabel('Apartment *', { exact: true }).selectOption({ label: `${apartmentName} · ${updatedPropertyName} · ₦12,500.25/night` });
   await booking.getByLabel('Check-in *', { exact: true }).fill('2028-02-01');

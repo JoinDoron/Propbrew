@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { openDialog } from './dialog';
 
 async function enterDemo(page: Page, workspace: 'Estate' | 'Facility') {
   await page.goto('/login');
@@ -14,8 +15,8 @@ test('Estate sandbox creates and edits property and resident records with reload
   const residentName = `Estate Workflow Resident ${suffix}`, updatedResident = `${residentName} Updated`;
   await enterDemo(page, 'Estate');
 
-  await page.getByRole('button', { name: 'Add property', exact: true }).click();
   const property = page.getByRole('dialog', { name: 'Add property', exact: true });
+  await openDialog(page.getByRole('button', { name: 'Add property', exact: true }), property);
   await property.getByLabel('Property name', { exact: true }).fill(propertyName);
   await property.getByLabel('Property address', { exact: true }).fill('22 Synthetic Workflow Avenue, Lagos, Nigeria');
   await property.getByLabel('Number of units', { exact: true }).fill('2');
@@ -23,8 +24,8 @@ test('Estate sandbox creates and edits property and resident records with reload
   await expect(property.getByRole('heading', { name: 'Property added', exact: true })).toBeVisible();
   await property.getByRole('button', { name: 'Done', exact: true }).click();
 
-  await page.getByRole('button', { name: 'Add tenant', exact: true }).click();
   const tenant = page.getByRole('dialog', { name: 'Add tenant', exact: true });
+  await openDialog(page.getByRole('button', { name: 'Add tenant', exact: true }), tenant);
   await tenant.getByLabel('Tenant full name', { exact: true }).fill(residentName);
   await tenant.getByRole('combobox', { name: 'Property and unit', exact: true }).selectOption({ label: `${propertyName} · Unit 1` });
   await tenant.getByLabel('Move-in date', { exact: true }).fill('2026-01-01');
@@ -33,8 +34,8 @@ test('Estate sandbox creates and edits property and resident records with reload
   await tenant.getByRole('button', { name: 'Done', exact: true }).click();
 
   await page.goto('/properties');
-  await page.getByRole('button', { name: `Edit property ${propertyName}`, exact: true }).click();
   const propertyEdit = page.getByRole('dialog', { name: 'Edit property', exact: true });
+  await openDialog(page.getByRole('button', { name: `Edit property ${propertyName}`, exact: true }), propertyEdit);
   await propertyEdit.getByLabel('Property name', { exact: true }).fill(updatedProperty);
   await propertyEdit.getByRole('textbox', { name: 'Property address', exact: true }).fill('24 Synthetic Workflow Avenue, Lagos, Nigeria');
   await propertyEdit.getByRole('button', { name: 'Save property', exact: true }).click();
@@ -45,8 +46,8 @@ test('Estate sandbox creates and edits property and resident records with reload
   await expect(propertyRow.getByRole('button', { name: `Edit property ${updatedProperty}`, exact: true })).toBeVisible();
 
   await page.goto('/people');
-  await page.getByRole('button', { name: `Edit resident ${residentName}`, exact: true }).click();
   const residentEdit = page.getByRole('dialog', { name: 'Edit resident', exact: true });
+  await openDialog(page.getByRole('button', { name: `Edit resident ${residentName}`, exact: true }), residentEdit);
   await residentEdit.getByLabel('Resident full name', { exact: true }).fill(updatedResident);
   await residentEdit.getByLabel('Email', { exact: true }).fill(`sandbox-${suffix}@example.invalid`);
   await residentEdit.getByLabel('Phone', { exact: true }).fill('+2348000000000');
@@ -59,8 +60,8 @@ test('Estate sandbox creates and edits property and resident records with reload
   await expect(residentRow).toContainText('Unit 2');
   await expect(residentRow).toContainText('3 people');
   await expect(residentRow).toContainText(`sandbox-${suffix}@example.invalid`);
-  await residentRow.getByRole('button', { name: `Edit resident ${updatedResident}`, exact: true }).click();
   const savedResident = page.getByRole('dialog', { name: 'Edit resident', exact: true });
+  await openDialog(residentRow.getByRole('button', { name: `Edit resident ${updatedResident}`, exact: true }), savedResident);
   await expect(savedResident.getByLabel('Phone', { exact: true })).toHaveValue('+2348000000000');
   await savedResident.getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.goto('/properties');
@@ -75,8 +76,8 @@ test('Facility sandbox creates and edits assets and completes the normal work-or
   const workOrderTitle = `Inspect sandbox pump ${suffix}`;
   await enterDemo(page, 'Facility');
   await page.goto('/assets');
-  await page.getByRole('button', { name: 'Add asset', exact: true }).click();
   const asset = page.getByRole('dialog', { name: 'Add asset', exact: true });
+  await openDialog(page.getByRole('button', { name: 'Add asset', exact: true }), asset);
   await asset.getByLabel('Asset name', { exact: true }).fill(assetName);
   await asset.getByRole('combobox', { name: 'Location', exact: true }).selectOption({ label: 'Victoria Court' });
   await asset.getByLabel('Category', { exact: true }).fill('Plumbing');
@@ -87,8 +88,8 @@ test('Facility sandbox creates and edits assets and completes the normal work-or
   await asset.getByRole('button', { name: 'Save asset', exact: true }).click();
   await expect(asset).toHaveCount(0);
   await page.getByRole('textbox', { name: 'Search assets', exact: true }).fill(assetName);
-  await page.getByRole('button', { name: `Edit asset ${assetName}`, exact: true }).click();
   const assetEdit = page.getByRole('dialog', { name: 'Edit asset', exact: true });
+  await openDialog(page.getByRole('button', { name: `Edit asset ${assetName}`, exact: true }), assetEdit);
   await assetEdit.getByLabel('Asset name', { exact: true }).fill(updatedAsset);
   await assetEdit.getByRole('combobox', { name: 'Asset status', exact: true }).selectOption('degraded');
   await assetEdit.getByRole('button', { name: 'Save asset', exact: true }).click();
@@ -98,8 +99,8 @@ test('Facility sandbox creates and edits assets and completes the normal work-or
   await expect(page.getByRole('region', { name: `${updatedAsset} asset details`, exact: true })).toContainText('Degraded');
 
   await page.goto('/work-orders');
-  await page.getByRole('button', { name: 'New work order', exact: true }).click();
   const workOrder = page.getByRole('dialog', { name: 'New facility work order', exact: true });
+  await openDialog(page.getByRole('button', { name: 'New work order', exact: true }), workOrder);
   await workOrder.getByRole('combobox', { name: 'Location', exact: true }).selectOption({ label: 'Victoria Court' });
   await workOrder.getByRole('combobox', { name: 'Asset (optional)', exact: true }).selectOption({ label: updatedAsset });
   await workOrder.getByLabel('Work order title', { exact: true }).fill(workOrderTitle);
@@ -108,22 +109,22 @@ test('Facility sandbox creates and edits assets and completes the normal work-or
   await expect(page).toHaveURL(/\/work-orders\/WO-\d+$/);
   await expect(page.getByRole('heading', { name: workOrderTitle, exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Triage', exact: true }).click();
-  await page.getByRole('button', { name: 'Assign', exact: true }).click();
   const assignment = page.getByRole('dialog', { name: 'Assign work order', exact: true });
+  await openDialog(page.getByRole('button', { name: 'Assign', exact: true }), assignment);
   await assignment.getByRole('combobox', { name: 'Assignee', exact: true }).selectOption({ label: 'Demo operator' });
   await assignment.getByRole('button', { name: 'Confirm assign', exact: true }).click();
   await expect(assignment).toHaveCount(0);
   await page.getByRole('button', { name: 'Start work', exact: true }).click();
-  await page.getByRole('button', { name: 'Mark resolved', exact: true }).click();
   const resolution = page.getByRole('dialog', { name: 'Mark resolved work order', exact: true });
+  await openDialog(page.getByRole('button', { name: 'Mark resolved', exact: true }), resolution);
   await resolution.getByRole('button', { name: 'Confirm mark resolved', exact: true }).click();
   await expect(resolution).toHaveCount(0);
-  await page.getByRole('button', { name: 'Verify', exact: true }).click();
   const verification = page.getByRole('dialog', { name: 'Verify work order', exact: true });
+  await openDialog(page.getByRole('button', { name: 'Verify', exact: true }), verification);
   await verification.getByRole('button', { name: 'Confirm verify', exact: true }).click();
   await expect(verification).toHaveCount(0);
-  await page.getByRole('button', { name: 'Close', exact: true }).click();
   const closure = page.getByRole('dialog', { name: 'Close work order', exact: true });
+  await openDialog(page.getByRole('button', { name: 'Close', exact: true }), closure);
   await closure.getByRole('button', { name: 'Confirm close', exact: true }).click();
   await expect(closure).toHaveCount(0);
   await expect(page.getByText('No actions available to you from this state.', { exact: true })).toBeVisible();

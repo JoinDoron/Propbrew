@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test, type Page } from '@playwright/test';
+import { openDialog } from './dialog';
 
 async function enterEstate(page: Page) {
   await page.goto('/login');
@@ -9,8 +10,8 @@ async function enterEstate(page: Page) {
 }
 async function addProperty(page: Page, name: string) {
   await page.goto('/estate');
-  await page.getByRole('button', { name: 'Add property', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Add property', exact: true });
+  await openDialog(page.getByRole('button', { name: 'Add property', exact: true }), dialog);
   await dialog.getByLabel('Property name', { exact: true }).fill(name);
   await dialog.getByLabel('Property address', { exact: true }).fill('Synthetic test address, Lagos');
   await dialog.getByRole('button', { name: 'Add property', exact: true }).click();
@@ -65,16 +66,16 @@ test('private construction sandbox creates a project and persists safe project e
   const id = randomUUID().slice(0, 8), name = `Sandbox build ${id}`, updated = `${name} edited`;
   await page.goto('/login'); await page.getByRole('button', { name: 'Explore Construction demo', exact: true }).click();
   await expect(page).toHaveURL(/\/construction$/); await page.goto('/construction/projects');
-  await page.getByRole('button', { name: 'New project', exact: true }).click();
   const create = page.getByRole('dialog', { name: 'New project', exact: true });
+  await openDialog(page.getByRole('button', { name: 'New project', exact: true }), create);
   await create.getByLabel('Name', { exact: true }).fill(name); await create.getByLabel('Location', { exact: true }).fill('Lagos');
   await create.getByLabel('Client', { exact: true }).fill('Sample project owner');
   await create.getByLabel('Contract (₦)', { exact: true }).fill('1000000'); await create.getByLabel('Budget (₦)', { exact: true }).fill('800000');
   await create.getByLabel('Planned finish', { exact: true }).fill(new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10));
   await create.getByRole('button', { name: 'Create project', exact: true }).click();
   await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
-  await page.getByRole('button', { name: `Edit project ${name}`, exact: true }).click();
   const edit = page.getByRole('dialog', { name: 'Edit project', exact: true });
+  await openDialog(page.getByRole('button', { name: `Edit project ${name}`, exact: true }), edit);
   await edit.getByLabel('Project name', { exact: true }).fill(updated); await edit.getByLabel('Location', { exact: true }).fill('Abuja');
   await edit.getByRole('button', { name: 'Save project', exact: true }).click();
   await expect(edit).not.toBeVisible(); await page.reload();
