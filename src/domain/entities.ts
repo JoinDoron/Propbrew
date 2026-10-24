@@ -219,6 +219,8 @@ export type Announcement = TenantScoped & {
   scope: AnnouncementScope;
   audience: string;
   sentAt: ISODateTime | null;
+  /** Requested publication time; retaining it does not claim a delivery worker exists. */
+  scheduleAt?: ISODateTime | null;
   delivered: number;
   read: number;
   /** EM-04: AI-drafted sends need manager approval first. */

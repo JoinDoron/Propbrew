@@ -1,6 +1,7 @@
 import { requireCapability } from '@/server/guard';
 import { effectiveLevel } from '@/lib/authz';
 import { getSession, devIdentityEnabled } from '@/server/session';
+import { isReviewActor } from '@/server/review-auth';
 import { listEstateWorkOrderSites, listEstateWorkOrderUnits, listEstateWorkOrders } from '@/server/reads/estate-work-orders';
 import { PageHeader } from '@/components/ui/page-header';
 import { PageTabs } from '@/components/ui/page-tabs';
@@ -22,8 +23,9 @@ export default async function EstateWorkOrdersPage() {
   const open = rows.filter((workOrder) => !CLOSED.includes(workOrder.status)).length;
   const sites = canMutate ? listEstateWorkOrderSites(actor).map((site) => ({ id: String(site.id), label: site.name })) : [];
   const units = canMutate ? listEstateWorkOrderUnits(actor).map((unit) => ({ id: String(unit.id), siteId: String(unit.siteId), label: unit.label })) : [];
-  const demo = process.env.NODE_ENV !== 'production' && process.env.DATA_SOURCE !== 'http'
-    && devIdentityEnabled() && session?.key !== 'clerk';
+  const memory = !process.env.DATA_SOURCE || process.env.DATA_SOURCE === 'memory';
+  const privateReview = session?.key === 'private-review' && isReviewActor(actor);
+  const demo = memory && (privateReview || process.env.NODE_ENV !== 'production' && devIdentityEnabled() && session?.key !== 'clerk');
   const boardRows = rows.map((workOrder) => ({
     id: workOrder.id, ref: workOrder.ref, title: workOrder.title, origin: workOrder.origin,
     requesterName: workOrder.requesterName, status: workOrder.status, priority: workOrder.priority,

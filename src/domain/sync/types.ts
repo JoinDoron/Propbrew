@@ -17,6 +17,9 @@ export type OpKind =
   | 'task_progress'
   | 'safety_event';
 
+/** Server-computed ownership namespace; an old account's queue must never drain as a new user. */
+export const outboxOwnerKey = (tenantId: string | null, userId: string): string | undefined => tenantId ? JSON.stringify([tenantId, userId]) : undefined;
+
 export type OpStatus =
   /** sitting in the local outbox, not yet attempted */
   | 'queued'

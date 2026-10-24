@@ -8,6 +8,7 @@ import { canRegisterEstateRecords } from '@/server/data/estate-creation-scope';
 import { requireCapability } from '@/server/guard';
 import { devIdentityEnabled } from '@/server/session';
 import { requireOperatorSession } from '@/server/workspaces';
+import { isReviewActor, reviewModeEnabled } from '@/server/review-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,8 +30,9 @@ export default async function EstatePropertiesPage() {
   const sites = allRows((cursor) => repos.sites.list(actor, { cursor, limit: 200 }));
   const units = allRows((cursor) => repos.units.list(actor, { cursor, limit: 200 }));
   const properties = buildEstateProperties(sites, units);
-  const demo = session.key !== 'clerk' && devIdentityEnabled();
-  const localDemo = demo && process.env.NODE_ENV !== 'production' && (!process.env.DATA_SOURCE || process.env.DATA_SOURCE === 'memory');
+  const review = session.key === 'private-review' && reviewModeEnabled() && isReviewActor(actor);
+  const demo = review || session.key !== 'clerk' && devIdentityEnabled();
+  const localDemo = review || demo && process.env.NODE_ENV !== 'production' && (!process.env.DATA_SOURCE || process.env.DATA_SOURCE === 'memory');
   const now = demo ? new Date(`${NOW}T09:00:00Z`) : new Date();
   const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Lagos', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now);
   const datePart = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? '';

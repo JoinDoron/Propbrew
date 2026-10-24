@@ -1,3 +1,4 @@
+import { estateTargetOptions } from '@/server/reads/estate-target-options';
 import { requireCapability } from '@/server/guard';
 import { can } from '@/lib/authz';
 import { repos } from '@/server/data';
@@ -20,7 +21,7 @@ export default async function AnnouncementsPage() {
       <PageHeader title="Announcements" subtitle="Resident notices, assisted draft previews and recorded engagement."
         scope={<ScopeBanner label={actor.allEstates ? 'all estates' : `${actor.estateIds.length} estate(s)`} />}
       />
-      <AnnouncementsWorkspace rows={rows} canMutate={canMutate} />
+      <AnnouncementsWorkspace estates={can(actor, 'announcements', 'transition').allowed ? estateTargetOptions(actor, 'announcements', 'transition') : []} rows={rows} canMutate={canMutate} />
     </div>
   );
 }

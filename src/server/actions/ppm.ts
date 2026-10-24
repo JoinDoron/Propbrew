@@ -11,11 +11,12 @@
 import { revalidatePath } from 'next/cache';
 import { getActor } from '@/server/session';
 import { ForbiddenError, assertCan, ROLE_LABELS, type Actor } from '@/lib/authz';
-import { repos } from '@/server/data';
+import { repos, scopedMutableGet } from '@/server/data';
 import { db, recordHistory } from '@/server/data/store';
 import { NOW, addDays } from '@/domain/ppm';
 import type { Role } from '@/domain/enums';
 import { nowISO } from '@/server/clock';
+import { facilityAssignees, isFacilityDate } from '@/server/facility-guards';
 
 export type PpmResult = { ok: true; ref?: string } | { ok: false; error: string };
 
@@ -35,7 +36,7 @@ function actorName(actor: Actor): string {
   return ROLE_LABELS[(actor.roles as Role[])[0]] ?? actor.userId;
 }
 function scopedOccurrence(actor: Actor, id: string) {
-  return repos.ppmOccurrences.list(actor).items.find((o) => o.id === id) ?? null;
+  return scopedMutableGet(actor, 'assets_ppm', db.ppmOccurrences, id, 'transition');
 }
 
 /** Generate the work order for an occurrence. Idempotent: no-op if an open
@@ -47,11 +48,17 @@ export async function generatePpmWorkOrder(occurrenceId: string): Promise<PpmRes
 
   const occ = scopedOccurrence(actor, occurrenceId);
   if (!occ) return { ok: false, error: 'Occurrence not found.' };
-  const live = db.ppmOccurrences.find((o) => o.id === occurrenceId)!;
+  if (occ.status === 'completed') return { ok: false, error: 'This service occurrence is already completed.' };
+  const live = occ;
+  const plan = scopedMutableGet(actor, 'assets_ppm', db.ppmPlans, String(occ.planId), 'transition');
+  if (!plan || plan.tenantId !== occ.tenantId || plan.assetId !== occ.assetId) return { ok: false, error: 'Plan not found.' };
+  // A retry belongs to the same occurrence even when its linked job has closed.
+  const linked = occ.workOrderRef ? db.workOrders.find((row) => row.tenantId === occ.tenantId && row.ref === occ.workOrderRef) : null;
+  if (occ.workOrderRef) return linked ? { ok: true, ref: linked.ref } : { ok: false, error: 'The linked work order could not be found. Review this occurrence before retrying.' };
 
   // idempotency — reuse an existing open PPM work order for this asset
   const existing = db.workOrders.find(
-    (w) => String(w.assetId) === String(occ.assetId) && w.origin === 'ppm_schedule' &&
+    (w) => w.tenantId === occ.tenantId && w.siteId === occ.siteId && String(w.assetId) === String(occ.assetId) && w.origin === 'ppm_schedule' &&
       !['closed', 'cancelled', 'rejected', 'verified'].includes(w.status),
   );
   if (existing) {
@@ -61,7 +68,7 @@ export async function generatePpmWorkOrder(occurrenceId: string): Promise<PpmRes
     return { ok: true, ref: existing.ref };
   }
 
-  const plan = db.ppmPlans.find((p) => p.id === occ.planId);
+  const assignment = facilityAssignees(occ.tenantId, occ.siteId).find((candidate) => candidate.assigneeName === plan.assignee);
   const ref = `WO-P${9000 + woCounter++}`;
   const now = new Date().toISOString();
   db.workOrders.push({
@@ -73,12 +80,14 @@ export async function generatePpmWorkOrder(occurrenceId: string): Promise<PpmRes
     siteId: occ.siteId,
     estateId: occ.siteId,
     assetId: occ.assetId,
-    status: plan?.assignee ? 'assigned' : 'new',
+    status: assignment ? 'assigned' : 'new',
     priority: 'routine',
     origin: 'ppm_schedule',
     requesterUserId: actor.userId,
     requesterName: 'PPM Scheduler',
-    assigneeName: plan?.assignee ?? 'Unassigned',
+    assigneeName: assignment?.assigneeName ?? 'Unassigned',
+    assigneeUserId: assignment?.assigneeUserId,
+    vendorOrgId: assignment?.vendorOrgId,
     respondDueAt: `${occ.dueDate}T09:00:00Z`,
     resolveDueAt: `${addDays(occ.dueDate, 1)}T18:00:00Z`,
     cost: null,
@@ -101,20 +110,24 @@ export async function completePpmOccurrence(occurrenceId: string, input: { check
 
   const occ = scopedOccurrence(actor, occurrenceId);
   if (!occ) return { ok: false, error: 'Occurrence not found.' };
-  const plan = db.ppmPlans.find((p) => p.id === occ.planId);
+  if (occ.status === 'completed') return { ok: false, error: 'This service occurrence is already completed.' };
+  const plan = scopedMutableGet(actor, 'assets_ppm', db.ppmPlans, String(occ.planId), 'transition');
   if (!plan) return { ok: false, error: 'Plan not found.' };
+  if (!Array.isArray(input.checkedIds) || new Set(input.checkedIds).size !== input.checkedIds.length
+    || input.checkedIds.some((id) => !plan.checklist.some((item) => item.id === id))
+    || !Number.isSafeInteger(input.photoCount) || input.photoCount < 0) return { ok: false, error: 'Provide valid checklist items and a non-negative whole evidence count.' };
 
   const allTicked = plan.checklist.every((c) => input.checkedIds.includes(c.id));
   if (!allTicked) return { ok: false, error: 'Every checklist item must be completed.' };
   if (plan.evidenceRequired && input.photoCount < 1) return { ok: false, error: 'An evidence photo is required to complete this service.' };
 
-  const live = db.ppmOccurrences.find((o) => o.id === occurrenceId)!;
+  const live = occ;
   live.status = 'completed';
   plan.lastServicedAt = NOW;
   plan.overdue = false;
   plan.nextDue = addDays(NOW, intervalDays(plan.frequency));
   // reset the runtime baseline on the asset's feed
-  const rt = db.assetRuntime.find((r) => String(r.assetId) === String(occ.assetId));
+  const rt = db.assetRuntime.find((r) => r.tenantId === occ.tenantId && String(r.assetId) === String(occ.assetId));
   if (rt) rt.runtimeHoursAtLastService = rt.runtimeHours;
 
   recordHistory('ppm', String(occ.planId), hist('COMPLETE', 'in_progress', 'completed', actor, `Serviced with ${input.checkedIds.length} checks${plan.evidenceRequired ? ` and ${input.photoCount} photo(s)` : ''}`));
@@ -130,16 +143,18 @@ export async function reschedulePpmOccurrence(occurrenceId: string, newDate: str
 
   const occ = scopedOccurrence(actor, occurrenceId);
   if (!occ) return { ok: false, error: 'Occurrence not found.' };
+  if (occ.status === 'completed') return { ok: false, error: 'Completed service occurrences cannot be rescheduled.' };
+  if (!isFacilityDate(newDate)) return { ok: false, error: 'Choose a valid service date.' };
   if (occ.statutory && occ.statutoryDeadline && Date.parse(newDate) > Date.parse(occ.statutoryDeadline)) {
     return { ok: false, error: `Statutory inspection cannot be moved past its legal deadline (${occ.statutoryDeadline}).` };
   }
 
-  const live = db.ppmOccurrences.find((o) => o.id === occurrenceId)!;
-  const plan = db.ppmPlans.find((p) => p.id === occ.planId);
+  const live = occ;
+  const plan = scopedMutableGet(actor, 'assets_ppm', db.ppmPlans, String(occ.planId), 'transition');
   const from = live.status;
   live.dueDate = newDate;
   live.generateDate = addDays(newDate, -(plan?.leadTimeDays ?? 0));
-  live.status = Date.parse(newDate) < Date.parse(NOW) ? 'overdue' : 'scheduled';
+  live.status = ['wo_generated', 'in_progress'].includes(from) ? from : Date.parse(newDate) < Date.parse(NOW) ? 'overdue' : 'scheduled';
   if (plan) plan.rescheduleCount += 1;
   recordHistory('ppm', String(occ.planId), hist('RESCHEDULE', from, live.status, actor, `Rescheduled ${occ.assetName} to ${newDate}`));
   revalidate();
@@ -157,6 +172,9 @@ export async function decidePpmSuggestion(
   const actor = await getActor();
   const denied = gate(actor);
   if (denied) return denied;
+  if (!['approve', 'override'].includes(decision)) return { ok: false, error: 'Choose approve or override.' };
+  if (input.confidence !== undefined && (!Number.isFinite(input.confidence) || input.confidence < 0 || input.confidence > 1)) return { ok: false, error: 'The suggestion confidence must be between zero and one.' };
+  if (decision === 'override' && !input.reason?.trim()) return { ok: false, error: 'Record a reason for keeping the existing date.' };
 
   const plan = repos.ppmPlans.list(actor).items.find((p) => String(p.assetId) === String(assetId));
   if (!plan) return { ok: false, error: 'Plan not found.' };
@@ -169,11 +187,13 @@ export async function decidePpmSuggestion(
       return { ok: false, error: 'This suggestion is in shadow mode — not enough data to act on yet.' };
     }
     const newDue = input.date ?? live.nextDue;
+    if (!isFacilityDate(newDue)) return { ok: false, error: 'Choose a valid service date.' };
+    if (live.statutory && live.statutoryDeadline && newDue > live.statutoryDeadline) return { ok: false, error: `Statutory inspection cannot be moved past its legal deadline (${live.statutoryDeadline}).` };
     live.nextDue = newDue;
     live.overdue = Date.parse(newDue) < Date.parse(NOW);
     // promote the plan's earliest scheduled occurrence to the pulled-forward date
     const occ = db.ppmOccurrences
-      .filter((o) => o.planId === plan.id && o.status !== 'completed')
+      .filter((o) => o.tenantId === plan.tenantId && o.planId === plan.id && o.status !== 'completed')
       .sort((a, b) => (a.dueDate < b.dueDate ? -1 : 1))[0];
     if (occ) {
       occ.dueDate = newDue;
@@ -199,9 +219,11 @@ export async function logRuntimeReading(assetId: string, addHours: number): Prom
   // scope: only assets the actor can see
   const visible = new Set(repos.assets.list(actor).items.map((a) => String(a.id)));
   if (!visible.has(String(assetId))) return { ok: false, error: 'Asset not found.' };
-  const rt = db.assetRuntime.find((r) => String(r.assetId) === String(assetId));
+  if (!Number.isFinite(addHours) || addHours <= 0) return { ok: false, error: 'Enter finite runtime hours greater than zero.' };
+  const rt = db.assetRuntime.find((r) => r.tenantId === actor.tenantId && String(r.assetId) === String(assetId));
   if (!rt) return { ok: false, error: 'No runtime feed for this asset.' };
-  rt.runtimeHours += Math.max(0, addHours);
+  if (!Number.isFinite(rt.runtimeHours + addHours) || rt.runtimeHours + addHours > Number.MAX_SAFE_INTEGER) return { ok: false, error: 'Runtime is outside the supported range.' };
+  rt.runtimeHours += addHours;
   rt.lastReadingAt = NOW;
   revalidate();
   return { ok: true };

@@ -4,6 +4,7 @@ import { can } from '@/lib/authz';
 import { ScopeBanner } from '@/components/domain';
 import { repos } from '@/server/data';
 import { recoveryForecast } from '@/domain/estate';
+import { reviewCollectionInvoice } from '@/domain/estate/collection-review';
 import { CollectionsWorkspace, type CaseRow } from '@/components/estate/collections-workspace';
 
 /** Collections — arrears-recovery war room: debtor risk scoring, an expected-
@@ -13,11 +14,15 @@ export default async function CollectionsPage() {
   const { actor } = await requireCapability('charges_invoicing', 'read', 'estate');
   const cases = repos.collectionCases.list(actor).items;
 
-  const rows: CaseRow[] = cases.map((c) => ({
-    id: c.id, invoiceRef: c.invoiceRef, residentName: c.residentName, unitLabel: c.unitLabel,
-    amountMinor: c.amountMinor, agingDays: c.agingDays, stage: c.stage, remindersSent: c.remindersSent,
-    promiseAmountMinor: c.promiseAmountMinor, promiseDueISO: c.promiseDueISO, promiseStatus: c.promiseStatus,
-  }));
+  const rows: CaseRow[] = cases.map((c) => {
+    const invoice = repos.invoices.getByRef(actor, c.invoiceRef);
+    return {
+      id: c.id, invoiceRef: c.invoiceRef, residentName: c.residentName, unitLabel: c.unitLabel,
+      amountMinor: c.amountMinor, agingDays: c.agingDays, stage: c.stage, remindersSent: c.remindersSent,
+      promiseAmountMinor: c.promiseAmountMinor, promiseDueISO: c.promiseDueISO, promiseStatus: c.promiseStatus,
+      invoiceReview: reviewCollectionInvoice(c, invoice ? [invoice] : []),
+    };
+  });
 
   return (
     <div className="pb-page">

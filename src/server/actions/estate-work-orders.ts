@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { assertCan, ForbiddenError, ROLE_LABELS } from '@/lib/authz';
 import { requireWorkspace } from '@/server/workspaces';
 import { devIdentityEnabled } from '@/server/session';
+import { isReviewActor } from '@/server/review-auth';
 import { scopedMutableGet } from '@/server/data';
 import { db, nextWorkOrderRef, recordHistory } from '@/server/data/store';
 import { nowISO } from '@/server/clock';
@@ -27,7 +28,7 @@ const schema = z.object({
   idempotencyKey: z.string().uuid(),
 }).strict();
 
-/** Estate-owned request creation. Durable creation must be wired before production. */
+/** Estate request creation in local/sample review workspaces; customer production still requires durable storage. */
 export async function createEstateWorkOrder(input: unknown): Promise<EstateWorkOrderResult> {
   const session = await requireWorkspace('estate');
   const actor = session.actor;
@@ -38,8 +39,9 @@ export async function createEstateWorkOrder(input: unknown): Promise<EstateWorkO
     throw error;
   }
 
-  if (process.env.NODE_ENV === 'production' || (process.env.DATA_SOURCE && process.env.DATA_SOURCE !== 'memory')
-    || session.key === 'clerk' || !devIdentityEnabled()) {
+  const privateReview = session.key === 'private-review' && isReviewActor(actor);
+  if ((process.env.DATA_SOURCE && process.env.DATA_SOURCE !== 'memory')
+    || !privateReview && (process.env.NODE_ENV === 'production' || session.key === 'clerk' || !devIdentityEnabled())) {
     return { ok: false, error: 'Durable estate work-order creation is not connected in this environment. No work order was created.' };
   }
   if (!actor.tenantId?.trim()) return { ok: false, error: 'A signed-in organisation assignment is required.' };

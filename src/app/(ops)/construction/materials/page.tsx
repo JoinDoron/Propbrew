@@ -52,6 +52,7 @@ export default async function ConstructionMaterialsPage() {
         movements={movements}
         projectName={project?.name ?? 'Portfolio'}
         projectId={projectId}
+        projects={world.projects.map((row) => ({ id: row.id, name: row.name }))}
         kpis={{
           stockValueMinor: materials.reduce((n, m) => n + m.onHand * m.unitCostMinor, 0),
           belowReorder: materials.filter((m) => m.belowReorder).length,

@@ -47,6 +47,7 @@ export type ShellIdentity = {
   name: string;
   roleSummary: string;
   tenantLabel: string;
+  outboxOwner?: string;
 };
 
 export function AppShell({
@@ -231,7 +232,7 @@ export function AppShell({
         </div>
 
         <div className={styles.headerActions}>
-          <SyncIndicator workspace={workspace?.id} />
+          <SyncIndicator workspace={workspace?.id} owner={identity.outboxOwner} />
           <IconButton onClick={toggleTheme} title="Toggle theme" aria-label="Toggle theme" className={styles.themeButton}>
             {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
           </IconButton>

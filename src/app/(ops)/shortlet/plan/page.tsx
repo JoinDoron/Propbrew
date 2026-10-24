@@ -2,7 +2,7 @@ import { can } from '@/lib/authz';
 import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
-import { db } from '@/server/data/store';
+import { shortletSettings } from '@/server/shortlet-settings';
 import { PLANS, entitlements, recommendPlan, type PlanKey } from '@/domain/shortlet';
 import { PlanWorkspace, type PlanCard } from '@/components/shortlet/plan-workspace';
 
@@ -14,7 +14,7 @@ const ORDER: PlanKey[] = ['lite', 'starter', 'growth', 'pro', 'enterprise'];
 export default async function ShortletPlanPage() {
   const { actor } = await requireCapability('bookings_amenities', 'read', 'shortlet');
   const apts = repos.shortletApartments.list(actor).items;
-  const currentKey = db.shortletPlanKey as PlanKey;
+  const currentKey = shortletSettings(actor.tenantId).planKey;
 
   const usesWhatsapp = true; // messaging is configured
   const usesIcal = apts.some((a) => a.channels.length > 0);

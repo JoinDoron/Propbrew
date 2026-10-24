@@ -19,6 +19,8 @@ import { COPILOT_MODELS, type CopilotModelId } from '@/domain/facility';
 import { setTenantModel } from '@/server/copilot/metering';
 import type { WorkOrder } from '@/domain/entities';
 import { nowISO } from '@/server/clock';
+import { isFacilityDate } from '@/server/facility-guards';
+import { CopilotConnectionError, resolveCopilotProvider } from '@/server/ai/copilot-provider';
 
 const PATHS = ['/control-center', '/facility', '/energy', '/inventory', '/contracts', '/safety', '/access', '/sustainability', '/copilot', '/work-orders', '/dashboard'];
 const revalidate = () => PATHS.forEach((p) => revalidatePath(p));
@@ -74,7 +76,7 @@ export async function logRefuel(generatorId: string, litres: number): Promise<Re
   const g = await gate('update'); if ('ok' in g) return g;
   const gen = scopedMutableGet(g.actor, 'assets_ppm', db.facilityGenerators, generatorId, 'update');
   if (!gen) return { ok: false, error: 'Generator not found.' };
-  if (!(litres > 0)) return { ok: false, error: 'Enter litres greater than zero.' };
+  if (!Number.isFinite(litres) || !(litres > 0)) return { ok: false, error: 'Enter finite litres greater than zero.' };
   gen.fuelPct = Math.min(100, Math.round(gen.fuelPct + (litres / gen.tankLitres) * 100));
   gen.lastRefuelISO = NOW;
   revalidate();
@@ -85,6 +87,7 @@ export async function logMeterReading(meterId: string, reading: number): Promise
   const g = await gate('update'); if ('ok' in g) return g;
   const m = scopedMutableGet(g.actor, 'assets_ppm', db.facilityMeters, meterId, 'update');
   if (!m) return { ok: false, error: 'Meter not found.' };
+  if (!Number.isFinite(reading) || reading < 0) return { ok: false, error: 'Enter a finite, non-negative meter reading.' };
   if (reading < m.reading) return { ok: false, error: 'Reading cannot be lower than the last one.' };
   m.previous = m.reading; m.reading = reading; m.atISO = NOW;
   revalidate();
@@ -96,8 +99,8 @@ export async function receiveStock(partId: string, qty: number): Promise<Res> {
   const g = await gate('update'); if ('ok' in g) return g;
   const p = scopedMutableGet(g.actor, 'assets_ppm', db.facilityParts, partId, 'update');
   if (!p) return { ok: false, error: 'Part not found.' };
-  if (!(qty > 0)) return { ok: false, error: 'Enter a quantity greater than zero.' };
-  p.stock += Math.round(qty);
+  if (!Number.isSafeInteger(qty) || qty <= 0 || !Number.isSafeInteger(p.stock + qty)) return { ok: false, error: 'Enter a positive whole quantity within the stock limit.' };
+  p.stock += qty;
   revalidate();
   return { ok: true };
 }
@@ -107,7 +110,8 @@ export async function advancePermit(id: string): Promise<Res> {
   const g = await gate('update'); if ('ok' in g) return g;
   const p = scopedMutableGet(g.actor, 'assets_ppm', db.facilityPermits, id, 'update');
   if (!p) return { ok: false, error: 'Permit not found.' };
-  p.status = p.status === 'requested' ? 'active' : p.status === 'active' ? 'closed' : 'closed';
+  if (!['requested', 'active'].includes(p.status)) return { ok: false, error: 'This permit is already closed.' };
+  p.status = p.status === 'requested' ? 'active' : 'closed';
   revalidate();
   return { ok: true };
 }
@@ -126,13 +130,18 @@ export type PreRegisterInput = { visitorName: string; kind: 'guest' | 'contracto
 export async function preRegisterVisitor(input: PreRegisterInput): Promise<Res> {
   const g = await gate('create'); if ('ok' in g) return g;
   if (!input.visitorName?.trim()) return { ok: false, error: 'Enter the visitor name.' };
-  const code = `VP-${4830 + db.visitorPasses.length}`;
+  if (!['guest', 'contractor', 'delivery', 'ride_hail'].includes(input.kind)) return { ok: false, error: 'Choose a valid visitor type.' };
   const today = nowIso().slice(0, 10);
+  const validTo = input.validToISO || today;
+  if (!isFacilityDate(validTo) || validTo < today) return { ok: false, error: 'Choose a valid pass expiry date on or after today.' };
+  const site = repos.sites.list(g.actor).items[0];
+  if (!site) return { ok: false, error: 'No authorised site is available for this visitor pass.' };
+  const code = `VP-${4830 + db.visitorPasses.length}`;
   db.visitorPasses.unshift({
-    tenantId: g.actor.tenantId ?? 't-lekki', id: `vp-new-${++vpSeq}`, code, siteId: (g.actor.estateIds[0] as string) ?? 's-gardens',
+    tenantId: site.tenantId, id: `vp-new-${++vpSeq}`, code, siteId: site.id,
     visitorName: input.visitorName.trim(), kind: input.kind, hostName: input.hostName.trim() || '—', hostUnit: input.hostUnit.trim() || '—',
     purpose: input.purpose.trim() || 'Visit', vehiclePlate: input.vehiclePlate?.trim() || undefined,
-    status: 'expected', validFromISO: today, validToISO: input.validToISO || today,
+    status: 'expected', validFromISO: today, validToISO: validTo,
   } as (typeof db.visitorPasses)[number]);
   revalidate();
   return { ok: true, ref: code };
@@ -142,7 +151,9 @@ export async function checkInVisitor(id: string): Promise<Res> {
   const g = await gate('update'); if ('ok' in g) return g;
   const p = scopedMutableGet(g.actor, 'assets_ppm', db.visitorPasses, id, 'update');
   if (!p) return { ok: false, error: 'Pass not found.' };
-  if (p.status === 'checked_out') return { ok: false, error: 'This pass is already closed.' };
+  if (p.status !== 'expected') return { ok: false, error: 'Only an expected visitor can be checked in.' };
+  const start = Date.parse(p.validFromISO), end = Date.parse(p.validToISO) + (isFacilityDate(p.validToISO) ? 86_400_000 - 1 : 0);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || NOW_MS < start || NOW_MS > end) return { ok: false, error: 'This visitor pass is outside its valid entry window.' };
   p.status = 'checked_in'; p.checkedInISO = nowIso();
   logAccess(g.actor.tenantId, p.siteId, 'Main Gate', 'entry', p.visitorName, 'pass', p.code);
   revalidate();
@@ -162,6 +173,7 @@ export async function checkOutVisitor(id: string): Promise<Res> {
 
 export async function setAccessPointMode(id: string, mode: 'secured' | 'unlocked' | 'lockdown'): Promise<Res> {
   const g = await gate('update'); if ('ok' in g) return g;
+  if (!['secured', 'unlocked', 'lockdown'].includes(mode)) return { ok: false, error: 'Choose a valid access-point mode.' };
   const ap = scopedMutableGet(g.actor, 'assets_ppm', db.accessPoints, id, 'update');
   if (!ap) return { ok: false, error: 'Access point not found.' };
   ap.mode = mode;
@@ -173,8 +185,9 @@ export async function setAccessPointMode(id: string, mode: 'secured' | 'unlocked
 /** One-tap estate lockdown / release — sets every point at once (the red button). */
 export async function setEstateLockdown(on: boolean): Promise<Res> {
   const g = await gate('update'); if ('ok' in g) return g;
-  const visibleIds = new Set(repos.accessPoints.list(g.actor).items.map((ap) => ap.id));
-  const visible = db.accessPoints.filter((ap) => visibleIds.has(ap.id));
+  if (typeof on !== 'boolean') return { ok: false, error: 'Choose whether to engage or release lockdown.' };
+  const visible = repos.accessPoints.list(g.actor, { limit: db.accessPoints.length }).items;
+  if (!visible.length) return { ok: false, error: 'No authorised access points are available.' };
   for (const ap of visible) { ap.mode = on ? 'lockdown' : 'secured'; if (on && ap.status !== 'offline') ap.status = 'online'; }
   logAccess(g.actor.tenantId, visible[0]?.siteId ?? g.actor.estateIds[0] ?? 's-gardens', 'All points', 'held', on ? 'Estate lockdown engaged' : 'Lockdown released', 'manual');
   revalidate();
@@ -188,6 +201,13 @@ export async function setCopilotModel(modelId: string): Promise<Res> {
   try { assertCan(actor, 'reports_analytics', 'update'); }
   catch (e) { if (e instanceof ForbiddenError) return { ok: false, error: 'You need analytics-config access to change the model.' }; throw e; }
   if (!COPILOT_MODELS.some((m) => m.id === modelId)) return { ok: false, error: 'Unknown model.' };
+  // Do not replace a working tenant selection with a provider known to be
+  // unavailable. This checks local configuration only; it makes no AI request.
+  try { resolveCopilotProvider(modelId); }
+  catch (error) {
+    if (error instanceof CopilotConnectionError) return { ok: false, error: error.message };
+    return { ok: false, error: 'The selected AI provider could not be prepared. The existing model is unchanged.' };
+  }
   setTenantModel(actor.tenantId, modelId as CopilotModelId);
   ['/copilot', '/estate/copilot', '/shortlet/copilot', '/construction/copilot'].forEach((path) => revalidatePath(path));
   return { ok: true };

@@ -2,7 +2,7 @@ import { can } from '@/lib/authz';
 import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { repos } from '@/server/data';
-import { db } from '@/server/data/store';
+import { shortletSettings } from '@/server/shortlet-settings';
 import { bookingPageFunnel, bookingPageByApartment } from '@/domain/shortlet';
 import { BookingPageWorkspace, type AptFunnel, type PreviewApt } from '@/components/shortlet/booking-page-workspace';
 
@@ -26,7 +26,7 @@ export default async function ShortletBookingPagePage() {
   return (
     <div className="pb-page">
       <PageHeader title="Direct booking page" subtitle="Manage your guest-facing page, promotions and conversion performance." />
-      <BookingPageWorkspace canUpdate={can(actor, 'bookings_amenities', 'update').allowed} config={db.shortletBookingPage} funnel={funnel} aptFunnels={aptFunnels} preview={preview} businessName="Marina Suites & Maitama Court" />
+      <BookingPageWorkspace canUpdate={can(actor, 'bookings_amenities', 'update').allowed} config={shortletSettings(actor.tenantId).bookingPage} funnel={funnel} aptFunnels={aptFunnels} preview={preview} businessName={[...props.values()].join(' & ') || 'Your Shortlet portfolio'} />
     </div>
   );
 }

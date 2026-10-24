@@ -1,6 +1,7 @@
+import { estateTargetOptions } from '@/server/reads/estate-target-options';
 import { requireCapability } from '@/server/guard';
 import { can } from '@/lib/authz';
-import { repos } from '@/server/data';
+import { scopedDocumentRecords } from '@/server/reads/documents';
 import { NOW } from '@/domain/ppm';
 import { DocumentsWorkspace } from '@/components/documents/documents-workspace';
 import type { DocData } from '@/components/documents/types';
@@ -17,7 +18,8 @@ export default async function DocumentsPage() {
     now: NOW,
     canMutate,
     scopeLabel: actor.allEstates ? 'all estates' : `${actor.estateIds.length} estate(s)`,
-    documents: [...repos.documents.list(actor).items],
+    documents: scopedDocumentRecords(actor),
+    estates: canMutate ? estateTargetOptions(actor, 'announcements', 'update') : [],
   };
 
   return (

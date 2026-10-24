@@ -10,7 +10,7 @@ import { useRouter } from 'next/navigation';
 import { Truck, Gavel, TriangleAlert, Check, Star, ShieldAlert, Banknote } from 'lucide-react';
 import { toneVar, type Tone } from '@/lib/status-tones';
 
-import { approvePurchaseRequest, awardRfq, receiveDelivery } from '@/server/actions/construction';
+import { approvePurchaseRequest, approvePurchaseOrder, awardRfq, receiveDelivery } from '@/server/actions/construction';
 import { PageTabs } from '@/components/ui/page-tabs';
 import { PageHeader } from '@/components/ui/page-header';
 
@@ -128,7 +128,8 @@ export function ProcurementWorkspace({ requests, rfqs, orders, kpis, canMutate }
                     <div className="flex items-center gap-2 flex-none">
                       <span className="text-[14px] font-medium font-mono">{naira(o.valueMinor)}</span>
                       <span className="text-[12px] font-semibold px-2 h-6 inline-flex items-center rounded-full capitalize" style={{ background: `color-mix(in srgb, ${toneVar(PO_TONE[o.status] ?? 'muted')} 14%, transparent)`, color: toneVar(PO_TONE[o.status] ?? 'muted') }}>{o.status.replace('_', ' ')}</span>
-                      {canMutate && o.deliveredQty < o.qty && <Button variant="primary" type="button" disabled={pending} onClick={() => setReceiveFor(o)} >Receive</Button>}
+                      {canMutate && ['draft', 'approved'].includes(o.status) && <Button type="button" disabled={pending} onClick={() => act(() => approvePurchaseOrder(o.id), `${o.status === 'draft' ? 'Approve' : 'Issue'} ${o.ref}`, `Review ${o.item}, ${o.qty} ${o.unit} and the recorded commitment of ${naira(o.valueMinor)} before advancing this purchase order. No supplier payment is made.`)}>{o.status === 'draft' ? 'Approve order' : 'Issue order'}</Button>}
+                      {canMutate && ['issued', 'acknowledged', 'part_delivered'].includes(o.status) && o.deliveredQty < o.qty && <Button variant="primary" type="button" disabled={pending} onClick={() => setReceiveFor(o)} >Receive</Button>}
                     </div>
                   </div>
                 ))}

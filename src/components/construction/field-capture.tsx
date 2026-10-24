@@ -14,16 +14,17 @@ import { useOutbox, useOnline, capture, removeOp, clearSynced, abandon, requeue,
 const displayDate = (value: string) => new Date(value).toLocaleString('en-NG', { day: 'numeric', month: 'short', year: 'numeric', ...(value.includes('T') ? { hour: '2-digit', minute: '2-digit' } as const : {}), timeZone: 'Africa/Lagos' });
 
 export type FieldProject = { id: string; name: string; code: string };
-export type FieldTask = { id: string; name: string; percentComplete: number };
-export type FieldWorker = { id: string; name: string; trade: string };
+export type FieldTask = { id: string; projectId: string; name: string; percentComplete: number };
+export type FieldWorker = { id: string; projectId?: string; name: string; trade: string };
 
-export function FieldCapture({ projects, tasks, workers, todayISO, canCapture = false }: {
+export function FieldCapture({ projects, tasks, workers, todayISO, canCapture = false, owner }: {
   projects: FieldProject[]; tasks: FieldTask[]; workers: FieldWorker[]; todayISO: string;
-  canCapture?: boolean;
+  canCapture?: boolean; owner?: string;
 }) {
   const router = useRouter();
-  const ops = useOutbox();
+  const ops = useOutbox(owner);
   const online = useOnline();
+  const [attendancePending, setAttendancePending] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [forced, setForced] = useState(() => (typeof window === 'undefined' ? false : isForcedOffline()));
 
@@ -61,20 +62,20 @@ export function FieldCapture({ projects, tasks, workers, todayISO, canCapture = 
       </ConstructionSummary>
 
       <PageTabs label="Construction field capture sections" items={[
-        { id: 'report', label: 'Daily report', content: <fieldset disabled={!canCapture} className={styles.fieldset}><legend className="sr-only">Daily report capture</legend>{!canCapture && <p className={styles.notice}>Read-only access · construction capture permission is required.</p>}<ReportForm projects={projects} todayISO={todayISO} onCaptured={flash} online={online} /></fieldset> },
-        { id: 'issue', label: 'Raise issue', content: <fieldset disabled={!canCapture} className={styles.fieldset}><legend className="sr-only">Issue capture</legend><IssueForm projects={projects} onCaptured={flash} online={online} /></fieldset> },
-        { id: 'progress', label: 'Task progress', content: <fieldset disabled={!canCapture} className={styles.fieldset}><legend className="sr-only">Progress capture</legend><ProgressForm projects={projects} tasks={tasks} onCaptured={flash} online={online} /></fieldset> },
+        { id: 'report', label: 'Daily report', content: <fieldset disabled={!canCapture} className={styles.fieldset}><legend className="sr-only">Daily report capture</legend>{!canCapture && <p className={styles.notice}>Read-only access · construction capture permission is required.</p>}<ReportForm owner={owner} projects={projects} todayISO={todayISO} onCaptured={flash} online={online} /></fieldset> },
+        { id: 'issue', label: 'Raise issue', content: <fieldset disabled={!canCapture} className={styles.fieldset}><legend className="sr-only">Issue capture</legend><IssueForm owner={owner} projects={projects} onCaptured={flash} online={online} /></fieldset> },
+        { id: 'progress', label: 'Task progress', content: <fieldset disabled={!canCapture} className={styles.fieldset}><legend className="sr-only">Progress capture</legend><ProgressForm owner={owner} projects={projects} tasks={tasks} onCaptured={flash} online={online} /></fieldset> },
         {
           id: 'attendance', label: 'Quick attendance', content: (
             <ConstructionPanel >
               <div className={styles.header}><CardHeader title="Quick attendance" subtitle={`${displayDate(todayISO)} · WAT · ${workers.length} worker records`} /></div>
-              <div className={styles.body}><p className={styles.notice}>Manual attendance capture uses the first supplied project ({projects[0]?.name ?? 'no project available'}) and a recorded 07:00 WAT clock-in. It does not verify physical presence or a geofence.</p></div>
+              <div className={styles.body}><p className={styles.notice}>Manual attendance uses each worker&apos;s assigned project and a recorded 07:00 WAT clock-in. It does not verify physical presence or a geofence.</p></div>
               <div>
                 {workers.map((w) => (
                   <div key={w.id} className={`${styles.row} ${styles.toolbar}`}>
                     <div><p className={styles.rowTitle}>{w.name}</p><p className={styles.text}>{w.trade}</p></div>
-                    <Button type="button" disabled={!canCapture || projects.length === 0}
-                      onClick={() => { capture('attendance', `${w.name} present · ${todayISO}`, { workerId: w.id, projectId: projects[0]?.id ?? '', dateISO: todayISO, status: 'present', clockIn: '07:00' }); flash(`${w.name} clocked in — saved on this device`); }}
+                    <Button type="button" disabled={!canCapture || !owner || !w.projectId || attendancePending !== null}
+                      onClick={async () => { setAttendancePending(w.id); try { await capture(owner, 'attendance', `${w.name} present · ${todayISO}`, { workerId: w.id, projectId: w.projectId, dateISO: todayISO, status: 'present', clockIn: '07:00' }); flash(`${w.name} clocked in — saved on this device`); } catch (error) { flash(error instanceof Error ? error.message : 'Capture failed; please retry.'); } finally { setAttendancePending(null); } }}
                       className="flex-none"><Check size={12} /> Present</Button>
                   </div>
                 ))}
@@ -83,7 +84,7 @@ export function FieldCapture({ projects, tasks, workers, todayISO, canCapture = 
             </ConstructionPanel>
           )
         },
-        { id: 'queue', label: 'Device outbox', count: stats.pending + stats.conflicts, content: <Outbox ops={ops} onToast={flash} /> }
+        { id: 'queue', label: 'Device outbox', count: stats.pending + stats.conflicts, content: <Outbox owner={owner} ops={ops} onToast={flash} /> }
       ]} />
 
       {toast && <ConstructionToast>{toast}</ConstructionToast>}
@@ -93,7 +94,7 @@ export function FieldCapture({ projects, tasks, workers, todayISO, canCapture = 
 
 /* --- capture forms -------------------------------------------------------- */
 
-function ReportForm({ projects, todayISO, onCaptured, online }: { projects: FieldProject[]; todayISO: string; onCaptured: (m: string) => void; online: boolean }) {
+function ReportForm({ owner, projects, todayISO, onCaptured, online }: { owner?: string; projects: FieldProject[]; todayISO: string; onCaptured: (m: string) => void; online: boolean }) {
   const [projectId, setProjectId] = useState(projects[0]?.id ?? '');
   const [dateISO, setDateISO] = useState(todayISO);
   const [weather, setWeather] = useState('');
@@ -103,14 +104,19 @@ function ReportForm({ projects, todayISO, onCaptured, online }: { projects: Fiel
   const [constraints, setConstraints] = useState<string[]>([]);
   const [photos, setPhotos] = useState<File[]>([]);
 
-  const submit = () => {
+  const [pending, setPending] = useState(false);
+  const submit = async () => {
+    if (pending) return;
+    setPending(true);
+    try {
     const name = projects.find((p) => p.id === projectId)?.name ?? 'Site';
-    capture('daily_report', `Daily report · ${name} · ${dateISO}`, {
+    await capture(owner, 'daily_report', `Daily report · ${name} · ${dateISO}`, {
       projectId, dateISO, weather, shift: 'day', workforceCount: Number(crew) || 0,
       completed, ongoing, delayed: [], plannedNext: [], deliveries: [], incidents: [], constraints, photos: photos.length,
     }, photos);
     setCompleted([]); setOngoing([]); setConstraints([]); setPhotos([]);
     onCaptured(online ? 'Report captured — queued for sync' : 'Report queued offline on this device — check the outbox when the connection returns');
+    } catch (error) { onCaptured(error instanceof Error ? error.message : 'Capture failed. Your form and files were kept.'); } finally { setPending(false); }
   };
 
   return (
@@ -134,7 +140,7 @@ function ReportForm({ projects, todayISO, onCaptured, online }: { projects: Fiel
           <input type="file" aria-label="Attach site photos" accept="image/*" multiple className="sr-only" onChange={(e) => { setPhotos((p) => [...p, ...Array.from(e.target.files ?? [])]); e.target.value = ''; }} />
         </label>
         {photos.length > 0 && <span className="text-[14px] text-text-3">{photos.length} photo{photos.length === 1 ? '' : 's'} · {Math.round(photos.reduce((n, f) => n + f.size, 0) / 1024)} KB held on this device</span>}
-        <Button variant="primary" type="button" disabled={!projectId || !dateISO || crew === ''} onClick={submit}><Check size={16} /> Submit report</Button>
+        <Button variant="primary" type="button" disabled={pending || !owner || !projectId || !dateISO || crew === ''} onClick={submit}><Check size={16} /> Submit report</Button>
       </div>
       {photos.length > 0 && <ul className={styles.list} aria-label="Attached site photo files">{photos.map((photo, index) => <li key={`${index}-${photo.name}`}>{photo.name} · {Math.round(photo.size / 1024)} KB</li>)}</ul>}
       <p className={styles.metadata}>Capture uses this device&apos;s outbox first. Attachments use IndexedDB storage; quota or storage failures can prevent persistence. Check the outbox acknowledgement before treating a report or photo as synced.</p>
@@ -143,11 +149,12 @@ function ReportForm({ projects, todayISO, onCaptured, online }: { projects: Fiel
   );
 }
 
-function IssueForm({ projects, onCaptured, online }: { projects: FieldProject[]; onCaptured: (m: string) => void; online: boolean }) {
+function IssueForm({ owner, projects, onCaptured, online }: { owner?: string; projects: FieldProject[]; onCaptured: (m: string) => void; online: boolean }) {
   const [projectId, setProjectId] = useState(projects[0]?.id ?? '');
   const [title, setTitle] = useState('');
   const [severity, setSeverity] = useState('medium');
   const [action, setAction] = useState('');
+  const [pending, setPending] = useState(false);
   return (
     <ConstructionPanel>
       <div className={styles.header}><CardHeader title="Raise a site issue" subtitle="Record the issue and proposed correction. Capture does not dispatch emergency services or verify completed corrective work." /></div>
@@ -159,17 +166,18 @@ function IssueForm({ projects, onCaptured, online }: { projects: FieldProject[];
       <Field label="What's wrong"><input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Honeycombing on L3 column C4" /></Field>
       <Field label="Corrective action"><input value={action} onChange={(e) => setAction(e.target.value)} placeholder="e.g. Record the proposed correction for technical review" /></Field>
       <Button variant="primary" type="button"
-        disabled={!title.trim() || !projectId}
-        onClick={() => { capture('site_issue', `Issue · ${title.trim()}`, { projectId, title: title.trim(), severity, category: 'Quality', correctiveAction: action.trim() }); setTitle(''); setAction(''); onCaptured(online ? 'Issue captured — queued for sync' : 'Issue queued offline on this device'); }}
+        disabled={pending || !owner || !title.trim() || !projectId}
+        onClick={async () => { if (pending) return; setPending(true); try { await capture(owner, 'site_issue', `Issue · ${title.trim()}`, { projectId, title: title.trim(), severity, category: 'Quality', correctiveAction: action.trim() }); setTitle(''); setAction(''); onCaptured(online ? 'Issue captured — queued for sync' : 'Issue queued offline on this device'); } catch (error) { onCaptured(error instanceof Error ? error.message : 'Capture failed. Your form was kept.'); } finally { setPending(false); } }}
         className="self-start"><Check size={14} /> Raise issue</Button>
       </div>
     </ConstructionPanel>
   );
 }
 
-function ProgressForm({ projects, tasks, onCaptured, online }: { projects: FieldProject[]; tasks: FieldTask[]; onCaptured: (m: string) => void; online: boolean }) {
+function ProgressForm({ owner, projects, tasks, onCaptured, online }: { owner?: string; projects: FieldProject[]; tasks: FieldTask[]; onCaptured: (m: string) => void; online: boolean }) {
   const [taskId, setTaskId] = useState(tasks[0]?.id ?? '');
   const task = tasks.find((t) => t.id === taskId);
+  const [pending, setPending] = useState(false);
   const [pct, setPct] = useState(String(task?.percentComplete ?? 0));
   return (
     <ConstructionPanel>
@@ -185,10 +193,10 @@ function ProgressForm({ projects, tasks, onCaptured, online }: { projects: Field
         <input type="range" min="0" max="100" step="5" value={pct} onChange={(e) => setPct(e.target.value)} className={styles.range} aria-label="Percent complete" aria-valuetext={`${pct}% complete`} />
         {task && Number(pct) < task.percentComplete && <p className={styles.notice}>Lower than the {task.percentComplete}% in the supplied server snapshot — this will be flagged as a conflict rather than silently overwriting it.</p>}
       </div>
-      <Button variant="primary" type="button" disabled={!taskId || projects.length === 0}
-        onClick={() => { capture('task_progress', `${task?.name ?? 'Task'} → ${pct}%`, { taskId, percentComplete: Number(pct), projectId: projects[0]?.id ?? '' }); onCaptured(online ? 'Progress captured — queued for sync' : 'Progress queued offline on this device'); }}
+      <Button variant="primary" type="button" disabled={pending || !owner || !task?.projectId}
+        onClick={async () => { if (pending) return; setPending(true); try { await capture(owner, 'task_progress', `${task?.name ?? 'Task'} → ${pct}%`, { taskId, percentComplete: Number(pct), projectId: task?.projectId }); onCaptured(online ? 'Progress captured — queued for sync' : 'Progress queued offline on this device'); } catch (error) { onCaptured(error instanceof Error ? error.message : 'Capture failed. Your form was kept.'); } finally { setPending(false); } }}
         className="self-start"><Check size={14} /> Record progress</Button>
-      <p className={styles.metadata}>Progress capture uses {projects[0]?.name ?? 'the first scoped project when available'} as its project reference. Confirm the task and project before recording.</p>
+      <p className={styles.metadata}>Assigned project: {projects.find((p) => p.id === task?.projectId)?.name ?? 'No assigned project'}. Confirm the task and project before recording.</p>
       </div>
     </ConstructionPanel>
   );
@@ -196,7 +204,7 @@ function ProgressForm({ projects, tasks, onCaptured, online }: { projects: Field
 
 /* --- outbox inspector ----------------------------------------------------- */
 
-function Outbox({ ops, onToast }: { ops: ReturnType<typeof useOutbox>; onToast: (m: string) => void }) {
+function Outbox({ owner, ops, onToast }: { owner?: string; ops: ReturnType<typeof useOutbox>; onToast: (m: string) => void }) {
   const router = useRouter();
   const stats = queueStats(ops);
   const sorted = [...ops].sort((a, b) => (a.status === 'synced' ? 1 : 0) - (b.status === 'synced' ? 1 : 0) || Date.parse(a.capturedISO) - Date.parse(b.capturedISO));
@@ -211,7 +219,7 @@ function Outbox({ ops, onToast }: { ops: ReturnType<typeof useOutbox>; onToast: 
       </div>
 
       <ConstructionPanel >
-        <div className={styles.header}><CardHeader title="Device outbox" subtitle="Local queued records, server acknowledgements and conflicts · persistence depends on device storage" action={stats.synced > 0 ? <Button type="button" onClick={() => { clearSynced(); onToast('Cleared synced receipts'); }}>Clear synced</Button> : undefined} /></div>
+        <div className={styles.header}><CardHeader title="Device outbox" subtitle="Local queued records, server acknowledgements and conflicts · persistence depends on device storage" action={stats.synced > 0 ? <Button type="button" onClick={() => { clearSynced(owner); onToast('Cleared synced receipts'); }}>Clear synced</Button> : undefined} /></div>
         <div>
           {sorted.map((o) => (
             <section key={o.id} className={`${styles.row} ${styles.section}`} aria-label={`${o.label} outbox record`}>
@@ -222,12 +230,12 @@ function Outbox({ ops, onToast }: { ops: ReturnType<typeof useOutbox>; onToast: 
                 <div className={styles.actions}>
                   {o.status === 'conflict' && (
                     <>
-                      <Button type="button" onClick={() => { requeue(o.id); onToast('Re-queued — will try again'); }} ><RefreshCw size={11} /> Retry</Button>
-                      <Button type="button" onClick={async () => { await abandon(o.id); onToast('Discarded — the server keeps its version'); router.refresh(); }} style={{ color: toneVar('danger') }}><Trash2 size={11} /> Discard mine</Button>
+                      <Button type="button" onClick={() => { requeue(owner, o.id); onToast('Re-queued — will try again'); }} ><RefreshCw size={11} /> Retry</Button>
+                      <Button type="button" onClick={async () => { try { await abandon(owner, o.id); onToast('Discarded — the server keeps its version'); router.refresh(); } catch (error) { onToast(error instanceof Error ? error.message : 'Discard failed. Your copy was kept.'); } }} style={{ color: toneVar('danger') }}><Trash2 size={11} /> Discard mine</Button>
                     </>
                   )}
-                  {o.status === 'failed' && <Button type="button" onClick={() => { requeue(o.id); onToast('Re-queued'); }} ><RefreshCw size={11} /> Retry now</Button>}
-                  {o.status === 'synced' && <IconButton aria-label={`Remove receipt for ${o.label}`} type="button" onClick={() => removeOp(o.id)} title="Remove receipt"><X size={18} /></IconButton>}
+                  {o.status === 'failed' && <Button type="button" onClick={() => { requeue(owner, o.id); onToast('Re-queued'); }} ><RefreshCw size={11} /> Retry now</Button>}
+                  {o.status === 'synced' && <IconButton aria-label={`Remove receipt for ${o.label}`} type="button" onClick={() => removeOp(owner, o.id)} title="Remove receipt"><X size={18} /></IconButton>}
                 </div>
             </section>
           ))}

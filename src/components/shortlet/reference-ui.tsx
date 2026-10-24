@@ -31,15 +31,18 @@ export function ShortletDialog({ title, children, onClose, pending = false, wide
 export function ShortletReview({ children, pending, disabled, onSubmit, onCancel, label }: { children: ReactNode; pending: boolean; disabled?: boolean; onSubmit: () => void; onCancel: () => void; label: string }) {
   const [approved, setApproved] = useState(false);
   const review = useRef<HTMLDivElement>(null);
+  const actions = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const fieldset = review.current?.closest('fieldset');
-    const invalidate = (event: Event) => { if (event.target instanceof Node && !review.current?.contains(event.target)) setApproved(false); };
+    // Native fieldset listeners run before React dispatches a button's click.
+    // Clearing approval on Confirm itself disables it before onSubmit can run.
+    const invalidate = (event: Event) => { if (event.target instanceof Node && !review.current?.contains(event.target) && !actions.current?.contains(event.target)) setApproved(false); };
     fieldset?.addEventListener('input', invalidate);
     fieldset?.addEventListener('change', invalidate);
     fieldset?.addEventListener('click', invalidate);
     return () => { fieldset?.removeEventListener('input', invalidate); fieldset?.removeEventListener('change', invalidate); fieldset?.removeEventListener('click', invalidate); };
   }, []);
-  return <><div ref={review} className={styles.review}><div>{children}</div><label><input type="checkbox" checked={approved} onChange={(event) => setApproved(event.target.checked)} disabled={pending} />I have reviewed these details and approve this record change.</label></div><div className={styles.actions}><Button type="button" onClick={onCancel} disabled={pending}>Cancel</Button><Button type="button" variant="primary" onClick={onSubmit} disabled={pending || disabled || !approved}>{pending ? 'Saving…' : label}</Button></div></>;
+  return <><div ref={review} className={styles.review}><div>{children}</div><label><input type="checkbox" checked={approved} onChange={(event) => setApproved(event.target.checked)} disabled={pending} />I have reviewed these details and approve this record change.</label></div><div ref={actions} className={styles.actions}><Button type="button" onClick={onCancel} disabled={pending}>Cancel</Button><Button type="button" variant="primary" onClick={onSubmit} disabled={pending || disabled || !approved}>{pending ? 'Saving…' : label}</Button></div></>;
 }
 
 /** Review-first affordance for permission, cancellation and financial status changes. */

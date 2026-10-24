@@ -12,10 +12,11 @@
 import { revalidatePath } from 'next/cache';
 import { getActor } from '@/server/session';
 import { ForbiddenError, assertCan, type Actor } from '@/lib/authz';
-import { repos } from '@/server/data';
+import { scopedMutableGet } from '@/server/data';
 import { db } from '@/server/data/store';
 import { NOW, addDaysISO, SEVERITY_PRIORITY } from '@/domain/inspections';
 import { INSPECTION_TEMPLATES, templateChecklist } from '@/domain/inspection-templates';
+import { isFacilityDate } from '@/server/facility-guards';
 
 export type InspResult = { ok: true; raised?: number; passed?: boolean } | { ok: false; error: string };
 
@@ -40,9 +41,13 @@ export async function runInspection(
   const denied = gate(actor);
   if (denied) return denied;
 
-  const insp = repos.inspections.list(actor).items.find((i) => i.id === inspectionId);
+  const insp = scopedMutableGet(actor, 'inspections_compliance', db.inspections, inspectionId, 'transition');
   if (!insp) return { ok: false, error: 'Inspection not found.' };
-  const live = db.inspections.find((i) => i.id === inspectionId)!;
+  if (!['scheduled', 'overdue'].includes(insp.status)) return { ok: false, error: 'Only scheduled or overdue inspections can be completed. Schedule a new inspection for a repeat visit.' };
+  const live = insp;
+  if (!Array.isArray(input.results) || !Number.isSafeInteger(input.photoCount) || input.photoCount < 0
+    || input.results.some((row) => !row || !['pass', 'fail', 'na'].includes(row.result) || !live.checklist.some((item) => item.id === row.itemId))
+    || new Set(input.results.map((row) => row.itemId)).size !== input.results.length) return { ok: false, error: 'Provide valid, unique checklist results and a non-negative whole evidence count.' };
 
   // server-side re-validation: every item must be marked
   const byId = new Map(input.results.map((r) => [r.itemId, r]));
@@ -53,6 +58,7 @@ export async function runInspection(
   // apply results
   const applied = live.checklist.map((c) => ({ ...c, result: byId.get(c.id)!.result, note: byId.get(c.id)!.note }));
   const failed = applied.filter((c) => c.result === 'fail');
+  if (!applied.some((item) => item.result !== 'na')) return { ok: false, error: 'At least one applicable checklist item is required to complete this inspection.' };
   // require an evidence photo when any item demanded one
   if (applied.some((c) => c.requiresPhoto && c.result !== 'na') && input.photoCount < 1) {
     return { ok: false, error: 'An evidence photo is required for this inspection.' };
@@ -95,7 +101,7 @@ export async function runInspection(
 
   // renew the obligation on a clean pass
   if (failed.length === 0) {
-    const ob = db.complianceObligations.find((o) => o.id === live.obligationId);
+    const ob = db.complianceObligations.find((o) => o.tenantId === live.tenantId && o.id === live.obligationId);
     if (ob) {
       ob.validUntil = addDaysISO(NOW, ob.cadenceDays);
       ob.lastInspectionRef = live.ref;
@@ -116,9 +122,9 @@ export async function scheduleInspection(input: { obligationId: string; date: st
   const denied = gate(actor);
   if (denied) return denied;
 
-  const ob = repos.complianceObligations.list(actor).items.find((o) => o.id === input.obligationId);
+  const ob = scopedMutableGet(actor, 'inspections_compliance', db.complianceObligations, input.obligationId, 'transition');
   if (!ob) return { ok: false, error: 'Obligation not found.' };
-  if (!input.date) return { ok: false, error: 'Pick a date.' };
+  if (!isFacilityDate(input.date)) return { ok: false, error: 'Pick a valid inspection date.' };
 
   const template = INSPECTION_TEMPLATES[ob.templateKey] ?? INSPECTION_TEMPLATES.general;
   const ref = `INS-${1300 + inspCounter++}`;
@@ -154,9 +160,11 @@ export async function rescheduleInspection(inspectionId: string, newDate: string
   const actor = await getActor();
   const denied = gate(actor);
   if (denied) return denied;
-  const insp = repos.inspections.list(actor).items.find((i) => i.id === inspectionId);
+  const insp = scopedMutableGet(actor, 'inspections_compliance', db.inspections, inspectionId, 'transition');
   if (!insp) return { ok: false, error: 'Inspection not found.' };
-  const live = db.inspections.find((i) => i.id === inspectionId)!;
+  if (!['scheduled', 'overdue'].includes(insp.status)) return { ok: false, error: 'Completed inspections cannot be rescheduled. Schedule a new inspection instead.' };
+  if (!isFacilityDate(newDate)) return { ok: false, error: 'Pick a valid inspection date.' };
+  const live = insp;
   live.scheduledDate = newDate;
   live.status = Date.parse(newDate) < Date.parse(NOW) ? 'overdue' : 'scheduled';
   REVALIDATE.forEach((p) => revalidatePath(p));

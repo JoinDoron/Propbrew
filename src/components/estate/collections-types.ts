@@ -1,4 +1,5 @@
 import type { DunningStage, PromiseStatus } from '@/domain/estate';
+import type { CollectionInvoiceReview } from '@/domain/estate/collection-review';
 
 export type CaseRow = {
   id: string;
@@ -12,6 +13,7 @@ export type CaseRow = {
   promiseAmountMinor?: number;
   promiseDueISO?: string;
   promiseStatus?: PromiseStatus;
+  invoiceReview?: CollectionInvoiceReview;
 };
 
 // Collection cases currently store NGN minor units, unlike multi-currency invoices.

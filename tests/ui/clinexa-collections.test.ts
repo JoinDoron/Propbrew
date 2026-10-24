@@ -6,6 +6,7 @@ import { CollectionsWorkspace } from '@/components/estate/collections-workspace'
 import { CollectionPromiseDialog } from '@/components/estate/collection-promise-dialog';
 import { collectionDate, collectionMoney, type CaseRow } from '@/components/estate/collections-types';
 import { advanceDunning, recordPromise, sendReminder } from '@/server/actions/estate';
+import { UNVERIFIED_COLLECTION_INVOICE } from '@/domain/estate/collection-review';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock('@/server/actions/estate', () => ({ sendReminder: vi.fn(), advanceDunning: vi.fn(), recordPromise: vi.fn() }));
@@ -206,5 +207,28 @@ describe('Clinexa-aligned Collections workspace', () => {
     expect(css).toContain('font-size: 12px');
     expect(css).toContain('var(--');
     expect(css).not.toContain('!important');
+  });
+
+  it('distinguishes the historical case amount from a paid invoice without rewriting history', () => {
+    const paid = { ...cases[0], invoiceReview: { state: 'paid' as const, label: 'No invoice balance', detail: 'No recorded invoice balance remains. Review Billing.', outstandingMinor: 0, canFollowUp: false } };
+    const html = render({ cases: [paid] });
+    expect(html).toContain('No invoice balance');
+    expect(html).toContain(collectionMoney(paid.amountMinor));
+    expect(html).toContain('Invoice: ');
+    expect(html).toContain('₦0');
+    expect(view()).toContain('Historical case balance');
+    expect(view()).toContain('Current invoice outstanding');
+    expect(view()).toContain('href="/billing"');
+    expect(view()).toContain('disabled={pending || !reviewFor(selected).canFollowUp}');
+  });
+
+  it('keeps an unmatched invoice reviewable and prevents its promise form from submitting', () => {
+    const blocked = { ...cases[1], invoiceReview: UNVERIFIED_COLLECTION_INVOICE };
+    const html = renderToStaticMarkup(createElement(CollectionPromiseDialog, { c: blocked, onClose: vi.fn(), onDone: vi.fn() }));
+    expect(html).toContain('role="alert"');
+    expect(html).toContain(UNVERIFIED_COLLECTION_INVOICE.detail);
+    expect(html).toMatch(/<fieldset[^>]*disabled=""/);
+    expect(html).toMatch(/<button[^>]*type="submit"[^>]*disabled=""/);
+    expect(recordPromise).not.toHaveBeenCalled();
   });
 });

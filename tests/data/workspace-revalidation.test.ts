@@ -72,7 +72,7 @@ describe('workspace overview cache refresh after existing mutations', () => {
 
   it('refreshes Facility after an inspection is rescheduled', async () => {
     const actor = actAs('facility_manager');
-    const inspection = repos.inspections.list(actor).items[0];
+    const inspection = repos.inspections.list(actor).items.find((row) => row.status === 'scheduled')!;
     expect(inspection).toBeDefined();
     expect(await rescheduleInspection(inspection.id, '2026-11-01')).toEqual({ ok: true });
     expectRefresh('/inspections', '/facility', '/dashboard');
@@ -116,7 +116,7 @@ describe('workspace overview cache refresh after existing mutations', () => {
 
   it('refreshes Estate and Facility when failed inspection evidence raises a work order', async () => {
     const actor = actAs('facility_manager');
-    const inspection = repos.inspections.list(actor).items.find((row) => row.checklist.length > 0);
+    const inspection = repos.inspections.list(actor).items.find((row) => row.status === 'scheduled' && row.checklist.length > 0);
     expect(inspection).toBeDefined();
     const results = inspection!.checklist.map((item, index) => ({ itemId: item.id, result: index === 0 ? 'fail' as const : 'pass' as const }));
     const count = db.workOrders.length;
@@ -127,7 +127,7 @@ describe('workspace overview cache refresh after existing mutations', () => {
 
   it('does not refresh Estate for a clean inspection that creates no work order', async () => {
     const actor = actAs('facility_manager');
-    const inspection = repos.inspections.list(actor).items[0];
+    const inspection = repos.inspections.list(actor).items.find((row) => row.status === 'scheduled')!;
     expect(inspection).toBeDefined();
     const results = inspection.checklist.map((item) => ({ itemId: item.id, result: 'pass' as const }));
     const count = db.workOrders.length;

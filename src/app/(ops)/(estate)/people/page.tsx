@@ -10,6 +10,7 @@ import { canRegisterEstateRecords } from '@/server/data/estate-creation-scope';
 import { devIdentityEnabled } from '@/server/session';
 import { requireOperatorSession } from '@/server/workspaces';
 import { NOW } from '@/domain/ppm';
+import { isReviewActor, reviewModeEnabled } from '@/server/review-auth';
 
 function allRows<T>(read: (cursor?: string | null) => Page<T>): T[] {
   const rows: T[] = [];
@@ -54,8 +55,9 @@ export default async function PeoplePage() {
   const unitById = new Map(units.map((unit) => [keyFor(unit.tenantId, unit.id), unit]));
   const canAddTenant = canRegisterEstateRecords(actor);
   const session = canAddTenant ? await requireOperatorSession() : null;
-  const demo = Boolean(session && session.key !== 'clerk' && devIdentityEnabled());
-  const localDemo = demo && process.env.NODE_ENV !== 'production' && (!process.env.DATA_SOURCE || process.env.DATA_SOURCE === 'memory');
+  const review = session?.key === 'private-review' && reviewModeEnabled() && isReviewActor(actor);
+  const demo = Boolean(review || session && session.key !== 'clerk' && devIdentityEnabled());
+  const localDemo = review || demo && process.env.NODE_ENV !== 'production' && (!process.env.DATA_SOURCE || process.env.DATA_SOURCE === 'memory');
   const now = demo ? new Date(`${NOW}T09:00:00Z`) : new Date();
   const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Lagos', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now);
   const datePart = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? '';

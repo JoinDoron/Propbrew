@@ -86,6 +86,13 @@ describe('Construction insight and assurance Clinexa polish', () => {
     for (const call of ['acknowledgeSignal(signal.id)', 'snoozeSignal(signal.id)', 'dismissSignal(signal.id)', 'escalateSignalToIssue(signal.id, signal.projectId, signal.title)', 'useConstructionReview', '{confirmation}']) expect(text).toContain(call);
   });
 
+  it('shows the prior escalation receipt while preserving advisory actions and preventing a duplicate escalation affordance', () => {
+    const html = renderToStaticMarkup(createElement(RiskRadar, { canMutate: true, canCreate: true, signals: [{ ...risk.signals[0], state: 'escalated', escalatedIssueId: 'is-esc-recorded' }] }));
+    expect(html).toContain('Recorded site issue:'); expect(html).toContain('is-esc-recorded');
+    expect(html).toContain('Acknowledge</button>'); expect(html).toContain('Snooze</button>'); expect(html).toContain('Dismiss</button>');
+    expect(html).not.toContain('Escalate to issue</button>');
+  });
+
   it('retains full floor identity, full-year programme dates, forecast finish and every supplied update', () => {
     const html = renderToStaticMarkup(createElement(BuildWatch, watch));
     for (const text of ['Complete floor label outside the progress track', '1 Jun 2027', '15 Jun 2027', '24 Oct 2026', 'Full approved site narrative number 4', 'Structural handover review', 'at risk', '5 / 7 approved reports', '2 / 10 units recorded sold']) expect(html).toContain(text);

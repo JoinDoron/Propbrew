@@ -19,15 +19,15 @@ export default async function ConstructionFieldPage() {
 
   const tasks: FieldTask[] = world.tasks
     .filter((t) => projectIds.has(t.projectId) && t.status !== 'done')
-    .map((t) => ({ id: t.id, name: t.name, percentComplete: t.percentComplete }));
+    .map((t) => ({ id: t.id, projectId: t.projectId, name: t.name, percentComplete: t.percentComplete }));
 
   const workers: FieldWorker[] = world.workers
     .filter((w) => !w.projectId || projectIds.has(w.projectId))
-    .map((w) => ({ id: w.id, name: w.name, trade: w.trade }));
+    .map((w) => ({ id: w.id, projectId: w.projectId, name: w.name, trade: w.trade }));
 
   return (
     <div className="pb-page">
-      <FieldCapture projects={projects} tasks={tasks} workers={workers} todayISO={NOW.slice(0, 10)} canCapture={can(actor, 'reports_analytics', 'create').allowed} />
+      <FieldCapture owner={actor.tenantId ? JSON.stringify([actor.tenantId, actor.userId]) : undefined} projects={projects} tasks={tasks} workers={workers} todayISO={NOW.slice(0, 10)} canCapture={can(actor, 'reports_analytics', 'create').allowed} />
     </div>
   );
 }

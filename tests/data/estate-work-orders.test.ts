@@ -6,9 +6,10 @@ import { identityByKey, SEED } from '@/server/identities';
 import { canEnterWorkspace } from '@/config/workspaces';
 import type { Actor } from '@/lib/authz';
 
-const boundary = vi.hoisted(() => ({ requireWorkspace: vi.fn(), devIdentityEnabled: vi.fn(), revalidatePath: vi.fn() }));
+const boundary = vi.hoisted(() => ({ requireWorkspace: vi.fn(), devIdentityEnabled: vi.fn(), reviewActor: vi.fn(), revalidatePath: vi.fn() }));
 vi.mock('@/server/workspaces', () => ({ requireWorkspace: boundary.requireWorkspace }));
 vi.mock('@/server/session', () => ({ devIdentityEnabled: boundary.devIdentityEnabled }));
+vi.mock('@/server/review-auth', () => ({ isReviewActor: boundary.reviewActor }));
 vi.mock('next/cache', () => ({ revalidatePath: boundary.revalidatePath }));
 import { createEstateWorkOrder } from '@/server/actions/estate-work-orders';
 
@@ -31,6 +32,7 @@ beforeEach(() => {
   vi.stubEnv('NODE_ENV', 'development');
   vi.stubEnv('DATA_SOURCE', '');
   boundary.devIdentityEnabled.mockReturnValue(true);
+  boundary.reviewActor.mockReturnValue(false);
   actAs();
 });
 
@@ -177,6 +179,26 @@ describe('Estate-owned manager work-order creation', () => {
     expect(await createEstateWorkOrder(request())).toMatchObject({ ok: false });
     actAs();
     boundary.devIdentityEnabled.mockReturnValue(false);
+    expect(await createEstateWorkOrder(request())).toMatchObject({ ok: false });
+    expect(db.workOrders).toHaveLength(initialOrders.length);
+  });
+
+  it('permits a verified signed private review to create only scoped sample rows in hosted production', async () => {
+    vi.stubEnv('NODE_ENV', 'production'); vi.stubEnv('DATA_SOURCE', 'memory');
+    boundary.devIdentityEnabled.mockReturnValue(false);
+    const session = actAs('estate_manager', { userId: 'propbrew-private-review-estate-manager' }, 'private-review');
+    boundary.reviewActor.mockImplementation((actor: Actor) => actor.userId === session.actor.userId && actor.tenantId === session.actor.tenantId);
+    expect(await createEstateWorkOrder(request())).toMatchObject({ ok: true });
+    expect(boundary.reviewActor).toHaveBeenCalledWith(session.actor);
+    expect(await createEstateWorkOrder({ ...request(), siteId: SEED.estateVictoria })).toMatchObject({ ok: false });
+    expect(await createEstateWorkOrder({ ...request(), siteId: SEED.estateIkoyi })).toMatchObject({ ok: false });
+    vi.stubEnv('DATA_SOURCE', 'http');
+    expect(await createEstateWorkOrder(request())).toMatchObject({ ok: false });
+  });
+
+  it('does not treat a private-review session label alone as verified review access', async () => {
+    vi.stubEnv('NODE_ENV', 'production'); boundary.devIdentityEnabled.mockReturnValue(false);
+    actAs('estate_manager', {}, 'private-review');
     expect(await createEstateWorkOrder(request())).toMatchObject({ ok: false });
     expect(db.workOrders).toHaveLength(initialOrders.length);
   });

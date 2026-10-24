@@ -20,7 +20,7 @@ export default async function ConstructionPage() {
   const world = constructionWorld(actor);
 
   const signals = scanRisks(world, NOW_MS);
-  const states = signalStates();
+  const states = signalStates(actor);
   const signalRows: SignalRow[] = signals.map((s) => ({
     id: s.id, kind: s.kind, projectName: s.projectName, severity: s.severity, confidence: s.confidence,
     title: s.title, evidence: s.evidence, recommendation: s.recommendation, nairaAtRiskMinor: s.nairaAtRiskMinor,

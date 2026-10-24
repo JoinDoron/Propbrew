@@ -14,8 +14,8 @@ describe('Clinexa shared application surfaces', () => {
   it('uses shared sync targets without changing the outbox drain or queue predicates', () => {
     expect(sync).toContain('className="pb-icon-action relative border transition-colors"');
     expect(sync).not.toContain('38px');
-    expect(sync).toContain('useOutboxSync();');
-    expect(sync).toContain('const ops = useOutbox();');
+    expect(sync).toContain('useOutboxSync(owner);');
+    expect(sync).toContain('const ops = useOutbox(owner);');
     expect(sync).toContain('const online = useOnline();');
     expect(sync).toContain("ops.filter((o) => o.status !== 'synced')");
     expect(sync).toContain('stats.pending + stats.conflicts');

@@ -550,17 +550,25 @@ export function countVariance(systemQty: number, countedQty: number): { deltaQty
 /** Would this movement drive stock negative? Blocking that is the single most
  *  important inventory invariant — a negative bin means the records are fiction. */
 export function movementAllowed(kind: StockKind, onHand: number, qty: number): { allowed: boolean; reason?: string } {
-  if (qty <= 0) return { allowed: false, reason: 'Quantity must be greater than zero.' };
+  if (!Number.isFinite(qty) || qty <= 0 || !Number.isFinite(onHand)) return { allowed: false, reason: 'Quantity and stock must be finite; quantity must be greater than zero.' };
   const reduces = kind === 'issue' || kind === 'transfer';
   if (reduces && qty > onHand) return { allowed: false, reason: `Only ${onHand} on hand — stock can never go negative.` };
   return { allowed: true };
 }
 
 export type StockLedgerRow = { movement: StockMovement; runningQty: number };
+/** Transfers move quantity between stores; adjustments carry a signed variance. */
+export function stockMovementQuantity(kind: StockKind, qty: number): string {
+  if (kind === 'transfer') return String(Math.abs(qty));
+  const delta = kind === 'issue' ? -qty : qty;
+  return `${delta < 0 ? '−' : '+'}${Math.abs(delta)}`;
+}
 /** Replay movements oldest-first into a running balance — the perpetual ledger
  *  that must reconcile to the counted figure. */
 export function stockLedger(movements: readonly StockMovement[], materialId: string): StockLedgerRow[] {
-  const sign = (k: StockKind) => (k === 'receipt' || k === 'return' ? 1 : k === 'adjust' ? 1 : -1);
+  // This ledger aggregates a material across all authorised stores. Transfers
+  // conserve that total; adjustment quantities retain their signed variance.
+  const sign = (k: StockKind) => (k === 'transfer' ? 0 : k === 'receipt' || k === 'return' || k === 'adjust' ? 1 : -1);
   let running = 0;
   return movements
     .filter((m) => m.materialId === materialId)

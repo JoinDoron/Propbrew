@@ -10,19 +10,24 @@ export function canRegisterEstateRecords(actor: Actor): boolean {
     && canEnterWorkspace(actor, 'estate') && can(actor, 'users_roles', 'create').allowed;
 }
 
-/**
- * Only the local demo-session boundary calls this function. Creator access is
- * verified against both a server-created receipt and the matching stored Site;
- * neither a request body nor a cookie may supply an estate assignment.
- */
-export function withCreatedEstateAssignments(actor: Actor): Actor {
-  const result: Actor = { ...actor, estateIds: [...actor.estateIds] };
-  if (process.env.NODE_ENV === 'production' || process.env.DATA_SOURCE === 'http' || !canRegisterEstateRecords(actor)) return result;
+/** Trusted provenance only; the caller still chooses the permitted session boundary. */
+export function trustedCreatedEstateIds(actor: Actor): string[] {
+  if (!canRegisterEstateRecords(actor)) return [];
   const assigned = db.estateCreatorAssignments.filter((assignment) =>
     assignment.tenantId === actor.tenantId && assignment.userId === actor.userId
     && assignment.source === 'estate_property_registration'
     && db.sites.some((site) => site.id === assignment.siteId && site.tenantId === actor.tenantId && site.kind === 'estate')
     && db.estateRegistrationReceipts.some((receipt) => receipt.kind === 'property'
       && receipt.tenantId === actor.tenantId && receipt.actorId === actor.userId && receipt.result.id === assignment.siteId));
-  return { ...result, estateIds: Array.from(new Set([...actor.estateIds, ...assigned.map((assignment) => assignment.siteId)])) };
+  return Array.from(new Set(assigned.map((assignment) => assignment.siteId)));
+}
+
+/**
+ * Local demo boundary only. Production and real Clerk scopes remain untouched;
+ * signed private review calls the provenance reader from its separate boundary.
+ */
+export function withCreatedEstateAssignments(actor: Actor): Actor {
+  const result: Actor = { ...actor, estateIds: [...actor.estateIds] };
+  if (process.env.NODE_ENV === 'production' || process.env.DATA_SOURCE === 'http') return result;
+  return { ...result, estateIds: Array.from(new Set([...actor.estateIds, ...trustedCreatedEstateIds(actor)])) };
 }

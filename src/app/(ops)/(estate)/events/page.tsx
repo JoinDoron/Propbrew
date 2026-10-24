@@ -1,3 +1,4 @@
+import { estateTargetOptions } from '@/server/reads/estate-target-options';
 import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { can } from '@/lib/authz';
@@ -21,7 +22,7 @@ export default async function EventsPage() {
   return (
     <div className="pb-page">
       <PageHeader title="Events &amp; amenities" subtitle="Plan community events and manage participation." />
-      <EventsWorkspace
+      <EventsWorkspace estates={can(actor, 'bookings_amenities', 'create').allowed ? estateTargetOptions(actor, 'bookings_amenities', 'create') : []}
         events={rows}
         amenities={amenities}
         kpis={{

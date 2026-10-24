@@ -57,7 +57,7 @@ export function DocumentsWorkspace(data: DocData) {
           {visible.length ? <div className="pb-table-scroll" role="region" aria-label="Document library register" tabIndex={0}>
             <table className={`${common.table} pb-data-table`}><thead><tr>{['Document', 'Type', 'Audience', 'Updated', 'Expiry', 'Details'].map((h) => <th key={h} scope="col">{h}</th>)}</tr></thead>
               <tbody>{visible.map((d) => { const expiry = docExpiryState(d.expiryDate); return <tr key={d.id}>
-                <td><div className={common.person}><FileText size={18} className="text-primary shrink-0" /><div><span className={common.title}>{d.name}</span><span className={common.metadata}>{d.folder} · {(d.sizeKb / 1024).toFixed(1)} MB recorded</span></div></div></td>
+                <td><div className={common.person}><FileText size={18} className="text-primary shrink-0" /><div><span className={common.title}>{d.name}</span><span className={common.metadata}>{d.folder} · {d.sizeKb > 0 ? `${(d.sizeKb / 1024).toFixed(1)} MB recorded` : 'Metadata only'}</span></div></div></td>
                 <td><StatusPill status={DOC_TYPE_LABEL[d.type]} tone="neutral" /></td><td>{d.audience}</td><td>{d.updatedAt.slice(0, 10)}</td>
                 <td>{d.expiryDate ? <StatusPill status={expiry === 'expired' ? 'Expired' : expiry === 'expiring' ? 'Expiring soon' : `Valid to ${d.expiryDate}`} tone={EXPIRY_TONE[expiry]} /> : <span className={common.metadata}>Not recorded</span>}</td>
                 <td className={common.rowAction}><Button type="button" variant="ghost" aria-label={`View document ${d.name}`} onClick={() => setOpenId(d.id)}>View</Button></td>
@@ -79,6 +79,6 @@ export function DocumentsWorkspace(data: DocData) {
       </div> }] : []),
     ]} />
     {doc && <DocDrawer key={doc.id} doc={doc} canMutate={canManage} onClose={() => setOpenId(null)} />}
-    {uploading && canManage && <UploadDialog onClose={() => setUploading(false)} />}
+    {uploading && canManage && <UploadDialog estates={data.estates ?? []} onClose={() => setUploading(false)} />}
   </div>;
 }

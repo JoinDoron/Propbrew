@@ -54,6 +54,12 @@ export function actorName(actor: Actor): string {
 }
 
 /** Advisory risk-signal lifecycle states, keyed by the deterministic signal id. */
-export function signalStates(): Map<string, string> {
-  return new Map(db.constructionSignalStates.map((s) => [s.signalId, s.state]));
+export function signalStates(actor: Actor): Map<string, string> {
+  return new Map(db.constructionSignalStates.filter((s) => s.tenantId === actor.tenantId).map((s) => [s.signalId, s.state]));
+}
+
+/** Escalation receipts survive later acknowledgement, snoozing or dismissal. */
+export function signalEscalations(actor: Actor): Map<string, string> {
+  const issues = new Set(repos.constructionIssues.list(actor, { limit: Number.MAX_SAFE_INTEGER }).items.map((issue) => issue.id));
+  return new Map(db.constructionSignalStates.filter((s) => s.tenantId === actor.tenantId && s.escalatedIssueId && issues.has(s.escalatedIssueId)).map((s) => [s.signalId, s.escalatedIssueId!]));
 }

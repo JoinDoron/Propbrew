@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { CloudOff, CloudUpload, Cloud, TriangleAlert, RefreshCw, WifiOff } from 'lucide-react';
 import { toneVar } from '@/lib/status-tones';
 import { queueStats, syncPosture, OP_LABEL, STATUS_TONE } from '@/domain/sync';
-import { useOutbox, useOnline, useOutboxSync, setForcedOffline, isForcedOffline } from '@/lib/offline/outbox';
+import { useOutbox, useOnline, useOutboxSync, useLegacyOutboxNotice, setForcedOffline, isForcedOffline } from '@/lib/offline/outbox';
 import type { WorkspaceId } from '@/config/workspaces';
 
 /**
@@ -13,21 +13,22 @@ import type { WorkspaceId } from '@/config/workspaces';
  * so a field user can see, from any screen, exactly how much work is still only
  * on this device. It also hosts the single drain loop for the app.
  */
-export function SyncIndicator({ workspace }: { workspace?: WorkspaceId }) {
-  useOutboxSync(); // the app's one outbox drain loop
-  const ops = useOutbox();
+export function SyncIndicator({ workspace, owner }: { workspace?: WorkspaceId; owner?: string }) {
+  useOutboxSync(owner); // the app's one outbox drain loop
+  const ops = useOutbox(owner);
+  const legacy = useLegacyOutboxNotice();
   const online = useOnline();
   const [open, setOpen] = useState(false);
   const popoverId = useId();
   const trigger = useRef<HTMLButtonElement>(null);
 
   const stats = queueStats(ops);
-  const posture = syncPosture(stats, online);
+  const posture = legacy && stats.total === 0 ? { label: 'Recovery needed', tone: 'warn' as const, detail: 'An older device outbox is preserved separately and has not been sent.' } : syncPosture(stats, online);
   const unsent = ops.filter((o) => o.status !== 'synced');
   const badge = stats.pending + stats.conflicts;
 
   // Nothing to say and everything is normal — stay out of the way.
-  if (online && badge === 0 && stats.sending === 0) {
+  if (online && badge === 0 && stats.sending === 0 && !legacy) {
     return <ForceToggle />;
   }
 
@@ -64,6 +65,7 @@ export function SyncIndicator({ workspace }: { workspace?: WorkspaceId }) {
                 {!online && <span className="text-[12px] px-2 min-h-6 inline-flex items-center rounded-md gap-1 bg-surface-2 text-text-3"><WifiOff size={12} aria-hidden="true" /> no signal</span>}
               </div>
               <p className="text-[12px] text-text-3 mt-1">{posture.detail}</p>
+              {legacy && <p className="text-[12px] text-text-3 mt-1">An older device outbox is preserved separately. Its owner cannot be verified, so it will not be sent under this account. Contact your administrator to recover it.</p>}
               {stats.attachments > 0 && <p className="text-[12px] text-text-3 mt-1">{stats.attachments} photo{stats.attachments === 1 ? '' : 's'} held with them.</p>}
             </div>
 

@@ -45,7 +45,7 @@ export function EstatePropertiesWorkspace({ properties, actions, demo = false }:
 
   return <div className={styles.workspace}>
 <header className={styles.header}><div><p className={styles.eyebrow}>Estate register</p><h2>Properties</h2><p>Manage your rental properties and units, from one clear view.</p></div>{actions}</header>
-{demo ? <p className={styles.scope}><Check size={12} aria-hidden="true" />Development demo · your authorised estate records only. New records reset when the server restarts.</p> : <p className={styles.scope}><Check size={12} aria-hidden="true" />Only properties and units your account can access are included.</p>}
+{demo ? <p className={styles.scope}><Check size={12} aria-hidden="true" />Sample workspace · your authorised estate records only. New records reset when the app restarts.</p> : <p className={styles.scope}><Check size={12} aria-hidden="true" />Only properties and units your account can access are included.</p>}
 <PageTabs label="Property register sections" items={[
 { id: 'register', label: 'Properties', count: properties.length, content: <div className={styles.sectionStack}>
 

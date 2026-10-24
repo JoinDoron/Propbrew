@@ -21,16 +21,18 @@ const BLOBS = 'blobs';
 
 export type StoredBlob = { id: string; opId: string; name: string; type: string; size: number; blob: Blob };
 
-let dbPromise: Promise<IDBDatabase> | null = null;
+const databases = new Map<string, Promise<IDBDatabase>>();
 
 export function idbAvailable(): boolean {
   return typeof indexedDB !== 'undefined';
 }
 
-function open(): Promise<IDBDatabase> {
-  if (dbPromise) return dbPromise;
-  dbPromise = new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
+function open(owner: string | null): Promise<IDBDatabase> {
+  const name = owner === null ? DB_NAME : `${DB_NAME}:${encodeURIComponent(owner)}`;
+  const cached = databases.get(name);
+  if (cached) return cached;
+  const promise = new Promise<IDBDatabase>((resolve, reject) => {
+    const req = indexedDB.open(name, DB_VERSION);
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains(OPS)) db.createObjectStore(OPS, { keyPath: 'id' });
@@ -42,28 +44,30 @@ function open(): Promise<IDBDatabase> {
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
-  return dbPromise;
+  databases.set(name, promise);
+  return promise;
 }
 
-function tx<T>(store: string, mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest<T>): Promise<T> {
-  return open().then((db) => new Promise<T>((resolve, reject) => {
+function tx<T>(store: string, mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest<T>, owner: string | null): Promise<T> {
+  return open(owner).then((db) => new Promise<T>((resolve, reject) => {
     const t = db.transaction(store, mode);
     const req = fn(t.objectStore(store));
-    req.onsuccess = () => resolve(req.result);
+    t.oncomplete = () => resolve(req.result);
+    t.onabort = () => reject(t.error ?? new Error('Device storage transaction was interrupted.'));
     req.onerror = () => reject(req.error);
   }));
 }
 
 /* --- ops ------------------------------------------------------------------ */
 
-export async function idbGetOps<T>(): Promise<T[]> {
-  return (await tx<T[]>(OPS, 'readonly', (s) => s.getAll() as IDBRequest<T[]>)) ?? [];
+export async function idbGetOps<T>(owner: string): Promise<T[]> {
+  return (await tx<T[]>(OPS, 'readonly', (s) => s.getAll() as IDBRequest<T[]>, owner)) ?? [];
 }
 
 /** Replace the whole queue. Small (metadata only), so a full rewrite is simpler
  *  and safer than diffing, and stays atomic inside one transaction. */
-export async function idbPutOps<T extends { id: string }>(ops: readonly T[]): Promise<void> {
-  const db = await open();
+export async function idbPutOps<T extends { id: string }>(ops: readonly T[], owner: string): Promise<void> {
+  const db = await open(owner);
   await new Promise<void>((resolve, reject) => {
     const t = db.transaction(OPS, 'readwrite');
     const store = t.objectStore(OPS);
@@ -71,17 +75,18 @@ export async function idbPutOps<T extends { id: string }>(ops: readonly T[]): Pr
     for (const op of ops) store.put(op);
     t.oncomplete = () => resolve();
     t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error ?? new Error('Device storage transaction was interrupted.'));
   });
 }
 
 /* --- blobs ---------------------------------------------------------------- */
 
-export async function idbPutBlob(rec: StoredBlob): Promise<void> {
-  await tx(BLOBS, 'readwrite', (s) => s.put(rec));
+export async function idbPutBlob(rec: StoredBlob, owner: string): Promise<void> {
+  await tx(BLOBS, 'readwrite', (s) => s.put(rec), owner);
 }
 
-export async function idbBlobsFor(opId: string): Promise<StoredBlob[]> {
-  const db = await open();
+export async function idbBlobsFor(opId: string, owner: string): Promise<StoredBlob[]> {
+  const db = await open(owner);
   return new Promise((resolve, reject) => {
     const t = db.transaction(BLOBS, 'readonly');
     const req = t.objectStore(BLOBS).index('opId').getAll(opId) as IDBRequest<StoredBlob[]>;
@@ -92,8 +97,8 @@ export async function idbBlobsFor(opId: string): Promise<StoredBlob[]> {
 
 /** Delete an op's photos — called when it syncs or is discarded, so the device
  *  never accumulates the originals of work that is already safely on the server. */
-export async function idbDeleteBlobsFor(opId: string): Promise<void> {
-  const db = await open();
+export async function idbDeleteBlobsFor(opId: string, owner: string): Promise<void> {
+  const db = await open(owner);
   await new Promise<void>((resolve, reject) => {
     const t = db.transaction(BLOBS, 'readwrite');
     const store = t.objectStore(BLOBS);
@@ -105,7 +110,14 @@ export async function idbDeleteBlobsFor(opId: string): Promise<void> {
 }
 
 /** Total bytes of unsent photos — surfaced so "3 photos held" has a real size. */
-export async function idbBlobBytes(): Promise<number> {
-  const all = await tx<StoredBlob[]>(BLOBS, 'readonly', (s) => s.getAll() as IDBRequest<StoredBlob[]>);
+export async function idbBlobBytes(owner: string): Promise<number> {
+  const all = await tx<StoredBlob[]>(BLOBS, 'readonly', (s) => s.getAll() as IDBRequest<StoredBlob[]>, owner);
   return (all ?? []).reduce((n, b) => n + b.size, 0);
+}
+
+/** Legacy records have no verified owner. Inspect only to disclose preserved work; never adopt or clear them. */
+export async function idbLegacyHasPending(): Promise<boolean> {
+  if (!idbAvailable()) return false;
+  const old = await tx<{ status?: string }[]>(OPS, 'readonly', (s) => s.getAll(), null);
+  return old.some((op) => op.status !== 'synced');
 }

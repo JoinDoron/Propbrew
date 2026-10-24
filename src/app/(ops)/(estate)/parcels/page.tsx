@@ -1,3 +1,4 @@
+import { estateTargetOptions } from '@/server/reads/estate-target-options';
 import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { can } from '@/lib/authz';
@@ -21,7 +22,7 @@ export default async function ParcelsPage() {
   return (
     <div className="pb-page">
       <PageHeader title="Parcels &amp; lockers" subtitle="Track incoming deliveries and resident collections." />
-      <ParcelsWorkspace
+      <ParcelsWorkspace estates={can(actor, 'security_sos', 'create').allowed ? estateTargetOptions(actor, 'security_sos', 'create') : []}
         lockers={lockerCells}
         parcels={parcelRows}
         kpis={{ ...stats, util: lockerUtilization(lockers) }}

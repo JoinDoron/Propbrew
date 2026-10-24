@@ -1,3 +1,4 @@
+import { estateTargetOptions } from '@/server/reads/estate-target-options';
 import { PageHeader } from '@/components/ui/page-header';
 import { requireCapability } from '@/server/guard';
 import { can } from '@/lib/authz';
@@ -34,7 +35,7 @@ export default async function BoardPage() {
   return (
     <div className="pb-page">
       <PageHeader title="Board &amp; committee" subtitle="Committee members, meetings, elections and decisions." />
-      <BoardWorkspace members={memberRows} meetings={meetingRows} elections={electionRows} egm={egm} motionCounts={motionCounts} nowMs={NOW_MS}
+      <BoardWorkspace estates={can(actor, 'announcements', 'create').allowed ? estateTargetOptions(actor, 'announcements', 'create') : []} members={memberRows} meetings={meetingRows} elections={electionRows} egm={egm} motionCounts={motionCounts} nowMs={NOW_MS}
         canCreate={can(actor, 'announcements', 'create').allowed} canMutate={can(actor, 'announcements', 'update').allowed} />
     </div>
   );

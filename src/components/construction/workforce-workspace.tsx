@@ -83,7 +83,7 @@ export function WorkforceWorkspace({ workers, byTrade, kpis, projectName, projec
                     <td className={styles.wide}><p className={styles.text}>{w.certName || 'Not recorded'}</p><p className={styles.metadata}>{w.certExpiryISO ? displayDate(w.certExpiryISO) : 'Expiry not recorded'}</p>{w.certDays !== null && <StatusPill status={w.certDays < 0 ? `Expired ${-w.certDays} days ago` : `${w.certDays} days left`} tone={w.certBand} />}</td>
                     <td><StatusPill status={humanizeStatus(w.status)} tone={w.status === 'present' ? 'success' : w.status === 'absent' ? 'danger' : 'muted'} /></td>
                     <td className={styles.wide}><p className={styles.text}>{w.clockIn ? `${w.clockIn} WAT` : 'Clock time not recorded'}</p><p className={styles.text}>{w.method || 'Capture method not recorded'}</p></td>
-                    <td className={styles.wide}>{w.withinGeofence === undefined ? 'Not recorded' : w.withinGeofence ? 'Recorded inside' : 'Recorded outside'}</td>
+                    <td className={styles.wide}>{/^(manual|offline)\b/i.test(w.method ?? '') ? 'Not verified' : w.withinGeofence === undefined ? 'Not recorded' : w.withinGeofence ? 'Recorded inside' : 'Recorded outside'}</td>
                     <td>{canMutate && <IconButton aria-label={`${w.status === 'present' ? 'Mark absent' : 'Clock in'} ${w.name}`} type="button" disabled={pending} onClick={() => toggle(w)} title={w.status === 'present' ? 'Mark absent' : 'Clock in'}>{w.status === 'present' ? <X size={18} /> : <Check size={18} />}</IconButton>}</td>
                   </tr>
                 ))}

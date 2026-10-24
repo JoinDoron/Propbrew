@@ -18,8 +18,8 @@ import { revalidatePath } from 'next/cache';
 import { getActor } from '@/server/session';
 import { ForbiddenError, assertCan } from '@/lib/authz';
 import { repos } from '@/server/data';
-import { db, recordHistory } from '@/server/data/store';
-import * as seed from '@/server/data/seed/fixtures';
+import { recordHistory } from '@/server/data/store';
+import { facilityAssignees } from '@/server/facility-guards';
 import { workOrderMachine } from '@/domain/workflows';
 import { ROLE_LABELS } from '@/lib/authz';
 import type { Role } from '@/domain/enums';
@@ -55,26 +55,22 @@ export async function fireWoTransition(
     return { ok: false, error: `“${event}” is not a legal move from “${wo.status}” for your role.` };
   }
 
-  // Apply — status always; assignee on (re)assignment.
-  const from = wo.status;
-  wo.status = transition.to;
-  if ((event === 'ASSIGN' || event === 'REASSIGN') && opts?.assignee) {
-    // Resolve the picked name to the ID COLUMNS the scope filter actually reads
-    // (`assigned_to_me` -> assigneeUserId, `my_vendor_org` -> vendorOrgId).
-    // Writing only the display string meant assignment routed nothing: the job
-    // never appeared in the technician's list or the vendor's portal.
-    const name = opts.assignee.trim();
-    const user = db.users.find((u) => u.name === name && u.tenantId === wo.tenantId);
-    const vendor = seed.vendors.find((v) => v.name === name && v.tenantId === wo.tenantId);
-
-    wo.assigneeName = name;
-    wo.assigneeUserId = user?.id;
-    wo.vendorOrgId = vendor?.id;
-
-    if (!user && !vendor) {
-      return { ok: false, error: `“${name}” is not a known technician or vendor.` };
+  // Resolve every assignment before changing the live row. A refused request
+  // must not silently move its status or clear its existing owner.
+  let assignment: ReturnType<typeof facilityAssignees>[number] | undefined;
+  if (event === 'ASSIGN' || event === 'REASSIGN') {
+    const name = typeof opts?.assignee === 'string' ? opts.assignee.trim() : '';
+    assignment = facilityAssignees(wo.tenantId, wo.siteId).find((candidate) => candidate.assigneeName === name);
+    if (!assignment) return { ok: false, error: 'Choose an active technician assigned to this site or a vendor with valid compliance.' };
+    if (event === 'REASSIGN' && assignment.assigneeUserId === wo.assigneeUserId && assignment.vendorOrgId === wo.vendorOrgId) {
+      return { ok: false, error: 'Choose a different assignee.' };
     }
   }
+
+  const from = wo.status;
+  wo.status = transition.to;
+  if (assignment) Object.assign(wo, assignment);
+  Object.assign(wo, { updatedAt: nowISO(), updatedBy: actor.userId });
 
   const firingRole = (actor.roles as Role[]).find((r) => (transition.actors as string[]).includes(r)) ?? actor.roles[0];
   recordHistory('work-order', wo.id, {

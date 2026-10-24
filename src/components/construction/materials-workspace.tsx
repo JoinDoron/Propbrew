@@ -9,6 +9,7 @@ import { useId, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Package, TriangleAlert, ArrowDownUp, Search, Fuel, Boxes, Info } from 'lucide-react';
 import { toneVar, type Tone } from '@/lib/status-tones';
+import { stockMovementQuantity, type StockKind } from '@/domain/construction';
 
 import { issueMaterials } from '@/server/actions/construction';
 import { PageTabs } from '@/components/ui/page-tabs';
@@ -20,15 +21,15 @@ export type MaterialRow = {
   receivedQty: number; issuedQty: number; leakageQty: number; leakagePct: number; anomalous: boolean; leakageValueMinor: number;
 };
 export type TrailNodeRow = { id: string; label: string; minor: number; tone: Tone };
-export type MovementRow = { id: string; materialName: string; kind: string; qty: number; unit: string; atISO: string; ref?: string; by: string };
+export type MovementRow = { id: string; materialName: string; kind: StockKind; qty: number; unit: string; atISO: string; ref?: string; by: string };
 
 const KIND_TONE: Record<string, Tone> = { receipt: 'success', issue: 'progress', transfer: 'info', return: 'warn', adjust: 'danger' };
 const timestampLabel = (iso: string) => { const at = new Date(iso); return Number.isNaN(at.getTime()) ? iso : `${at.toLocaleString('en-NG', { day: 'numeric', month: 'short', year: 'numeric', ...(iso.includes('T') ? { hour: '2-digit', minute: '2-digit', hour12: false } : {}), timeZone: 'Africa/Lagos' })} WAT`; };
 
-export function MaterialsWorkspace({ materials, trail, movements, projectName, kpis, canMutate, projectId }: {
+export function MaterialsWorkspace({ materials, trail, movements, projectName, kpis, canMutate, projectId, projects }: {
   materials: MaterialRow[]; trail: TrailNodeRow[]; movements: MovementRow[]; projectName: string;
   kpis: { stockValueMinor: number; belowReorder: number; leakageValueMinor: number; anomalies: number };
-  canMutate: boolean; projectId: string;
+  canMutate: boolean; projectId: string; projects?: { id: string; name: string }[];
 }) {
   const [q, setQ] = useState('');
   const [issueFor, setIssueFor] = useState<MaterialRow | null>(null);
@@ -125,7 +126,7 @@ export function MaterialsWorkspace({ materials, trail, movements, projectName, k
                   <div key={m.id} className="px-6 py-4 flex items-center gap-4 flex-wrap">
                     <span className="text-[12px] font-semibold px-1.5 h-5 inline-flex items-center rounded-full flex-none capitalize" style={{ background: `color-mix(in srgb, ${toneVar(KIND_TONE[m.kind] ?? 'muted')} 14%, transparent)`, color: toneVar(KIND_TONE[m.kind] ?? 'muted') }}>{m.kind}</span>
                     <div className={styles.rowMain}><p className={styles.title}>{m.materialName}</p><dl className={styles.facts}><div><dt>Recorded at</dt><dd><time dateTime={m.atISO}>{timestampLabel(m.atISO)}</time></dd></div><div><dt>Source reference</dt><dd>{m.ref || 'Not recorded'}</dd></div><div><dt>Recorded by</dt><dd>{m.by}</dd></div></dl></div>
-                    <span className="text-[14px] font-mono font-medium flex-none" style={{ color: toneVar(m.kind === 'receipt' ? 'success' : 'progress') }}>{m.kind === 'receipt' ? '+' : '−'}{m.qty} {m.unit}</span>
+                    <span className="text-[14px] font-mono font-medium flex-none" style={{ color: toneVar(m.kind === 'receipt' || m.kind === 'return' || m.kind === 'adjust' && m.qty >= 0 ? 'success' : 'progress') }}>{stockMovementQuantity(m.kind, m.qty)} {m.unit}</span>
                   </div>
                 ))}
                 {movements.length === 0 && <ConstructionEmpty title="No material movements recorded" />}
@@ -144,27 +145,29 @@ export function MaterialsWorkspace({ materials, trail, movements, projectName, k
 
       {/* Movements */}
 
-      {issueFor && <IssueDialog material={issueFor} projectId={projectId} onClose={() => setIssueFor(null)} onDone={(m) => { setIssueFor(null); flash(m); }} />}
+      {issueFor && <IssueDialog material={issueFor} projectId={projectId} projects={projects ?? (projectId ? [{ id: projectId, name: projectName }] : [])} onClose={() => setIssueFor(null)} onDone={(m) => { setIssueFor(null); flash(m); }} />}
       {toast && <ConstructionToast>{toast}</ConstructionToast>}
     </div></ConstructionFrame>
   );
 }
 
-function IssueDialog({ material, projectId, onClose, onDone }: { material: MaterialRow; projectId: string; onClose: () => void; onDone: (m: string) => void }) {
+function IssueDialog({ material, projectId, projects, onClose, onDone }: { material: MaterialRow; projectId: string; projects: { id: string; name: string }[]; onClose: () => void; onDone: (m: string) => void }) {
   const fieldId = useId();
   const router = useRouter();
   const [qty, setQty] = useState('1');
+  const [receivingProject, setReceivingProject] = useState(projectId);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useConstructionSave(setError);
-  function submit() { setError(null); start(async () => { const r = await issueMaterials(material.id, Number(qty), projectId); if (!r.ok) { setError(r.error); return; } router.refresh(); onDone(`Issued ${qty} ${material.unit} of ${material.name}`); }); }
+  function submit() { setError(null); start(async () => { const r = await issueMaterials(material.id, Number(qty), receivingProject); if (!r.ok) { setError(r.error); return; } router.refresh(); onDone(`Issued ${qty} ${material.unit} of ${material.name} to ${projects.find((project) => project.id === receivingProject)?.name ?? 'the selected project'}`); }); }
   return (
     <ConstructionDialog title={"Issue to site"} onClose={onClose} pending={pending}>
       <div className={styles.notice}><div><p className={styles.title}>{material.name}</p><p className={styles.metadata}>{material.sku} · {material.category}</p><dl className={styles.facts}><div><dt>On hand</dt><dd>{material.onHand} {material.unit}</dd></div><div><dt>Reserved</dt><dd>{material.reserved} {material.unit}</dd></div><div><dt>Available</dt><dd>{material.onHand - material.reserved} {material.unit}</dd></div><div><dt>Recorded unit cost</dt><dd>{naira(material.unitCostMinor)}</dd></div></dl></div></div>
       <label htmlFor={fieldId} className="pb-form-label">Quantity to issue · {material.unit}</label>
       <input id={fieldId} aria-label="Quantity" value={qty} onChange={(e) => setQty(e.target.value)} inputMode="decimal" type="number" min="0" step="any" className={styles.control} autoFocus />
-      <p className="text-[12px] text-text-3 mt-1.5">Issuing more than on-hand is blocked — stock can never go negative.</p>
+      <label className="pb-form-label mt-4">Receiving project<select aria-label="Receiving project" value={receivingProject} onChange={(event) => setReceivingProject(event.target.value)} className={styles.control}>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>
+      <p className="text-[12px] text-text-3 mt-1.5">This issues from the authorised stores represented by the total above. Issuing more than on-hand is blocked; each store remains non-negative.</p>
       {error && <div role="alert" className="text-[12px] text-negative mt-2">{error}</div>}
-      <div className="flex justify-end gap-2 mt-4"><Button type="button" disabled={pending} onClick={onClose} >Cancel</Button><Button variant="primary" type="button" onClick={submit} disabled={pending || !qty} >{pending ? 'Issuing…' : 'Issue'}</Button></div>
+      <div className="flex justify-end gap-2 mt-4"><Button type="button" disabled={pending} onClick={onClose} >Cancel</Button><Button variant="primary" type="button" onClick={submit} disabled={pending || !receivingProject || !Number.isFinite(Number(qty)) || Number(qty) <= 0 || Number(qty) > material.onHand} >{pending ? 'Issuing…' : 'Issue'}</Button></div>
     </ConstructionDialog>
   );
 }

@@ -1,5 +1,8 @@
 'use client';
 
+import { EstateTargetSelect } from '@/components/estate/estate-target-select';
+import type { EstateTargetOption } from '@/domain/estate/targets';
+
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Check, Eye, Languages, Megaphone, Search, Send, ShieldCheck, Sparkles, Users, X } from 'lucide-react';
@@ -15,9 +18,10 @@ import layout from '@/components/ui/workspace-layout.module.css';
 import styles from './announcements-workspace.module.css';
 
 const SCOPES: AnnouncementScope[] = ['broadcast', 'estate', 'building'];
+const scheduledDate = (iso: string) => `${new Date(iso).toLocaleString('en-NG', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Africa/Lagos' })} WAT`;
 const AUDIENCES = ['All residents', 'Owners', 'Tenants', 'Committee'];
 
-export function AnnouncementsWorkspace({ rows, canMutate }: { rows: readonly Announcement[]; canMutate: boolean }) {
+export function AnnouncementsWorkspace({ rows, canMutate, estates = [] }: { estates?: EstateTargetOption[]; rows: readonly Announcement[]; canMutate: boolean }) {
   const [composing, setComposing] = useState(false);
   const [selected, setSelected] = useState<Announcement | null>(null);
   const [query, setQuery] = useState('');
@@ -32,7 +36,7 @@ export function AnnouncementsWorkspace({ rows, canMutate }: { rows: readonly Ann
         {filtered.length ? <div className={layout.analytics}>{filtered.map((an) => {
           const rate = readRate(an);
           return <Card key={an.id} className={styles.noticeCard}>
-            <div className={styles.noticeMeta}><StatusPill status={an.sentAt ? 'Recorded as sent' : 'Not sent'} tone={an.sentAt ? 'success' : 'warn'} /><span className={layout.metadata}>{an.scope} · {an.audience}</span>{an.aiDrafted && <StatusPill status="AI-drafted" tone="progress" />}</div>
+            <div className={styles.noticeMeta}><StatusPill status={an.sentAt ? 'Recorded as sent' : 'Not sent'} tone={an.sentAt ? 'success' : 'warn'} /><span className={layout.metadata}>{an.scope} · {an.audience}</span>{an.scheduleAt && <time className={layout.metadata} dateTime={an.scheduleAt}>Requested · {scheduledDate(an.scheduleAt)}</time>}{an.aiDrafted && <StatusPill status="AI-drafted" tone="progress" />}</div>
             <h3 className={layout.sectionTitle}>{an.title}</h3><p className={styles.excerpt}>{an.body}</p>
             <div className={styles.readSummary}><div className={styles.noticeMeta}><span className={layout.metadata}>Recorded reads</span><span className={styles.count}>{an.read.toLocaleString()} / {an.delivered.toLocaleString()} · {rate}%</span></div><div className={styles.meter} role="img" aria-label={`${rate}% recorded read rate; ${an.read} reads from ${an.delivered} deliveries`}><span style={{ width: `${rate}%`, background: toneVar(engagementTone(rate)) }} /></div></div>
             <Button icon={<Eye size={16} />} onClick={() => setSelected(an)} aria-label={`View announcement ${an.title}`}>View notice</Button>
@@ -44,16 +48,17 @@ export function AnnouncementsWorkspace({ rows, canMutate }: { rows: readonly Ann
         <Card><CardHeader title="Delivery and engagement" subtitle="A snapshot of the notice records currently in your scope." /><div className="pb-table-scroll" role="region" aria-label="Announcement delivery register" tabIndex={0}><table className={`pb-data-table ${layout.table}`}><thead><tr>{['Announcement', 'Audience', 'Delivery record', 'Read rate', 'Details'].map((label) => <th scope="col" key={label}>{label}</th>)}</tr></thead><tbody>{rows.map((an) => <tr key={an.id}><td><span className={styles.tableTitle}>{an.title}</span></td><td>{an.audience}</td><td>{an.delivered.toLocaleString()} deliveries · {an.read.toLocaleString()} reads</td><td>{readRate(an)}%</td><td><Button onClick={() => setSelected(an)} aria-label={`Review delivery record for ${an.title}`}>Review</Button></td></tr>)}</tbody></table></div>{!rows.length && <EmptyState icon={<Send size={24} />} title="No delivery records yet" description="Recorded engagement will appear when notices are available." />}<p className={layout.notice}>{a.drafts} notice(s) are not marked as sent. These are application records, not independently verified provider callbacks. Audience estimates use demonstration assumptions.</p></Card>
       </div> },
     ]} />
-    {canMutate && composing && <Composer onClose={() => setComposing(false)} onSent={(text) => { setComposing(false); setMessage(text); }} />}
-    {selected && <PortalDialog label="Announcement details" onClose={() => setSelected(null)} drawer width={600}><div className={layout.drawer}><div className={layout.dialogHeader}><div><h2 className={layout.dialogTitle}>{selected.title}</h2><p className={layout.metadata}>{selected.scope} · {selected.audience}</p></div><IconButton aria-label="Close announcement details" onClick={() => setSelected(null)}><X size={18} /></IconButton></div><div className={layout.dialogBody}><StatusPill status={selected.sentAt ? 'Recorded as sent' : 'Not sent'} tone={selected.sentAt ? 'success' : 'warn'} /><p className={styles.fullMessage}>{selected.body}</p><div className={layout.notice}>{selected.read.toLocaleString()} recorded reads · {selected.delivered.toLocaleString()} recorded deliveries. Provider delivery is not verified by this screen.</div></div></div></PortalDialog>}
+    {canMutate && composing && <Composer estates={estates} onClose={() => setComposing(false)} onSent={(text) => { setComposing(false); setMessage(text); }} />}
+    {selected && <PortalDialog label="Announcement details" onClose={() => setSelected(null)} drawer width={600}><div className={layout.drawer}><div className={layout.dialogHeader}><div><h2 className={layout.dialogTitle}>{selected.title}</h2><p className={layout.metadata}>{selected.scope} · {selected.audience}</p></div><IconButton aria-label="Close announcement details" onClick={() => setSelected(null)}><X size={18} /></IconButton></div><div className={layout.dialogBody}><StatusPill status={selected.sentAt ? 'Recorded as sent' : 'Not sent'} tone={selected.sentAt ? 'success' : 'warn'} /><p className={styles.fullMessage}>{selected.body}</p>{selected.scheduleAt && <p className={layout.notice}>Requested schedule · <time dateTime={selected.scheduleAt}>{scheduledDate(selected.scheduleAt)}</time><br />Delivery scheduling is not connected; this is a saved request.</p>}<div className={layout.notice}>{selected.read.toLocaleString()} recorded reads · {selected.delivered.toLocaleString()} recorded deliveries. Provider delivery is not verified by this screen.</div></div></div></PortalDialog>}
     {message && <div className={layout.feedback} role="status"><span>{message}</span><IconButton aria-label="Dismiss announcement notification" onClick={() => setMessage(null)}><X size={18} /></IconButton></div>}
   </div>;
 }
 
-export function Composer({ onClose, onSent }: { onClose: () => void; onSent: (message: string) => void }) {
+export function Composer({ onClose, onSent, estates = [] }: { estates?: EstateTargetOption[]; onClose: () => void; onSent: (message: string) => void }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [topic, setTopic] = useState('');
+  const [estateId, setEstateId] = useState(estates[0]?.id ?? '');
   const [composed, setComposed] = useState<Composed | null>(null);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
@@ -71,7 +76,7 @@ export function Composer({ onClose, onSent }: { onClose: () => void; onSent: (me
   const size = targetSize(scope, audience, block);
   const reach = estimateReach(size, channels);
   const needsApproval = aiDrafted && !approved;
-  const valid = Boolean(title.trim() && body.trim() && channels.length && !needsApproval && (!schedule || scheduleAt));
+  const valid = Boolean(estateId && title.trim() && body.trim() && channels.length && !needsApproval && (!schedule || scheduleAt));
   function draft() { if (!topic.trim() || pending) return; const next = composeDraft(topic.trim()); setComposed(next); setTitle(next.draft.title); setBody(next.draft.body); setAiDrafted(true); setApproved(false); setLang('en'); setError(null); }
   function switchLang(next: 'en' | 'pcm') { if (!composed || pending) return; const translated = next === 'en' ? composed.draft : composed.pidgin; setLang(next); setTitle(translated.title); setBody(translated.body); setAiDrafted(true); setApproved(false); }
   function submit() {
@@ -79,12 +84,12 @@ export function Composer({ onClose, onSent }: { onClose: () => void; onSent: (me
     const when = schedule ? new Date(scheduleAt) : null;
     if (when && (!Number.isFinite(when.getTime()) || when.getTime() <= Date.now())) { setError('Choose a future date and time for this scheduled record.'); return; }
     setError(null);
-    start(async () => { try { const result = await sendAnnouncement({ title, body, scope, audience, block, channels, aiDrafted, approved, scheduleAt: when?.toISOString() ?? null }); if (!result.ok) { setError(result.error); return; } router.refresh(); onSent(result.scheduled ? 'Scheduled announcement record saved. Delivery scheduling is not connected here.' : 'Announcement record saved. External channel delivery is not verified here.'); } catch { setError('The announcement could not be saved. Please try again.'); } });
+    start(async () => { try { const result = await sendAnnouncement({ estateId, title, body, scope, audience, block, channels, aiDrafted, approved, scheduleAt: when?.toISOString() ?? null }); if (!result.ok) { setError(result.error); return; } router.refresh(); onSent(result.scheduled ? 'Scheduled announcement record saved. Delivery scheduling is not connected here.' : 'Announcement record saved. External channel delivery is not verified here.'); } catch { setError('The announcement could not be saved. Please try again.'); } });
   }
   return <PortalDialog label="Compose announcement" onClose={onClose} width={640} drawer canClose={!pending}><div className={layout.drawer}>
     <div className={layout.dialogHeader}><div><h2 className={layout.dialogTitle}>{reviewing ? 'Review announcement' : 'Compose announcement'}</h2><p className={layout.metadata}>A clear message, with a human decision before publishing.</p></div><IconButton aria-label="Close announcement composer" disabled={pending} onClick={onClose}><X size={18} /></IconButton></div>
     <form onSubmit={(event) => { event.preventDefault(); if (reviewing) submit(); else if (valid) setReviewing(true); }} aria-busy={pending}>
-      <fieldset disabled={pending} className={styles.fields}>{!reviewing ? <>
+      <fieldset disabled={pending} className={styles.fields}>{!reviewing ? <><EstateTargetSelect options={estates} value={estateId} onChange={setEstateId} />
         <section className={styles.draftPanel}><h3 className={layout.sectionTitle}><Sparkles size={16} aria-hidden="true" /> Assisted draft preview</h3><p className={layout.metadata}>Uses local message templates, not a connected AI provider. Review names, dates and translations.</p><label className="pb-form-label" htmlFor="announcement-topic">What is the notice about?</label><div className={styles.draftInput}><input id="announcement-topic" className="pb-form-control" value={topic} onChange={(event) => setTopic(event.target.value)} placeholder="e.g. water supply cut Saturday morning" /><Button type="button" onClick={draft} disabled={!topic.trim()} icon={<Sparkles size={16} />}>Draft preview</Button></div>{composed && <div className={styles.noticeMeta}><Languages size={16} aria-hidden="true" />{(['en', 'pcm'] as const).map((value) => <Button key={value} type="button" aria-pressed={lang === value} variant={lang === value ? 'primary' : 'secondary'} onClick={() => switchLang(value)}>{value === 'en' ? 'English' : 'Pidgin'}</Button>)}</div>}</section>
         <div><label className="pb-form-label" htmlFor="announcement-title">Title</label><input id="announcement-title" className="pb-form-control" value={title} onChange={(event) => { setTitle(event.target.value); setApproved(false); }} required placeholder="Announcement title" /></div>
         <div><label className="pb-form-label" htmlFor="announcement-message">Message</label><textarea id="announcement-message" className="pb-form-control" rows={6} value={body} onChange={(event) => { setBody(event.target.value); setApproved(false); }} required placeholder="Write a clear message for residents" /></div>

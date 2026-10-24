@@ -5,6 +5,7 @@ import { Check, Info, X } from 'lucide-react';
 import { PortalDialog } from '@/components/portal/portal-dialog';
 import { Avatar, Button, IconButton } from '@/components/ui';
 import { recordPromise } from '@/server/actions/estate';
+import { UNVERIFIED_COLLECTION_INVOICE } from '@/domain/estate/collection-review';
 import { collectionMoney, type CaseRow } from './collections-types';
 import styles from './collection-promise-dialog.module.css';
 
@@ -14,6 +15,7 @@ export function CollectionPromiseDialog({ c, onClose, onDone }: {
   onDone: () => void;
 }) {
   const id = useId();
+  const review = c.invoiceReview ?? UNVERIFIED_COLLECTION_INVOICE;
   const [pending, start] = useTransition();
   const [amount, setAmount] = useState(String(c.amountMinor / 100));
   // A new promise needs an explicitly agreed date, not the previous commitment.
@@ -23,12 +25,14 @@ export function CollectionPromiseDialog({ c, onClose, onDone }: {
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (pending) return;
+    if (!review.canFollowUp) { setError(review.detail); return; }
 
     const amountMajor = Number(amount);
     if (!Number.isFinite(amountMajor) || amountMajor <= 0) {
       setError('Enter an amount greater than zero.');
       return;
     }
+    if (Math.round(amountMajor * 100) > (review.outstandingMinor ?? 0)) { setError('A promise cannot exceed the recorded invoice balance.'); return; }
     if (!due) {
       setError('Pick a promise date.');
       return;
@@ -77,10 +81,11 @@ export function CollectionPromiseDialog({ c, onClose, onDone }: {
             </div>
           </section>
 
-          <fieldset className={styles.fields} disabled={pending}>
+          {!review.canFollowUp && <p className={styles.error} role="alert">{review.detail}</p>}
+          <fieldset className={styles.fields} disabled={pending || !review.canFollowUp}>
             <div className={styles.field}>
               <label htmlFor={`${id}-amount`}>Promised amount (NGN ₦)</label>
-              <input id={`${id}-amount`} name="amount" type="number" inputMode="decimal" min="0.01" step="0.01" required
+              <input id={`${id}-amount`} name="amount" type="number" inputMode="decimal" min="0.01" max={(review.outstandingMinor ?? c.amountMinor) / 100} step="0.01" required
                 value={amount} onChange={(event) => setAmount(event.target.value)} autoFocus />
             </div>
             <div className={styles.field}>
@@ -99,7 +104,7 @@ export function CollectionPromiseDialog({ c, onClose, onDone }: {
 
         <footer className={styles.actions}>
           <Button type="button" onClick={onClose} disabled={pending}>Cancel</Button>
-          <Button type="submit" variant="primary" icon={<Check size={16} aria-hidden="true" />} disabled={pending}>
+          <Button type="submit" variant="primary" icon={<Check size={16} aria-hidden="true" />} disabled={pending || !review.canFollowUp}>
             {pending ? 'Recording…' : 'Record promise'}
           </Button>
         </footer>

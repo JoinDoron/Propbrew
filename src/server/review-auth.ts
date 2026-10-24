@@ -6,6 +6,7 @@ import { cookies } from 'next/headers';
 import { NextResponse, type NextRequest } from 'next/server';
 import type { Actor } from '@/lib/authz';
 import { identityByKey, type DevIdentity } from '@/server/identities';
+import { trustedCreatedEstateIds } from '@/server/data/estate-creation-scope';
 
 export const REVIEW_SESSION_COOKIE = '__Host-propbrew_review_session';
 export const REVIEW_CSRF_COOKIE = '__Host-propbrew_review_csrf';
@@ -73,16 +74,24 @@ export function reviewLedgerTenantId(): string | null {
 export function reviewActorIdentity(): DevIdentity {
   assertReviewReadiness();
   const preset = identityByKey('estate_manager');
-  return { ...preset, key: 'private-review', label: 'Private reviewer — Estate Manager', tenantLabel: 'Sample portfolio · private review', actor: { ...structuredClone(preset.actor), userId: REVIEW_USER } };
+  const actor = { ...structuredClone(preset.actor), userId: REVIEW_USER };
+  actor.estateIds = Array.from(new Set([...actor.estateIds, ...trustedCreatedEstateIds(actor)]));
+  return { ...preset, key: 'private-review', label: 'Private reviewer — Estate Manager', tenantLabel: 'Sample portfolio · private review', actor };
 }
 
 /** Identity marker is server-derived; callers must still obtain their actor through getSession(). */
 export function isReviewActor(actor: Actor): boolean {
   if (!reviewModeEnabled()) return false;
-  const fixed = reviewActorIdentity().actor;
+  assertReviewReadiness();
+  const fixed = { ...identityByKey('estate_manager').actor, userId: REVIEW_USER };
+  const permittedEstateIds = new Set([...fixed.estateIds, ...trustedCreatedEstateIds(fixed)]);
+  // Creation may occur during another request. An earlier, narrower actor stays
+  // a review actor, but no client-supplied extra estate or missing base scope does.
+  const validEstates = Array.isArray(actor.estateIds) && new Set(actor.estateIds).size === actor.estateIds.length
+    && fixed.estateIds.every((id) => actor.estateIds.includes(id)) && actor.estateIds.every((id) => permittedEstateIds.has(id));
   return actor.userId === fixed.userId && actor.tenantId === fixed.tenantId
     && JSON.stringify(actor.roles) === JSON.stringify(fixed.roles)
-    && JSON.stringify(actor.estateIds) === JSON.stringify(fixed.estateIds)
+    && validEstates
     && actor.allEstates === fixed.allEstates && actor.vendorOrgId === fixed.vendorOrgId
     && JSON.stringify(actor.unitIds) === JSON.stringify(fixed.unitIds)
     && JSON.stringify(actor.investorProjectIds) === JSON.stringify(fixed.investorProjectIds);

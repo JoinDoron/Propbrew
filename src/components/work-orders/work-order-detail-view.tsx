@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { can, type Actor, type Role } from '@/lib/authz';
 import type { WorkOrder } from '@/domain/entities';
-import { seed } from '@/server/data';
+import { facilityAssignees } from '@/server/facility-guards';
 import { getHistory } from '@/server/data/store';
 import { workOrderMachine } from '@/domain/workflows';
 import { Card, CardHeader } from '@/components/ui';
@@ -50,10 +50,7 @@ export function WorkOrderDetailView({ actor, wo, basePath }: { actor: Actor; wo:
         .map((e) => ({ event: e, ...EVENT_META[e] }))
     : [];
 
-  const assignees = [
-    ...seed.users.filter((u) => u.tenantId === actor.tenantId && u.roles.includes('technician')).map((u) => u.name),
-    ...seed.vendors.filter((v) => v.tenantId === actor.tenantId).map((v) => v.name),
-  ];
+  const assignees = facilityAssignees(wo.tenantId, wo.siteId).map((candidate) => candidate.assigneeName);
 
   const history = getHistory('work-order', wo.id);
   const breached = !CLOSED.includes(wo.status) && wo.respondDueAt !== null && wo.respondDueAt < NOW;

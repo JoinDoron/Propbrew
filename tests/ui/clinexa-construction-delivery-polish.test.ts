@@ -35,7 +35,7 @@ const workforce: ComponentProps<typeof WorkforceWorkspace> = { workers: [worker]
 const sheet: ComponentProps<typeof TimesheetsWorkspace>['sheets'][number] = { id: 'sheet-one', ref: 'TS-001', workerName: worker.name, weekEndingISO: '2026-10-23', costCode: 'LAG-STR', normalHours: 40, overtimeHours: 2.5, status: 'submitted', submittedBy: 'Full Supervisor Name', approvedBy: 'Full Approver Name', approvedISO: '2026-10-23T23:30:00Z', costMinor: 1234567, band: 'warn', dayRateMinor: 12345 };
 const timesheets: ComponentProps<typeof TimesheetsWorkspace> = { sheets: [sheet], byCode: [{ code: 'LAG-STR', name: 'Complete Structural Labour Cost Code', postedMinor: 100001, pendingMinor: 1234567, hours: 42.5, actualMinor: 200001, budgetMinor: 10000025 }], posture: { postedMinor: 100001, pendingMinor: 1234567, pendingSheets: 1, overtimeHours: 2.5 }, projectName: 'Lagos Waterfront', canMutate: false };
 const safety: ComponentProps<typeof SafetyWorkspace> = { permits: [{ id: 'permit-one', ref: 'PTW-001', type: 'height', location: 'Full named work area on the upper roof', requestedBy: 'Full Requester Name', supervisor: 'Full Responsible Supervisor Name', status: 'active', validFromISO: '2026-12-31T23:00:00Z', validToISO: '2027-01-01T10:00:00Z', controls: ['First full recorded safety control', 'Second full recorded safety control'], expired: false, clash: true }], events: [{ id: 'event-one', kind: 'near_miss', title: 'Complete recorded safety event title', atISO: '2026-10-23T23:30:00Z', reportedBy: 'Full Reporter Name', lostDays: 0, closed: false, action: 'Complete recorded corrective action description', zoneLabel: 'Upper roof work area' }], talks: [{ id: 'talk-one', topic: 'Full toolbox briefing topic', atISO: '2026-10-23', attendees: 12, deliveredBy: 'Full Facilitator Name' }], clashes: [{ aRef: 'PTW-001', bRef: 'PTW-002', location: 'Upper roof work area', aType: 'height', bType: 'hot_work' }], stats: { daysSinceLTI: null, lostTimeEvents: 0, nearMisses: 1, activePermits: 1, expiredPermits: 0, talksThisMonth: 1, score: 75, band: 'warn' }, projectName: 'Lagos Waterfront' };
-const field: ComponentProps<typeof FieldCapture> = { projects: [{ id: 'project-one', name: 'Lagos Waterfront', code: 'LAG-001' }], tasks: [{ id: 'task-one', name: schedule.tasks[0].name, percentComplete: 40 }], workers: Array.from({ length: 8 }, (_, index) => ({ id: `worker-${index}`, name: `Full Worker Number ${index + 1}`, trade: 'Construction trade' })), todayISO: '2026-10-23', canCapture: false };
+const field: ComponentProps<typeof FieldCapture> = { projects: [{ id: 'project-one', name: 'Lagos Waterfront', code: 'LAG-001' }], tasks: [{ id: 'task-one', projectId: 'project-one', name: schedule.tasks[0].name, percentComplete: 40 }], workers: Array.from({ length: 8 }, (_, index) => ({ id: `worker-${index}`, name: `Full Worker Number ${index + 1}`, trade: 'Construction trade', projectId: 'project-one' })), todayISO: '2026-10-23', canCapture: false };
 
 beforeEach(() => { vi.clearAllMocks(); device.ops = []; device.online = true; });
 
@@ -130,7 +130,7 @@ describe('Construction delivery Clinexa composition', () => {
 
   it('provides a complete semantic workforce register with honest manual/geofence and certification facts', () => {
     const html = renderToStaticMarkup(createElement(WorkforceWorkspace, workforce));
-    for (const value of [worker.name, worker.trade, worker.company!, worker.crew!, worker.certName!, constructionNaira(worker.dayRateMinor), '20 Oct 2026', 'Expired 3 days ago', 'Recorded outside', 'Manual attendance entry', '07:00 WAT']) expect(html).toContain(value);
+    for (const value of [worker.name, worker.trade, worker.company!, worker.crew!, worker.certName!, constructionNaira(worker.dayRateMinor), '20 Oct 2026', 'Expired 3 days ago', 'Not verified', 'Manual attendance entry', '07:00 WAT']) expect(html).toContain(value);
     expect(html.match(/scope="col"/g)).toHaveLength(8); expect(html).toContain('scope="row"');
     expect(html).toContain('aria-label="Construction workforce attendance register, horizontally scrollable"');
     expect(html).not.toContain(`Mark absent ${worker.name}`);
@@ -138,6 +138,22 @@ describe('Construction delivery Clinexa composition', () => {
     expect(source('workforce-workspace')).toContain('clockWorker(w.id, projectId, w.status !== \'present\')');
     expect(source('workforce-workspace')).not.toContain('Certified work is blocked');
     expect(html).toContain('1/2 present / allocated');
+  });
+
+  it.each(['manual', 'offline'])('never infers geofence location from a %s attendance capture', (method) => {
+    for (const withinGeofence of [true, false, undefined]) {
+      const html = renderToStaticMarkup(createElement(WorkforceWorkspace, { ...workforce, workers: [{ ...worker, method, withinGeofence }] }));
+      expect(html).toMatch(/<td[^>]*>Not verified<\/td>/);
+      expect(html).not.toContain('Recorded inside'); expect(html).not.toContain('Recorded outside');
+    }
+  });
+
+  it.each(['gps', 'qr'])('preserves the recorded inside, outside and unknown geofence states for %s captures', (method) => {
+    for (const [withinGeofence, expected] of [[true, 'Recorded inside'], [false, 'Recorded outside'], [undefined, 'Not recorded']] as const) {
+      const html = renderToStaticMarkup(createElement(WorkforceWorkspace, { ...workforce, workers: [{ ...worker, method, withinGeofence }] }));
+      expect(html).toMatch(new RegExp(`<td[^>]*>${expected}</td>`));
+      expect(html).not.toContain('Not verified');
+    }
   });
 
   it('shows missing credential/geofence values as missing instead of inventing valid or zero-day evidence', () => {
@@ -179,7 +195,7 @@ describe('Construction delivery Clinexa composition', () => {
     expect(html).toContain('aria-valuetext="40% complete"');
     expect(html).toContain('quota or storage failures can prevent persistence');
     expect(source('field-capture')).not.toContain('workers.slice');
-    for (const token of ["capture('daily_report'", "capture('site_issue'", "capture('task_progress'", "capture('attendance'", 'clockIn: \'07:00\'', 'projectId: projects[0]?.id', 'photos.length', '}, photos)']) expect(source('field-capture')).toContain(token);
+    for (const token of ["capture(owner, 'daily_report'", "capture(owner, 'site_issue'", "capture(owner, 'task_progress'", "capture(owner, 'attendance'", 'clockIn: \'07:00\'', 'projectId: task?.projectId', 'projectId: w.projectId', 'photos.length', '}, photos)']) expect(source('field-capture')).toContain(token);
   });
 
   it('retains full device IDs, year-aware WAT timestamps, attachment counts and conflict actions', () => {
@@ -187,7 +203,7 @@ describe('Construction delivery Clinexa composition', () => {
     const html = renderToStaticMarkup(createElement(FieldCapture, field));
     for (const value of [device.ops[0].id, device.ops[0].label, '24 Oct 2026, 00:30', device.ops[0].error!, device.ops[0].serverState!, 'Attachment references']) expect(html).toContain(value);
     expect(html).toContain('Discard mine'); expect(html).toContain('Retry');
-    for (const token of ['requeue(o.id)', 'await abandon(o.id)', 'removeOp(o.id)', 'clearSynced()']) expect(source('field-capture')).toContain(token);
+    for (const token of ['requeue(owner, o.id)', 'await abandon(owner, o.id)', 'removeOp(owner, o.id)', 'clearSynced(owner)']) expect(source('field-capture')).toContain(token);
     expect(source('field-capture')).not.toContain('o.id.slice');
     expect(source('field-capture')).not.toContain('opacity-55');
   });

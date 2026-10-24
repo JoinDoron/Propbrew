@@ -19,7 +19,7 @@ import type { HistoryEntry } from '@/server/data/store';
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock('@/server/actions/work-orders', () => ({ fireWoTransition: vi.fn() }));
 vi.mock('@/server/data', () => ({ seed: { users: [], vendors: [] } }));
-vi.mock('@/server/data/store', () => ({ getHistory: () => [] }));
+vi.mock('@/server/data/store', async (original) => ({ ...await original<typeof import('@/server/data/store')>(), getHistory: () => [] }));
 
 const render = <Props extends object>(component: ComponentType<Props>, props: Props) => renderToStaticMarkup(createElement(component, props));
 const source = (file: string) => readFileSync(resolve(process.cwd(), `src/components/${file}.tsx`), 'utf8');
@@ -155,7 +155,7 @@ describe('Deep Facility register Clinexa polish', () => {
     expect(source('work-orders/work-order-detail-view')).toContain("can(actor, 'work_orders', 'transition').allowed");
     expect(source('work-orders/work-order-detail-view')).toContain("id: 'actions'");
     expect(source('work-orders/work-order-detail-view')).toContain("id: 'history'");
-    expect(source('work-orders/work-order-detail-view')).toContain('u.tenantId === actor.tenantId');
+    expect(source('work-orders/work-order-detail-view')).toContain('facilityAssignees(wo.tenantId, wo.siteId)');
     expect(source('work-orders/work-order-detail-view')).toMatch(/<h2[^>]+>\{wo\.title\}<\/h2>/);
     expect(source('work-orders/work-order-detail-view')).not.toContain('<h1');
   });

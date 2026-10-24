@@ -99,7 +99,8 @@ describe('Clinexa-aligned document library and audience preview', () => {
     const route = read('src/app/(ops)/(estate)/documents/page.tsx');
     expect(route).toContain("requireCapability('announcements', 'read', 'estate')");
     expect(route).toContain("can(actor, 'announcements', 'update').allowed");
-    expect(route).toContain('repos.documents.list(actor)');
+    expect(route).toContain('scopedDocumentRecords(actor)');
+    expect(read('src/server/reads/documents.ts')).toContain('repos.documents.list(actor, { cursor, limit: 200 })');
     expect(documentsSource()).toContain('uploading && canManage && <UploadDialog');
   });
   it('keeps compliance links inside the Estate module and distinguishes records from confirmed compliance', () => {
@@ -141,7 +142,7 @@ describe('Document record forms, details and search', () => {
   it('protects metadata submission and dismissal while pending and retains errors and entries in the active form', () => {
     const source = uploadSource();
     for (const value of ['canClose={!pending}', 'if (pending) return', 'e.preventDefault()', '<fieldset', 'disabled={pending}', 'role="alert"', 'Your entries are still here; please try again.', 'if (!r.ok) setError(r.error)']) expect(source).toContain(value);
-    expect(source).toContain('uploadDocument({ name: name.trim(), folder, type, audience, extracted: fields, scanned })');
+    expect(source).toContain('uploadDocument({ estateId, name: name.trim(), folder, type, audience, extracted: fields, scanned })');
     expect(source).toContain('setReviewing(true); return;');
   });
   it('renders a native read-only document drawer with honest disabled downloads and no provider-confidence claim', () => {

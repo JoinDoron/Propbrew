@@ -1,5 +1,8 @@
 'use client';
 
+import { EstateTargetSelect } from '@/components/estate/estate-target-select';
+import type { EstateTargetOption } from '@/domain/estate/targets';
+
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { PartyPopper, Dumbbell, Baby, Users, Sparkles, CalendarPlus, MapPin, CalendarDays, Ticket, X, Clock, Search } from 'lucide-react';
@@ -20,8 +23,8 @@ const dayKey = (iso: string) => new Date(iso).toLocaleDateString('en-NG', { week
 const time = (iso: string) => new Date(iso).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Africa/Lagos' });
 type RsvpReview = { event: EventRow; release: boolean };
 
-export function EventsWorkspace({ events, amenities, kpis, nowMs, canMutate = false, canCreate = false }: {
-  events: EventRow[]; amenities: AmenityRow[];
+export function EventsWorkspace({ events, amenities, kpis, nowMs, canMutate = false, canCreate = false, estates = [] }: {
+  estates?: EstateTargetOption[]; events: EventRow[]; amenities: AmenityRow[];
   kpis: { upcoming: number; totalRsvps: number; full: number; topVenue: string };
   nowMs: number; canMutate?: boolean; canCreate?: boolean;
 }) {
@@ -82,15 +85,15 @@ export function EventsWorkspace({ events, amenities, kpis, nowMs, canMutate = fa
         <Card><CardHeader title="Amenity demand" subtitle="Reservations across upcoming community events, not confirmed attendance." />{amenities.length ? <div className={styles.demand}>{amenities.map((a) => <div key={a.venue}><div className={styles.demandLabel}><span>{a.venue}</span><span>{a.rsvps} RSVPs</span></div><div className={styles.progress} role="img" aria-label={`${a.venue}: ${a.rsvps} reservations across ${a.events} events`}><span style={{ width: `${maxLoad > 0 ? Math.round((a.rsvps / maxLoad) * 100) : 0}%` }} /></div><p className={layout.metadata}>{a.events} event{a.events === 1 ? '' : 's'}</p></div>)}</div> : <EmptyState icon={<MapPin size={24} />} title="No venue demand yet" description="Demand appears when community events have reservations." />}</Card>
       </div> },
     ]} />
-    {canCreate && showCreate && <CreateDialog nowMs={nowMs} onClose={() => setShowCreate(false)} onDone={(ref) => { setShowCreate(false); setFeedback(`Event created · ${ref}`); }} />}
+    {canCreate && showCreate && <CreateDialog estates={estates} nowMs={nowMs} onClose={() => setShowCreate(false)} onDone={(ref) => { setShowCreate(false); setFeedback(`Event created · ${ref}`); }} />}
     {canMutate && review && <PortalDialog label={review.release ? 'Release event RSVP' : 'Add event RSVP'} onClose={() => setReview(null)} canClose={!pending} width={520}><div className={layout.modal}><div className={layout.dialogHeader}><h2 className={layout.dialogTitle}>{review.release ? 'Release event RSVP' : 'Add event RSVP'}</h2><IconButton aria-label="Close RSVP confirmation" disabled={pending} onClick={() => setReview(null)}><X size={18} /></IconButton></div><div className={layout.dialogBody}><p className={layout.body}>This changes the event reservation count by one. It does not record a named attendee or send a confirmation message.</p><dl className={styles.facts}><div><dt>Event</dt><dd>{review.event.title}</dd></div><div><dt>Current reservations</dt><dd>{review.event.rsvps} / {review.event.capacity}</dd></div><div><dt>After confirmation</dt><dd>{review.event.rsvps + (review.release ? -1 : 1)} / {review.event.capacity}</dd></div></dl>{error && <p role="alert" className={layout.feedback}>{error}</p>}<div className={layout.actions}><Button disabled={pending} onClick={() => setReview(null)}>Cancel</Button><Button variant="primary" disabled={pending} onClick={confirm}>{pending ? 'Saving…' : review.release ? 'Confirm release' : 'Confirm RSVP'}</Button></div></div></div></PortalDialog>}
   </div>;
 }
 
-function CreateDialog({ nowMs, onClose, onDone }: { nowMs: number; onClose: () => void; onDone: (ref: string) => void }) {
+function CreateDialog({ nowMs, onClose, onDone, estates = [] }: { estates?: EstateTargetOption[]; nowMs: number; onClose: () => void; onDone: (ref: string) => void }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [f, setF] = useState<CreateEventInput>({ title: '', category: 'social', venue: '', host: '', startISO: new Date(nowMs).toISOString().slice(0, 10), capacity: 30 });
+  const [f, setF] = useState<CreateEventInput>({ estateId: estates[0]?.id ?? '', title: '', category: 'social', venue: '', host: '', startISO: new Date(nowMs).toISOString().slice(0, 10), capacity: 30 });
   const [error, setError] = useState<string | null>(null);
   const set = (k: keyof CreateEventInput, v: string | number) => setF((s) => ({ ...s, [k]: v }));
   function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -99,7 +102,7 @@ function CreateDialog({ nowMs, onClose, onDone }: { nowMs: number; onClose: () =
   }
   return <PortalDialog label="New community event" onClose={onClose} canClose={!pending} width={600}><div className={layout.modal}><div className={layout.dialogHeader}><h2 className={layout.dialogTitle}>New community event</h2><IconButton aria-label="Close new event" onClick={onClose} disabled={pending}><X size={18} /></IconButton></div><form onSubmit={submit} className={layout.dialogBody}>
     <p className={layout.body}>Create a community programme. The current scheduler sets a two-hour event starting at 19:00 WAT on the selected date.</p>
-    <div className={styles.form}><label className={styles.field}><span className="pb-form-label">Event title</span><input className="pb-form-control" value={f.title} onChange={(e) => set('title', e.target.value)} placeholder="e.g. Movie night on the lawn" required disabled={pending} /></label><div className={styles.formGrid}><label className={styles.field}><span className="pb-form-label">Category</span><select className="pb-form-control" value={f.category} onChange={(e) => set('category', e.target.value)} disabled={pending}>{['social', 'fitness', 'kids', 'meeting', 'festive'].map((c) => <option key={c} value={c}>{c[0].toUpperCase() + c.slice(1)}</option>)}</select></label><label className={styles.field}><span className="pb-form-label">Capacity</span><input className="pb-form-control" type="number" min={1} step={1} required value={f.capacity || ''} onChange={(e) => set('capacity', Number(e.target.value))} disabled={pending} /></label></div><div className={styles.formGrid}><label className={styles.field}><span className="pb-form-label">Venue</span><input className="pb-form-control" value={f.venue} onChange={(e) => set('venue', e.target.value)} placeholder="Clubhouse Hall" disabled={pending} /></label><label className={styles.field}><span className="pb-form-label">Date</span><input className="pb-form-control" type="date" value={f.startISO} onChange={(e) => set('startISO', e.target.value)} required disabled={pending} /></label></div><label className={styles.field}><span className="pb-form-label">Host</span><input className="pb-form-control" value={f.host} onChange={(e) => set('host', e.target.value)} placeholder="Estate Office" disabled={pending} /></label></div>
-    {error && <p role="alert" className={layout.feedback}>{error}</p>}<div className={layout.actions}><Button type="button" onClick={onClose} disabled={pending}>Cancel</Button><Button type="submit" variant="primary" disabled={pending || !f.title.trim() || f.capacity <= 0}>{pending ? 'Creating…' : 'Create event'}</Button></div>
+    <div className={styles.form}><EstateTargetSelect options={estates} value={f.estateId ?? ''} onChange={(value) => set('estateId', value)} disabled={pending} /><label className={styles.field}><span className="pb-form-label">Event title</span><input className="pb-form-control" value={f.title} onChange={(e) => set('title', e.target.value)} placeholder="e.g. Movie night on the lawn" required disabled={pending} /></label><div className={styles.formGrid}><label className={styles.field}><span className="pb-form-label">Category</span><select className="pb-form-control" value={f.category} onChange={(e) => set('category', e.target.value)} disabled={pending}>{['social', 'fitness', 'kids', 'meeting', 'festive'].map((c) => <option key={c} value={c}>{c[0].toUpperCase() + c.slice(1)}</option>)}</select></label><label className={styles.field}><span className="pb-form-label">Capacity</span><input className="pb-form-control" type="number" min={1} step={1} required value={f.capacity || ''} onChange={(e) => set('capacity', Number(e.target.value))} disabled={pending} /></label></div><div className={styles.formGrid}><label className={styles.field}><span className="pb-form-label">Venue</span><input className="pb-form-control" value={f.venue} onChange={(e) => set('venue', e.target.value)} placeholder="Clubhouse Hall" disabled={pending} /></label><label className={styles.field}><span className="pb-form-label">Date</span><input className="pb-form-control" type="date" value={f.startISO} onChange={(e) => set('startISO', e.target.value)} required disabled={pending} /></label></div><label className={styles.field}><span className="pb-form-label">Host</span><input className="pb-form-control" value={f.host} onChange={(e) => set('host', e.target.value)} placeholder="Estate Office" disabled={pending} /></label></div>
+    {error && <p role="alert" className={layout.feedback}>{error}</p>}<div className={layout.actions}><Button type="button" onClick={onClose} disabled={pending}>Cancel</Button><Button type="submit" variant="primary" disabled={pending || !f.estateId || !f.title.trim() || f.capacity <= 0}>{pending ? 'Creating…' : 'Create event'}</Button></div>
   </form></div></PortalDialog>;
 }

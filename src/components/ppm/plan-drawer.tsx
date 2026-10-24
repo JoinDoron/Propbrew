@@ -79,7 +79,7 @@ export function PlanDrawer({ occ, plan, risk, canMutate, onClose }: { occ: OccVi
           )}
 
           {/* Actions */}
-          {canMutate ? (
+          {canMutate && occ.status !== 'completed' ? (
             <fieldset disabled={pending} className={styles.fieldset}>
               <legend className="sr-only">Maintenance plan actions</legend>
               {!occ.workOrderRef && (
@@ -126,7 +126,7 @@ export function PlanDrawer({ occ, plan, risk, canMutate, onClose }: { occ: OccVi
               {plan.statutory && <p className={styles.metadata}>Statutory — cannot move past {plan.statutoryDeadline}.</p>}
             </fieldset>
           ) : (
-            <p className={styles.text}>Read-only — only the Facility Manager can generate, complete or reschedule.</p>
+            <p className={styles.text}>{occ.status === 'completed' ? 'Completed service record — generate or reschedule a separate occurrence for further work.' : 'Read-only — only the Facility Manager can generate, complete or reschedule.'}</p>
           )}
 
           {error && <p role="alert" className="text-[14px] text-negative">{error}</p>}

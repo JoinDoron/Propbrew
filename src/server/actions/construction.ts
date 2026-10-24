@@ -10,22 +10,24 @@
  */
 
 import { revalidatePath } from 'next/cache';
+import { randomUUID } from 'node:crypto';
 import { getActor } from '@/server/session';
 import { ForbiddenError, assertCan, type Actor } from '@/lib/authz';
 import { db } from '@/server/data/store';
 import { repos, scopedMutableGet } from '@/server/data';
 import { money, type Money } from '@/domain/primitives';
-import { NOW } from '@/domain/ppm';
+import { NOW, NOW_MS } from '@/domain/ppm';
+import { constructionWorld } from '@/server/reads/construction';
 import { canEnterWorkspace } from '@/config/workspaces';
 import {
   nextRevision, timesheetCostMinor, movementAllowed, routeFor, stepsFromRule,
-  canApprove, applyDecision, pendingSteps, fxExposure, fxTable,
+  canApprove, applyDecision, pendingSteps, fxExposure, fxTable, scanRisks,
 } from '@/domain/construction';
 import type { CurrencyCode } from '@/domain/primitives';
 
 export type Res = { ok: true; ref?: string } | { ok: false; error: string };
 
-const PATHS = ['/construction', '/construction/evm', '/construction/schedule', '/construction/materials', '/construction/risk', '/construction/procurement', '/construction/site', '/construction/cost', '/construction/projects', '/construction/workforce', '/construction/digest', '/construction/documents', '/construction/boq', '/construction/timesheets', '/construction/stock', '/construction/approvals', '/construction/audit', '/construction/fx'];
+const PATHS = ['/construction', '/construction/evm', '/construction/schedule', '/construction/materials', '/construction/risk', '/construction/procurement', '/construction/site', '/construction/projects', '/construction/workforce', '/construction/digest', '/construction/documents', '/construction/boq', '/construction/timesheets', '/construction/stock', '/construction/approvals', '/construction/audit', '/construction/fx', '/construction/field', '/construction/simulator', '/construction/twin', '/construction/league', '/construction/safety', '/construction/build-watch', '/construction/copilot'];
 const revalidate = () => PATHS.forEach((p) => revalidatePath(p));
 
 async function gate(action: 'update' | 'create'): Promise<{ ok: true; actor: Actor } | { ok: false; error: string }> {
@@ -36,6 +38,9 @@ async function gate(action: 'update' | 'create'): Promise<{ ok: true; actor: Act
 }
 
 const addMinor = (a: Money, b: number): Money => money(a.minor + b, a.currency);
+const finiteQty = (value: number) => Number.isFinite(value) && value > 0;
+const safeMinor = (value: number) => Number.isSafeInteger(value) && value >= 0;
+const validDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
 /** The acting user's human name (Actor carries ids, not display names). */
 const nameOf = (actor: Actor): string => db.users.find((u) => u.id === actor.userId)?.name ?? 'Site team';
 const daysISO = (fromISO: string, days: number) => new Date(Date.parse(fromISO) + days * 24 * 3600 * 1000).toISOString().slice(0, 10);
@@ -66,6 +71,7 @@ export async function returnDailyReport(id: string, reason: string): Promise<Res
   const g = await gate('update'); if (!g.ok) return g;
   const r = scopedMutableGet(g.actor, 'reports_analytics', db.constructionReports, id, 'update'); if (!r) return { ok: false, error: 'Report not found.' };
   if (!reason?.trim()) return { ok: false, error: 'A return reason is required.' };
+  if (!['submitted', 'reviewed'].includes(r.status)) return { ok: false, error: 'Only a submitted or reviewed report can be returned. Approved reports require an adjustment.' };
   r.status = 'returned'; r.constraints = [...r.constraints, `Returned: ${reason.trim()}`]; revalidate(); return { ok: true };
 }
 
@@ -73,6 +79,9 @@ export async function returnDailyReport(id: string, reason: string): Promise<Res
 export async function updateTaskProgress(id: string, pct: number): Promise<Res> {
   const g = await gate('update'); if (!g.ok) return g;
   const t = scopedMutableGet(g.actor, 'reports_analytics', db.constructionTasks, id, 'update'); if (!t) return { ok: false, error: 'Task not found.' };
+  if (!Number.isFinite(pct) || pct < 0 || pct > 100) return { ok: false, error: 'Enter progress from 0% to 100%.' };
+  if (t.status === 'done' && pct < 100) return { ok: false, error: 'Completed work needs a separate approved adjustment before reopening.' };
+  if (pct > 0 && t.dependsOn.some((dependencyId) => scopedMutableGet(g.actor, 'reports_analytics', db.constructionTasks, dependencyId, 'read')?.status !== 'done')) return { ok: false, error: 'Complete the predecessor tasks before recording progress.' };
   const p = Math.max(0, Math.min(100, Math.round(pct)));
   t.percentComplete = p; t.status = p === 0 ? 'not_started' : p >= 100 ? 'done' : 'in_progress';
   if (p > 0 && !t.actualStartISO) t.actualStartISO = NOW.slice(0, 10);
@@ -82,6 +91,7 @@ export async function updateTaskProgress(id: string, pct: number): Promise<Res> 
 export async function advanceMilestone(id: string): Promise<Res> {
   const g = await gate('update'); if (!g.ok) return g;
   const m = scopedMutableGet(g.actor, 'reports_analytics', db.constructionMilestones, id, 'update'); if (!m) return { ok: false, error: 'Milestone not found.' };
+  if (m.status === 'accepted') return { ok: false, error: 'This milestone is already accepted.' };
   m.status = 'accepted'; revalidate(); return { ok: true, ref: m.name };
 }
 let issueSeq = 0;
@@ -100,22 +110,30 @@ export async function approvePurchaseRequest(id: string): Promise<Res> {
   if (pr.status !== 'pending' && pr.status !== 'draft') return { ok: false, error: 'Only a pending request can be approved.' };
   pr.status = 'approved'; revalidate(); return { ok: true, ref: pr.ref };
 }
-let poSeq = 0;
 /** Award an RFQ to a vendor: issue a PO from the winning quote and commit budget. */
 export async function awardRfq(rfqId: string, vendorId: string): Promise<Res> {
   const g = await gate('create'); if (!g.ok) return g;
   const rfq = scopedMutableGet(g.actor, 'reports_analytics', db.constructionRfqs, rfqId, 'create'); if (!rfq) return { ok: false, error: 'RFQ not found.' };
+  if (rfq.status === 'awarded') return { ok: false, error: 'This RFQ is already awarded. Its order cannot be issued twice.' };
   const q = rfq.quotes.find((x) => x.vendorId === vendorId); if (!q) return { ok: false, error: 'Quote not found.' };
+  const req = repos.constructionRequests.list(g.actor, { limit: Number.MAX_SAFE_INTEGER }).items.find((r) => r.ref === rfq.requestRef && r.projectId === rfq.projectId);
+  if (!req || !['approved', 'rfq'].includes(req.status)) return { ok: false, error: 'An approved request for this project is required before award.' };
+  const cc = repos.constructionCostCodes.list(g.actor, { limit: Number.MAX_SAFE_INTEGER }).items.find((c) => c.projectId === rfq.projectId && c.code === req.costCode);
+  if (!cc || !safeMinor(q.price.minor) || q.price.currency !== cc.committed.currency || !Number.isSafeInteger(cc.committed.minor + q.price.minor) || !Number.isFinite(q.leadDays) || q.leadDays < 0 || !finiteQty(rfq.qty)) return { ok: false, error: 'Review the quote currency, amount, delivery lead time and project cost code before award.' };
+  const vendor = scopedMutableGet(g.actor, 'reports_analytics', db.constructionVendors, vendorId, 'read');
+  if (!vendor || vendor.suspended) return { ok: false, error: 'Choose an authorised, active supplier.' };
   rfq.status = 'awarded'; rfq.awardedVendorId = vendorId;
-  const ref = `PO-${3015 + db.constructionOrders.length + (++poSeq)}`;
-  db.constructionOrders.unshift({ tenantId: g.actor.tenantId, id: `po-new-${poSeq}`, ref, projectId: rfq.projectId, vendorId, vendorName: q.vendorName, item: rfq.item, qty: rfq.qty, unit: rfq.unit, costCode: 'MAR-SUP', value: q.price, status: 'issued', issuedISO: NOW.slice(0, 10), expectedISO: daysISO(NOW, q.leadDays), deliveredQty: 0 } as (typeof db.constructionOrders)[number]);
-  const req = repos.constructionRequests.list(g.actor, { limit: 500 }).items.find((r) => r.ref === rfq.requestRef); if (req) req.status = 'ordered';
-  const cc = repos.constructionCostCodes.list(g.actor, { limit: 500 }).items.find((c) => c.code === 'MAR-SUP'); if (cc) cc.committed = addMinor(cc.committed, q.price.minor);
+  const latest = Math.max(3014, ...db.constructionOrders.filter((order) => order.tenantId === g.actor.tenantId).map((order) => Number(/^PO-(\d+)$/.exec(order.ref)?.[1] ?? 0)));
+  const ref = `PO-${latest + 1}`;
+  db.constructionOrders.unshift({ tenantId: g.actor.tenantId, id: `po-new-${randomUUID()}`, ref, projectId: rfq.projectId, vendorId, vendorName: q.vendorName, item: rfq.item, qty: rfq.qty, unit: rfq.unit, costCode: req.costCode, value: q.price, status: 'issued', issuedISO: NOW.slice(0, 10), expectedISO: daysISO(NOW, q.leadDays), deliveredQty: 0 } as (typeof db.constructionOrders)[number]);
+  req.status = 'ordered';
+  cc.committed = addMinor(cc.committed, q.price.minor);
   revalidate(); return { ok: true, ref };
 }
 export async function approvePurchaseOrder(id: string): Promise<Res> {
   const g = await gate('update'); if (!g.ok) return g;
   const po = scopedMutableGet(g.actor, 'reports_analytics', db.constructionOrders, id, 'update'); if (!po) return { ok: false, error: 'PO not found.' };
+  if (!['draft', 'approved'].includes(po.status)) return { ok: false, error: 'Only a draft or approved order can advance to issue.' };
   po.status = po.status === 'draft' ? 'approved' : 'issued'; revalidate(); return { ok: true, ref: po.ref };
 }
 let movSeq = 0;
@@ -123,18 +141,29 @@ let movSeq = 0;
 export async function receiveDelivery(poId: string, qty: number): Promise<Res> {
   const g = await gate('update'); if (!g.ok) return g;
   const po = scopedMutableGet(g.actor, 'reports_analytics', db.constructionOrders, poId, 'update'); if (!po) return { ok: false, error: 'PO not found.' };
-  if (!(qty > 0)) return { ok: false, error: 'Enter a quantity greater than zero.' };
-  const recv = Math.min(qty, po.qty - po.deliveredQty);
-  po.deliveredQty += recv; po.status = po.deliveredQty >= po.qty ? 'delivered' : 'part_delivered';
+  if (!finiteQty(qty)) return { ok: false, error: 'Enter a finite quantity greater than zero.' };
+  if (!['issued', 'acknowledged', 'part_delivered'].includes(po.status)) return { ok: false, error: 'Only an issued, acknowledged or part-delivered order can receive goods.' };
+  if (!finiteQty(po.qty) || po.deliveredQty < 0 || qty > po.qty - po.deliveredQty) return { ok: false, error: 'The receipt cannot exceed the outstanding order quantity.' };
+  const recv = qty;
   // Book actual cost pro-rata into the cost code.
-  const cc = repos.constructionCostCodes.list(g.actor, { limit: 500 }).items.find((c) => c.code === po.costCode);
-  const bookedMinor = Math.round(po.value.minor * (recv / Math.max(1, po.qty)));
-  if (cc) cc.actual = addMinor(cc.actual, bookedMinor);
-  // Book stock if we can match the material by name, and log a permanent movement.
-  const mat = repos.constructionMaterials.list(g.actor, { limit: 500 }).items.find((m) => po.item.toLowerCase().includes(m.name.toLowerCase().slice(0, 6)) || m.name.toLowerCase().includes(po.item.toLowerCase().slice(0, 6)));
-  if (mat) {
-    const st = repos.constructionStock.list(g.actor, { limit: 1000 }).items.find((s) => s.materialId === mat.id);
+  const cc = repos.constructionCostCodes.list(g.actor, { limit: Number.MAX_SAFE_INTEGER }).items.find((c) => c.projectId === po.projectId && c.code === po.costCode);
+  const bookedMinor = Math.round(po.value.minor * ((po.deliveredQty + recv) / po.qty)) - Math.round(po.value.minor * (po.deliveredQty / po.qty));
+  if (!cc || cc.actual.currency !== po.value.currency || !safeMinor(bookedMinor) || !Number.isSafeInteger(cc.actual.minor + bookedMinor)) return { ok: false, error: 'Review the order currency, value and project cost code before receiving.' };
+  // Match the full name first, then a unique leading-name/unit match. Substring
+  // matching "cement" inside "reinforcement" used to receive rebar as cement.
+  const normalName = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const itemName = normalName(po.item);
+  const candidates = repos.constructionMaterials.list(g.actor, { limit: Number.MAX_SAFE_INTEGER }).items.filter((material) => material.unit === po.unit && (itemName.startsWith(normalName(material.name).slice(0, 6)) || normalName(material.name).startsWith(itemName.slice(0, 6))));
+  const mat = candidates.find((material) => normalName(material.name) === itemName) ?? (candidates.length === 1 ? candidates[0] : undefined);
+  if (candidates.length > 1 && !mat) return { ok: false, error: 'The receipt has an ambiguous material match. Review the purchase-order item before receiving.' };
+  const warehouse = mat ? repos.constructionWarehouses.list(g.actor, { limit: Number.MAX_SAFE_INTEGER }).items.find((row) => row.projectId === po.projectId) : undefined;
+  if (mat && !warehouse) return { ok: false, error: 'A receiving store must be configured for this project first.' };
+  po.deliveredQty += recv; po.status = po.deliveredQty >= po.qty ? 'delivered' : 'part_delivered';
+  cc.actual = addMinor(cc.actual, bookedMinor);
+  if (mat && warehouse) {
+    const st = repos.constructionStock.list(g.actor, { limit: Number.MAX_SAFE_INTEGER }).items.find((s) => s.materialId === mat.id && s.warehouseId === warehouse.id);
     if (st) { st.onHand += recv; st.inTransit = Math.max(0, st.inTransit - recv); }
+    else db.constructionStock.push({ tenantId: g.actor.tenantId, id: `st-receive-${randomUUID()}`, materialId: mat.id, warehouseId: warehouse.id, onHand: recv, reserved: 0, inTransit: 0 } as (typeof db.constructionStock)[number]);
     db.constructionMovements.unshift({ tenantId: g.actor.tenantId, id: `sm-new-${++movSeq}`, materialId: mat.id, kind: 'receipt', qty: recv, atISO: NOW.slice(0, 10), projectId: po.projectId, costCode: po.costCode, ref: po.ref, by: nameOf(g.actor) } as (typeof db.constructionMovements)[number]);
   }
   revalidate(); return { ok: true, ref: `${recv} ${po.unit}` };
@@ -143,10 +172,17 @@ export async function receiveDelivery(poId: string, qty: number): Promise<Res> {
 /* --- materials ------------------------------------------------------------ */
 export async function issueMaterials(materialId: string, qty: number, projectId: string): Promise<Res> {
   const g = await gate('update'); if (!g.ok) return g;
-  const st = repos.constructionStock.list(g.actor, { limit: 1000 }).items.find((s) => s.materialId === materialId); if (!st) return { ok: false, error: 'Stock not found.' };
-  if (!(qty > 0)) return { ok: false, error: 'Enter a quantity greater than zero.' };
-  if (qty > st.onHand) return { ok: false, error: 'Cannot issue more than on-hand (negative stock blocked).' };
-  st.onHand -= qty; st.reserved = Math.max(0, st.reserved - qty);
+  if (!scopedMutableGet(g.actor, 'reports_analytics', db.constructionProjects, projectId, 'update')) return { ok: false, error: 'Project not found.' };
+  const stock = repos.constructionStock.list(g.actor, { limit: Number.MAX_SAFE_INTEGER }).items.filter((row) => row.materialId === materialId);
+  if (!stock.length) return { ok: false, error: 'Stock not found.' };
+  if (!finiteQty(qty)) return { ok: false, error: 'Enter a finite quantity greater than zero.' };
+  if (qty > stock.reduce((total, row) => total + row.onHand, 0)) return { ok: false, error: 'Cannot issue more than on-hand (negative stock blocked).' };
+  let remaining = qty;
+  for (const row of stock) {
+    const issued = Math.min(row.onHand, remaining);
+    row.onHand -= issued; row.reserved = Math.max(0, row.reserved - issued); remaining -= issued;
+    if (remaining === 0) break;
+  }
   db.constructionMovements.unshift({ tenantId: g.actor.tenantId, id: `sm-new-${++movSeq}`, materialId, kind: 'issue', qty, atISO: NOW.slice(0, 10), projectId, ref: `MI-${470 + movSeq}`, by: nameOf(g.actor) } as (typeof db.constructionMovements)[number]);
   revalidate(); return { ok: true };
 }
@@ -157,6 +193,8 @@ export type VariationInput = { projectId: string; title: string; reason: string;
 export async function raiseVariation(input: VariationInput): Promise<Res> {
   const g = await gate('create'); if (!g.ok) return g;
   if (!input.title?.trim()) return { ok: false, error: 'Enter a variation title.' };
+  if (!scopedMutableGet(g.actor, 'reports_analytics', db.constructionProjects, input.projectId, 'create')) return { ok: false, error: 'Project not found.' };
+  if (!Number.isFinite(input.costImpactNaira) || !Number.isSafeInteger(Math.round(input.costImpactNaira * 100)) || !Number.isFinite(input.scheduleImpactDays) || !Number.isSafeInteger(Math.round(input.scheduleImpactDays))) return { ok: false, error: 'Enter finite cost and schedule impacts.' };
   const ref = `VO-${12 + db.constructionVariations.length + (++varSeq)}`;
   db.constructionVariations.unshift({ tenantId: g.actor.tenantId, id: `var-new-${varSeq}`, ref, projectId: input.projectId, title: input.title.trim(), reason: input.reason.trim() || 'Not stated', costImpact: money(Math.round((input.costImpactNaira || 0) * 100)), scheduleImpactDays: Math.round(input.scheduleImpactDays || 0), status: 'submitted', raisedISO: NOW.slice(0, 10) } as (typeof db.constructionVariations)[number]);
   revalidate(); return { ok: true, ref };
@@ -164,31 +202,47 @@ export async function raiseVariation(input: VariationInput): Promise<Res> {
 export async function approveVariation(id: string): Promise<Res> {
   const g = await gate('update'); if (!g.ok) return g;
   const v = scopedMutableGet(g.actor, 'reports_analytics', db.constructionVariations, id, 'update'); if (!v) return { ok: false, error: 'Variation not found.' };
+  if (v.status !== 'submitted') return { ok: false, error: 'Only a submitted variation can be approved.' };
   v.status = 'approved'; revalidate(); return { ok: true, ref: v.ref };
 }
 
 /* --- risk radar (advisory lifecycle) -------------------------------------- */
-function setSignalState(signalId: string, state: 'ack' | 'snoozed' | 'escalated' | 'dismissed') {
-  const existing = db.constructionSignalStates.find((s) => s.signalId === signalId);
-  if (existing) existing.state = state; else db.constructionSignalStates.push({ signalId, state, atISO: NOW });
+function setSignalState(actor: Actor, signalId: string, state: 'ack' | 'snoozed' | 'escalated' | 'dismissed') {
+  const existing = db.constructionSignalStates.find((s) => s.tenantId === actor.tenantId && s.signalId === signalId);
+  if (existing) { existing.state = state; return existing; }
+  const row: (typeof db.constructionSignalStates)[number] = { tenantId: actor.tenantId!, signalId, state, atISO: NOW };
+  db.constructionSignalStates.push(row); return row;
 }
 export async function acknowledgeSignal(signalId: string): Promise<Res> {
   const g = await gate('update'); if (!g.ok) return g;
-  setSignalState(signalId, 'ack'); revalidate(); return { ok: true };
+  if (!scanRisks(constructionWorld(g.actor), NOW_MS).some((signal) => signal.id === signalId)) return { ok: false, error: 'Signal not found in your authorised projects.' };
+  setSignalState(g.actor, signalId, 'ack'); revalidate(); return { ok: true };
 }
 export async function snoozeSignal(signalId: string): Promise<Res> {
   const g = await gate('update'); if (!g.ok) return g;
-  setSignalState(signalId, 'snoozed'); revalidate(); return { ok: true };
+  if (!scanRisks(constructionWorld(g.actor), NOW_MS).some((signal) => signal.id === signalId)) return { ok: false, error: 'Signal not found in your authorised projects.' };
+  setSignalState(g.actor, signalId, 'snoozed'); revalidate(); return { ok: true };
 }
 export async function dismissSignal(signalId: string): Promise<Res> {
   const g = await gate('update'); if (!g.ok) return g;
-  setSignalState(signalId, 'dismissed'); revalidate(); return { ok: true };
+  if (!scanRisks(constructionWorld(g.actor), NOW_MS).some((signal) => signal.id === signalId)) return { ok: false, error: 'Signal not found in your authorised projects.' };
+  setSignalState(g.actor, signalId, 'dismissed'); revalidate(); return { ok: true };
 }
 export async function escalateSignalToIssue(signalId: string, projectId: string, title: string): Promise<Res> {
   const g = await gate('create'); if (!g.ok) return g;
+  if (!scopedMutableGet(g.actor, 'reports_analytics', db.constructionProjects, projectId, 'create')) return { ok: false, error: 'Project not found.' };
+  const signal = scanRisks(constructionWorld(g.actor), NOW_MS).find((row) => row.id === signalId && row.projectId === projectId);
+  if (!signal || !title?.trim()) return { ok: false, error: 'Signal not found in this authorised project.' };
+  const receipt = db.constructionSignalStates.find((row) => row.tenantId === g.actor.tenantId && row.signalId === signalId);
+  if (receipt?.escalatedIssueId) {
+    const linked = scopedMutableGet(g.actor, 'reports_analytics', db.constructionIssues, receipt.escalatedIssueId, 'read');
+    if (!linked || linked.projectId !== projectId) return { ok: false, error: 'This signal was already escalated. Review its recorded site issue before taking further action.' };
+    return { ok: true, ref: linked.id };
+  }
+  if (receipt?.state === 'escalated') return { ok: false, error: 'This signal has already been escalated.' };
   const id = `is-esc-${++issueSeq}`;
-  db.constructionIssues.unshift({ tenantId: g.actor.tenantId, id, projectId, category: 'Risk', title: `Escalated: ${title}`, severity: 'high', owner: nameOf(g.actor), raisedISO: NOW.slice(0, 10), dueISO: daysISO(NOW, 5), status: 'open', correctiveAction: 'From risk radar' } as (typeof db.constructionIssues)[number]);
-  setSignalState(signalId, 'escalated'); revalidate(); return { ok: true, ref: id };
+  db.constructionIssues.unshift({ tenantId: g.actor.tenantId, id, projectId, category: 'Risk', title: `Escalated: ${signal.title}`, severity: 'high', owner: nameOf(g.actor), raisedISO: NOW.slice(0, 10), dueISO: daysISO(NOW, 5), status: 'open', correctiveAction: 'From risk radar' } as (typeof db.constructionIssues)[number]);
+  setSignalState(g.actor, signalId, 'escalated').escalatedIssueId = id; revalidate(); return { ok: true, ref: id };
 }
 
 /* --- projects ------------------------------------------------------------- */
@@ -197,6 +251,8 @@ export type ProjectInput = { name: string; location: string; clientName: string;
 export async function createProject(input: ProjectInput): Promise<Res> {
   const g = await gate('create'); if (!g.ok) return g;
   if (!input.name?.trim()) return { ok: false, error: 'Enter a project name.' };
+  if (!Number.isFinite(input.contractNaira) || !safeMinor(Math.round(input.contractNaira * 100)) || !Number.isFinite(input.budgetNaira) || !safeMinor(Math.round(input.budgetNaira * 100))) return { ok: false, error: 'Enter finite, non-negative NGN contract and budget amounts.' };
+  if (input.plannedFinishISO && (!validDate(input.plannedFinishISO) || input.plannedFinishISO < NOW.slice(0, 10))) return { ok: false, error: 'Choose a valid planned finish on or after the project start.' };
   const id = `cp-new-${++projSeq}`;
   db.constructionProjects.unshift({ tenantId: g.actor.tenantId, id, projectId: id, code: `NEW-${projSeq}`, name: input.name.trim(), location: input.location.trim() || 'Lagos', clientName: input.clientName.trim() || '7 Fifteen Capital', pmName: nameOf(g.actor), status: 'planning', contractValue: money(Math.round((input.contractNaira || 0) * 100)), approvedBudget: money(Math.round((input.budgetNaira || 0) * 100)), startISO: NOW.slice(0, 10), plannedFinishISO: input.plannedFinishISO || daysISO(NOW, 540), plannedPercent: 0, percentComplete: 0 } as (typeof db.constructionProjects)[number]);
   revalidate(); return { ok: true, ref: input.name.trim() };
@@ -205,10 +261,13 @@ export async function createProject(input: ProjectInput): Promise<Res> {
 /* --- workforce ------------------------------------------------------------ */
 export async function clockWorker(workerId: string, projectId: string, present: boolean): Promise<Res> {
   const g = await gate('update'); if (!g.ok) return g;
+  const worker = scopedMutableGet(g.actor, 'reports_analytics', db.constructionWorkers, workerId, 'update');
+  if (!worker || !scopedMutableGet(g.actor, 'reports_analytics', db.constructionProjects, projectId, 'update') || worker.projectId !== projectId) return { ok: false, error: 'Worker and project assignment not found.' };
   const today = NOW.slice(0, 10);
-  const existing = db.constructionAttendance.find((a) => a.workerId === workerId && a.dateISO === today);
-  if (existing) { existing.status = present ? 'present' : 'absent'; existing.clockIn = present ? '07:30' : undefined; }
-  else db.constructionAttendance.unshift({ tenantId: g.actor.tenantId, id: `at-new-${workerId}`, workerId, projectId, dateISO: today, clockIn: present ? '07:30' : undefined, hours: 0, overtime: 0, method: 'manual', withinGeofence: present, status: present ? 'present' : 'absent' } as (typeof db.constructionAttendance)[number]);
+  const existing = db.constructionAttendance.find((a) => a.tenantId === g.actor.tenantId && a.projectId === projectId && a.workerId === workerId && a.dateISO === today);
+  if (existing && ['gps', 'qr'].includes(existing.method)) return { ok: false, error: 'Manual attendance cannot replace recorded GPS or QR evidence. Review the source attendance record.' };
+  if (existing) { existing.status = present ? 'present' : 'absent'; existing.clockIn = present ? '07:30' : undefined; existing.method = 'manual'; existing.withinGeofence = false; }
+  else db.constructionAttendance.unshift({ tenantId: g.actor.tenantId, id: `at-new-${workerId}`, workerId, projectId, dateISO: today, clockIn: present ? '07:30' : undefined, hours: 0, overtime: 0, method: 'manual', withinGeofence: false, status: present ? 'present' : 'absent' } as (typeof db.constructionAttendance)[number]);
   revalidate(); return { ok: true };
 }
 
@@ -234,6 +293,7 @@ export async function issueRevision(docId: string, changeNote: string): Promise<
   if (prior.status === 'approved' && !changeNote.trim()) return { ok: false, error: 'A change note is required when superseding an approved revision.' };
 
   const revision = nextRevision(prior.revision);
+  if (db.constructionDocs.some((doc) => doc.tenantId === prior.tenantId && doc.projectId === prior.projectId && doc.number === prior.number && doc.revision === revision)) return { ok: false, error: `Revision ${revision} already exists. Review that revision before issuing another.` };
   const id = `doc-rev-${++revSeq}`;
   db.constructionDocs.unshift({
     ...prior, id, revision, status: 'draft',
@@ -254,9 +314,10 @@ export async function approveRevision(docId: string): Promise<Res> {
   if (!doc) return { ok: false, error: 'Document not found.' };
   if (doc.status === 'approved') return { ok: false, error: 'Already approved.' };
   if (doc.status === 'superseded') return { ok: false, error: 'A superseded revision cannot be approved.' };
+  if (db.constructionDocs.some((other) => other.tenantId === doc.tenantId && other.projectId === doc.projectId && other.number === doc.number && other.revision === doc.revision && other.id !== doc.id && other.status === 'approved')) return { ok: false, error: 'This revision label already has an approved issue. Review the duplicate record instead.' };
   // Exactly one approved revision per document number.
   for (const other of db.constructionDocs) {
-    if (other.number === doc.number && other.id !== doc.id && other.status === 'approved') {
+    if (other.tenantId === doc.tenantId && other.projectId === doc.projectId && other.number === doc.number && other.id !== doc.id && other.status === 'approved') {
       other.status = 'superseded';
       other.supersededById = doc.id;
     }
@@ -289,6 +350,7 @@ export async function answerRfi(rfiId: string, answer: string): Promise<Res> {
   const r = scopedMutableGet(g.actor, 'reports_analytics', db.constructionRfis, rfiId, 'update');
   if (!r) return { ok: false, error: 'RFI not found.' };
   if (!answer.trim()) return { ok: false, error: 'An answer is required.' };
+  if (r.status === 'closed') return { ok: false, error: 'A closed RFI cannot be changed.' };
   r.answer = answer.trim(); r.answeredISO = NOW.slice(0, 10); r.status = 'answered';
   revalidate();
   return { ok: true, ref: r.ref };
@@ -298,7 +360,7 @@ export async function closeRfi(rfiId: string): Promise<Res> {
   const g = await gate('update'); if (!g.ok) return g;
   const r = scopedMutableGet(g.actor, 'reports_analytics', db.constructionRfis, rfiId, 'update');
   if (!r) return { ok: false, error: 'RFI not found.' };
-  if (r.status === 'open') return { ok: false, error: 'Answer the RFI before closing it.' };
+  if (r.status !== 'answered') return { ok: false, error: 'Only an answered RFI can be closed.' };
   r.status = 'closed';
   revalidate();
   return { ok: true, ref: r.ref };
@@ -316,6 +378,7 @@ export async function importBoq(projectId: string, rows: BoqImportRow[]): Promis
   const g = await gate('create'); if (!g.ok) return g;
   if (!scopedMutableGet(g.actor, 'reports_analytics', db.constructionProjects, projectId, 'create')) return { ok: false, error: 'Project not found.' };
   if (rows.length === 0) return { ok: false, error: 'Nothing to import.' };
+  if (rows.length > 1000 || rows.some((row) => !row.code?.trim() || !row.name?.trim() || !safeMinor(row.budgetMinor)) || new Set(rows.map((row) => row.code)).size !== rows.length) return { ok: false, error: 'Import at most 1,000 unique cost codes with names and non-negative whole-kobo budgets.' };
 
   let created = 0, updated = 0;
   for (const r of rows) {
@@ -367,9 +430,11 @@ export async function approveTimesheet(id: string): Promise<Res> {
     return { ok: false, error: 'You submitted these hours — a different approver is required.' };
   }
   const worker = scopedMutableGet(g.actor, 'reports_analytics', db.constructionWorkers, ts.workerId, 'read');
-  const costMinor = timesheetCostMinor(ts, worker ? worker.dayRate.minor : 0);
+  if (!worker || worker.projectId !== ts.projectId || ![ts.normalHours, ts.overtimeHours].every((hours) => Number.isFinite(hours) && hours >= 0) || ts.normalHours + ts.overtimeHours > 7 * 24) return { ok: false, error: 'Review the worker assignment and recorded weekly hours before posting.' };
+  const costMinor = timesheetCostMinor(ts, worker.dayRate.minor);
   const code = repos.constructionCostCodes.list(g.actor, { limit: 500 }).items.find((c) => c.projectId === ts.projectId && c.code === ts.costCode);
   if (!code) return { ok: false, error: `Cost code ${ts.costCode} does not exist on this project.` };
+  if (code.actual.currency !== worker.dayRate.currency || !safeMinor(costMinor) || !Number.isSafeInteger(code.actual.minor + costMinor)) return { ok: false, error: 'Labour currency and finite cost must match the project cost code.' };
 
   code.actual = addMinor(code.actual, costMinor);
   ts.status = 'approved'; ts.approvedBy = nameOf(g.actor); ts.approvedISO = NOW.slice(0, 10); ts.postedMinor = costMinor;
@@ -420,8 +485,8 @@ function recordReason(actor: Actor, e: {
 
 /* --- stock movements (the full set) ---------------------------------------- */
 
-const onHandOf = (materialId: string, warehouseId?: string) =>
-  db.constructionStock
+const onHandOf = (actor: Actor, materialId: string, warehouseId?: string) =>
+  repos.constructionStock.list(actor, { limit: Number.MAX_SAFE_INTEGER }).items
     .filter((s) => s.materialId === materialId && (!warehouseId || s.warehouseId === warehouseId))
     .reduce((n, s) => n + s.onHand, 0);
 
@@ -437,9 +502,12 @@ function writeMovement(actor: Actor, kind: 'receipt' | 'issue' | 'transfer' | 'r
 export async function transferStock(materialId: string, fromWarehouseId: string, toWarehouseId: string, qty: number): Promise<Res> {
   const g = await gate('update'); if (!g.ok) return g;
   if (fromWarehouseId === toWarehouseId) return { ok: false, error: 'Pick two different stores.' };
+  if (!finiteQty(qty)) return { ok: false, error: 'Enter a finite quantity greater than zero.' };
+  if (!scopedMutableGet(g.actor, 'reports_analytics', db.constructionWarehouses, fromWarehouseId, 'update') || !scopedMutableGet(g.actor, 'reports_analytics', db.constructionWarehouses, toWarehouseId, 'update')) return { ok: false, error: 'Store not found.' };
   const from = repos.constructionStock.list(g.actor, { limit: 1000 }).items.find((s) => s.materialId === materialId && s.warehouseId === fromWarehouseId);
   const mat = scopedMutableGet(g.actor, 'reports_analytics', db.constructionMaterials, materialId, 'read');
   if (!from || !mat) return { ok: false, error: 'Stock line not found.' };
+  if (!Number.isFinite(from.reserved) || from.reserved < 0 || qty > from.onHand - from.reserved) return { ok: false, error: `Only ${Math.max(0, from.onHand - from.reserved)} unreserved ${mat.unit} available for transfer. Reserved stock must stay in its source store.` };
   const check = movementAllowed('transfer', from.onHand, qty);
   if (!check.allowed) return { ok: false, error: check.reason! };
 
@@ -459,9 +527,10 @@ export async function returnStock(materialId: string, warehouseId: string, qty: 
   const g = await gate('update'); if (!g.ok) return g;
   const mat = scopedMutableGet(g.actor, 'reports_analytics', db.constructionMaterials, materialId, 'read');
   if (!mat) return { ok: false, error: 'Material not found.' };
-  if (!(qty > 0)) return { ok: false, error: 'Quantity must be greater than zero.' };
+  if (!finiteQty(qty)) return { ok: false, error: 'Quantity must be finite and greater than zero.' };
+  if (!scopedMutableGet(g.actor, 'reports_analytics', db.constructionWarehouses, warehouseId, 'update')) return { ok: false, error: 'Store not found.' };
   const code = scopedMutableGet(g.actor, 'reports_analytics', db.constructionReasonCodes, reasonCodeId, 'read');
-  if (!code) return { ok: false, error: 'Choose a reason.' };
+  if (!code || !code.active || code.domain !== 'stock_return') return { ok: false, error: 'Choose an active stock-return reason.' };
   if (code.requiresNote && !note?.trim()) return { ok: false, error: `“${code.label}” needs a note.` };
 
   const line = repos.constructionStock.list(g.actor, { limit: 1000 }).items.find((s) => s.materialId === materialId && s.warehouseId === warehouseId);
@@ -482,11 +551,12 @@ export async function recordStockCount(materialId: string, warehouseId: string, 
   const g = await gate('create'); if (!g.ok) return g;
   const mat = scopedMutableGet(g.actor, 'reports_analytics', db.constructionMaterials, materialId, 'read');
   if (!mat) return { ok: false, error: 'Material not found.' };
-  if (countedQty < 0) return { ok: false, error: 'A count cannot be negative.' };
-  const systemQty = onHandOf(materialId, warehouseId);
+  if (!Number.isFinite(countedQty) || countedQty < 0) return { ok: false, error: 'A count must be finite and cannot be negative.' };
+  if (!scopedMutableGet(g.actor, 'reports_analytics', db.constructionWarehouses, warehouseId, 'create')) return { ok: false, error: 'Store not found.' };
+  const systemQty = onHandOf(g.actor, materialId, warehouseId);
   const ref = `SC-${2040 + db.constructionStockCounts.length + (++scSeq)}`;
   db.constructionStockCounts.unshift({
-    tenantId: g.actor.tenantId ?? 't-lekki', id: `sc-${scSeq}`, ref, warehouseId, materialId,
+    tenantId: g.actor.tenantId!, id: `sc-${scSeq}`, ref, warehouseId, materialId,
     systemQty, countedQty, countedBy: nameOf(g.actor), countedISO: NOW.slice(0, 10), status: 'open',
   });
   audit(g.actor, { action: 'stock_count', entity: 'material', entityRef: mat.name, summary: `Counted ${countedQty} vs ${systemQty} on system`, before: String(systemQty), after: String(countedQty) });
@@ -502,16 +572,19 @@ export async function reconcileStockCount(countId: string, reasonCodeId: string,
   if (!count) return { ok: false, error: 'Count not found.' };
   if (count.status === 'reconciled') return { ok: false, error: 'Already reconciled.' };
   const code = scopedMutableGet(g.actor, 'reports_analytics', db.constructionReasonCodes, reasonCodeId, 'read');
-  if (!code) return { ok: false, error: 'A reason is required to move stock.' };
+  if (!code || !code.active || code.domain !== 'stock_adjust') return { ok: false, error: 'An active stock-adjustment reason is required to move stock.' };
   if (code.requiresNote && !note?.trim()) return { ok: false, error: `“${code.label}” needs a note.` };
 
   const mat = scopedMutableGet(g.actor, 'reports_analytics', db.constructionMaterials, count.materialId, 'read');
+  if (!mat || !Number.isFinite(count.countedQty) || count.countedQty < 0 || !scopedMutableGet(g.actor, 'reports_analytics', db.constructionWarehouses, count.warehouseId, 'update')) return { ok: false, error: 'Review the counted quantity, material and store before reconciliation.' };
   const delta = count.countedQty - count.systemQty;
   const line = repos.constructionStock.list(g.actor, { limit: 1000 }).items.find((s) => s.materialId === count.materialId && s.warehouseId === count.warehouseId);
-  if (line) line.onHand = count.countedQty;
-  else if (count.countedQty > 0) db.constructionStock.push({ tenantId: g.actor.tenantId, id: `st-sc-${++mvSeq}`, materialId: count.materialId, warehouseId: count.warehouseId, onHand: count.countedQty, reserved: 0, inTransit: 0 } as unknown as (typeof db.constructionStock)[number]);
+  const adjustedQty = (line?.onHand ?? 0) + delta;
+  if (adjustedQty < 0) return { ok: false, error: 'Stock changed after this count; record a fresh count before reconciling.' };
+  if (line) line.onHand = adjustedQty;
+  else if (adjustedQty > 0) db.constructionStock.push({ tenantId: g.actor.tenantId, id: `st-sc-${++mvSeq}`, materialId: count.materialId, warehouseId: count.warehouseId, onHand: adjustedQty, reserved: 0, inTransit: 0 } as unknown as (typeof db.constructionStock)[number]);
 
-  if (delta !== 0) writeMovement(g.actor, 'adjust', count.materialId, Math.abs(delta), { ref: `${count.ref} · ${code.code}` });
+  if (delta !== 0) writeMovement(g.actor, 'adjust', count.materialId, delta, { ref: `${count.ref} · ${code.code}` });
   count.status = 'reconciled'; count.reasonCodeId = reasonCodeId; count.note = note; count.approvedBy = nameOf(g.actor);
 
   recordReason(g.actor, { domain: 'stock_adjust', codeId: reasonCodeId, subjectKind: 'material', subjectRef: count.materialId, note, impactMinor: Math.abs(delta) * (mat?.unitCost.minor ?? 0) });
@@ -526,7 +599,8 @@ let aprSeq = 0;
 /** Raise a request onto the route its value and category select. */
 export async function raiseApproval(subject: 'purchase_request' | 'variation' | 'timesheet' | 'stock_adjust' | 'budget_override', subjectRef: string, title: string, projectId: string, amountMinor: number, category?: string): Promise<Res> {
   const g = await gate('create'); if (!g.ok) return g;
-  const rule = routeFor(db.constructionApprovalRules, subject, amountMinor, category);
+  if (!safeMinor(amountMinor) || !title?.trim() || !subjectRef?.trim() || !scopedMutableGet(g.actor, 'reports_analytics', db.constructionProjects, projectId, 'create')) return { ok: false, error: 'Choose an authorised project and enter a title, reference and valid whole-kobo amount.' };
+  const rule = routeFor(repos.constructionApprovalRules.list(g.actor, { limit: Number.MAX_SAFE_INTEGER }).items, subject, amountMinor, category);
   if (!rule) return { ok: false, error: 'No approval route is configured for this.' };
   const ref = `APR-${1050 + db.constructionApprovals.length + (++aprSeq)}`;
   db.constructionApprovals.unshift({
@@ -543,14 +617,15 @@ export async function raiseApproval(subject: 'purchase_request' | 'variation' | 
  *  the parallel-step rule are enforced in the engine, not the UI. */
 export async function decideApproval(requestId: string, decision: 'approved' | 'rejected', comment?: string, reasonCodeId?: string): Promise<Res> {
   const g = await gate('update'); if (!g.ok) return g;
+  if (!['approved', 'rejected'].includes(decision)) return { ok: false, error: 'Choose approve or reject.' };
   const req = scopedMutableGet(g.actor, 'reports_analytics', db.constructionApprovals, requestId, 'update');
   if (!req) return { ok: false, error: 'Request not found.' };
-  const idx = db.constructionApprovals.findIndex((a) => a.id === requestId);
+  const idx = db.constructionApprovals.indexOf(req);
   const check = canApprove(req, g.actor.roles as string[], nameOf(g.actor));
   if (!check.allowed || !check.step) return { ok: false, error: check.reason ?? 'You cannot act on this step.' };
   if (decision === 'rejected') {
     const code = reasonCodeId ? scopedMutableGet(g.actor, 'reports_analytics', db.constructionReasonCodes, reasonCodeId, 'read') : null;
-    if (!code) return { ok: false, error: 'A rejection needs a coded reason.' };
+    if (!code || !code.active || code.domain !== 'rejection') return { ok: false, error: 'A rejection needs an active rejection reason.' };
     if (code.requiresNote && !comment?.trim()) return { ok: false, error: `“${code.label}” needs a note.` };
   }
 
@@ -601,16 +676,17 @@ export async function delegateApproval(requestId: string, toName: string): Promi
 export async function updateFxRate(currency: CurrencyCode, newRate: number): Promise<Res> {
   const g = await gate('update'); if (!g.ok) return g;
   if (currency === 'NGN') return { ok: false, error: 'NGN is the reporting currency — it cannot be repriced.' };
-  if (!(newRate > 0)) return { ok: false, error: 'Rate must be greater than zero.' };
+  if (!finiteQty(newRate)) return { ok: false, error: 'Rate must be finite and greater than zero.' };
   const row = repos.constructionFxRates.list(g.actor, { limit: 50 }).items.find((r) => r.currency === currency);
   if (!row) return { ok: false, error: `No ${currency} rate on file.` };
   const oldRate = row.rate;
   if (newRate === oldRate) return { ok: false, error: 'That is already the current rate.' };
 
   // Revaluation swing = the outstanding foreign book × the rate move (NGN).
-  const rows = fxExposure(db.constructionOrders, fxTable(db.constructionFxRates)).filter((r) => r.currency === currency);
+  const rows = fxExposure(repos.constructionOrders.list(g.actor, { limit: Number.MAX_SAFE_INTEGER }).items, fxTable(repos.constructionFxRates.list(g.actor, { limit: Number.MAX_SAFE_INTEGER }).items)).filter((r) => r.currency === currency);
   const outstandingForeignMinor = rows.reduce((n, r) => n + r.outstandingForeignMinor, 0);
   const swingMinor = Math.round(outstandingForeignMinor * (newRate - oldRate));
+  if (!Number.isSafeInteger(swingMinor)) return { ok: false, error: 'The revaluation is outside the supported monetary range.' };
 
   row.priorRate = oldRate;
   row.rate = newRate;

@@ -13,7 +13,7 @@ import { ApprovalsWorkspace, type ReqView } from '@/components/construction/appr
 import { parseBoq, boqReconciliation, countVariance, fxPositions, fxSensitivity, type FxExposureRow } from '@/domain/construction';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
-vi.mock('@/server/actions/construction', () => ({ importBoq: vi.fn(), approvePurchaseRequest: vi.fn(), awardRfq: vi.fn(), receiveDelivery: vi.fn(), issueMaterials: vi.fn(), transferStock: vi.fn(), returnStock: vi.fn(), recordStockCount: vi.fn(), reconcileStockCount: vi.fn(), updateFxRate: vi.fn(), decideApproval: vi.fn(), delegateApproval: vi.fn() }));
+vi.mock('@/server/actions/construction', () => ({ importBoq: vi.fn(), approvePurchaseRequest: vi.fn(), approvePurchaseOrder: vi.fn(), awardRfq: vi.fn(), receiveDelivery: vi.fn(), issueMaterials: vi.fn(), transferStock: vi.fn(), returnStock: vi.fn(), recordStockCount: vi.fn(), reconcileStockCount: vi.fn(), updateFxRate: vi.fn(), decideApproval: vi.fn(), delegateApproval: vi.fn() }));
 
 const draw = <Props extends object>(component: ComponentType<Props>, props: Props) => renderToStaticMarkup(createElement(component, props));
 const source = (name: string) => readFileSync(resolve(process.cwd(), `src/components/construction/${name}.tsx`), 'utf8');
@@ -87,6 +87,16 @@ describe('Construction commercial Clinexa composition', () => {
     expect(draw(ProcurementWorkspace, { ...procurement, rfqs: [{ ...procurement.rfqs[0], bids: [] }] })).toContain('No bids recorded');
   });
 
+  it('offers the correct purchase-order step without receiving drafts, cancelled or terminal orders', () => {
+    const base = procurement.orders[0];
+    const html = draw(ProcurementWorkspace, { ...procurement, canMutate: true, orders: [
+      { ...base, id: 'draft-order', status: 'draft' }, { ...base, id: 'approved-order', status: 'approved' },
+      { ...base, id: 'cancelled-order', status: 'cancelled' }, { ...base, id: 'closed-order', status: 'closed' },
+    ] });
+    expect(html).toContain('Approve order'); expect(html).toContain('Issue order');
+    expect(html).not.toContain('>Receive</button>');
+  });
+
   it('shows material units, reserved quantities, exact unit costs and complete WAT movements', () => {
     const html = draw(MaterialsWorkspace, materials);
     for (const text of ['Cement 42.5N', 'CEM-42', '₦5,000.25', 'Reorder at 5 bags', '1 reserved', '10:30', '26 Jul 2026', 'GR-LAG-101', 'Chidi Obi', '₦1,000,000.25', '₦250,000.25', '25% of approved budget']) expect(html).toContain(text);
@@ -94,7 +104,8 @@ describe('Construction commercial Clinexa composition', () => {
     expect(html).toContain('not verified bank settlement');
     expect(html).not.toContain('> Issue</button>');
     expect(source('materials-workspace')).not.toContain('max-h-[320px]');
-    expect(source('materials-workspace')).toContain('issueMaterials(material.id, Number(qty), projectId)');
+    expect(source('materials-workspace')).toContain('issueMaterials(material.id, Number(qty), receivingProject)');
+    expect(source('materials-workspace')).toContain('aria-label="Receiving project"');
   });
 
   it('keeps both open and non-open count evidence, and a semantic complete stock ledger', () => {
@@ -114,6 +125,17 @@ describe('Construction commercial Clinexa composition', () => {
     expect(html).not.toContain('>Reconcile</button>');
     const view = source('stock-workspace');
     for (const text of ['transferStock(line.materialId, line.warehouseId, to, Number(qty))', 'returnStock(line.materialId, line.warehouseId, Number(qty), codeId, note)', 'recordStockCount(line.materialId, line.warehouseId, Number(counted))', 'reconcileStockCount(count.id, codeId, note)', 'code?.requiresNote && !note.trim()']) expect(view).toContain(text);
+  });
+
+  it('renders signed stock adjustments and transfer quantities without a false outgoing sign', () => {
+    const html = draw(StockWorkspace, { ...stock, ledger: [
+      { ...stock.ledger[0], id: 'negative-count', kind: 'adjust', qty: -5, runningQty: 5 },
+      { ...stock.ledger[0], id: 'positive-count', kind: 'adjust', qty: 2, runningQty: 7 },
+      { ...stock.ledger[0], id: 'store-transfer', kind: 'transfer', qty: 3, runningQty: 7 },
+    ] });
+    expect(html).toContain('−5'); expect(html).toContain('+2');
+    expect(html).not.toContain('−-5'); expect(html).not.toContain('−3');
+    expect(html).toContain('transfers conserve the total');
   });
 
   it('displays full native FX balances without compacting or mixing foreign units', () => {

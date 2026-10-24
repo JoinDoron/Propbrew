@@ -9,7 +9,7 @@ import { useId, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Boxes, ArrowLeftRight, Undo2, ClipboardList, Check, TriangleAlert, History } from 'lucide-react';
 import { toneVar, type Tone } from '@/lib/status-tones';
-import { STOCK_KIND_LABEL, countVariance, type StockKind } from '@/domain/construction';
+import { STOCK_KIND_LABEL, countVariance, stockMovementQuantity, type StockKind } from '@/domain/construction';
 import { transferStock, returnStock, recordStockCount, reconcileStockCount } from '@/server/actions/construction';
 import { PageTabs } from '@/components/ui/page-tabs';
 import { PageHeader } from '@/components/ui/page-header';
@@ -104,7 +104,7 @@ export function StockWorkspace({ lines, warehouses, counts, ledger, adjustReason
             <ConstructionPanel >
               <ConstructionPanelHeader title="Perpetual ledger"><span className="text-[12px] text-text-3 font-normal">· every movement, with the running balance it produced</span></ConstructionPanelHeader>
               <div role="region" tabIndex={0} aria-label="Stock movement ledger" className={styles.scroll}>
-                {ledger.length ? <table className={styles.table}><caption className="sr-only">Every recorded stock movement and its running quantity</caption><thead><tr><th scope="col">Material</th><th scope="col">Movement</th><th scope="col">Recorded at · WAT</th><th scope="col">Reference</th><th scope="col">Recorded by</th><th scope="col" className={styles.numeric}>Quantity</th><th scope="col" className={styles.numeric}>Running balance</th></tr></thead><tbody>{ledger.map((movement) => <tr key={movement.id}><th scope="row">{movement.materialName}</th><td><StatusPill status={STOCK_KIND_LABEL[movement.kind]} tone={KIND_TONE[movement.kind]} /></td><td><time dateTime={movement.atISO}>{timestampLabel(movement.atISO)}</time></td><td>{movement.ref || 'Not recorded'}</td><td>{movement.by}</td><td className={styles.numeric}>{movement.kind === 'receipt' || movement.kind === 'return' ? '+' : '−'}{movement.qty} {movement.unit}</td><td className={styles.numeric}>{movement.runningQty} {movement.unit}</td></tr>)}</tbody></table> : <div className={styles.body}><EmptyState title="No stock movements recorded" description="Receipts, issues, returns and adjustments appear here when recorded in the current scope." /></div>}
+                {ledger.length ? <table className={styles.table}><caption className="sr-only">Every recorded stock movement and its running quantity across authorised stores; transfers conserve the total</caption><thead><tr><th scope="col">Material</th><th scope="col">Movement</th><th scope="col">Recorded at · WAT</th><th scope="col">Reference</th><th scope="col">Recorded by</th><th scope="col" className={styles.numeric}>Quantity</th><th scope="col" className={styles.numeric}>Running balance</th></tr></thead><tbody>{ledger.map((movement) => <tr key={movement.id}><th scope="row">{movement.materialName}</th><td><StatusPill status={STOCK_KIND_LABEL[movement.kind]} tone={KIND_TONE[movement.kind]} /></td><td><time dateTime={movement.atISO}>{timestampLabel(movement.atISO)}</time></td><td>{movement.ref || 'Not recorded'}</td><td>{movement.by}</td><td className={styles.numeric}>{stockMovementQuantity(movement.kind, movement.qty)} {movement.unit}</td><td className={styles.numeric}>{movement.runningQty} {movement.unit}</td></tr>)}</tbody></table> : <div className={styles.body}><EmptyState title="No stock movements recorded" description="Receipts, issues, returns and adjustments appear here when recorded in the current scope." /></div>}
               </div>
             </ConstructionPanel>
           </div>
@@ -140,6 +140,7 @@ function TransferDialog({ line, warehouses, onClose, onDone }: { line: StockLine
   const fieldId = useId();
   const router = useRouter();
   const others = warehouses.filter((w) => w.id !== line.warehouseId);
+  const available = Math.max(0, line.onHand - line.reserved);
   const [to, setTo] = useState('');
   const [qty, setQty] = useState('1');
   const [error, setError] = useState<string | null>(null);
@@ -152,9 +153,9 @@ function TransferDialog({ line, warehouses, onClose, onDone }: { line: StockLine
       <select id={`${fieldId}-store`} aria-label="To store" value={to} onChange={(e) => setTo(e.target.value)} className={styles.control}><option value="">Choose a destination store</option>{others.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select>
       <label htmlFor={`${fieldId}-quantity`} className="pb-form-label">Quantity · {line.unit}</label>
       <input id={`${fieldId}-quantity`} aria-label="Quantity" value={qty} onChange={(e) => setQty(e.target.value)} inputMode="decimal" type="number" min="0" step="any" className={styles.control} autoFocus />
-      <p className="text-[12px] text-text-3 mt-1.5">Blocked above {line.onHand} — a transfer can never drive the source store negative.</p>
+      <p className="text-[12px] text-text-3 mt-1.5">Blocked above {available} unreserved {line.unit}. Reserved stock stays in its source store.</p>
       {error && <div role="alert" className="text-[12px] text-negative mt-2">{error}</div>}
-      <Actions pending={pending} onClose={onClose} onSubmit={submit} disabled={!(Number(qty) > 0) || Number(qty) > line.onHand || !to} label="Confirm transfer" />
+      <Actions pending={pending} onClose={onClose} onSubmit={submit} disabled={!Number.isFinite(Number(qty)) || !(Number(qty) > 0) || Number(qty) > available || !to} label="Confirm transfer" />
     </Modal>
   );
 }

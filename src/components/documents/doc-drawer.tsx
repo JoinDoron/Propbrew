@@ -46,7 +46,7 @@ export function DocDrawer({ doc, canMutate, onClose }: { doc: DocView; canMutate
         {error && <p className={common.feedback} role="alert">{error}</p>}
         {!editing && <div className={common.actions}><Button type="button" icon={<Download size={16} />} disabled title="No stored file URL is connected to this record.">Download unavailable</Button>{canMutate && fields.length > 0 && <Button type="button" icon={<Pencil size={16} />} onClick={() => setEditing(true)}>Edit fields</Button>}</div>}
         <p className={common.metadata}>File download and OCR are not connected in this workspace. Editing fields updates the document record, not the source file.</p>
-        <dl className={common.facts}><div><dt>Uploaded by</dt><dd>{doc.uploadedBy}</dd></div><div><dt>Last updated</dt><dd>{doc.updatedAt.slice(0, 10)}</dd></div><div><dt>Recorded file size</dt><dd>{(doc.sizeKb / 1024).toFixed(1)} MB</dd></div><div><dt>Index flag</dt><dd>{doc.indexed ? 'Marked indexed' : 'Not indexed'}</dd></div></dl>
+        <dl className={common.facts}><div><dt>Uploaded by</dt><dd>{doc.uploadedBy}</dd></div><div><dt>Last updated</dt><dd>{doc.updatedAt.slice(0, 10)}</dd></div><div><dt>Recorded file size</dt><dd>{doc.sizeKb > 0 ? `${(doc.sizeKb / 1024).toFixed(1)} MB` : 'No file bytes recorded'}</dd></div><div><dt>Index flag</dt><dd>{doc.indexed ? 'Marked indexed' : 'Not indexed'}</dd></div></dl>
       </div>
     </div>
   </PortalDialog>;

@@ -42,7 +42,7 @@ export default async function ShortletBookingsPage() {
     };
   });
 
-  const aptOptions: AptOption[] = apts.map((a) => ({ id: a.id, name: a.name, property: propById.get(a.propertyId)?.name ?? '', rateMinor: a.nightlyRate.minor }));
+  const aptOptions: AptOption[] = apts.filter((a) => a.status === 'active' && a.nightlyRate.currency === 'NGN').map((a) => ({ id: a.id, name: a.name, property: propById.get(a.propertyId)?.name ?? '', rateMinor: a.nightlyRate.minor }));
 
   return (
     <div className="pb-page">

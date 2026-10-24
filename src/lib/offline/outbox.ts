@@ -1,238 +1,162 @@
 'use client';
 
-/**
- * The device outbox — durable local storage for field-captured work.
- *
- * Writes land in localStorage SYNCHRONOUSLY before the UI acknowledges them, so
- * killing the app (or the battery) between capture and sync cannot lose a
- * record. The queue survives reloads; the transport drains it whenever the
- * browser reports connectivity, with exponential backoff on failure.
- *
- * All queue semantics (ordering, backoff, dedupe, conflict handling) live in
- * `@/domain/sync` and are unit-tested; this file only does persistence,
- * connectivity detection and the retry loop.
- */
-
-import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { applyOutcome, dueOps, enqueue, prunable, type OutboxOp, type OpKind, type SyncOutcome } from '@/domain/sync';
 import { syncOperation, abandonOperation } from '@/server/actions/sync';
-import { idbAvailable, idbGetOps, idbPutOps, idbPutBlob, idbDeleteBlobsFor, idbBlobsFor } from './idb';
+import { idbAvailable, idbGetOps, idbPutOps, idbPutBlob, idbDeleteBlobsFor, idbBlobsFor, idbLegacyHasPending } from './idb';
 
-const KEY = 'vesta.outbox.v1';
-
-/* --- persistence ----------------------------------------------------------
- * IndexedDB is the source of truth (it holds the photo Blobs); the localStorage
- * copy is a metadata mirror so the very first paint has something to render
- * before IDB opens, and a fallback where IDB is unavailable (private mode).
- * ------------------------------------------------------------------------- */
-
-function read(): OutboxOp[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = window.localStorage.getItem(KEY);
-    return raw ? (JSON.parse(raw) as OutboxOp[]) : [];
-  } catch {
-    return []; // corrupt storage must never crash the field app
-  }
-}
-
-let cache: OutboxOp[] | null = null;
-const listeners = new Set<() => void>();
-
-function snapshot(): OutboxOp[] {
-  if (cache === null) cache = read();
-  return cache;
-}
-function commit(next: OutboxOp[]): void {
-  cache = next;
-  // Mirror synchronously so a crash between now and the IDB write still leaves
-  // the metadata recoverable; then persist for real.
-  try { window.localStorage.setItem(KEY, JSON.stringify(next)); } catch { /* quota — IDB still has it */ }
-  if (idbAvailable()) void idbPutOps(next).catch(() => { /* mirror already written */ });
-  listeners.forEach((l) => l());
-}
-
-/** Reconcile from IndexedDB once on mount — it, not the mirror, is canonical. */
-let hydrated = false;
-export async function hydrateFromIdb(): Promise<void> {
-  if (hydrated || !idbAvailable()) return;
-  hydrated = true;
-  try {
-    const stored = await idbGetOps<OutboxOp>();
-    if (stored.length === 0) return;
-    // Union by id, preferring whichever copy is further along.
-    const rank = (s: OutboxOp['status']) => (s === 'synced' ? 3 : s === 'conflict' ? 2 : s === 'failed' ? 1 : 0);
-    const merged = new Map(snapshot().map((o) => [o.id, o]));
-    for (const op of stored) {
-      const mine = merged.get(op.id);
-      if (!mine || rank(op.status) > rank(mine.status)) merged.set(op.id, op);
-    }
-    commit([...merged.values()]);
-  } catch { /* fall back to the mirror */ }
-}
-function subscribe(l: () => void): () => void {
-  listeners.add(l);
-  // Another tab on the same device shares the queue.
-  const onStorage = (e: StorageEvent) => { if (e.key === KEY) { cache = read(); l(); } };
-  window.addEventListener('storage', onStorage);
-  return () => { listeners.delete(l); window.removeEventListener('storage', onStorage); };
-}
-
+const LEGACY_KEY = 'vesta.outbox.v1';
+const key = (owner: string) => `propbrew.outbox.v2:${encodeURIComponent(owner)}`;
 const EMPTY: OutboxOp[] = [];
-
-/* --- connectivity --------------------------------------------------------- */
-
-/** A dev override so the offline path is demonstrable on a wired machine. */
-const FORCE_KEY = 'vesta.outbox.forceOffline';
-export function isForcedOffline(): boolean {
-  try { return window.localStorage.getItem(FORCE_KEY) === '1'; } catch { return false; }
+const stores = new Map<string, { cache: OutboxOp[] | null; hydrated: boolean; listeners: Set<() => void> }>();
+function store(owner: string) {
+  let current = stores.get(owner);
+  if (!current) { current = { cache: null, hydrated: false, listeners: new Set() }; stores.set(owner, current); }
+  return current;
 }
-export function setForcedOffline(on: boolean): void {
+function read(owner: string): OutboxOp[] {
+  if (typeof window === 'undefined') return EMPTY;
   try {
-    if (on) window.localStorage.setItem(FORCE_KEY, '1');
-    else window.localStorage.removeItem(FORCE_KEY);
-  } catch { /* ignore */ }
+    const raw = window.localStorage.getItem(key(owner));
+    const value: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(value) ? value.filter((op): op is OutboxOp => !!op && typeof op === 'object' && typeof op.id === 'string' && typeof op.kind === 'string' && typeof op.capturedISO === 'string' && !!op.payload && Number.isInteger(op.attachments) && op.attachments >= 0).map((op) => op.status === 'sending' ? { ...op, status: 'queued' } : op) : [];
+  } catch { return EMPTY; }
+}
+function snapshot(owner?: string): OutboxOp[] {
+  if (!owner) return EMPTY;
+  const current = store(owner);
+  if (current.cache === null) current.cache = read(owner);
+  return current.cache;
+}
+function commit(owner: string, next: OutboxOp[]): void {
+  const current = store(owner);
+  // Never acknowledge a capture if neither persistence path can keep it.
+  window.localStorage.setItem(key(owner), JSON.stringify(next));
+  current.cache = next;
+  if (idbAvailable()) void idbPutOps(next, owner).catch(() => { /* synchronous mirror remains intact */ });
+  current.listeners.forEach((l) => l());
+}
+export async function hydrateFromIdb(owner?: string): Promise<void> {
+  if (!owner || store(owner).hydrated || !idbAvailable()) return;
+  store(owner).hydrated = true;
+  try {
+    const stored = await idbGetOps<OutboxOp>(owner);
+    const merged = new Map(snapshot(owner).map((o) => [o.id, o]));
+    // Interrupted sends are safe to retry, using the same owner/content receipt.
+    for (const op of stored) if (!merged.has(op.id)) merged.set(op.id, op.status === 'sending' ? { ...op, status: 'queued' } : op);
+    if (merged.size) commit(owner, [...merged.values()]);
+  } catch { /* keep the existing account's mirror */ }
+}
+function subscribe(owner: string | undefined, listener: () => void): () => void {
+  if (!owner) return () => {};
+  store(owner).listeners.add(listener);
+  const onStorage = (event: StorageEvent) => { if (event.key === key(owner)) { store(owner).cache = read(owner); listener(); } };
+  window.addEventListener('storage', onStorage);
+  return () => { store(owner).listeners.delete(listener); window.removeEventListener('storage', onStorage); };
+}
+
+/** Old queues are retained untouched because there is no evidence of who captured them. */
+export function useLegacyOutboxNotice(): boolean {
+  const [legacy, setLegacy] = useState(false);
+  useEffect(() => {
+    let active = true;
+    let local = false;
+    try { const value = JSON.parse(window.localStorage.getItem(LEGACY_KEY) ?? '[]'); local = Array.isArray(value) && value.some((op) => op.status !== 'synced'); } catch { local = true; }
+    void idbLegacyHasPending().then((pending) => { if (active) setLegacy(local || pending); }).catch(() => { if (active && local) setLegacy(true); });
+    return () => { active = false; };
+  }, []);
+  return legacy;
+}
+
+const FORCE_KEY = 'vesta.outbox.forceOffline';
+export function isForcedOffline(): boolean { try { return window.localStorage.getItem(FORCE_KEY) === '1'; } catch { return false; } }
+export function setForcedOffline(on: boolean): void {
+  try { if (on) window.localStorage.setItem(FORCE_KEY, '1'); else window.localStorage.removeItem(FORCE_KEY); } catch { /* device setting only */ }
   window.dispatchEvent(new Event(on ? 'offline' : 'online'));
 }
-
-function onlineSubscribe(l: () => void): () => void {
-  window.addEventListener('online', l);
-  window.addEventListener('offline', l);
-  return () => { window.removeEventListener('online', l); window.removeEventListener('offline', l); };
-}
-function onlineSnapshot(): boolean {
-  return typeof navigator === 'undefined' ? true : navigator.onLine && !isForcedOffline();
+function onlineSubscribe(l: () => void) { window.addEventListener('online', l); window.addEventListener('offline', l); return () => { window.removeEventListener('online', l); window.removeEventListener('offline', l); }; }
+function onlineSnapshot() { return typeof navigator === 'undefined' ? true : navigator.onLine && !isForcedOffline(); }
+export function useOnline() { return useSyncExternalStore(onlineSubscribe, onlineSnapshot, () => true); }
+export function useOutbox(owner?: string): OutboxOp[] {
+  return useSyncExternalStore(useCallback((l) => subscribe(owner, l), [owner]), useCallback(() => snapshot(owner), [owner]), () => EMPTY);
 }
 
-/* --- public API ----------------------------------------------------------- */
-
-export function useOnline(): boolean {
-  return useSyncExternalStore(onlineSubscribe, onlineSnapshot, () => true);
-}
-
-export function useOutbox(): OutboxOp[] {
-  return useSyncExternalStore(subscribe, snapshot, () => EMPTY);
-}
-
-/** Capture a mutation locally. Returns once it is durably on the device — the
- *  UI can confirm to the user immediately, with or without a connection. */
-export function capture(kind: OpKind, label: string, payload: Record<string, unknown>, attachments: number | readonly File[] = 0): OutboxOp {
-  const files = Array.isArray(attachments) ? attachments : [];
-  const op: OutboxOp = {
-    id: newId(),
-    kind, label, payload,
-    capturedISO: new Date().toISOString(),
-    attachments: typeof attachments === 'number' ? attachments : files.length,
-    status: 'queued',
-    attempts: 0,
-  };
-  commit(enqueue(snapshot(), op));
-  // Photos go to IndexedDB as real Blobs — never base64 into the metadata.
-  if (files.length && idbAvailable()) {
-    files.forEach((f, i) => {
-      void idbPutBlob({ id: `${op.id}-${i}`, opId: op.id, name: f.name, type: f.type, size: f.size, blob: f })
-        .catch(() => { /* the op still syncs; the photo is what's lost */ });
-    });
-  }
+/** Capture acknowledges only after metadata AND every supplied file are durable. */
+export async function capture(owner: string | undefined, kind: OpKind, label: string, payload: Record<string, unknown>, attachments: readonly File[] = []): Promise<OutboxOp> {
+  if (!owner) throw new Error('Sign in to a tenant workspace before capturing work.');
+  if (attachments.length && !idbAvailable()) throw new Error('This device cannot store photos offline. Keep the form open and retry when storage is available.');
+  const op: OutboxOp = { id: crypto.randomUUID(), kind, label, payload, capturedISO: new Date().toISOString(), attachments: attachments.length, status: 'queued', attempts: 0 };
+  // Do not publish a drainable record until all file transactions have completed.
+  for (const [i, file] of attachments.entries()) await idbPutBlob({ id: `${op.id}-${i}`, opId: op.id, name: file.name, type: file.type, size: file.size, blob: file }, owner);
+  commit(owner, enqueue(snapshot(owner), op));
   return op;
 }
-
-/** The photos still held on this device for an op. */
-export async function attachmentsFor(opId: string) {
-  return idbAvailable() ? idbBlobsFor(opId) : [];
+export async function attachmentsFor(owner: string, opId: string) { return idbAvailable() ? idbBlobsFor(opId, owner) : []; }
+export function removeOp(owner: string | undefined, id: string): void {
+  if (!owner) return;
+  commit(owner, snapshot(owner).filter((op) => op.id !== id));
+  if (idbAvailable()) void idbDeleteBlobsFor(id, owner).catch(() => {});
 }
-
-export function removeOp(id: string): void {
-  commit(snapshot().filter((o) => o.id !== id));
-  if (idbAvailable()) void idbDeleteBlobsFor(id).catch(() => { /* orphan blob, harmless */ });
+export function clearSynced(owner?: string): void { if (owner) commit(owner, snapshot(owner).filter((op) => op.status !== 'synced')); }
+export async function abandon(owner: string | undefined, id: string): Promise<void> {
+  if (!owner) throw new Error('Sign in before discarding captured work.');
+  const op = snapshot(owner).find((o) => o.id === id);
+  if (!op) throw new Error('The local record was not found.');
+  const outcome = await abandonOperation({ owner, id, kind: op.kind, capturedISO: op.capturedISO, payload: op.payload });
+  if (!outcome.ok) throw new Error(outcome.error);
+  removeOp(owner, id);
 }
+export function requeue(owner: string | undefined, id: string): void { if (owner) commit(owner, snapshot(owner).map((op) => op.id === id ? { ...op, status: 'queued', error: undefined } : op)); }
 
-export function clearSynced(): void {
-  commit(snapshot().filter((o) => o.status !== 'synced'));
-}
-
-/** Give up on a conflicted op — the server keeps its version. */
-export async function abandon(id: string): Promise<void> {
-  const op = snapshot().find((o) => o.id === id);
-  if (op) await abandonOperation(id, op.kind);
-  removeOp(id);
-}
-
-/** Re-queue a conflicted op to overwrite… nothing: conflicts are server-wins by
- *  design, so "retry" here just re-attempts in case the server has since moved
- *  back into an acceptable state. */
-export function requeue(id: string): void {
-  commit(snapshot().map((o) => (o.id === id ? { ...o, status: 'queued' as const, error: undefined } : o)));
-}
-
-function newId(): string {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
-  return `op-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-/* --- the drain loop ------------------------------------------------------- */
-
-/**
- * Drains the outbox while online. Mount ONCE (the shell does it). Sends ops one
- * at a time in capture order so a report and its follow-up issue arrive in the
- * order the field user wrote them.
- */
-export function useOutboxSync(): void {
-  const ops = useOutbox();
-  const online = useOnline();
-  const busy = useRef(false);
-  const lastAttempt = useRef<Record<string, number>>({});
-
+export function useOutboxSync(owner?: string): void {
+  const ops = useOutbox(owner), online = useOnline();
+  const currentOwner = useRef(owner);
+  useEffect(() => { currentOwner.current = owner; return () => { currentOwner.current = undefined; }; }, [owner]);
+  const busy = useRef(false), lastAttempt = useRef<Record<string, number>>({});
   const drain = useCallback(async () => {
-    if (busy.current || !onlineSnapshot()) return;
-    const due = dueOps(snapshot(), Date.now(), lastAttempt.current);
-    if (due.length === 0) return;
+    if (!owner || currentOwner.current !== owner || busy.current || !onlineSnapshot()) return;
+    const due = dueOps(snapshot(owner), Date.now(), lastAttempt.current);
+    if (!due.length) return;
     busy.current = true;
     try {
       for (const op of due) {
-        if (!onlineSnapshot()) break; // signal dropped mid-drain — stop cleanly
-        commit(snapshot().map((o) => (o.id === op.id ? { ...o, status: 'sending' as const } : o)));
+        if (currentOwner.current !== owner || !onlineSnapshot()) break;
+        commit(owner, snapshot(owner).map((o) => o.id === op.id ? { ...o, status: 'sending' } : o));
         lastAttempt.current[op.id] = Date.now();
         let outcome: SyncOutcome;
         try {
-          const blobs = await attachmentsFor(op.id);
-          const mediaRefs: string[] = [];
-          for (const stored of blobs) {
-            const form = new FormData();
-            form.append('file', stored.blob, stored.name);
-            form.append('purpose', `offline-${op.kind}`);
-            const upload = await fetch('/api/upload', { method: 'POST', body: form, headers: { 'idempotency-key': `${op.id}:${stored.id}` } });
-            if (!upload.ok) throw new Error(`Media upload failed (${upload.status}).`);
-            const uploaded = await upload.json() as { url?: string };
-            if (uploaded.url) mediaRefs.push(uploaded.url);
+          let payload = op.payload;
+          const existingRefs = Array.isArray(payload.mediaRefs) ? payload.mediaRefs as string[] : [];
+          if (existingRefs.length !== op.attachments) {
+            const blobs = await attachmentsFor(owner, op.id);
+            if (blobs.length !== op.attachments) throw new Error('Some attached files are missing from device storage. The record was kept and has not been sent.');
+            const mediaRefs: string[] = [];
+            for (const stored of blobs) {
+              if (currentOwner.current !== owner) throw new Error('The signed-in account changed. Your original device copy was kept.');
+              const form = new FormData(); form.append('file', stored.blob, stored.name); form.append('purpose', `offline-${op.kind}`);
+              const upload = await fetch('/api/upload', { method: 'POST', body: form, headers: { 'idempotency-key': `${op.id}:${stored.id}` } });
+              if (!upload.ok) throw new Error(`Photo upload unavailable (${upload.status}). Your record and files remain on this device.`);
+              const uploaded = await upload.json() as { url?: string };
+              if (!uploaded.url?.startsWith('https://')) throw new Error('The upload did not return a stored file. Your originals were kept.');
+              mediaRefs.push(uploaded.url);
+            }
+            payload = { ...payload, mediaRefs };
+            // Persist returned references before sync so ambiguous network retries keep identical content.
+            commit(owner, snapshot(owner).map((o) => o.id === op.id ? { ...o, payload } : o));
           }
-          outcome = await syncOperation({ id: op.id, kind: op.kind, capturedISO: op.capturedISO, payload: { ...op.payload, mediaRefs } });
-        } catch {
-          // Network died mid-flight. The op stays queued; because the id is the
-          // idempotency key, re-sending later is safe even if the server DID
-          // apply it — it will answer `duplicate: true`.
-          outcome = { ok: false, id: op.id, conflict: false, error: 'No connection — will retry automatically.' };
+          if (currentOwner.current !== owner) throw new Error('The signed-in account changed. Your original device copy was kept.');
+          outcome = await syncOperation({ owner, id: op.id, kind: op.kind, capturedISO: op.capturedISO, payload });
+        } catch (error) {
+          outcome = { ok: false, id: op.id, conflict: false, error: error instanceof Error ? error.message : 'Unable to connect. Your record remains on this device for retry.' };
         }
-        const nowISO = new Date().toISOString();
-        commit(snapshot().map((o) => (o.id === op.id ? applyOutcome(o, outcome, nowISO) : o)));
-        // Uploaded media is deleted only after the operation receives a server
-        // outcome. Failed uploads remain in IndexedDB for retry.
-        if (outcome.ok && idbAvailable()) await idbDeleteBlobsFor(op.id);
+        commit(owner, snapshot(owner).map((o) => o.id === op.id ? applyOutcome(o, outcome, new Date().toISOString()) : o));
+        if (outcome.ok && idbAvailable()) await idbDeleteBlobsFor(op.id, owner);
       }
-      // Housekeeping: drop long-since-synced receipts.
-      const stale = prunable(snapshot(), Date.now());
-      if (stale.length) commit(snapshot().filter((o) => !stale.includes(o.id)));
-    } finally {
-      busy.current = false;
-    }
-  }, []);
-
-  // Reconcile from IndexedDB first, then drain on mount, whenever connectivity
-  // returns, when new work is queued, and on a slow heartbeat for backoff.
-  useEffect(() => { void hydrateFromIdb().then(() => drain()); }, [drain]);
+      const stale = prunable(snapshot(owner), Date.now());
+      if (stale.length) commit(owner, snapshot(owner).filter((op) => !stale.includes(op.id)));
+    } finally { busy.current = false; }
+  }, [owner]);
+  useEffect(() => { void hydrateFromIdb(owner).then(drain); }, [owner, drain]);
   useEffect(() => { void drain(); }, [drain, online, ops.length]);
-  useEffect(() => {
-    const t = setInterval(() => { void drain(); }, 10_000);
-    return () => clearInterval(t);
-  }, [drain]);
+  useEffect(() => { const timer = setInterval(() => { void drain(); }, 10_000); return () => clearInterval(timer); }, [drain]);
 }

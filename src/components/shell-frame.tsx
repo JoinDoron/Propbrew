@@ -35,6 +35,7 @@ export async function ShellFrame({ expected, workspace, children }: { expected: 
     name: session.key === 'clerk' ? session.label : session.label.split(' — ')[0],
     roleSummary: session.roleSummary,
     tenantLabel: session.tenantLabel,
+    outboxOwner: actor.tenantId ? JSON.stringify([actor.tenantId, actor.userId]) : undefined,
   };
 
   const canReadWorkOrders = can(actor, 'work_orders', 'read').allowed;

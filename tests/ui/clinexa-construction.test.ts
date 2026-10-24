@@ -253,9 +253,9 @@ describe('Construction records, permissions and specialised views survive the vi
     expect(html).toContain('aria-label="Add to completed today"');
     expect(html).toContain('Device outbox');
     expect(view('field-capture')).toContain('}, photos);');
-    expect(view('field-capture')).toContain("capture('daily_report'");
-    expect(view('field-capture')).toContain("capture('task_progress'");
-    expect(view('field-capture')).toContain("capture('site_issue'");
+    expect(view('field-capture')).toContain("capture(owner, 'daily_report'");
+    expect(view('field-capture')).toContain("capture(owner, 'task_progress'");
+    expect(view('field-capture')).toContain("capture(owner, 'site_issue'");
     expect(view('field-capture')).toContain('client-generated id');
   });
 

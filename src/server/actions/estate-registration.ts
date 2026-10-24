@@ -9,6 +9,7 @@ import { scopedMutableGet } from '@/server/data';
 import { canRegisterEstateRecords, withCreatedEstateAssignments } from '@/server/data/estate-creation-scope';
 import { NOW } from '@/domain/ppm';
 import { money } from '@/domain/primitives';
+import { assertReviewReadiness, isReviewActor, reviewModeEnabled } from '@/server/review-auth';
 import type { Actor } from '@/lib/authz';
 import type { Building, Resident, Site, Unit } from '@/domain/entities';
 
@@ -29,10 +30,21 @@ const tenantSchema = z.object({
 }).strict();
 
 async function registrationActor(): Promise<{ ok: true; actor: Actor } | { ok: false; error: string }> {
-  if (process.env.NODE_ENV === 'production' || (process.env.DATA_SOURCE && process.env.DATA_SOURCE !== 'memory')) {
+  const review = reviewModeEnabled();
+  if ((!review && process.env.NODE_ENV === 'production') || (process.env.DATA_SOURCE && process.env.DATA_SOURCE !== 'memory')) {
     return { ok: false, error: 'Property and tenant creation require the durable registration adapter in this environment. No record was created.' };
   }
+  if (review) {
+    try { assertReviewReadiness(); }
+    catch { return { ok: false, error: 'Private review registration is unavailable until its secure configuration is restored. No record was created.' }; }
+  }
   const session = await getSession();
+  if (review) {
+    if (!session || session.key !== 'private-review' || !isReviewActor(session.actor) || !canRegisterEstateRecords(session.actor)) {
+      return { ok: false, error: 'Sign in to the private review with the authorised estate-manager account to add sample records.' };
+    }
+    return { ok: true, actor: session.actor };
+  }
   if (!session || session.key === 'clerk' || !devIdentityEnabled()) {
     return { ok: false, error: 'Registration is available only in the signed-in local demo until durable registration is configured.' };
   }
@@ -52,7 +64,7 @@ function priorResult(actor: Actor, requestKey: string, kind: 'property' | 'tenan
 
 const refresh = () => ['/estate', '/properties', '/people', '/tenancy', '/spaces', '/portfolio', '/workspaces'].forEach((path) => revalidatePath(path));
 
-/** Demo record creation only: no infrastructure, subscription or billing changes. */
+/** Sample record creation only: no infrastructure, subscription or billing changes. */
 export async function addEstateProperty(input: unknown): Promise<RegistrationResult> {
   const gate = await registrationActor();
   if (!gate.ok) return gate;

@@ -2,12 +2,14 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { ArrowRight, ArrowUpRight, Banknote, Bell, HandCoins, Info, Search, ShieldCheck, Sparkles, TrendingUp, TriangleAlert, X } from 'lucide-react';
 import { Avatar, Button, Card, CardHeader, EmptyState, IconButton, KpiCard, StatusPill } from '@/components/ui';
 import { PageTabs } from '@/components/ui/page-tabs';
 import { PortalDialog } from '@/components/portal/portal-dialog';
 import { toneVar, type Tone } from '@/lib/status-tones';
 import { debtorRisk, DUNNING_LABEL, nextDunningStage, type DunningStage, type PromiseStatus } from '@/domain/estate';
+import { UNVERIFIED_COLLECTION_INVOICE } from '@/domain/estate/collection-review';
 import { sendReminder, advanceDunning } from '@/server/actions/estate';
 import { CollectionPromiseDialog } from './collection-promise-dialog';
 import { collectionMoney as money, collectionDate, type CaseRow } from './collections-types';
@@ -19,6 +21,11 @@ const STAGE_TONE: Record<DunningStage, Tone> = { reminder: 'info', notice: 'warn
 const PROMISE_TONE: Record<PromiseStatus, Tone> = { pending: 'info', kept: 'success', broken: 'danger' };
 const compactMoney = (minor: number) => new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', notation: 'compact', maximumFractionDigits: 1 }).format(minor / 100);
 const riskLabel = (c: CaseRow) => debtorRisk(c).band === 'success' ? 'Lower risk' : debtorRisk(c).label;
+const reviewFor = (c: CaseRow) => c.invoiceReview ?? UNVERIFIED_COLLECTION_INVOICE;
+function InvoiceBadge({ c }: { c: CaseRow }) {
+  const review = reviewFor(c);
+  return <StatusPill status={review.label} tone={review.state === 'matched' ? 'info' : review.state === 'paid' ? 'success' : 'warn'} />;
+}
 type FollowUp = { caseId: string; type: 'reminder' | 'advance' };
 
 export function CollectionsWorkspace({ cases, forecast, canMutate }: {
@@ -44,7 +51,7 @@ export function CollectionsWorkspace({ cases, forecast, canMutate }: {
   const filtered = sorted.filter((c) => (stage === 'all' || c.stage === stage) && `${c.residentName} ${c.unitLabel} ${c.invoiceRef}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
   const openCase = (c: CaseRow) => { setMessage(null); setSelectedId(c.id); };
   const reviewFollowUp = (c: CaseRow, type: FollowUp['type']) => {
-    if (!canMutate || pending) return;
+    if (!canMutate || pending || !reviewFor(c).canFollowUp) return;
     setMessage(null);
     setFollowUp({ caseId: c.id, type });
   };
@@ -52,6 +59,7 @@ export function CollectionsWorkspace({ cases, forecast, canMutate }: {
   function confirmFollowUp() {
     if (!canMutate || pending || !followUp || !confirmationCase) return;
     const c = confirmationCase;
+    if (!reviewFor(c).canFollowUp) { setMessage(reviewFor(c).detail); return; }
     const type = followUp.type;
     if (type === 'advance' && c.stage === 'escalated') return;
     start(async () => {
@@ -70,17 +78,17 @@ export function CollectionsWorkspace({ cases, forecast, canMutate }: {
     <PageTabs label="Collection sections" items={[
       { id: 'overview', label: 'Recovery overview', content: <div className="pb-section">
         <div className={styles.metrics}>
-          <KpiCard label="Outstanding" value={compactMoney(forecast.outstandingMinor)} icon={<Banknote size={18} />} />
+          <KpiCard label="Recorded case balances" value={compactMoney(forecast.outstandingMinor)} icon={<Banknote size={18} />} />
           <KpiCard label="Risk-weighted estimate" value={compactMoney(forecast.expectedMinor)} icon={<TrendingUp size={18} />} />
           <KpiCard label="High-risk cases" value={String(highRisk)} icon={<TriangleAlert size={18} />} />
           <KpiCard label="Promises pending" value={String(pendingPromises.length)} icon={<HandCoins size={18} />} />
         </div>
         <div className={styles.analytics}>
           <Card className={styles.panel}>
-            <CardHeader title="Recovery outlook" subtitle="An advisory estimate from recorded case balances" action={<Sparkles size={18} className="text-primary" />} />
+            <CardHeader title="Recovery outlook" subtitle="An advisory estimate from historical case balances" action={<Sparkles size={18} className="text-primary" />} />
             {forecast.outstandingMinor > 0 ? <>
               <div className={styles.recoverySummary}><RecoveryRing pct={forecast.recoveryPct} /><div><p className={styles.summaryTitle}>{money(forecast.expectedMinor)} estimated recovery</p><p className={styles.bodySecondary}>From {money(forecast.outstandingMinor)} outstanding.</p><p className={styles.metadata}>Weighted by recorded arrears, exposure and promise status.</p></div></div>
-              <dl className={styles.facts}><div><dt>Recorded outstanding balance</dt><dd>{money(forecast.outstandingMinor)}</dd></div><div><dt>Outside the recovery estimate</dt><dd>{money(forecast.outstandingMinor - forecast.expectedMinor)}</dd></div></dl>
+              <dl className={styles.facts}><div><dt>Recorded case balance</dt><dd>{money(forecast.outstandingMinor)}</dd></div><div><dt>Outside the recovery estimate</dt><dd>{money(forecast.outstandingMinor - forecast.expectedMinor)}</dd></div></dl>
               <p className={styles.footnote}>Rules-based snapshot, not a payment prediction or cash received. Review every case before deciding on follow-up.</p>
             </> : <EmptyState icon={<Banknote size={22} />} title="No outstanding recovery balance" description="Recorded arrears will appear here when a collection case needs follow-up." />}
           </Card>
@@ -110,9 +118,9 @@ export function CollectionsWorkspace({ cases, forecast, canMutate }: {
             <div className={styles.toolbar}><label className={styles.search}><Search size={17} aria-hidden="true" /><span className="sr-only">Search collection cases</span><input type="search" placeholder="Search resident, unit or invoice…" value={query} onChange={(event) => setQuery(event.target.value)} /></label><label className={styles.stageFilter}><span className="sr-only">Collection stage</span><select value={stage} onChange={(event) => setStage(event.target.value)}><option value="all">All stages</option>{STAGES.map((s) => <option key={s} value={s}>{DUNNING_LABEL[s]}</option>)}</select></label></div>
           </div>
           {filtered.length ? <div className="pb-table-scroll" role="region" aria-label="Collection case register" tabIndex={0}><table className={`pb-data-table ${styles.caseTable}`}>
-            <thead><tr>{['Resident / unit', 'Invoice', 'Outstanding', 'Aging', 'Review signal', 'Current stage', 'Payment promise', 'Case'].map((heading) => <th key={heading} scope="col" className={heading === 'Outstanding' ? styles.numeric : undefined}>{heading}</th>)}</tr></thead>
+            <thead><tr>{['Resident / unit', 'Invoice', 'Recorded case balance', 'Aging', 'Review signal', 'Current stage', 'Payment promise', 'Case'].map((heading) => <th key={heading} scope="col" className={heading === 'Recorded case balance' ? styles.numeric : undefined}>{heading}</th>)}</tr></thead>
             <tbody>{filtered.map((c) => <tr key={c.id}>
-              <td><div className={styles.person}><Avatar name={c.residentName} size={32} /><div><span className={styles.recordTitle}>{c.residentName}</span><span className={styles.metadata}>{c.unitLabel}</span></div></div></td><td><span className={styles.recordTitle}>{c.invoiceRef}</span><span className={styles.metadata}>{c.remindersSent} reminder record{c.remindersSent === 1 ? '' : 's'}</span></td><td className={styles.numeric}>{money(c.amountMinor)}</td><td>{c.agingDays > 0 ? <span className="text-warning">{c.agingDays}d overdue</span> : <span className={styles.metadata}>Current</span>}</td><td><div className={styles.signal}><StatusPill status={riskLabel(c)} tone={debtorRisk(c).band} /><span className={styles.metadata}>Score {debtorRisk(c).score}/100</span></div></td><td><StatusPill status={DUNNING_LABEL[c.stage]} tone={STAGE_TONE[c.stage]} /></td><td>{c.promiseStatus ? <div className={styles.signal}><StatusPill status={c.promiseStatus} tone={PROMISE_TONE[c.promiseStatus]} /><span className={styles.metadata}>{money(c.promiseAmountMinor ?? 0)}{c.promiseDueISO ? ` · ${collectionDate(c.promiseDueISO)}` : ''}</span></div> : <span className={styles.metadata}>Not recorded</span>}</td><td className={styles.rowAction}><Button variant="ghost" aria-label={`Open collection case ${c.invoiceRef} for ${c.residentName}`} onClick={() => openCase(c)}>View <ArrowUpRight size={15} aria-hidden="true" /></Button></td>
+              <td><div className={styles.person}><Avatar name={c.residentName} size={32} /><div><span className={styles.recordTitle}>{c.residentName}</span><span className={styles.metadata}>{c.unitLabel}</span></div></div></td><td><span className={styles.recordTitle}>{c.invoiceRef}</span><InvoiceBadge c={c} /><span className={styles.metadata}>{c.remindersSent} reminder record{c.remindersSent === 1 ? '' : 's'}</span></td><td className={styles.numeric}>{money(c.amountMinor)}<span className={styles.metadata}>Invoice: {reviewFor(c).outstandingMinor === null ? 'unverified' : money(reviewFor(c).outstandingMinor!)}</span></td><td>{c.agingDays > 0 ? <span className="text-warning">{c.agingDays}d overdue</span> : <span className={styles.metadata}>Current</span>}</td><td><div className={styles.signal}><StatusPill status={riskLabel(c)} tone={debtorRisk(c).band} /><span className={styles.metadata}>Score {debtorRisk(c).score}/100</span></div></td><td><StatusPill status={DUNNING_LABEL[c.stage]} tone={STAGE_TONE[c.stage]} /></td><td>{c.promiseStatus ? <div className={styles.signal}><StatusPill status={c.promiseStatus} tone={PROMISE_TONE[c.promiseStatus]} /><span className={styles.metadata}>{money(c.promiseAmountMinor ?? 0)}{c.promiseDueISO ? ` · ${collectionDate(c.promiseDueISO)}` : ''}</span></div> : <span className={styles.metadata}>Not recorded</span>}</td><td className={styles.rowAction}><Button variant="ghost" aria-label={`Open collection case ${c.invoiceRef} for ${c.residentName}`} onClick={() => openCase(c)}>View <ArrowUpRight size={15} aria-hidden="true" /></Button></td>
             </tr>)}</tbody>
           </table></div> : <EmptyState icon={<HandCoins size={22} />} title={cases.length ? 'No matching collection cases' : 'No collection cases in your scope.'} description={cases.length ? 'Try another resident, unit, invoice reference or collection stage.' : 'Outstanding charges needing follow-up will appear here.'} action={cases.length ? <Button onClick={() => { setQuery(''); setStage('all'); }}>Clear filters</Button> : undefined} />}
           <p className={styles.registerFooter}>Showing {filtered.length} of {cases.length} recorded cases · NGN · Risk scores support human review only.</p>
@@ -126,11 +134,12 @@ export function CollectionsWorkspace({ cases, forecast, canMutate }: {
         <header className={styles.dialogHeader}><div className={styles.person}><Avatar name={selected.residentName} size={40} /><div><h2 className={styles.dialogTitle}>{selected.residentName}</h2><p className={styles.metadata}>{selected.unitLabel} · {selected.invoiceRef}</p></div></div><IconButton aria-label="Close collection case" disabled={pending} onClick={() => setSelectedId(null)}><X size={18} /></IconButton></header>
         <div className={styles.dialogBody}>
           {message && !followUp && !promiseFor && <CollectionFeedback message={message} onDismiss={() => setMessage(null)} />}
-          <div className={styles.balancePanel}><span className={styles.metadata}>Recorded outstanding · NGN</span><span className={styles.balanceValue}>{money(selected.amountMinor)}</span><div className={styles.balanceContext}><StatusPill status={`${riskLabel(selected)} · ${debtorRisk(selected).score}/100`} tone={debtorRisk(selected).band} /><span className={styles.metadata}>{selected.agingDays > 0 ? `${selected.agingDays} days overdue` : 'Current balance'}</span></div></div>
+          <div className={styles.balancePanel}><span className={styles.metadata}>Recorded case balance · NGN</span><span className={styles.balanceValue}>{money(selected.amountMinor)}</span><div className={styles.balanceContext}><StatusPill status={`${riskLabel(selected)} · ${debtorRisk(selected).score}/100`} tone={debtorRisk(selected).band} /><span className={styles.metadata}>{selected.agingDays > 0 ? `${selected.agingDays} days overdue` : 'Current balance'}</span></div></div>
+          <section aria-label="Linked invoice review"><h3 className={styles.sectionTitle}>Linked invoice review</h3><InvoiceBadge c={selected} /><dl className={styles.facts}><div><dt>Historical case balance</dt><dd>{money(selected.amountMinor)}</dd></div><div><dt>Current invoice outstanding</dt><dd>{reviewFor(selected).outstandingMinor === null ? 'Unverified' : money(reviewFor(selected).outstandingMinor!)}</dd></div></dl><p className={styles.footnote}>{reviewFor(selected).detail}</p><Link href="/billing" className="pb-action">Review Billing <ArrowUpRight size={15} aria-hidden="true" /></Link></section>
           <section aria-label={`Collection stages for ${selected.residentName}`}><h3 className={styles.sectionTitle}>Collection workflow</h3><ol className={styles.stageList}>{STAGES.map((s, index) => <li key={s} className={styles.stageItem} data-current={s === selected.stage} aria-current={s === selected.stage ? 'step' : undefined}><span className={styles.stageNumber}>{index + 1}</span><span>{DUNNING_LABEL[s]}</span>{s === selected.stage && <span className={styles.currentLabel}>Current stage</span>}</li>)}</ol><p className={styles.footnote}>Workflow position is not evidence of previous message or notice delivery.</p></section>
           <section aria-label="Case follow-up record"><h3 className={styles.sectionTitle}>Follow-up record</h3><dl className={styles.facts}><div><dt>Invoice reference</dt><dd>{selected.invoiceRef}</dd></div><div><dt>Reminder entries</dt><dd>{selected.remindersSent}</dd></div><div><dt>Current stage</dt><dd>{DUNNING_LABEL[selected.stage]}</dd></div></dl></section>
           <section aria-label="Case payment promise"><div className={styles.sectionHeader}><h3 className={styles.sectionTitle}>Payment promise</h3>{selected.promiseStatus && <StatusPill status={selected.promiseStatus} tone={PROMISE_TONE[selected.promiseStatus]} />}</div>{selected.promiseStatus ? <dl className={styles.facts}><div><dt>Promised amount</dt><dd>{money(selected.promiseAmountMinor ?? 0)}</dd></div><div><dt>Promised by</dt><dd>{selected.promiseDueISO ? <time dateTime={selected.promiseDueISO}>{collectionDate(selected.promiseDueISO)}</time> : 'Not recorded'}</dd></div></dl> : <p className={styles.bodySecondary}>No payment promise recorded for this case.</p>}<p className={styles.footnote}>A promise is a commitment, not a receipt or a reduction of the balance.</p></section>
-          {canMutate ? <div className={styles.caseActions}><Button icon={<Bell size={16} />} disabled={pending} onClick={() => reviewFollowUp(selected, 'reminder')}>Record reminder</Button><Button icon={<HandCoins size={16} />} disabled={pending} onClick={() => { setMessage(null); setPromiseFor(selected); }}>Record promise</Button>{selected.stage !== 'escalated' && <Button variant="primary" icon={<ArrowRight size={16} />} disabled={pending} onClick={() => reviewFollowUp(selected, 'advance')}>Advance stage</Button>}</div> : <p className={styles.bodySecondary}>Read-only access. An authorised manager can update this case.</p>}
+          {canMutate ? <div className={styles.caseActions}><Button icon={<Bell size={16} />} disabled={pending || !reviewFor(selected).canFollowUp} onClick={() => reviewFollowUp(selected, 'reminder')}>Record reminder</Button><Button icon={<HandCoins size={16} />} disabled={pending || !reviewFor(selected).canFollowUp} onClick={() => { if (!reviewFor(selected).canFollowUp) return; setMessage(null); setPromiseFor(selected); }}>Record promise</Button>{selected.stage !== 'escalated' && <Button variant="primary" icon={<ArrowRight size={16} />} disabled={pending || !reviewFor(selected).canFollowUp} onClick={() => reviewFollowUp(selected, 'advance')}>Advance stage</Button>}</div> : <p className={styles.bodySecondary}>Read-only access. An authorised manager can update this case.</p>}
           <p className={styles.safetyNote}><ShieldCheck size={16} aria-hidden="true" />Advisory scores do not apply penalties or restrict resident services.</p>
         </div>
       </div>
@@ -143,7 +152,7 @@ export function CollectionsWorkspace({ cases, forecast, canMutate }: {
         <div className={styles.dialogBody}>
           {message && <CollectionFeedback message={message} onDismiss={() => setMessage(null)} />}
           {followUp.type === 'reminder' ? <div className={styles.notice}><Bell size={18} aria-hidden="true" /><p>Record a reminder entry only.<span>This increases the case reminder count from {confirmationCase.remindersSent} to {confirmationCase.remindersSent + 1}. No message is sent and the outstanding balance does not change.</span></p></div> : <><div className={styles.stageChange}><StatusPill status={DUNNING_LABEL[confirmationCase.stage]} tone={STAGE_TONE[confirmationCase.stage]} /><ArrowRight size={18} aria-label="moves to" /><StatusPill status={DUNNING_LABEL[nextDunningStage(confirmationCase.stage)]} tone={STAGE_TONE[nextDunningStage(confirmationCase.stage)]} /></div><p className={styles.bodySecondary}>This changes the recorded workflow stage only. It does not send a notice, apply a penalty, collect money or restrict services.</p></>}
-          <div className={styles.dialogActions}><Button disabled={pending} onClick={() => setFollowUp(null)}>Cancel</Button><Button variant="primary" disabled={pending || (followUp.type === 'advance' && confirmationCase.stage === 'escalated')} onClick={confirmFollowUp}>{pending ? 'Saving…' : followUp.type === 'reminder' ? 'Record entry' : 'Confirm stage change'}</Button></div>
+          <div className={styles.dialogActions}><Button disabled={pending} onClick={() => setFollowUp(null)}>Cancel</Button><Button variant="primary" disabled={pending || !reviewFor(confirmationCase).canFollowUp || (followUp.type === 'advance' && confirmationCase.stage === 'escalated')} onClick={confirmFollowUp}>{pending ? 'Saving…' : followUp.type === 'reminder' ? 'Record entry' : 'Confirm stage change'}</Button></div>
         </div>
       </div>
     </PortalDialog>}
