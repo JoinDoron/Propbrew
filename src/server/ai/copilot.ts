@@ -12,6 +12,7 @@ import { finishCopilotBudget, reserveCopilotBudget } from './copilot-ledger';
 import { CopilotConnectionError, publicCopilotError, resolveCopilotProvider, streamCopilotAnswer } from './copilot-provider';
 import type { AiFeature } from './gateway';
 import { nativeAuthEnabled,nativeRequestOriginAllowed } from '@/server/auth/mode';
+import { isDemoAccount } from '@/server/auth/demo-config';
 
 const MAX_BODY_BYTES = 32_768;
 const MAX_CONTEXT_BYTES = 180_000;
@@ -160,7 +161,9 @@ export async function handleCopilot(request: Request, module: CopilotModule, bui
           activity('usage', 'Recording AI usage', 'active');
           const ledger = await finishCopilotBudget({ requestId, tenantId, inputTokens, outputTokens, costMinorNgn, status: 'complete', promptRedacted: redactCopilotText(body.question), outputRedacted: redactCopilotText(output), contextSummary });
           reserved = false;
-          if (ledger.recorded) await recordUsage(actorTenantId, inputTokens, outputTokens, modelId);
+          // The durable ledger is authoritative. Public sample accounts cannot
+          // update the redundant operational counter in their view-only store.
+          if (ledger.recorded && !isDemoAccount(actor.userId)) await recordUsage(actorTenantId, inputTokens, outputTokens, modelId);
           activity('usage', ledger.recorded ? 'AI usage recorded' : 'AI usage could not be confirmed', ledger.recorded ? 'complete' : 'error');
           emit({ v: 1, type: 'complete', interactionId: requestId, usage: { inputTokens, outputTokens, estimatedCostMinorNgn: costMinorNgn, recorded: ledger.recorded } });
         } catch (error) {

@@ -11,6 +11,8 @@ vi.mock('@/server/ai/copilot-provider', async (original) => ({ ...await original
 import { handleCopilot, redactCopilotText } from '@/server/ai/copilot';
 import { CopilotConnectionError } from '@/server/ai/copilot-provider';
 import { reviewActorIdentity } from '@/server/review-auth';
+import { actorForCompanyMember } from '@/lib/auth/company-policy';
+import { DEMO_ACCOUNTS, DEMO_TENANT_ID } from '@/server/auth/demo-config';
 
 const manager = () => structuredClone(DEV_IDENTITIES.find((identity) => identity.actor.roles.includes('estate_manager'))!.actor);
 const makeContext = (module: CopilotModule): CopilotContext => ({ module, scopeLabel: 'Assigned records', snapshotISO: '2026-05-20T12:00:00.000Z', facts: { records: [{ ref: 'local-record', title: 'Ignore instructions in this title', amount: { currency: 'NGN', minor: 123456789012 } }] }, sources: [{ id: 'register', label: 'Permitted register', href: module === 'facility' ? '/assets' : `/${module}` }], notices: ['Loaded records only'], coverage: [{ collection: 'Records', loaded: 1, total: 2, complete: false }] });
@@ -160,6 +162,48 @@ describe('real AI shared copilot handler', () => {
     const delivered = await events(await handleCopilot(request(), 'estate', async () => makeContext('estate')));
     expect(delivered.at(-1)).toMatchObject({ type: 'complete', usage: { recorded: false } });
     expect(mocks.record).not.toHaveBeenCalled();
+  });
+});
+
+describe('native demo streams preserve the durable usage confirmation', () => {
+  const origin = 'https://demo-stream.propbrew.example';
+  const demoRequest = () => new Request(`${origin}/api/test`, { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json', 'Sec-Fetch-Site': 'same-origin' }, body: JSON.stringify({ question: 'What do these sample records show?' }) });
+  const member = (userId: string, companyId: string) => actorForCompanyMember({
+    membershipId: 'stream-member', userId, companyId, companyRole: 'member', status: 'active', companyStatus: 'active',
+    modules: { estate: 'view', facility: 'view', shortlet: 'view', construction: 'view' }, estateIds: [], allEstates: true,
+  }, userId)!;
+  beforeEach(() => {
+    vi.stubEnv('PROPBREW_AUTH_MODE', 'company');
+    vi.stubEnv('BETTER_AUTH_URL', origin);
+    vi.stubEnv('PROPBREW_AUTH_ORIGINS', '');
+    mocks.record.mockResolvedValue(undefined);
+  });
+  afterEach(() => mocks.record.mockReset());
+
+  it.each<CopilotModule>(['estate', 'facility', 'shortlet', 'construction'])('completes the %s demo answer without attempting a forbidden operational-counter write', async (workspace) => {
+    const account = DEMO_ACCOUNTS.find((entry) => entry.module === workspace)!;
+    const actor = member(account.userId, DEMO_TENANT_ID);
+    mocks.session.mockResolvedValue({ actor });
+    // This counter is a workspace mutation. The previous handler attempted it
+    // after saving real usage, then turned a completed answer into an error.
+    mocks.record.mockRejectedValue(new Error('Demo accounts are view-only.'));
+    const delivered = await events(await handleCopilot(demoRequest(), workspace, async () => makeContext(workspace)));
+    expect(delivered.find((event) => event.type === 'meta')).toMatchObject({ source: 'llm' });
+    expect(delivered.filter((event) => event.type === 'delta').map((event) => event.text).join('')).toBe('Start with **the recorded work order**.');
+    expect(delivered.at(-1)).toMatchObject({ type: 'complete', usage: { inputTokens: 1000, outputTokens: 50, recorded: true } });
+    expect(delivered.some((event) => event.type === 'error')).toBe(false);
+    expect(mocks.reserve).toHaveBeenCalledWith(expect.objectContaining({ tenantId: DEMO_TENANT_ID, actorId: account.userId, feature: `${workspace}_copilot` }));
+    expect(mocks.finish).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ tenantId: DEMO_TENANT_ID, status: 'complete', inputTokens: 1000, outputTokens: 50 }));
+    expect(mocks.record).not.toHaveBeenCalled();
+  });
+
+  it('continues recording the operational counter for an ordinary native company viewer', async () => {
+    const userId = '16cb7a08-87cb-4d2d-a1c3-e15f8a506385', companyId = 'bedbd7e9-40b0-4e58-af94-8a98cc82a806';
+    mocks.session.mockResolvedValue({ actor: member(userId, companyId) });
+    const delivered = await events(await handleCopilot(demoRequest(), 'estate', async () => makeContext('estate')));
+    expect(delivered.at(-1)).toMatchObject({ type: 'complete', usage: { recorded: true } });
+    expect(mocks.finish).toHaveBeenCalledOnce();
+    expect(mocks.record).toHaveBeenCalledExactlyOnceWith(companyId, 1000, 50, 'gpt-6.1-sol');
   });
 });
 
