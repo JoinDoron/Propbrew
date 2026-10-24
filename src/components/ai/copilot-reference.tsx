@@ -83,6 +83,7 @@ export function CopilotAnswer({ text }: { text: string }) {
     if (heading) { blocks.push(<p key={key} className={styles.answerHeading}>{inline(heading[1])}</p>); position++; continue; }
     const table = answerTableHeader(lines, position);
     if (table) {
+      if (table.prefix) blocks.push(<p key={`${key}-prefix`}>{inline(table.prefix)}</p>);
       position += 2;
       const rows: string[][] = [];
       // A bounded native table never drops overflow text: remaining lines become ordinary text.
@@ -152,11 +153,15 @@ function answerTableCells(line: string): string[] {
   return cells;
 }
 
-function answerTableHeader(lines: string[], position: number): { headers: string[]; align: ('left' | 'right' | 'center')[] } | null {
+function answerTableHeader(lines: string[], position: number): { prefix?: string; headers: string[]; align: ('left' | 'right' | 'center')[] } | null {
   if (!lines[position]?.includes('|') || !lines[position + 1]?.includes('|')) return null;
   const headers = answerTableCells(lines[position]), delimiters = answerTableCells(lines[position + 1]);
-  if (!headers.length || headers.length > 12 || headers.length !== delimiters.length || headers.some((header) => !header) || !delimiters.every((delimiter) => /^:?-{3,}:?$/.test(delimiter))) return null;
-  return { headers, align: delimiters.map((delimiter) => delimiter.startsWith(':') && delimiter.endsWith(':') ? 'center' : delimiter.endsWith(':') ? 'right' : 'left') };
+  if (!delimiters.length || delimiters.length > 12 || !delimiters.every((delimiter) => /^:?-{3,}:?$/.test(delimiter))) return null;
+  // Repair a missing newline before the opening pipe only when the next line
+  // proves a table and exactly one leading prose segment explains the mismatch.
+  const prefix = !lines[position].trimStart().startsWith('|') && headers.length === delimiters.length + 1 ? headers.shift() : undefined;
+  if (!headers.length || headers.length !== delimiters.length || headers.some((header) => !header)) return null;
+  return { prefix, headers, align: delimiters.map((delimiter) => delimiter.startsWith(':') && delimiter.endsWith(':') ? 'center' : delimiter.endsWith(':') ? 'right' : 'left') };
 }
 
 export function CopilotSuggestions({ items, onSelect, disabled = false, emptyText = 'No suggested questions are available for this scope. Write a question about your recorded operations.', note = 'Suggestions do not send a request until you select Ask Copilot.' }: { items: readonly string[]; onSelect: (question: string) => void; disabled?: boolean; emptyText?: string; note?: string }) {

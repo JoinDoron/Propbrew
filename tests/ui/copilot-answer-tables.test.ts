@@ -56,6 +56,39 @@ describe('Safe native tables in streamed Copilot answers', () => {
     expect(html).toContain('<li>Inspect the recorded unit</li>');
   });
 
+  it('splits the live prose-prefixed portfolio header into a paragraph and native table, preserving the bold Total row', () => {
+    const html = render('Your portfolio has 2 properties and 12 registered unit records: | Property | Buildings | Registered units | Occupied | Vacant | Reserved |\n|---|---:|---:|---:|---:|---:|\n| Lekki Gardens | 1 | 10 | 4 | 6 | 0 |\n| QA Audit Estate | 1 | 2 | 1 | 1 | 0 |\n| **Total** | **2** | **12** | **5** | **7** | **0** |');
+    expect(html).toContain('<p>Your portfolio has 2 properties and 12 registered unit records:</p>');
+    expect(html.match(/<table\b/g)).toHaveLength(1);
+    expect(html.match(/scope="col"/g)).toHaveLength(6);
+    expect(html.match(/<td\b/g)).toHaveLength(18);
+    expect(html).toContain('<strong>Total</strong>');
+    expect(html).toContain('<strong>12</strong>');
+    for (const value of ['Property', 'Buildings', 'Registered units', 'Occupied', 'Vacant', 'Reserved', 'QA Audit Estate']) expect(html).toContain(value);
+    expect(html).not.toContain('|---');
+    expect(html).not.toContain('records: | Property');
+  });
+
+  it('keeps prose-prefix HTML and arbitrary links inert while repairing a valid header', () => {
+    const html = render('<script>unsafe()</script> [Unsafe](javascript:alert(1)): | **Property** | Units |\n|---|---:|\n| <img src=x onerror=alert(1)> | **2** |');
+    expect(html).toContain('<p>&lt;script&gt;unsafe()&lt;/script&gt; [Unsafe](javascript:alert(1)):</p>');
+    expect(html).toContain('<table');
+    expect(html).toContain('<strong>Property</strong>');
+    expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    expect(html).not.toMatch(/<script>|<img |<a /);
+  });
+
+  it.each([
+    'Compare recorded A | B with C.',
+    'Summary: | Property | Units |\n|---|--|\n| Estate | 2 |',
+    'Summary: | Property | Units |\n|notes|---|\n| Estate | 2 |',
+    'Summary: | Property | Units | Extra |\n|---|---|\n| Estate | 2 |',
+    'Summary: `A|B` has no table separator.',
+  ])('does not turn ordinary pipes or incomplete/malformed separators into a repaired table: %s', (text) => {
+    expect(render(text)).not.toContain('<table');
+    expect(render(text)).toContain('|');
+  });
+
   it('keeps code fences literal, including blank lines and pipe-shaped content', () => {
     const html = render('```text\n' + table + '\n\n<script>not executable</script>\n```\n# Next recorded section\n' + table);
     expect(html.match(/<table\b/g)).toHaveLength(1);
