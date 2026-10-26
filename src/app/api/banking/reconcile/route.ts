@@ -2,10 +2,15 @@ import { NextResponse } from 'next/server';
 import { getActor } from '@/server/session';
 import { parseBankCsv, persistSettlementLines, reconcileStoredSettlements } from '@/server/payments';
 import { repos } from '@/server/data';
+import { assertCan, ForbiddenError } from '@/lib/authz';
 export const runtime = 'nodejs';
 
 export async function POST(req: Request) {
   const actor = await getActor();
+  if (!actor.tenantId) return NextResponse.json({ error: 'Company context required.' }, { status: 400 });
+  if (req.headers.get('Sec-Fetch-Site') === 'cross-site') return NextResponse.json({ error: 'Cross-site statement imports are not permitted.' }, { status: 403 });
+  try { assertCan(actor, 'charges_invoicing', 'update'); }
+  catch (error) { if (error instanceof ForbiddenError) return NextResponse.json({ error: 'Finance update access required.' }, { status: 403 }); throw error; }
   const contentType = req.headers.get('content-type') ?? '';
   if (!contentType.includes('text/csv')) return NextResponse.json({ error: 'Content-Type must be text/csv.' }, { status: 415 });
   try {

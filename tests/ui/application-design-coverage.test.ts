@@ -12,7 +12,7 @@ const groupPages = (prefix: string, routes: readonly string[]) => routes.map((ro
 const reviewed = {
   estate: groupPages('(ops)/(estate)', [
     'announcements', 'billing', 'board', 'bookings', 'collections', 'community', 'documents',
-    'estate', 'events', 'governance', 'investors', 'marketplace', 'parcels', 'people',
+    'estate', 'events', 'finance', 'governance', 'investors', 'marketplace', 'parcels', 'people',
     'portfolio', 'properties', 'reports', 'rewards', 'security', 'settings', 'tenancy',
     'estate/work-orders', 'estate/work-orders/[ref]', 'estate/inspections', 'estate/copilot',
   ]),
@@ -54,6 +54,7 @@ const headerDelegates = {
   '(ops)/(estate)/estate/page.tsx': { component: 'EstateHome', source: 'src/components/workspaces/estate-home.tsx', heading: /<h2\b[^>]*>Welcome back,/ },
   '(ops)/(estate)/properties/page.tsx': { component: 'EstatePropertiesWorkspace', source: 'src/components/workspaces/estate-properties-workspace.tsx', heading: /<h2\b[^>]*>Properties<\/h2>/ },
   '(ops)/(estate)/estate/copilot/page.tsx': { component: 'AskData', source: 'src/components/reports/ask-data.tsx', heading: /<CopilotSummary\b[^>]*title="Ask about your estate"/ },
+  '(ops)/(estate)/finance/page.tsx': { component: 'FinanceCommandCenter', source: 'src/components/finance/finance-command-center.tsx', heading: /<PageHeader\b[^>]*title="Finance Command Centre"/ },
   '(ops)/(facility)/copilot/page.tsx': { component: 'CopilotWorkspace', source: 'src/components/facility/copilot-workspace.tsx', heading: /<CopilotSummary\b[^>]*title="Ask about your facility"/ },
 } as const;
 
@@ -65,18 +66,18 @@ function discoverPages(directory: string): string[] {
 }
 
 describe('Exhaustive application design review manifest', () => {
-  it('accounts for every one of the 124 page files with no ignored directory or dynamic route', () => {
+  it('accounts for every one of the 125 page files with no ignored directory or dynamic route', () => {
     const files = manifest.map(({ file }) => file);
-    expect(new Set(files).size).toBe(124);
-    expect(files).toHaveLength(124);
+    expect(new Set(files).size).toBe(125);
+    expect(files).toHaveLength(125);
     expect(files.slice().sort()).toEqual(discoverPages(APP).sort());
     expect(files).toContain('(ops)/(facility)/work-orders/[ref]/page.tsx');
     expect(files).toContain('sign-up/[[...sign-up]]/page.tsx');
-    expect(manifest.filter(({ family }) => family !== 'publicMarketing')).toHaveLength(123);
+    expect(manifest.filter(({ family }) => family !== 'publicMarketing')).toHaveLength(124);
   });
 
   it.each([
-    ['estate', 25], ['facility', 17], ['construction', 25], ['shortlet', 19],
+    ['estate', 26], ['facility', 17], ['construction', 25], ['shortlet', 19],
     ['portal', 16], ['admin', 8], ['entryShared', 13], ['publicMarketing', 1],
   ] as const)('explicitly reviews all %s pages (%i)', (family, count) => {
     expect(reviewed[family]).toHaveLength(count);

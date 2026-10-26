@@ -11,6 +11,7 @@ import { collectCopilotRecords } from './records';
 import { nativeAuthEnabled } from '@/server/auth/mode';
 import { operatingClock } from '@/server/operating-clock';
 import { residentInvoiceBalances } from '@/domain/estate/invoice-balances';
+import { financeSnapshot } from '@/server/finance';
 
 const key = (tenantId: string, id: string) => JSON.stringify([tenantId, id]);
 
@@ -83,6 +84,21 @@ export async function buildEstateContext(actor: Actor): Promise<CopilotContext> 
     context.facts.collectionCases = cases.map((row) => ({ invoiceRef: row.invoiceRef, estateId: row.estateId, residentName: row.residentName, unitLabel: row.unitLabel, agingDays: row.agingDays, stage: row.stage, remindersSent: row.remindersSent, promiseDueISO: row.promiseDueISO, promiseStatus: row.promiseStatus, lastActionISO: row.lastActionISO }));
     context.notices.push('Collection-case amounts are omitted because those records do not declare a currency. Use currency-tagged invoices for financial calculations.');
     source('estate-billing', 'Estate invoices by recorded currency', '/billing'); source('estate-collections', 'Estate collection case workflow', '/collections');
+    try {
+      const finance = financeSnapshot(actor);
+      context.facts.companyFinance = {
+        totals: finance.totals,
+        moduleSummary: finance.moduleSummary,
+        ninetyDayCashFlow: finance.cashBuckets,
+        forecastScenarios: finance.forecast,
+        receivables: finance.receivables.map((row) => ({ ref: row.ref, module: row.module, dueDateISO: row.dueDateISO, outstandingMinor: row.outstandingMinor, status: row.status })),
+        payables: finance.payables.map((row) => ({ ref: row.ref, module: row.module, dueDateISO: row.dueDateISO, outstandingMinor: row.outstandingMinor, whtMinor: row.whtMinor ?? 0, status: row.status })),
+      };
+      context.notices.push('Company-finance forecasts are transparent scenarios derived from recorded module ledgers and stated collection assumptions. They are advisory, not a live bank balance, audited account or tax opinion.');
+      source('company-finance', 'Cross-module Finance Command Centre', '/finance');
+    } catch {
+      context.notices.push('The cross-module finance snapshot is unavailable for this request. Do not infer portfolio totals from the Estate invoice subset.');
+    }
   } else if (seesMoney) context.notices.push('Estate billing is unavailable in this context because Estate property membership cannot be established with your current permissions.');
 
   if (allowed('work_orders', 'Estate work orders and vendors')) {

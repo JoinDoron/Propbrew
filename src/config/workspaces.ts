@@ -114,7 +114,7 @@ const ESTATE_SEGMENTS = new Set([
   'estate', 'community', 'billing', 'collections', 'people', 'properties', 'tenancy',
   'announcements', 'governance', 'board', 'rewards', 'bookings', 'events',
   'security', 'parcels', 'marketplace', 'documents', 'portfolio', 'reports',
-  'investors', 'settings',
+  'investors', 'finance', 'settings',
 ]);
 
 const FACILITY_SEGMENTS = new Set([

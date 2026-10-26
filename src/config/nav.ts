@@ -101,6 +101,7 @@ const OPS_NAV: NavGroup[] = [
   {
     label: 'Insights',
     items: [
+      { id: 'finance', label: 'Finance Centre', href: '/finance', icon: 'banknote', capability: 'charges_invoicing', proposed: true },
       { id: 'portfolio', label: 'Portfolio', href: '/portfolio', icon: 'grid', capability: 'reports_analytics', proposed: true },
       { id: 'reports', label: 'Reports', href: '/reports', icon: 'trending', capability: 'reports_analytics' },
       { id: 'estate-copilot', label: 'Ask Copilot', href: '/estate/copilot', icon: 'sparkles', capability: 'reports_analytics', proposed: true },
@@ -326,6 +327,7 @@ export const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   '/portfolio': { title: 'Portfolio', subtitle: 'Every estate, ranked and compared' },
   '/field': { title: 'My Day', subtitle: 'Your jobs for today, built for the field' },
   '/reports': { title: 'Reports', subtitle: 'Portfolio performance and KPIs' },
+  '/finance': { title: 'Finance Command Centre', subtitle: 'Receivables, payables, cash flow, WHT and bank reconciliation across every module' },
   '/investors': { title: 'Investors', subtitle: 'Off-plan projects, sales and returns' },
   '/settings': { title: 'Settings', subtitle: 'Estate configuration and preferences' },
   '/construction': { title: 'Command Center', subtitle: 'Every project, cost and crew — live' },

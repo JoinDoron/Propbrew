@@ -29,7 +29,7 @@ export const COPILOT_MAX_HISTORY = 12;
 export const COPILOT_MAX_HISTORY_CHARS = 16000;
 
 const MODULE_PATHS: Record<CopilotModule, readonly string[]> = {
-  estate: ['/estate', '/people', '/properties', '/collections', '/billing', '/tenancy', '/security', '/announcements', '/documents', '/bookings', '/events', '/reports'],
+  estate: ['/estate', '/people', '/properties', '/collections', '/billing', '/finance', '/tenancy', '/security', '/announcements', '/documents', '/bookings', '/events', '/reports'],
   facility: ['/facility', '/control-center', '/assets', '/work-orders', '/ppm', '/energy', '/inventory', '/contracts', '/safety', '/sustainability', '/inspections'],
   shortlet: ['/shortlet'], construction: ['/construction'],
 };

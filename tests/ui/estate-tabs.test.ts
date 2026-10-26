@@ -27,6 +27,7 @@ const routes = [
   ['documents', 'announcements', 'DocumentsWorkspace', 'components/documents/documents-workspace.tsx'],
   ['estate', null, 'EstateHome', 'components/workspaces/estate-home.tsx'],
   ['events', 'bookings_amenities', 'EventsWorkspace', 'components/estate/events-workspace.tsx'],
+  ['finance', 'charges_invoicing', 'FinanceCommandCenter', 'components/finance/finance-command-center.tsx'],
   ['governance', 'announcements', 'GovernanceWorkspace', 'components/estate/governance-workspace.tsx'],
   ['investors', 'investor_projects', 'InvestorWorkspace', 'components/investors/investor-workspace.tsx'],
   ['marketplace', 'marketplace', 'MarketplaceWorkspace', 'components/marketplace/marketplace-workspace.tsx'],
@@ -48,7 +49,7 @@ describe('Estate page section wiring', () => {
       .filter((entry) => entry.isDirectory())
       .map((entry) => entry.name).sort();
     expect(routes.map(([route]) => route).sort()).toEqual(actual);
-    expect(actual).toHaveLength(21);
+    expect(actual).toHaveLength(22);
   });
 
   it.each(routes)('/%s preserves its permission boundary and renders the tabbed workspace', (route, capability, component, workspace) => {

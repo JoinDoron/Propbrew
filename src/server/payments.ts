@@ -50,7 +50,7 @@ export async function persistSettlementLines(tenantId: string, lines: BankLine[]
 
 export async function reconcileStoredSettlements(tenantId: string): Promise<unknown[]> {
   return withTenant(tenantId, (query) => query`
-    select s.id, s.statement_ref, s.statement_date, s.amount_minor, s.direction, s.narration,
+    select s.id, s.statement_ref, s.statement_date, s.amount_minor, s.direction, s.narration, s.status,
       p.provider, p.event_id, p.status as payment_status,
       case when p.event_id is null then 'unmatched' else 'matched' end as match_status
     from settlement_lines s

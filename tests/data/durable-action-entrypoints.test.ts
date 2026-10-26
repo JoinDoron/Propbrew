@@ -24,6 +24,7 @@ const expectedModules: Record<string, readonly string[]> = {
   'ppm.ts': ['facility'], 'resident-bills.ts': ['estate'], 'resident-bookings.ts': ['estate'],
   'facility-compliance.ts': ['facility'], 'facility-maintenance-setup.ts': ['facility'], 'facility-inventory.ts': ['facility'],
   'facility-site-setup.ts': ['facility'], 'facility-vendors.ts': ['facility'],
+  'finance-control.ts': ['estate', 'facility', 'shortlet', 'construction'],
   'resident-community.ts': ['estate'], 'resident-home.ts': ['estate'], 'resident-orders.ts': ['estate'],
   'resident-requests.ts': ['estate'], 'shortlet.ts': ['shortlet'], 'shortlet-control.ts': ['shortlet'], 'sync.ts': ['construction'],
   'transitions.ts': ['estate'], 'vendor-listings.ts': ['estate'], 'work-orders.ts': ['estate', 'facility'],
@@ -37,11 +38,11 @@ const entries = readdirSync(directory).filter((file) => file.endsWith('.ts')).fl
 const operational = entries.filter(({ key }) => !nonOperational.has(key));
 
 describe('operational action durability coverage', () => {
-  it('accounts for all 203 operational actions and the explicit separate account/onboarding actions', () => {
-    expect(operational).toHaveLength(203);
+  it('accounts for all 208 operational actions and the explicit separate account/onboarding actions', () => {
+    expect(operational).toHaveLength(208);
     expect(entries.filter(({ key }) => nonOperational.has(key)).map(({ key }) => key).sort()).toEqual([...nonOperational].sort());
     expect(operational.filter(({ key }) => readOnly.has(key))).toHaveLength(2);
-    expect(operational.filter(({ key }) => !readOnly.has(key))).toHaveLength(201);
+    expect(operational.filter(({ key }) => !readOnly.has(key))).toHaveLength(206);
   });
 
   it.each(operational)('protects the entire authenticated $key body', ({ ast, fn, key, file }) => {
