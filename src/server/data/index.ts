@@ -149,7 +149,7 @@ export const repos = {
   },
   vendors: {
     // Vendors are read via the work_orders capability (the proposed nav mapping).
-    list: (a: Actor, o?: ListOpts) => scopedList(a, 'work_orders', fixtureOrStoredRows('vendors', seed.vendors), o),
+    list: (a: Actor, o?: ListOpts) => scopedList(a, 'work_orders', db.vendors, o),
   },
   announcements: {
     list: (a: Actor, o?: ListOpts) => scopedList(a, 'announcements', db.announcements, o),

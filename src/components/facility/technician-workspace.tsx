@@ -37,6 +37,7 @@ export function TechnicianWorkspace({ jobs, techName, nowMs, canTransition = fal
   const inFlight = useRef(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [review, setReview] = useState<{ ref: string; event: string; label: string } | null>(null);
+  const [jobNote, setJobNote] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
   const onNow = jobs.filter((job) => job.status === 'in_progress');
   const upNext = jobs.filter((job) => job.status === 'assigned');
@@ -45,15 +46,16 @@ export function TechnicianWorkspace({ jobs, techName, nowMs, canTransition = fal
   const active = [...onNow, ...upNext, ...waiting];
   const nextDue = active.map((job) => job.dueISO).filter((value): value is string => value !== null).sort()[0] ?? null;
 
-  function fire(ref: string, event: string, label: string) {
+  function fire(ref: string, event: string, label: string, note?: string) {
     if (!canTransition || pending || inFlight.current) return;
-    if (event === 'RESOLVE' && (!review || review.ref !== ref)) { setFeedback(null); setReview({ ref, event, label }); return; }
+    if (['HOLD', 'RESOLVE'].includes(event) && (!review || review.ref !== ref || review.event !== event)) { setFeedback(null); setJobNote(''); setReview({ ref, event, label }); return; }
+    if (['HOLD', 'RESOLVE'].includes(event) && (!note || note.trim().length < 3)) { setFeedback(event === 'HOLD' ? 'Record the blocker before putting the job on hold.' : 'Record a completion note before resolving the job.'); return; }
     inFlight.current = true;
     setBusy(ref);
     setFeedback(null);
     start(async () => {
       try {
-        const result = await fireWoTransition(ref, event);
+        const result = await fireWoTransition(ref, event, { note: note?.trim() });
         if (!result.ok) { setFeedback(result.error); return; }
         setReview(null);
         router.refresh();
@@ -75,7 +77,7 @@ export function TechnicianWorkspace({ jobs, techName, nowMs, canTransition = fal
       { id: 'done', label: 'Completed', count: done.length, content: <JobSection title="Completed records" subtitle="All resolved, verified and closed jobs in this scope · not limited to today" jobs={done} renderJob={card} emptyTitle="No completed jobs in this view." emptyDescription="Resolved, verified and closed records will appear here without losing their job details." /> },
     ]} />
 
-    {review ? <FacilityDialog title="Confirm job resolution" pending={pending} onClose={() => setReview(null)}><div className={styles.stack}><p className={styles.title}>{review.ref}</p><p className={styles.body}>Confirm the work is complete and the required evidence has been recorded. This marks the job resolved; verification and closure remain separate authorised steps.</p>{feedback ? <p role="alert" className="text-[14px] text-negative">{feedback}</p> : null}<div className={styles.actions}><Button disabled={pending} onClick={() => setReview(null)}>Go back</Button><Button variant="primary" disabled={pending} onClick={() => fire(review.ref, review.event, review.label)}>{pending ? 'Saving…' : 'Confirm resolution'}</Button></div></div></FacilityDialog> : feedback ? <FacilityFeedback message={feedback} onDismiss={() => setFeedback(null)} /> : null}
+    {review ? <FacilityDialog title={review.event === 'HOLD' ? 'Record job blocker' : 'Confirm job resolution'} pending={pending} onClose={() => setReview(null)}><div className={styles.stack}><p className={styles.title}>{review.ref}</p><p className={styles.body}>{review.event === 'HOLD' ? 'Describe what is blocking safe completion so the manager can act without calling for context.' : 'Summarise the work completed. This marks the job resolved; manager verification and closure remain separate authorised steps.'}</p><label className={layout.field}><span className={layout.label}>{review.event === 'HOLD' ? 'Blocker note' : 'Completion note'}</span><textarea value={jobNote} onChange={(event) => setJobNote(event.target.value)} required minLength={3} maxLength={1000} rows={4} className={layout.control} placeholder={review.event === 'HOLD' ? 'e.g. Replacement contactor unavailable on site' : 'e.g. Replaced contactor, tested load and restored service'} /></label><p className={styles.metadata}>The note is attributed to your account and stored in the work-order activity history.</p>{feedback ? <p role="alert" className="text-[14px] text-negative">{feedback}</p> : null}<div className={styles.actions}><Button disabled={pending} onClick={() => setReview(null)}>Go back</Button><Button variant="primary" disabled={pending || jobNote.trim().length < 3} onClick={() => fire(review.ref, review.event, review.label, jobNote)}>{pending ? 'Saving…' : review.event === 'HOLD' ? 'Put job on hold' : 'Confirm resolution'}</Button></div></div></FacilityDialog> : feedback ? <FacilityFeedback message={feedback} onDismiss={() => setFeedback(null)} /> : null}
   </div>;
 }
 

@@ -13,8 +13,8 @@ import './review.css';
 import '@/components/ui/application-foundations.css';
 import '@/components/ui/operational-surfaces.css';
 
-// Clinexa's application screens use Inter. Include extended Latin glyphs for
-// Nigerian names; keep the existing mono face for technical record references.
+// Inter remains a resilient fallback while Propbrew's licensed Neue Jothama
+// variable face is self-hosted through globals.css (no third-party request).
 const inter = Inter({
   variable: '--font-inter',
   subsets: ['latin', 'latin-ext'],

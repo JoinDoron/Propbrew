@@ -16,7 +16,7 @@ describe('Pure legacy workspace capture import', () => {
     raw.db.shortletPlanKey = 'starter';
     const original = structuredClone(raw);
     const state = importLegacyWorkspace(raw, tenant);
-    expect(Object.keys(state.collections)).toHaveLength(105);
+    expect(Object.keys(state.collections)).toHaveLength(106);
     expect(state.collections.sites).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'new-review-estate', name: 'Saved QA estate' })]));
     expect(state.collections.documents).toEqual([]);
     expect(state.collections.shortletPlanKey).toBe('starter');

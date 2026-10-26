@@ -48,11 +48,13 @@ describe('Clinexa-derived Propbrew foundations', () => {
     expect(contrast(rgb(palette['--brand-solid']), rgb(palette['--on-brand-solid']))).toBeGreaterThanOrEqual(4.5);
   });
 
-  it('self-hosts Inter with extended Latin coverage and keeps marketing independently scoped', () => {
+  it('self-hosts Neue Jothama, retains an extended-Latin fallback and keeps marketing independently scoped', () => {
     const layout = read('src/app/layout.tsx');
     expect(layout).toContain('Inter, JetBrains_Mono');
     expect(layout).toContain("subsets: ['latin', 'latin-ext']");
     expect(layout).toContain("display: 'swap'");
+    expect(read('src/app/globals.css')).toContain("font-family: 'Neue Jothama'");
+    expect(read('src/app/globals.css')).toContain("neue-jothama-variable.woff2");
     expect(read('src/app/(marketing)/marketing.css')).toContain('--pb-cobalt: #2346f0');
     expect(read('src/app/(marketing)/marketing.css')).toContain('font-family: var(--font-manrope)');
     expect(read('src/components/ui/application-foundations.css')).toContain('.pb-app thead th');

@@ -58,6 +58,17 @@ describe('atomic, eligible work-order assignment', () => {
     expect(await fireWoTransition(row.ref, 'ASSIGN', { assignee: user.name })).toMatchObject({ ok: false });
     expect(row.status).toBe('triaged');
   });
+
+  it('requires attributed blocker and completion notes from field users', async () => {
+    boundary.getActor.mockResolvedValue(technician);
+    const row = currentOrder(); row.assigneeUserId = technician.userId as typeof row.assigneeUserId; row.vendorOrgId = undefined; row.status = 'in_progress';
+    expect(await fireWoTransition(row.ref, 'HOLD')).toMatchObject({ ok: false, error: expect.stringContaining('blocker') });
+    expect(row.status).toBe('in_progress');
+    expect(await fireWoTransition(row.ref, 'HOLD', { note: 'Awaiting an approved replacement contactor.' })).toEqual({ ok: true, to: 'on_hold' });
+    expect(getHistory('work-order', row.id).at(-1)?.note).toContain('replacement contactor');
+    expect(await fireWoTransition(row.ref, 'RESOLVE')).toMatchObject({ ok: false, error: expect.stringContaining('completion note') });
+    expect(await fireWoTransition(row.ref, 'RESOLVE', { note: 'Replaced contactor and tested equipment under load.' })).toEqual({ ok: true, to: 'resolved' });
+  });
 });
 
 describe('Facility numeric inputs and visit lifecycle', () => {

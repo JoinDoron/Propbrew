@@ -156,7 +156,7 @@ describe('Deep Facility register Clinexa polish', () => {
     expect(source('work-orders/work-order-detail-view')).toContain("can(actor, 'work_orders', 'transition').allowed");
     expect(source('work-orders/work-order-detail-view')).toContain("id: 'actions'");
     expect(source('work-orders/work-order-detail-view')).toContain("id: 'history'");
-    expect(source('work-orders/work-order-detail-view')).toContain('facilityAssignees(wo.tenantId, wo.siteId)');
+    expect(source('work-orders/work-order-detail-view')).toContain('facilityAssigneesFor(actor, wo.siteId)');
     expect(source('work-orders/work-order-detail-view')).toMatch(/<h2[^>]+>\{wo\.title\}<\/h2>/);
     expect(source('work-orders/work-order-detail-view')).not.toContain('<h1');
   });

@@ -89,7 +89,8 @@ describe('native company communications start empty', () => {
 describe('legacy read-only register boundaries', () => {
   it('returns empty native registers without inventing missing collection support', () => {
     const state = blank();
-    for (const name of ['assets', 'vendors', 'investorProjects']) expect(Object.hasOwn(state.collections, name)).toBe(false);
+    for (const name of ['assets', 'investorProjects']) expect(Object.hasOwn(state.collections, name)).toBe(false);
+    expect(state.collections.vendors).toEqual([]);
     run(state, () => {
       expect(repos.assets.list(actor()).items).toEqual([]);
       expect(repos.assets.get(actor(), seed.assets[0].id)).toBeNull();

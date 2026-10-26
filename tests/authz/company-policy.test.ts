@@ -88,6 +88,17 @@ describe('trusted company membership projection', () => {
     expect(canManageCompanyMembers(member({ estate: 'manage', facility: 'manage' }))).toBe(false);
   });
 
+  it('projects Facility field duties to least-privilege operational roles', () => {
+    const technician = member({ facility: 'manage' }, { facilityRole: 'technician' });
+    expect(technician.roles).toEqual(['technician']);
+    expect(technician.vendorOrgId).toBeNull();
+    const vendor = member({ facility: 'manage' }, { facilityRole: 'vendor', vendorOrgId: 'vendor-lagos' });
+    expect(vendor.roles).toEqual(['vendor']);
+    expect(vendor.vendorOrgId).toBe('vendor-lagos');
+    expect(actorForCompanyMember(membership({ modules: { facility: 'manage' }, facilityRole: 'vendor', vendorOrgId: null }), 'account-ade')).toBeNull();
+    expect(actorForCompanyMember(membership({ modules: { facility: 'manage' }, facilityRole: 'technician', vendorOrgId: 'vendor-lagos' }), 'account-ade')).toBeNull();
+  });
+
   it('a member without module grants has no portal or capability access', () => {
     const actor = member({}, { modules: undefined });
     expect(availableWorkspaces(actor)).toEqual([]);

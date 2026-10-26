@@ -12,6 +12,8 @@ export const COMPANY_ROLES = ['owner', 'admin', 'member'] as const;
 export type CompanyRole = (typeof COMPANY_ROLES)[number];
 export type CompanyModuleAccess = 'manage' | 'view';
 export type CompanyModuleGrants = Readonly<Partial<Record<WorkspaceId, CompanyModuleAccess>>>;
+export const FACILITY_ROLES = ['manager', 'technician', 'vendor'] as const;
+export type FacilityRole = (typeof FACILITY_ROLES)[number];
 
 export type CompanyAccess = {
   readonly membershipId: string;
@@ -29,6 +31,8 @@ export type CompanyMembershipRecord = {
   companyRole: CompanyRole;
   /** Owners/admins default to all four modules when this is absent. */
   modules?: CompanyModuleGrants;
+  facilityRole?: FacilityRole | null;
+  vendorOrgId?: string | null;
   estateIds: readonly string[];
   allEstates: boolean;
 };
@@ -88,11 +92,17 @@ export function actorForCompanyMember(record: CompanyMembershipRecord, authentic
     || !Array.isArray(record.estateIds) || record.estateIds.some((id) => !identifier(id))) return null;
   const modules = record.modules ?? (record.companyRole === 'member' ? {} : ALL_MODULES);
   if (!validModules(modules)) return null;
+  if (record.facilityRole != null && !FACILITY_ROLES.includes(record.facilityRole)) return null;
+  if (record.facilityRole === 'vendor' && !identifier(record.vendorOrgId)) return null;
+  if (record.facilityRole !== 'vendor' && record.vendorOrgId != null) return null;
 
   const roles = new Set<Role>();
   for (const workspace of MODULES) {
     const access = grantFor(modules, workspace);
-    if (access === 'manage') roles.add(workspace === 'facility' ? 'facility_manager' : 'estate_manager');
+    if (access === 'manage') {
+      if (workspace !== 'facility') roles.add('estate_manager');
+      else roles.add(record.facilityRole === 'technician' ? 'technician' : record.facilityRole === 'vendor' ? 'vendor' : 'facility_manager');
+    }
     if (access === 'view') roles.add('executive');
   }
   const companyAccess: CompanyAccess = Object.freeze({
@@ -107,7 +117,7 @@ export function actorForCompanyMember(record: CompanyMembershipRecord, authentic
     estateIds: Object.freeze([...new Set(record.estateIds)]),
     allEstates: record.allEstates,
     unitIds: Object.freeze([]),
-    vendorOrgId: null,
+    vendorOrgId: record.facilityRole === 'vendor' ? record.vendorOrgId! : null,
     investorProjectIds: Object.freeze([]),
     companyAccess,
   });

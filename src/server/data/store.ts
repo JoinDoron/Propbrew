@@ -64,6 +64,7 @@ const createWorkingSet = () => ({
   announcements: clone(seed.announcements),
   listings: clone(seed.listings),
   users: clone(seed.users),
+  vendors: clone(seed.vendors),
   shortletProperties: clone(seed.shortletProperties),
   shortletApartments: clone(seed.shortletApartments),
   shortletBookings: clone(seed.shortletBookings),

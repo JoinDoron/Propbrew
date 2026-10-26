@@ -6,12 +6,13 @@ import { facilityMoney } from '@/components/facility/facility-format';
 import layout from '@/components/ui/workspace-layout.module.css';
 import { Card, CardHeader, EmptyState } from '@/components/ui';
 import Link from 'next/link';
-import { ArrowUpRight, FileText, Plus, Search, Star, Sparkles, ShieldAlert } from 'lucide-react';
-import { Button, StatusPill } from '@/components/ui';
+import { ArrowUpRight, FileText, Search, Star, Sparkles, ShieldAlert } from 'lucide-react';
+import { StatusPill } from '@/components/ui';
 import { PageTabs } from '@/components/ui/page-tabs';
 import { ReadOnlyChip } from '@/components/domain';
 import { humanizeStatus, statusTone, toneVar, type Tone } from '@/lib/status-tones';
 import { compositeScore, responsiveness, avgResponseHours, complianceExpiry, slaTrend, recommendForService, allServices, type VendorMetrics } from '@/domain/vendors';
+import { VendorOnboarding } from './vendor-onboarding';
 
 export type VendorRow = {
   id: string;
@@ -34,7 +35,7 @@ const NOW_MS = Date.parse('2026-07-26');
 
 /** FM-05 — interactive vendor directory. Filter by compliance, search, sort, and
  *  select a vendor to see its profile, documents and assigned jobs. */
-export function VendorsExplorer({ vendors, jobs, spend, spendLabels = {}, canMutate }: { vendors: VendorRow[]; jobs: JobRow[]; spend: Record<string, number>; spendLabels?: Record<string, string>; canMutate: boolean }) {
+export function VendorsExplorer({ vendors, jobs, spend, spendLabels = {}, canMutate, expectedCompanyId }: { vendors: VendorRow[]; jobs: JobRow[]; spend: Record<string, number>; spendLabels?: Record<string, string>; canMutate: boolean; expectedCompanyId?: string }) {
   const detailsId = useId();
   const [filter, setFilter] = useState<Filter>('all');
   const [sort, setSort] = useState<Sort>('score');
@@ -78,7 +79,7 @@ export function VendorsExplorer({ vendors, jobs, spend, spendLabels = {}, canMut
             <option value="rating">Sort: Rating</option>
             <option value="name">Sort: Name</option>
           </select>
-          {canMutate ? <Button variant="primary" disabled title="Vendor onboarding is not connected" icon={<Plus size={15} />}>Onboard · unavailable</Button> : <ReadOnlyChip />}
+          {canMutate && expectedCompanyId ? <VendorOnboarding expectedCompanyId={expectedCompanyId} /> : <ReadOnlyChip />}
         </div>
       </div>
 

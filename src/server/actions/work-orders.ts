@@ -21,7 +21,7 @@ import { getActor } from '@/server/session';
 import { ForbiddenError, assertCan } from '@/lib/authz';
 import { repos } from '@/server/data';
 import { recordHistory } from '@/server/data/store';
-import { facilityAssignees } from '@/server/facility-guards';
+import { facilityAssigneesFor, type FacilityAssignment } from '@/server/facility-guards';
 import { workOrderMachine } from '@/domain/workflows';
 import { ROLE_LABELS } from '@/lib/authz';
 import type { Role } from '@/domain/enums';
@@ -32,7 +32,7 @@ export type TransitionResult = { ok: true; to: string } | { ok: false; error: st
 export async function fireWoTransition(
   ref: string,
   event: string,
-  opts?: { assignee?: string; note?: string },
+  opts?: { assigneeKey?: string; assignee?: string; note?: string },
 ): Promise<TransitionResult> {
   return withDurableMutation(async () => {
   const actor = await getActor();
@@ -57,13 +57,18 @@ export async function fireWoTransition(
   if (!transition) {
     return { ok: false, error: `“${event}” is not a legal move from “${wo.status}” for your role.` };
   }
+  const note = typeof opts?.note === 'string' ? opts.note.trim() : '';
+  if ((actor.roles.includes('technician') || actor.roles.includes('vendor')) && ['HOLD', 'RESOLVE'].includes(event) && note.length < 3) {
+    return { ok: false, error: event === 'HOLD' ? 'Record the blocker before putting this job on hold.' : 'Record a completion note before resolving this job.' };
+  }
 
   // Resolve every assignment before changing the live row. A refused request
   // must not silently move its status or clear its existing owner.
-  let assignment: ReturnType<typeof facilityAssignees>[number] | undefined;
+  let assignment: FacilityAssignment | undefined;
   if (event === 'ASSIGN' || event === 'REASSIGN') {
-    const name = typeof opts?.assignee === 'string' ? opts.assignee.trim() : '';
-    assignment = facilityAssignees(wo.tenantId, wo.siteId).find((candidate) => candidate.assigneeName === name);
+    const key = typeof opts?.assigneeKey === 'string' ? opts.assigneeKey.trim() : '';
+    const legacyName = typeof opts?.assignee === 'string' ? opts.assignee.trim() : '';
+    assignment = (await facilityAssigneesFor(actor, wo.siteId)).find((candidate) => key ? candidate.key === key : candidate.assigneeName === legacyName);
     if (!assignment) return { ok: false, error: 'Choose an active technician assigned to this site or a vendor with valid compliance.' };
     if (event === 'REASSIGN' && assignment.assigneeUserId === wo.assigneeUserId && assignment.vendorOrgId === wo.vendorOrgId) {
       return { ok: false, error: 'Choose a different assignee.' };
@@ -84,7 +89,7 @@ export async function fireWoTransition(
     actorId: actor.userId,
     actorName: ROLE_LABELS[firingRole] ?? actor.userId,
     actorRole: firingRole,
-    note: opts?.note,
+    note: note || undefined,
   });
 
   revalidatePath('/work-orders');
@@ -94,6 +99,7 @@ export async function fireWoTransition(
   revalidatePath('/people');
   revalidatePath('/dashboard');
   revalidatePath('/facility');
+  revalidatePath('/field');
   revalidatePath('/estate');
   revalidatePath('/portal');
   revalidatePath('/portal/requests');

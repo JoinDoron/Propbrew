@@ -2,7 +2,7 @@ import 'server-only';
 import { headers } from 'next/headers';
 import { randomBytes, createHash } from 'node:crypto';
 import type { PoolClient } from 'pg';
-import { actorForCompanyMember, canManageCompanyMembers, type CompanyMembershipRecord, type CompanyModuleGrants, type CompanyRole } from '@/lib/auth/company-policy';
+import { actorForCompanyMember, canManageCompanyMembers, type CompanyMembershipRecord, type CompanyModuleGrants, type CompanyRole, type FacilityRole } from '@/lib/auth/company-policy';
 import { getNativeAuth } from './auth';
 import { withAuthTransaction } from './database';
 import { nativeAuthEnabled } from './mode';
@@ -13,8 +13,8 @@ export { consumeAuthAttempt } from './rate-limit';
 
 export type NativeUser = { id: string; name: string; email: string; twoFactorEnabled?: boolean | null };
 export type NativeIdentity = { user: NativeUser; session: { id: string; activeCompanyId?: string | null } };
-type MembershipRow = { id: string; tenant_id: string; user_id: string; company_role: CompanyRole; status: 'active'|'suspended'|'revoked'; modules: CompanyModuleGrants; estate_ids: string[]; all_estates: boolean; version: string; name: string; company_status: 'active'|'suspended' };
-const membershipDto = (row: MembershipRow): CompanyMembershipRecord => ({ membershipId: row.id, userId: row.user_id, companyId: row.tenant_id, companyRole: row.company_role, status: row.status, companyStatus: row.company_status, modules: row.modules, estateIds: row.estate_ids, allEstates: row.all_estates });
+type MembershipRow = { id: string; tenant_id: string; user_id: string; company_role: CompanyRole; status: 'active'|'suspended'|'revoked'; modules: CompanyModuleGrants; facility_role: FacilityRole | null; vendor_org_id: string | null; estate_ids: string[]; all_estates: boolean; version: string; name: string; company_status: 'active'|'suspended' };
+const membershipDto = (row: MembershipRow): CompanyMembershipRecord => ({ membershipId: row.id, userId: row.user_id, companyId: row.tenant_id, companyRole: row.company_role, status: row.status, companyStatus: row.company_status, modules: row.modules, facilityRole: row.facility_role, vendorOrgId: row.vendor_org_id, estateIds: row.estate_ids, allEstates: row.all_estates });
 const ALL_MODULES: CompanyModuleGrants = { estate: 'manage', facility: 'manage', shortlet: 'manage', construction: 'manage' };
 const membershipSql = 'select m.*,m.version::text version,t.name,t.status company_status from company_memberships m join tenants t on t.id=m.tenant_id';
 
@@ -113,7 +113,7 @@ export async function companyAudit(client: PoolClient, companyId: string, userId
 
 export async function listCompanyMembers(principal: CompanyPrincipal) {
   if (!canManageCompanyMembers(principal.actor)) return [];
-  return withAuthTransaction(principal.user.id, async (client) => (await client.query('select m.id,m.user_id,u.name,u.email,m.company_role,m.modules from company_memberships m join auth_users u on u.id=m.user_id where m.tenant_id=$1::uuid and m.status<>$2 order by m.created_at', [principal.company.id, 'revoked'])).rows.map((row) => ({ id: row.id, userId: row.user_id, name: row.name, email: row.email, companyRole: row.company_role as CompanyRole, modules: row.modules as CompanyModuleGrants, isCurrentUser: row.user_id === principal.user.id })));
+  return withAuthTransaction(principal.user.id, async (client) => (await client.query('select m.id,m.user_id,u.name,u.email,m.company_role,m.modules,m.facility_role,m.vendor_org_id from company_memberships m join auth_users u on u.id=m.user_id where m.tenant_id=$1::uuid and m.status<>$2 order by m.created_at', [principal.company.id, 'revoked'])).rows.map((row) => ({ id: row.id, userId: row.user_id, name: row.name, email: row.email, companyRole: row.company_role as CompanyRole, modules: row.modules as CompanyModuleGrants, facilityRole: row.facility_role as FacilityRole | null, vendorOrgId: row.vendor_org_id as string | null, isCurrentUser: row.user_id === principal.user.id })));
 }
 
 export async function withCompanyManagement<T>(principal: CompanyPrincipal, fn: (client: PoolClient) => Promise<T>): Promise<T> {

@@ -156,7 +156,7 @@ describe('Clinexa-complete Facility module', () => {
     expect(view('assets/assets-explorer')).not.toContain('hashGrid');
     expect(view('assets/assets-explorer')).toContain('A scannable QR code and on-site asset lookup are not connected.');
     expect(view('assets/assets-explorer')).toContain('Asset registration is not connected');
-    expect(view('vendors/vendors-explorer')).toContain('Vendor onboarding is not connected');
+    expect(view('vendors/vendors-explorer')).toContain('VendorOnboarding');
     expect(view('inspections/inspections-workspace')).toContain('Audit-pack generation is not connected');
     expect(view('work-orders/work-order-detail-view')).not.toContain('confidence={0.88}');
   });

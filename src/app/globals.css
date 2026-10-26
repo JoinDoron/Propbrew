@@ -1,5 +1,13 @@
 @import 'tailwindcss';
 
+@font-face {
+  font-family: 'Neue Jothama';
+  src: url('./fonts/neue-jothama-variable.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+
 /* ==========================================================================
    Propbrew application design foundations — adapted from Clinexa.
    Reference: Figma QFmUQaznBI0924N8XILHYA · palette 4:2527,
@@ -124,7 +132,7 @@
   --shadow-card: var(--shadow);
   --shadow-float: var(--shadow-lg);
 
-  --font-sans: var(--font-inter), 'Inter', system-ui, sans-serif;
+  --font-sans: 'Neue Jothama', var(--font-inter), system-ui, sans-serif;
   --font-mono: var(--font-jetbrains-mono), 'JetBrains Mono', ui-monospace, monospace;
 
   --radius-card: 12px;
@@ -139,7 +147,7 @@
   body {
     background: var(--app);
     color: var(--text);
-    font-family: var(--font-inter), 'Inter', system-ui, sans-serif;
+    font-family: 'Neue Jothama', var(--font-inter), system-ui, sans-serif;
     font-size: 14px;
     -webkit-font-smoothing: antialiased;
   }

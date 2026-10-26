@@ -44,6 +44,7 @@ export default async function VendorsPage() {
         spend={spend}
         spendLabels={spendLabels}
         canMutate={canMutate}
+        expectedCompanyId={actor.tenantId ?? undefined}
       />
     </div>
   );
