@@ -125,21 +125,46 @@ export async function EstateHome({ currency = 'NGN' }: { currency?: CurrencyCode
         {access.billing ? <Metric title="Charges collected" value={money(collections.collectedMinor, currency)} note={`${currency} · all recorded non-draft invoices, including service charges`} icon={<Banknote size={16} />} href="/collections" /> : null}
         {!access.properties && access.security ? <Metric title="Active SOS events" value={String(activeSos.length)} note="Unresolved events in your authorised estates" icon={<ShieldCheck size={16} />} href="/security" /> : null}
       </section>
-<div className={styles.overviewGrid}>
-{(access.billing || access.maintenance) ? <section className={styles.panel} aria-labelledby="estate-analytics-snapshot">
-          <PanelHeader id="estate-analytics-snapshot" title="Analytics snapshot" subtitle="Measured from your visible operational records" action={access.insights ? <Link href="/reports" className={styles.link}>Reports <ArrowUpRight size={12} aria-hidden="true" /></Link> : undefined} />
-          <div className={styles.snapshot}>
-            {access.maintenance ? <><Snapshot label="Open issues" value={String(maintenance.open + maintenance.inProgress)} icon={<Wrench size={14} />} /><Snapshot label="Awaiting confirmation" value={String(maintenance.awaitingConfirmation)} icon={<Hourglass size={14} />} /><Snapshot label="Verified / closed rate" value={percent(maintenance.resolutionRatePct)} icon={<CircleCheck size={14} />} /><Snapshot label="Avg. resolution time" value="N/A" icon={<Clock3 size={14} />} /></> : null}
-            {access.billing ? <Snapshot label="Invoices fully settled" value={percent(collections.settledInvoicePct)} icon={<ReceiptText size={14} />} /> : null}
-          </div>
-          <p className={styles.snapshotNote}>Invoice settlement is not gateway payment success. Resolution time needs reliable completion timestamps and is not estimated.</p>
+{access.billing ? <div className={styles.commandGrid}>
+        <section className={`${styles.panel} ${styles.chartPanel}`} aria-labelledby="estate-overview-collection-trends">
+          <PanelHeader id="estate-overview-collection-trends" title="Rent collection trends" subtitle="Billed versus collected across the last six invoice due months" action={<span className={styles.chip}>{currency}</span>} />
+          <CollectionChart months={overview.collectionTrend} currency={currency} />
+          <p className={styles.chartCaption}>Due-month view · drafts excluded · currencies are never converted or combined.</p>
+        </section>
+        <section className={`${styles.panel} ${styles.pulsePanel}`} aria-labelledby="estate-overview-portfolio-pulse">
+          <PanelHeader id="estate-overview-portfolio-pulse" title="Portfolio pulse" subtitle="Collection health and next actions" action={<span className={styles.chip}>{collections.collectionRatePct === null ? 'No issued charges' : `${percent(collections.collectionRatePct)} collected`}</span>} />
+          <div className={styles.progressRow}><span>Payment collection rate</span><strong>{money(collections.collectedMinor, currency)} of {money(collections.billedMinor, currency)}</strong></div>
+          <Progress label="Amount collection rate" value={collections.collectionRatePct ?? 0} />
+          <div className={styles.total}><span>Outstanding charges</span><strong>{money(collections.outstandingMinor, currency)}</strong></div>
+          <div className={styles.pulseHeading}><strong>Upcoming and overdue</strong><Link href="/collections" className={styles.link}>View payments <ArrowUpRight size={12} aria-hidden="true" /></Link></div>
+          {overview.paymentsDue.length ? <ul className={styles.attention}>{overview.paymentsDue.slice(0, 3).map((payment) => <li key={payment.id}><Link href="/billing"><span><span className={styles.attentionName}>{payment.residentName}</span><span className={styles.attentionDate}>{payment.ref} · due {dateLabel(payment.dueDate)}</span></span><span className={styles.attentionAmount}>{money(payment.outstandingMinor, currency)}<span className={payment.overdue ? styles.overdue : styles.upcoming}>{payment.overdue ? `${-payment.daysUntilDue} days overdue` : payment.daysUntilDue === 0 ? 'Due today' : `Due in ${payment.daysUntilDue} days`}</span></span></Link></li>)}</ul> : <p className={styles.smallEmpty}>No upcoming or overdue payments in this view.</p>}
+          <nav className={styles.quickActions} aria-label="Overview quick actions">{quickActions.map(({ label, href, icon: Icon }) => <Link key={label} href={href}><Icon size={13} aria-hidden="true" />{label}</Link>)}</nav>
+        </section>
+      </div> : null}
+<div className={styles.operationsGrid}>
+        {access.properties ? <section className={styles.panel} aria-labelledby="estate-overview-property-performance">
+          <PanelHeader id="estate-overview-property-performance" title="Property performance" subtitle={access.billing ? `Recorded collections by property in ${currency}` : 'Occupancy across estate properties'} action={<Link href="/properties" className={styles.link}>View all <ArrowUpRight size={12} aria-hidden="true" /></Link>} />
+          {overview.propertyPerformance.length ? <ul className={styles.propertyList}>{overview.propertyPerformance.slice(0, 4).map((property) => <li key={property.id}><div className={styles.progressRow}><strong>{property.name}</strong><strong>{access.billing ? money(property.collectedMinor, currency) : percent(property.occupancyPct)}</strong></div><Progress label={`${property.name} performance`} value={(access.billing ? property.collectionRatePct : property.occupancyPct) ?? 0} /></li>)}</ul> : <p className={styles.smallEmpty}>No registered estate properties yet.</p>}
         </section> : null}
-{reviewQueues.length ? <section className={styles.panel} aria-labelledby="estate-review-queues">
-          <PanelHeader id="estate-review-queues" title="Needs attention" subtitle="A focused view of your current review queues" />
-          <ul className={styles.reviewQueues}>{reviewQueues.map(({ label, detail, count, href, icon: Icon, urgent }) => <li key={label}><Link href={href} className={styles.reviewLink} data-urgent={urgent ? 'true' : undefined}><span className={styles.reviewIcon}><Icon size={17} aria-hidden="true" /></span><span className={styles.reviewCopy}><strong>{label}</strong><span>{detail}</span></span><span className={styles.reviewCount}>{count}</span><ArrowUpRight size={14} className={styles.reviewArrow} aria-hidden="true" /></Link></li>)}</ul>
-          <p className={styles.snapshotNote}>Based on this record snapshot, not a live monitoring service.</p>
+        {access.maintenance ? <section className={styles.panel} aria-labelledby="estate-overview-maintenance-summary">
+          <PanelHeader id="estate-overview-maintenance-summary" title="Maintenance summary" subtitle="Current estate request status" action={<Link href="/estate/work-orders" className={styles.link}>View all <ArrowUpRight size={12} aria-hidden="true" /></Link>} />
+          <div className={styles.statusList}>{[
+            { label: 'Open', value: maintenance.open, color: 'var(--tone-danger)' },
+            { label: 'In progress', value: maintenance.inProgress, color: 'var(--tone-info)' },
+            { label: 'Awaiting confirmation', value: maintenance.awaitingConfirmation, color: 'var(--tone-warn)' },
+            { label: 'Resolved', value: maintenance.resolved, color: 'var(--tone-success)' },
+          ].map(({ label, value, color }) => <div key={label}><div className={styles.progressRow}><span>{label}</span><strong>{value}</strong></div><Progress label={`${label} requests`} value={maintenance.total ? value / maintenance.total * 100 : 0} color={color} /></div>)}</div>
+          <div className={styles.total}><span>Total requests</span><strong>{maintenance.total}</strong></div>
+        </section> : null}
+        {(access.billing || access.maintenance) ? <section className={styles.panel} aria-labelledby="estate-overview-analytics-snapshot">
+          <PanelHeader id="estate-overview-analytics-snapshot" title="Analytics snapshot" subtitle="Key performance indicators" action={access.insights ? <Link href="/reports" className={styles.link}>View all <ArrowUpRight size={12} aria-hidden="true" /></Link> : undefined} />
+          <div className={styles.snapshot}>
+            {access.maintenance ? <><Snapshot label="Open issues" value={String(maintenance.open + maintenance.inProgress)} icon={<Wrench size={14} />} /><Snapshot label="Awaiting confirmation" value={String(maintenance.awaitingConfirmation)} icon={<Hourglass size={14} />} /><Snapshot label="Verified / closed" value={percent(maintenance.resolutionRatePct)} icon={<CircleCheck size={14} />} /></> : null}
+            {access.billing ? <Snapshot label="Invoices settled" value={percent(collections.settledInvoicePct)} icon={<ReceiptText size={14} />} /> : null}
+          </div>
         </section> : null}
 </div>
+{reviewQueues.length ? <section className={styles.attentionStrip} aria-labelledby="estate-review-queues"><PanelHeader id="estate-review-queues" title="Needs attention" subtitle="Live review queues from your authorised records" /><ul className={styles.reviewQueueGrid}>{reviewQueues.map(({ label, detail, count, href, icon: Icon, urgent }) => <li key={label}><Link href={href} className={styles.reviewLink} data-urgent={urgent ? 'true' : undefined}><span className={styles.reviewIcon}><Icon size={17} aria-hidden="true" /></span><span className={styles.reviewCopy}><strong>{label}</strong><span>{detail}</span></span><span className={styles.reviewCount}>{count}</span><ArrowUpRight size={14} className={styles.reviewArrow} aria-hidden="true" /></Link></li>)}</ul></section> : null}
 </div> },
 ...(access.billing ? [{ id: 'collections', label: 'Collections', content: <div className={styles.sectionStack}>
 

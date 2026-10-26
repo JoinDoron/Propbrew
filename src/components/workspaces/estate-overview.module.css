@@ -38,6 +38,18 @@
 .metricNote { font-size: 11px; color: var(--text-3); line-height: 1.55; margin-top: 7px; }
 .overviewGrid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr); gap: var(--layout-gap); align-items: start; }
 .primaryGrid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(310px, 1fr); gap: var(--layout-gap); align-items: start; }
+.commandGrid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(320px, .85fr); gap: 14px; align-items: stretch; }
+.operationsGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: stretch; }
+.chartPanel, .pulsePanel { min-height: 410px; }
+.chartPanel { display: flex; flex-direction: column; }
+.chartPanel figure { display: flex; min-height: 0; flex: 1; flex-direction: column; justify-content: center; }
+.pulsePanel { display: flex; flex-direction: column; }
+.pulseHeading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 16px 0 4px; padding-top: 14px; border-top: 1px solid var(--border); font-size: 12px; }
+.pulseHeading > strong { font-weight: 600; }
+.attentionStrip { padding: var(--panel-padding); border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); box-shadow: var(--shadow); }
+.reviewQueueGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.reviewQueueGrid li + li { border-left: 1px solid var(--border); }
+.reviewQueueGrid .reviewLink { min-height: 82px; padding: 12px; }
 .panel { border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius-card, 12px); padding: var(--panel-padding); min-width: 0; box-shadow: var(--shadow); }
 .panelHeader { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: var(--layout-gap); }
 .panel h2 { font-size: 15px; line-height: 1.45; letter-spacing: -.025em; font-weight: 600; margin: 0; }
@@ -105,9 +117,9 @@
 .ai h2 { font-size: 18px; line-height: 1.5; letter-spacing: -.54px; font-weight: 500; margin: 0; }
 .ai p { font-size: 13px; color: var(--text-2); line-height: 1.8; margin-top: 6px; max-width: 650px; }
 .overview :is(a, button, select):focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
-@media (max-width: 1190px) { .primaryGrid { grid-template-columns: 1fr; } .overviewGrid { grid-template-columns: minmax(0, 1fr) minmax(280px, .8fr); gap: 16px; } .metrics { gap: 12px; } .metricTop, .metricBody { padding-left: 12px; padding-right: 12px; } .metricTop h3 { font-size: 12px; } .panel { padding: 20px; } }
-@media (max-width: 1020px) { .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .overviewGrid { grid-template-columns: 1fr; } .metricTop h3 { font-size: 14px; } .metricValue[data-long='true'] { font-size: 36px; } .metricTop, .metricBody { padding-left: 16px; padding-right: 16px; } }
-@media (max-width: 650px) { .overview { gap: 18px; } .communityGrid { grid-template-columns: 1fr; } .sectionStack { gap: 16px; } .welcome { gap: 18px; } .headerActions { width: 100%; gap: 12px; } .panel { padding: 16px; } .panelHeader { margin-bottom: 20px; flex-wrap: wrap; } .panel h2, .ai h2 { font-size: 16px; } .metricTop { padding: 6px 12px; gap: 5px; } .metricTop h3 { font-size: 12px; } .metricBody { padding: 12px; } .metricValue { font-size: 34px; } .metricValue[data-long='true'] { font-size: 27px; } .metricContext { gap: 5px; } .metricPie { width: 26px; height: 26px; } .metricNote { font-size: 12px; } .ai { flex-direction: column; align-items: flex-start; gap: 16px; padding: 18px; } .snapshotItem { padding: 12px; gap: 8px; } .sosAlert > a { margin-left: 0; width: 100%; } }
+@media (max-width: 1190px) { .primaryGrid, .commandGrid { grid-template-columns: 1fr; } .operationsGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .overviewGrid { grid-template-columns: minmax(0, 1fr) minmax(280px, .8fr); gap: 16px; } .reviewQueueGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .reviewQueueGrid li:nth-child(odd) { border-left: 0; } .reviewQueueGrid li:nth-child(n+3) { border-top: 1px solid var(--border); } .metrics { gap: 12px; } .metricTop, .metricBody { padding-left: 12px; padding-right: 12px; } .metricTop h3 { font-size: 12px; } .panel { padding: 20px; } }
+@media (max-width: 1020px) { .metrics, .operationsGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .overviewGrid { grid-template-columns: 1fr; } .metricTop h3 { font-size: 11px; } .metricValue[data-long='true'] { font-size: 29px; } .metricTop, .metricBody { padding-left: 16px; padding-right: 16px; } }
+@media (max-width: 650px) { .overview { gap: 18px; } .communityGrid, .operationsGrid { grid-template-columns: 1fr; } .reviewQueueGrid { grid-template-columns: 1fr; } .reviewQueueGrid li + li, .reviewQueueGrid li:nth-child(n+3) { border-left: 0; border-top: 1px solid var(--border); } .sectionStack { gap: 16px; } .welcome { gap: 18px; } .headerActions { width: 100%; gap: 12px; } .chartPanel, .pulsePanel { min-height: auto; } .panel, .attentionStrip { padding: 16px; } .panelHeader { margin-bottom: 16px; flex-wrap: wrap; } .panel h2, .ai h2 { font-size: 16px; } .metricTop { padding: 12px 12px 0; gap: 5px; } .metricTop h3 { font-size: 10px; } .metricBody { padding: 8px 12px 12px; } .metricValue { font-size: 28px; } .metricValue[data-long='true'] { font-size: 24px; } .metricContext { gap: 5px; } .metricPie { width: 26px; height: 26px; } .metricNote { font-size: 11px; } .ai { flex-direction: column; align-items: flex-start; gap: 16px; padding: 18px; } .snapshotItem { padding: 12px; gap: 8px; } .sosAlert > a { margin-left: 0; width: 100%; } }
 @media (max-width: 390px) { .metrics { grid-template-columns: 1fr; } .snapshot { grid-template-columns: 1fr; } .quickActions { grid-template-columns: 1fr; } }
 
 @media (pointer: coarse) { .button, .primaryButton, .link, .quickActions a, .currencyForm select { min-height: 44px; } .metricTop > a { width: 44px; height: 44px; } }
