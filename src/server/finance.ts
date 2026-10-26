@@ -68,11 +68,12 @@ export function financeSnapshot(actor: Actor): FinanceSnapshot {
   const shortletInflow = Math.max(shortletBookings.reduce((sum, row) => sum + ngn(row.paid), 0), approvedShortletInflows);
   const shortletOutflow = shortletExpenses.reduce((sum, row) => sum + ngn(row.amount), 0) + shortletRefunds;
   const manualByModule = (module: 'estate' | 'facility' | 'shortlet' | 'construction') => moduleRead[module] ? control.payables.filter((row) => row.module === module && row.status === 'paid').reduce((sum, row) => sum + row.netPayableMinor, 0) : 0;
-  return buildFinanceSnapshot({
+  const snapshot = buildFinanceSnapshot({
     todayISO,
     receivables: [...estateReceivables, ...shortletReceivables],
     payables: [...manualPayables, ...constructionPayables, ...claimPayables],
     recordedInflows: { estate: estateInflows, facility: 0, shortlet: shortletInflow, construction: 0 },
     recordedOutflows: { estate: manualByModule('estate'), facility: facilityActual + manualByModule('facility'), shortlet: shortletOutflow + manualByModule('shortlet'), construction: paidConstruction + manualByModule('construction') },
   });
+  return { ...snapshot, moduleSummary: snapshot.moduleSummary.filter((row) => moduleRead[row.module]) };
 }
