@@ -108,6 +108,22 @@ test('a fresh company creates and persists invoices, recurring charges, tenancy 
   await expect(tenancy).toContainText('Applied'); await expect(tenancy).toContainText('Deposit due');
   await page.reload();
   await expect(page.getByRole('row').filter({ hasText: residentName })).toContainText('Deposit due');
+  const tenancyRecord = page.getByRole('dialog', { name: `Tenancy record for ${residentName}`, exact: true });
+  await openDialog(page.getByRole('row').filter({ hasText: residentName }).getByRole('button', { name: /^View tenancy for / }), tenancyRecord);
+  const editAgreement = page.getByRole('dialog', { name: 'Edit draft tenancy agreement', exact: true });
+  await openDialog(tenancyRecord.getByRole('button', { name: 'Edit draft agreement', exact: true }), editAgreement);
+  // A wrapped textarea's label text includes its initial textContent. The
+  // textbox role uses the computed accessible name and remains exact when filled.
+  const notes = editAgreement.getByRole('textbox', { name: 'Agreed terms or notes (optional)', exact: true });
+  await expect(notes).toHaveValue('Synthetic reviewed agreement terms.');
+  const revisedTerms = `Reviewed draft terms ${suffix}; parking allocation recorded.`;
+  await notes.fill(revisedTerms);
+  await editAgreement.getByRole('button', { name: 'Save draft agreement', exact: true }).click();
+  await expect(editAgreement).toHaveCount(0);
+  await page.reload();
+  await openDialog(page.getByRole('row').filter({ hasText: residentName }).getByRole('button', { name: /^View tenancy for / }), tenancyRecord);
+  await expect(tenancyRecord.getByRole('region', { name: 'Agreement terms', exact: true })).toContainText(revisedTerms);
+  await tenancyRecord.getByRole('button', { name: 'Close tenancy record', exact: true }).click();
 
   await page.goto('/bookings');
   await section(page, /^Amenities(?: \d+)?$/);
