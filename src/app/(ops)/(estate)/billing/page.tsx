@@ -8,6 +8,7 @@ import { BillingWorkspace } from '@/components/billing/billing-workspace';
 import { estateBillingResidentOptions, listEstateRecurringRules } from '@/server/reads/estate-billing-setup';
 import { operatingClock } from '@/server/operating-clock';
 import { currentRecordContext } from '@/server/data/record-context';
+import { isDemoAccount } from '@/server/auth/demo-config';
 import { withDurableRead } from '@/server/data/durable-records';
 
 /** EM-01 / AI-E-03 — service charge & billing. A collections command surface:
@@ -32,7 +33,7 @@ export default async function BillingPage() {
       <PageHeader title="Billing & Collections" subtitle="Invoices, collection performance and resident follow-up — one clear view."
         scope={<ScopeBanner label={actor.allEstates ? 'all estates' : `${actor.estateIds.length} estate(s)`} />}
       />
-      <BillingWorkspace invoices={invoices} canMutate={canMutate} setup={currentRecordContext() ? { companyId: actor.tenantId!, residents: estateBillingResidentOptions(actor), rules: listEstateRecurringRules(actor), today: operatingClock().dateISO, canMutate } : undefined} />
+      <BillingWorkspace invoices={invoices} canMutate={canMutate} setup={currentRecordContext() ? { companyId: actor.tenantId!, residents: estateBillingResidentOptions(actor), rules: listEstateRecurringRules(actor), today: operatingClock().dateISO, canMutate, automaticGeneration: Boolean(currentRecordContext()?.companyPrincipal && !isDemoAccount(actor.userId) && process.env.NODE_ENV === 'production' && process.env.PROPBREW_ESTATE_RECURRING_WORKER !== '0') } : undefined} />
     </div>
   );
   });

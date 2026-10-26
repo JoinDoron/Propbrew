@@ -91,7 +91,7 @@ export function TenancyWorkspace({ tenancies, kpis, nowMs, canMutate, companySco
               </tr>;
             })}</tbody>
           </table></div> : <EmptyState icon={<Home size={22} />} title={tenancies.length ? 'No matching tenancies' : 'No tenancy records in your scope yet.'} description={tenancies.length ? 'Try another resident, unit or lifecycle stage.' : 'Register a property and tenant from Estate overview to begin building your estate records.'} action={tenancies.length ? <Button onClick={() => { setQuery(''); setStage('all'); }}>Clear filters</Button> : undefined} />}
-          <p className={styles.registerFooter}>Showing {filtered.length} of {tenancies.length} recorded tenancies · Lease runway uses the snapshot date, not today.</p>
+          <p className={styles.registerFooter}>Showing {filtered.length} of {tenancies.length} recorded tenancies · Lease runway uses the date shown above.</p>
         </Card>
         <div className={styles.notice}><ShieldCheck size={18} aria-hidden="true" /><p>Every transition stays under human review.<span>Changing a stage updates the record. It does not automatically renew a lease, send notice or make a payment.</span></p></div>
       </div> },

@@ -1,4 +1,16 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Locator } from '@playwright/test';
+
+/** Retry only a reversible display preference after the client header portal
+ * is mounted. Saves and operational mutations are never repeated here. */
+async function selectPropertyView(button: Locator): Promise<void> {
+  const headerTabs = button.page().locator('[data-page-tabs-outlet="true"] [data-header-page-tabs="true"][role="tablist"]').first();
+  await expect(headerTabs).toBeVisible({ timeout: 10_000 });
+  await expect(async () => {
+    if (await button.getAttribute('aria-pressed', { timeout: 1_000 }) === 'true') return;
+    await button.click({ timeout: 2_000 });
+    await expect(button).toHaveAttribute('aria-pressed', 'true', { timeout: 1_000 });
+  }).toPass({ timeout: 10_000, intervals: [200, 500, 1000] });
+}
 
 test('legacy dashboard opens the workspace chooser', async ({ page }) => {
   test.setTimeout(60_000);
@@ -52,7 +64,7 @@ test('Estate Properties supports list/grid views, unit details and navigation or
   const firstLinks = await nav.getByRole('link').evaluateAll((links) => links.slice(0, 3).map((link) => link.getAttribute('href')));
   expect(firstLinks).toEqual(['/estate', '/people', '/properties']);
   await expect(page.getByRole('table', { name: 'Property list', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Grid view', exact: true }).click();
+  await selectPropertyView(page.getByRole('button', { name: 'Grid view', exact: true }));
   await expect(page.getByRole('button', { name: 'Grid view', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('table', { name: 'Property list', exact: true })).toHaveCount(0);
   await page.getByRole('tab', { name: 'Occupancy summary', exact: true }).click();
@@ -65,7 +77,7 @@ test('Estate Properties supports list/grid views, unit details and navigation or
   await page.getByRole('textbox', { name: 'Search properties', exact: true }).fill('no matching property sample');
   await expect(page.getByRole('heading', { name: 'No properties match these filters', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Clear filters', exact: true }).click();
-  await page.getByRole('button', { name: 'List view', exact: true }).click();
+  await selectPropertyView(page.getByRole('button', { name: 'List view', exact: true }));
   await expect(page.getByRole('table', { name: 'Property list', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Add property', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Add property', exact: true })).toBeVisible();

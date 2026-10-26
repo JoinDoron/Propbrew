@@ -9,3 +9,6 @@
 .description { color: var(--text-2); font-size: 13px; line-height: 1.75; margin: 0; }
 .actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 @media (max-width: 580px) { .fields { grid-template-columns: minmax(0, 1fr); } }
+
+.bookingControl { display: flex; align-items: flex-end; flex-direction: column; gap: 10px; }
+.bookingControl > p { width: 100%; }

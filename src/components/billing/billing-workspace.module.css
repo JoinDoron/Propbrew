@@ -106,3 +106,5 @@
 }
 @media (max-width: 420px) { .metrics { grid-template-columns: minmax(0, 1fr); } .collectionSummary { flex-direction: column; align-items: flex-start; } }
 @media (pointer: coarse) { .currency select, .statusFilter select, .search, .search input { min-height: 44px; } }
+
+.agingCell { white-space: nowrap; min-width: 82px; }

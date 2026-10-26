@@ -39,7 +39,7 @@ export default async function BookingsPage() {
 
   return (
     <div className="pb-page">
-      <PageHeader title="Bookings" subtitle="Availability, utilisation, conflict detection and auto-approval — over the §10 booking machine"
+      <PageHeader title="Bookings" subtitle="Manage shared spaces, resident reservations and approvals."
         scope={<ScopeBanner label={actor.allEstates ? 'all estates' : `${actor.estateIds.length} estate(s)`} />}
       />
       <BookingsWorkspace bookings={bookings} canMutate={canMutate} amenities={native ? estateAmenitiesFor(actor, true) : undefined} sites={sites} residents={residents} expectedCompanyId={actor.tenantId ?? ''} />
