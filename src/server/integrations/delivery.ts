@@ -20,12 +20,13 @@ export async function deliver(input: { tenantId: string; channel: Channel; recip
   return { status: 'sent', providerId: result.id };
 }
 
-export async function enqueueDelivery(input: { tenantId: string; channel: Channel; recipient: string; body: string; purpose: string; subjectId?: string; emergency?: boolean; requiresApproval?: boolean }): Promise<string> {
+export async function enqueueDelivery(input: { tenantId: string; channel: Channel; recipient: string; body: string; purpose: string; subjectId?: string; emergency?: boolean; requiresApproval?: boolean; notBeforeISO?: string }): Promise<string> {
+  const notBefore = input.notBeforeISO && Number.isFinite(Date.parse(input.notBeforeISO)) ? input.notBeforeISO : new Date().toISOString();
   const quiet = input.subjectId && !input.emergency ? await withTenant(input.tenantId, (query) => query`select enabled, quiet_start, quiet_end from communication_preferences where tenant_id = ${input.tenantId}::uuid and subject_id = ${input.subjectId} and channel = ${input.channel} limit 1`) as Array<{ enabled: boolean; quiet_start: string | null; quiet_end: string | null }> : [];
   if (quiet[0]?.enabled === false) throw new Error('Recipient has disabled this notification channel.');
   const rows = await withTenant(input.tenantId, (query) => query`
-    insert into communication_queue (tenant_id, channel, recipient, body, purpose, requires_approval, status)
-    values (${input.tenantId}::uuid, ${input.channel}, ${input.recipient}, ${input.body}, ${input.purpose}, ${input.requiresApproval ?? false}, ${input.requiresApproval ? 'blocked_approval' : 'queued'}) returning id
+    insert into communication_queue (tenant_id, channel, recipient, body, purpose, requires_approval, status, next_attempt_at)
+    values (${input.tenantId}::uuid, ${input.channel}, ${input.recipient}, ${input.body}, ${input.purpose}, ${input.requiresApproval ?? false}, ${input.requiresApproval ? 'blocked_approval' : 'queued'}, ${notBefore}::timestamptz) returning id
   `) as Array<{ id: string }>;
   return rows[0].id;
 }

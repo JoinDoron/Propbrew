@@ -28,7 +28,7 @@ const reviewed = {
   ]),
   shortlet: groupPages('(ops)/shortlet', [
     '', 'agents', 'analytics', 'booking-page', 'bookings', 'calendar', 'channels', 'expenses',
-    'guests', 'inspections', 'maintenance', 'plan', 'pricing', 'properties', 'reviews', 'team', 'whatsapp', 'copilot',
+    'guests', 'inspections', 'maintenance', 'operations', 'plan', 'pricing', 'properties', 'reviews', 'team', 'whatsapp', 'copilot',
   ]),
   portal: groupPages('(portal)/portal', [
     '', 'announcements', 'bills', 'bookings', 'community', 'electricity', 'jobs', 'listings',
@@ -65,18 +65,18 @@ function discoverPages(directory: string): string[] {
 }
 
 describe('Exhaustive application design review manifest', () => {
-  it('accounts for every one of the 122 page files with no ignored directory or dynamic route', () => {
+  it('accounts for every one of the 123 page files with no ignored directory or dynamic route', () => {
     const files = manifest.map(({ file }) => file);
-    expect(new Set(files).size).toBe(122);
-    expect(files).toHaveLength(122);
+    expect(new Set(files).size).toBe(123);
+    expect(files).toHaveLength(123);
     expect(files.slice().sort()).toEqual(discoverPages(APP).sort());
     expect(files).toContain('(ops)/(facility)/work-orders/[ref]/page.tsx');
     expect(files).toContain('sign-up/[[...sign-up]]/page.tsx');
-    expect(manifest.filter(({ family }) => family !== 'publicMarketing')).toHaveLength(121);
+    expect(manifest.filter(({ family }) => family !== 'publicMarketing')).toHaveLength(122);
   });
 
   it.each([
-    ['estate', 25], ['facility', 17], ['construction', 24], ['shortlet', 18],
+    ['estate', 25], ['facility', 17], ['construction', 24], ['shortlet', 19],
     ['portal', 16], ['admin', 8], ['entryShared', 13], ['publicMarketing', 1],
   ] as const)('explicitly reviews all %s pages (%i)', (family, count) => {
     expect(reviewed[family]).toHaveLength(count);

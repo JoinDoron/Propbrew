@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import { identityByKey, SEED } from '@/server/identities';
 import { money } from '@/domain/primitives';
 import type { TenantId } from '@/domain/ids';
@@ -7,7 +8,9 @@ import { scanRisks, stockLedger, nextRevision } from '@/domain/construction';
 import { NOW_MS } from '@/domain/ppm';
 import { constructionWorld, signalStates, signalEscalations } from '@/server/reads/construction';
 import { shortletSettings } from '@/server/shortlet-settings';
+import { shortletControl } from '@/server/shortlet-control';
 import * as shortlet from '@/server/actions/shortlet';
+import * as shortletControlActions from '@/server/actions/shortlet-control';
 import * as construction from '@/server/actions/construction';
 
 const session = vi.hoisted(() => ({ actor: vi.fn() }));
@@ -40,14 +43,45 @@ afterEach(() => { Object.assign(db, structuredClone(baseline)); });
 const bookingInput = () => ({ apartmentId: db.shortletApartments[0].id, guestName: 'Workflow QA', guestPhone: '', checkIn: '2027-02-01', checkOut: '2027-02-03', source: 'direct' as const, status: 'confirmed', cautionNaira: 10000, paidNaira: 0 });
 
 describe('Shortlet booking and money workflows', () => {
+  it('applies guest, finance and team changes only through their approval controls', async () => {
+    const actor = manager();
+    const tenantId = actor.tenantId as TenantId;
+    const booking = { ...structuredClone(db.shortletBookings[0]), id: `control-${randomUUID()}`, tenantId, status: 'confirmed' as const, paid: money(0), total: money(500_000) };
+    const member = { ...structuredClone(db.shortletTeam.find((row) => row.role !== 'owner')!), id: `member-${randomUUID()}`, tenantId, role: 'housekeeper' as const };
+    db.shortletBookings.unshift(booking); db.shortletTeam.unshift(member);
+
+    expect((await shortletControlActions.submitGuestVerification({ bookingId: booking.id, documentType: 'nin', documentLast4: '4821', consentAccepted: true })).ok).toBe(true);
+    const control = shortletControl(actor.tenantId!);
+    const verification = control.guestReadiness.find((row) => row.bookingId === booking.id)!;
+    expect(verification.status).toBe('pending_review');
+    const verificationApproval = control.approvals.find((row) => row.kind === 'guest_verification' && row.entityId === verification.id)!;
+    expect((await shortletControlActions.decideShortletApproval(verificationApproval.id, 'approved')).ok).toBe(true);
+    expect(verification.status).toBe('verified');
+
+    expect((await shortlet.recordPayment(booking.id, 1000.01)).ok).toBe(true);
+    const transaction = control.transactions.find((row) => row.bookingId === booking.id)!;
+    expect(booking.paid.minor).toBe(0);
+    expect((await shortletControlActions.approveShortletTransaction(transaction.id, 'approved')).ok).toBe(false);
+    expect((await shortletControlActions.matchShortletTransaction(transaction.id)).ok).toBe(true);
+    expect((await shortletControlActions.approveShortletTransaction(transaction.id, 'approved')).ok).toBe(true);
+    expect(booking.paid.minor).toBe(100001);
+
+    expect((await shortlet.setMemberRole(member.id, 'accountant')).ok).toBe(true);
+    expect(member.role).toBe('housekeeper');
+    const roleApproval = control.approvals.find((row) => row.kind === 'team_role' && row.entityId === member.id)!;
+    expect((await shortletControlActions.decideShortletApproval(roleApproval.id, 'approved')).ok).toBe(true);
+    expect(member.role).toBe('accountant');
+  });
+
   it('creates a valid stay, preserves exact kobo in a partial payment, and rejects overpayment atomically', async () => {
     const created = await shortlet.createBooking(bookingInput());
     expect(created.ok).toBe(true);
     const booking = db.shortletBookings[0];
     expect(booking.total.minor).toBe(2 * db.shortletApartments[0].nightlyRate.minor);
     expect(booking.guestToken).not.toBe(`g-${booking.ref}`);
-    expect(await shortlet.recordPayment(booking.id, 1000.01)).toEqual({ ok: true });
-    expect(booking.paid).toEqual(money(100001));
+    expect((await shortlet.recordPayment(booking.id, 1000.01)).ok).toBe(true);
+    expect(booking.paid).toEqual(money(0));
+    expect(shortletControl(booking.tenantId).transactions.find((row) => row.bookingId === booking.id)?.amountMinor).toBe(100001);
     const before = structuredClone(booking);
     expect((await shortlet.recordPayment(booking.id, booking.total.minor / 100)).ok).toBe(false);
     expect(booking).toEqual(before);
@@ -77,10 +111,11 @@ describe('Shortlet booking and money workflows', () => {
     expect(booking.paid).toEqual(money(0, 'USD'));
   });
 
-  it('allows a late recorded payment without reopening a closed stay', async () => {
+  it('allows a late payment submission without reopening or prematurely crediting a closed stay', async () => {
     const booking = db.shortletBookings[0]; booking.status = 'closed'; booking.total = money(10000); booking.paid = money(0);
     expect((await shortlet.recordPayment(booking.id, 10.01)).ok).toBe(true);
-    expect(booking.paid.minor).toBe(1001); expect(booking.status).toBe('closed');
+    expect(booking.paid.minor).toBe(0); expect(booking.status).toBe('closed');
+    expect(shortletControl(booking.tenantId).transactions.some((row) => row.bookingId === booking.id && row.amountMinor === 1001 && row.status === 'pending_match')).toBe(true);
   });
 
   it('enforces confirmation overlap, stay-start and inspection-close guards', async () => {

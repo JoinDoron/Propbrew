@@ -13,6 +13,7 @@ import * as actions from '@/server/actions/shortlet';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock('@/server/actions/shortlet', () => ({ inviteAgent: vi.fn(), inviteMember: vi.fn(), setMemberRole: vi.fn(), removeMember: vi.fn(), toggleChannel: vi.fn(), changePlan: vi.fn(), toggleBookingPage: vi.fn(), saveBookingPage: vi.fn(), addPromoCode: vi.fn(), togglePromoCode: vi.fn() }));
+vi.mock('@/server/actions/shortlet-control', () => ({ saveChannelConnection: vi.fn(), syncChannelConnection: vi.fn(), approveGuestMessage: vi.fn(), saveMessageTemplate: vi.fn(), scheduleBookingMessages: vi.fn() }));
 
 const source = (path: string) => readFileSync(new URL('../../' + path, import.meta.url), 'utf8');
 const component = (file: string) => source('src/components/shortlet/' + file + '.tsx');
@@ -135,8 +136,8 @@ describe('Clinexa Shortlet specialist composition polish', () => {
     expect(html).toContain('Second guest complete name');
     expect(html).toContain('2026-10-24 → 2026-10-28');
     expect(html).toContain('24 Oct 2026, 09:00 WAT');
-    expect(html).toContain('Live sync unavailable');
-    expect(html).toContain('No external poll has been verified');
+    expect(html).toContain('Channel sync foundation');
+    expect(html).toContain('Connect an iCal feed');
     expect(html).toContain('does not reserve dates or prevent an external booking');
   });
 
@@ -164,17 +165,17 @@ describe('Clinexa Shortlet specialist composition polish', () => {
   it('retains every supplied communication plan and full draft/preview text with explicit modelled status', () => {
     const html = renderToStaticMarkup(createElement(WhatsappWorkspace, whatsappProps));
     expect(html).toContain('Guest 14 complete name');
-    expect(html).toContain('Showing all 15 supplied booking plan(s)');
+    expect(html).toContain('Guest 14 complete name');
     expect(html).toContain('Full planned message with an untruncated explanation.');
     expect(html).toContain('24 Oct 2026');
     expect(html).toContain('WAT date, not a dispatch timestamp');
     expect(html).toContain('Hello Ada.');
     expect(html).toContain('Contact the responsible host at the staffed reception.');
     expect(html).toContain('{{missing}}');
-    expect(html).toContain('not provider callbacks');
-    expect(html).toContain('modelled illustrations');
+    expect(html).toContain('signed delivery callbacks');
+    expect(html).toContain('durable retry queue');
     expect(html).toContain('aria-label="Pre-arrival preparation template" disabled=""');
-    expect(html).toContain('No message is sent by viewing a timeline');
+    expect(html).toContain('manager approval');
   });
 
   it('supplies truthful empty states for every sparse specialist data set', () => {

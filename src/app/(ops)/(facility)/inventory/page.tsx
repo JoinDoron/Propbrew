@@ -13,10 +13,10 @@ import { db } from '@/server/data/store';
 /** Inventory — spare-parts stock with stock-out forecasting and receive-to-stock.
  *  Below-reorder and soon-to-stock-out parts are flagged so nothing runs dry
  *  mid-repair. */
-export default async function InventoryPage({ searchParams }: { searchParams?: Promise<{ before?: string; view?: string }> } = {}) {
+export default async function InventoryPage({ searchParams }: { searchParams: Promise<{ before?: string; view?: string }> }) {
   return withDurableRead(async () => {
   const { actor } = await requireCapability('assets_ppm', 'read', 'facility');
-  const params = await searchParams ?? {};
+  const params = await searchParams;
   const native = nativeAuthEnabled();
   const setup = native ? listFacilityInventory(actor, { before: typeof params.before === 'string' ? params.before : undefined, limit: 50, includeArchived: true }) : null;
   const parts = setup ? setup.parts : repos.facilityParts.list(actor).items;

@@ -213,9 +213,9 @@ function PaymentDialog({ booking, onClose, onDone }: { booking: BookingRow; onCl
     <Modal title="Record payment" onClose={onClose} pending={pending}>
       <Card><CardHeader title={booking.guest} subtitle={booking.ref} /><dl className={styles.facts}><div><dt>Booking total</dt><dd>{money(booking.totalMinor)}</dd></div><div><dt>Outstanding</dt><dd>{money(booking.outstandingMinor)}</dd></div></dl></Card>
       <label className={styles.field}>Amount received (₦)<input aria-label="Amount received (₦)" value={amt} onChange={(e) => setAmt(e.target.value.replace(/[^0-9.]/g, ''))} inputMode="decimal" className={styles.control} autoFocus /></label>
-      <p className={styles.notice}>Off-platform payment (bank transfer). This records what the guest has paid; it does not verify a bank settlement or charge the guest.</p>
+      <p className={styles.notice}>Off-platform bank transfer. Submitting creates a pending finance record; the booking balance changes only after settlement matching and approval in Shortlet Operations.</p>
       {error && <div role="alert" className={styles.error}>{error}</div>}
-      <Actions onClose={onClose} onSubmit={submit} pending={pending} disabled={!amt || !Number.isFinite(Number(amt)) || Number(amt) <= 0 || Math.round(Number(amt) * 100) > booking.outstandingMinor} label="Confirm payment record" />
+      <Actions onClose={onClose} onSubmit={submit} pending={pending} disabled={!amt || !Number.isFinite(Number(amt)) || Number(amt) <= 0 || Math.round(Number(amt) * 100) > booking.outstandingMinor} label="Submit for reconciliation" />
     </Modal>
   );
 }

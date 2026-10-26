@@ -31,8 +31,10 @@ import type { PlanKey, TeamRole, TeamMember } from '@/domain/shortlet/plan';
 import { suggestPriority, ISSUE_NEXT, type RuleType, type IssuePriority, type PricingRule, type MaintenanceIssue, type Agent } from '@/domain/shortlet/operations';
 import { nowISO } from '@/server/clock';
 import { canEnterWorkspace } from '@/config/workspaces';
+import { TURNOVER_CHECKLIST } from '@/domain/shortlet/control';
+import { shortletControl } from '@/server/shortlet-control';
 
-const PATHS = ['/shortlet', '/shortlet/bookings', '/shortlet/calendar', '/shortlet/inspections', '/shortlet/expenses', '/shortlet/analytics', '/shortlet/guests', '/shortlet/whatsapp', '/shortlet/channels', '/shortlet/plan', '/shortlet/team', '/shortlet/pricing', '/shortlet/maintenance', '/shortlet/agents', '/shortlet/reviews', '/shortlet/booking-page', '/shortlet/properties', '/shortlet/copilot'];
+const PATHS = ['/shortlet', '/shortlet/bookings', '/shortlet/calendar', '/shortlet/inspections', '/shortlet/expenses', '/shortlet/analytics', '/shortlet/guests', '/shortlet/whatsapp', '/shortlet/channels', '/shortlet/operations', '/shortlet/plan', '/shortlet/team', '/shortlet/pricing', '/shortlet/maintenance', '/shortlet/agents', '/shortlet/reviews', '/shortlet/booking-page', '/shortlet/properties', '/shortlet/copilot'];
 const revalidate = () => PATHS.forEach((p) => revalidatePath(p));
 
 export type Res = { ok: true; ref?: string } | { ok: false; error: string };
@@ -192,10 +194,22 @@ export async function advanceBooking(id: string, event: string): Promise<Res> {
   if (event === 'CONFIRM' && overlaps(g.actor, live.apartmentId, live.checkIn, live.checkOut, live.id)) return { ok: false, error: 'This apartment has an overlapping recorded stay. Review the calendar first.' };
   const operatingDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Lagos', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(nowISO()));
   if (event === 'CHECK_IN' && live.checkIn > operatingDay) return { ok: false, error: 'Check-in is not available before the recorded stay start date.' };
+  const control = shortletControl(g.actor.tenantId!);
+  const readiness = control.guestReadiness.find((row) => row.bookingId === live.id);
+  if (event === 'CHECK_IN' && readiness?.status !== 'verified') return { ok: false, error: 'Complete and approve the guest identity and consent check before check-in.' };
   if (event === 'CLOSE' && (!db.shortletInspections.some((inspection) => inspection.tenantId === live.tenantId && inspection.bookingId === live.id) || ['pending', 'held'].includes(live.cautionStatus))) return { ok: false, error: 'Record the checkout inspection and caution decision before closing.' };
 
   const from = live.status;
   live.status = t.to;
+  if (event === 'CHECK_IN' && readiness) readiness.checkedInAtISO = nowISO();
+  if (event === 'CHECK_OUT') {
+    if (readiness) readiness.checkedOutAtISO = nowISO();
+    if (!control.turnovers.some((row) => row.bookingId === live.id)) control.turnovers.unshift({
+      tenantId: g.actor.tenantId!, id: `slto-${randomUUID()}`, bookingId: live.id, apartmentId: live.apartmentId,
+      dueAtISO: `${live.checkOut}T12:00:00+01:00`, status: 'scheduled', checklist: TURNOVER_CHECKLIST.map((item) => ({ ...item })),
+      maintenanceIssueIds: [], createdAtISO: nowISO(), updatedAtISO: nowISO(),
+    });
+  }
   if (t.to === 'cancelled' && live.cautionStatus === 'held') live.cautionStatus = 'refunded';
   recordHistory('shortlet-booking', live.id, { at: nowISO(), event, from, to: t.to, actorId: g.actor.userId, actorName: 'Operator', actorRole: roles[0] ?? 'estate_manager' });
   revalidate();
@@ -214,11 +228,20 @@ export async function recordPayment(id: string, amountNaira: number): Promise<Re
   if (add === null || add <= 0) return { ok: false, error: 'Enter a finite amount greater than zero.' };
   if (live.total.currency !== 'NGN' || live.paid.currency !== 'NGN') return { ok: false, error: 'This form records NGN only; currencies must match.' };
   if (live.status === 'cancelled') return { ok: false, error: 'A cancelled booking needs a separate financial adjustment.' };
-  if (add > live.total.minor - live.paid.minor) return { ok: false, error: 'The payment exceeds the recorded outstanding balance.' };
-  live.paid = money(live.paid.minor + add, 'NGN');
-  recordHistory('shortlet-booking', live.id, { at: nowISO(), event: 'PAYMENT_RECORDED', from: live.status, to: live.status, actorId: g.actor.userId, actorName: 'Operator', actorRole: (g.actor.roles[0] as Role) ?? 'estate_manager', note: `₦${amountNaira.toLocaleString()} recorded` });
+  const control = shortletControl(g.actor.tenantId!);
+  const pendingPayments = control.transactions.filter((row) => row.bookingId === live.id && row.kind === 'accommodation_payment' && !['rejected', 'completed'].includes(row.status)).reduce((sum, row) => sum + row.amountMinor, 0);
+  if (add > live.total.minor - live.paid.minor - pendingPayments) return { ok: false, error: 'The payment exceeds the outstanding balance after pending reconciliation records.' };
+  const sequence = nextRecordSequence('shortlet:paymentSeq', 0, true);
+  const reference = `MANUAL-${live.ref}-${sequence}`;
+  control.transactions.unshift({
+    tenantId: g.actor.tenantId!, id: `slt-${randomUUID()}`, bookingId: live.id,
+    kind: 'accommodation_payment', amountMinor: add, currency: 'NGN', method: 'bank_transfer',
+    reference, status: 'pending_match', requestedBy: g.actor.userId, requestedAtISO: nowISO(),
+    note: 'Submitted from the booking record; settlement matching and finance approval are required before posting.',
+  });
+  recordHistory('shortlet-booking', live.id, { at: nowISO(), event: 'PAYMENT_SUBMITTED', from: live.status, to: live.status, actorId: g.actor.userId, actorName: 'Operator', actorRole: (g.actor.roles[0] as Role) ?? 'estate_manager', note: `₦${amountNaira.toLocaleString()} awaiting settlement match · ${reference}` });
   revalidate();
-  return { ok: true };
+  return { ok: true, ref: reference };
 
   }, 'shortlet');
 }
@@ -239,6 +262,29 @@ export async function saveInspection(bookingId: string, items: InspectionItem[],
   const insp = { tenantId: g.actor.tenantId, id: `si-${bookingId}`, bookingId, apartmentId: live.apartmentId, inspectorName: inspectorName || 'Operator', at: nowISO(), items, outcome, damageTotal: money(damageTotal, 'NGN') } as unknown as SlInspection;
   const existing = db.shortletInspections.findIndex((i) => i.tenantId === g.actor.tenantId && i.bookingId === bookingId);
   if (existing >= 0) db.shortletInspections[existing] = insp; else db.shortletInspections.unshift(insp);
+
+  // Damage/missing items become durable Shortlet maintenance handoffs. The
+  // deterministic IDs keep an edited inspection from creating duplicates.
+  const control = shortletControl(g.actor.tenantId!);
+  const turnover = control.turnovers.find((row) => row.bookingId === bookingId);
+  const handoffIds: string[] = [];
+  items.forEach((item, index) => {
+    if (item.condition === 'ok') return;
+    const issueId = `mi-${insp.id}-${index}`;
+    handoffIds.push(issueId);
+    if (!db.shortletIssues.some((issue) => issue.tenantId === g.actor.tenantId && issue.id === issueId)) db.shortletIssues.unshift({
+      tenantId: g.actor.tenantId!, id: issueId, apartmentId: live.apartmentId,
+      title: `${item.condition === 'missing' ? 'Replace' : 'Repair'} ${item.label}`,
+      description: `${live.ref} checkout inspection handoff${item.note ? ` · ${item.note}` : ''}`,
+      priority: item.condition === 'missing' ? 'high' : suggestPriority(item.label + ' ' + (item.note ?? '')),
+      status: 'open', createdAt: operatingNowISO(),
+    } as MaintenanceIssue);
+  });
+  if (turnover) {
+    turnover.maintenanceIssueIds = Array.from(new Set([...turnover.maintenanceIssueIds, ...handoffIds]));
+    if (handoffIds.length) turnover.status = 'blocked';
+    turnover.updatedAtISO = nowISO();
+  }
 
   // Drive the caution decision + close the booking (FR-CI-03).
   live.cautionDeducted = money(Math.min(damageTotal, live.cautionFee.minor), 'NGN');
@@ -299,9 +345,17 @@ export async function setMemberRole(id: string, role: TeamRole): Promise<Res> {
   if (!m) return { ok: false, error: 'Member not found.' };
   if (!teamRoles.includes(role)) return { ok: false, error: 'Choose a valid team role. Owner access cannot be assigned here.' };
   if (m.role === 'owner') return { ok: false, error: 'The owner role cannot be changed here.' };
-  m.role = role;
+  if (m.role === role) return { ok: false, error: 'Choose a different role.' };
+  const state = shortletControl(g.actor.tenantId!);
+  const existing = state.approvals.find((row) => row.kind === 'team_role' && row.entityId === m.id && row.status === 'pending');
+  if (existing) return { ok: false, error: 'A role change for this team member is already awaiting approval.' };
+  state.approvals.unshift({
+    tenantId: g.actor.tenantId!, id: `sla-${randomUUID()}`, kind: 'team_role', entityId: m.id,
+    title: `Approve ${m.name} role change`, summary: `${m.role} → ${role}`, status: 'pending',
+    requestedBy: g.actor.userId, requestedAtISO: nowISO(), payload: { memberId: m.id, role },
+  });
   revalidate();
-  return { ok: true };
+  return { ok: true, ref: 'approval-pending' };
 
   }, 'shortlet');
 }

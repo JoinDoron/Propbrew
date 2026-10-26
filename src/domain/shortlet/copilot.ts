@@ -8,7 +8,10 @@ import { detectConflicts } from './automation';
 import { movementsOn, occupancyRate, suggestNightlyRate, turnovers } from './engine';
 
 export const SHORTLET_QUESTIONS = [
-  'Which bookings need attention?', 'How is occupancy this month?',
+  'Which bookings need attention?',
+  'Forecast occupancy for the next 30, 60 and 90 days from the recorded bookings, and explain the assumptions.',
+  'Recommend operator-reviewed NGN rates for the next 30 days using occupancy, seasonality and existing pricing rules.',
+  'Draft a concise WhatsApp pre-arrival message for the next arrival without including private access details.',
   'Are any recorded stays overlapping?', 'Which apartments need maintenance?',
   'What do the guest ratings show?', 'Explain the recorded pricing and rate suggestions.',
 ] as const;

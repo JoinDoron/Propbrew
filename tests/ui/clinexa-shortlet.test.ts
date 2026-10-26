@@ -18,15 +18,21 @@ import { PricingWorkspace } from '@/components/shortlet/pricing-workspace';
 import { TeamWorkspace } from '@/components/shortlet/team-workspace';
 import { WhatsappWorkspace } from '@/components/shortlet/whatsapp-workspace';
 import { ShortletCopilotWorkspace } from '@/components/shortlet/copilot-workspace';
+import { OperationsControlWorkspace } from '@/components/shortlet/operations-control-workspace';
 import { ShortletDialog } from '@/components/shortlet/reference-ui';
 import primitives from '@/components/ui/primitives.module.css';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock('@/server/actions/shortlet', () => ({}));
+vi.mock('@/server/actions/shortlet-control', () => ({
+  approveShortletTransaction: vi.fn(), assignTurnover: vi.fn(), decideShortletApproval: vi.fn(),
+  generateTurnoverTasks: vi.fn(), matchShortletTransaction: vi.fn(), reviewGuestVerification: vi.fn(),
+  submitGuestVerification: vi.fn(), submitShortletTransaction: vi.fn(), updateTurnover: vi.fn(),
+}));
 
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8');
 const component = (name: string) => read(`src/components/shortlet/${name}.tsx`);
-const routes = ['', 'agents', 'analytics', 'booking-page', 'bookings', 'calendar', 'channels', 'expenses', 'guests', 'inspections', 'maintenance', 'plan', 'pricing', 'properties', 'reviews', 'team', 'whatsapp', 'copilot'];
+const routes = ['', 'agents', 'analytics', 'booking-page', 'bookings', 'calendar', 'channels', 'expenses', 'guests', 'inspections', 'maintenance', 'operations', 'plan', 'pricing', 'properties', 'reviews', 'team', 'whatsapp', 'copilot'];
 const cases = [
   { name: 'Copilot', panels: 2, render: () => renderToStaticMarkup(createElement(ShortletCopilotWorkspace, { snapshotISO: '2026-07-26T00:00:00Z', suggestions: [] })) },
   { name: 'Agents', panels: 2, render: () => renderToStaticMarkup(createElement(AgentsWorkspace, { agents: [] })) },
@@ -39,6 +45,7 @@ const cases = [
   { name: 'Expenses', panels: 2, render: () => renderToStaticMarkup(createElement(ExpensesWorkspace, { expenses: [], properties: [], insight: { totalMinor: 0, dieselPctOfRevenue: 0, costPerOccupiedNightMinor: 0, byCategory: [] }, revenueMinor: 0 })) },
   { name: 'Checkout inspections', panels: 2, render: () => renderToStaticMarkup(createElement(InspectionsWorkspace, { pending: [], done: [] })) },
   { name: 'Maintenance', panels: 2, render: () => renderToStaticMarkup(createElement(MaintenanceWorkspace, { issues: [], apartments: [], stats: { open: 0, inProgress: 0, resolvedThisMonth: 0 } })) },
+  { name: 'Operations', panels: 4, render: () => renderToStaticMarkup(createElement(OperationsControlWorkspace, { bookings: [], transactions: [], turnovers: [], members: [], approvals: [], canCreate: false, canUpdate: false })) },
   { name: 'Plan', panels: 2, render: () => renderToStaticMarkup(createElement(PlanWorkspace, { plans: [{ key: 'lite', name: 'Lite', priceMonthlyMinor: 0, apartmentCap: 1, entitlements: ['Bookings'] }], currentKey: 'lite', apartmentCount: 0, recommendation: { key: 'lite', reasons: [] }, order: ['lite'] })) },
   { name: 'Pricing', panels: 2, render: () => renderToStaticMarkup(createElement(PricingWorkspace, { apartments: [] })) },
   { name: 'Team', panels: 2, render: () => renderToStaticMarkup(createElement(TeamWorkspace, { members: [], roles: [], modules: [], matrix: {} })) },
@@ -80,7 +87,7 @@ describe('Complete Shortlet Clinexa design coverage', () => {
     expect(components).toContain('reference-ui.tsx');
     expect(components).toContain('guest-directory.tsx');
     const serverPanels = ['guests', 'properties', 'reviews'].reduce((count, route) => count + (read(`src/app/(ops)/shortlet/${route}/page.tsx`).match(/id: ["']/g)?.length ?? 0), 0);
-    expect(cases.reduce((count, screen) => count + screen.panels, 0) + serverPanels).toBe(41);
+    expect(cases.reduce((count, screen) => count + screen.panels, 0) + serverPanels).toBe(45);
   });
 
   it('uses shared form, dialog and action patterns instead of leaking legacy form styles', () => {
@@ -158,8 +165,8 @@ describe('Complete Shortlet Clinexa design coverage', () => {
     expect(whatsapp).toContain('className={styles.switch}');
     const specialistCss = read('src/components/shortlet/shortlet-specialists-polish.module.css');
     expect(specialistCss).toMatch(/\.switch\s*\{[^}]*width:\s*44px;[^}]*height:\s*44px/);
-    expect(whatsapp).toContain('modelled illustrations');
-    expect(whatsapp).toContain('not provider callbacks');
+    expect(whatsapp).toContain('durable retry queue');
+    expect(whatsapp).toContain('signed delivery callbacks');
   });
 
   it('uses shared table/KPI contracts and preserves record-based channel conflict signals', () => {
@@ -174,7 +181,7 @@ describe('Complete Shortlet Clinexa design coverage', () => {
     expect(component('reference-ui')).toContain('aria-pressed={pressed}');
     expect(channels).toContain('Double-booking guard');
     expect(channels).toContain('residual double-booking window');
-    expect(channels).toContain('<ShortletMetric label="Provider status" value="Not connected"');
-    expect(channels).toContain('Live sync unavailable');
+    expect(channels).toContain('<ShortletMetric label="Active feeds"');
+    expect(channels).toContain('syncChannelConnection');
   });
 });

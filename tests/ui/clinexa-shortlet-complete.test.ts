@@ -96,11 +96,12 @@ describe('Shortlet complete Clinexa composition', () => {
     expect(source('bookings-workspace')).toContain("const [amt, setAmt] = useState('')");
   });
 
-  it('does not manufacture channel synchronisation, WhatsApp delivery, traffic or subscription payment', () => {
-    expect(source('channels-workspace')).toContain('Live sync unavailable');
+  it('uses durable channel and WhatsApp queues without manufacturing provider completion, traffic or subscription payment', () => {
+    expect(source('channels-workspace')).toContain('syncChannelConnection');
+    expect(source('channels-workspace')).toContain('residual delay');
     expect(source('channels-workspace')).not.toContain('All channels synced just now');
-    expect(source('whatsapp-workspace')).toContain('modelled illustrations');
-    expect(source('whatsapp-workspace')).toContain('not provider callbacks');
+    expect(source('whatsapp-workspace')).toContain('durable retry queue');
+    expect(source('whatsapp-workspace')).toContain('signed delivery callbacks');
     expect(source('booking-page-workspace')).toContain('not measured visits');
     expect(source('plan-workspace')).toContain('not a connected subscription checkout');
     expect(source('plan-workspace')).not.toContain('prorated to today');

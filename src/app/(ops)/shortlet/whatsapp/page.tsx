@@ -7,6 +7,7 @@ import { DEFAULT_TEMPLATES, renderTemplate, messageSchedule, whatsappStats } fro
 import { WhatsappWorkspace, type TimelineRow } from '@/components/shortlet/whatsapp-workspace';
 import { shortletDate, shortletMoney } from '@/components/shortlet/shortlet-format';
 import { withDurableRead } from '@/server/data/durable-records';
+import { shortletControl } from '@/server/shortlet-control';
 
 const TEMPLATE_BY_KEY = new Map(DEFAULT_TEMPLATES.map((t) => [t.key, t.body]));
 
@@ -18,6 +19,7 @@ export default async function ShortletWhatsappPage() {
   return withDurableRead(async () => {
   const { nowMs: NOW_MS } = operatingClock();
   const { actor } = await requireCapability('bookings_amenities', 'read', 'shortlet');
+  const control = shortletControl(actor.tenantId!);
   const bookings = repos.shortletBookings.list(actor).items;
   const apts = new Map(repos.shortletApartments.list(actor).items.map((a) => [a.id, a]));
   const props = new Map(repos.shortletProperties.list(actor).items.map((p) => [p.id, p.name]));
@@ -47,7 +49,7 @@ export default async function ShortletWhatsappPage() {
   return (
     <div className="pb-page">
       <PageHeader title="Guest messaging" subtitle="Review guest messages, templates and delivery activity." />
-      <WhatsappWorkspace canUpdate={can(actor, 'bookings_amenities', 'update').allowed} stats={whatsappStats(bookings, NOW_MS)} templates={DEFAULT_TEMPLATES} sampleVars={sampleVars} timeline={timeline} />
+      <WhatsappWorkspace canUpdate={can(actor, 'bookings_amenities', 'update').allowed} stats={whatsappStats(bookings, NOW_MS)} templates={control.templates.map((template) => ({ key: template.key, label: template.label, trigger: DEFAULT_TEMPLATES.find((row) => row.key === template.key)?.trigger ?? 'Booking lifecycle', body: template.body, enabled: template.enabled, requiresApproval: template.requiresApproval }))} sampleVars={sampleVars} timeline={timeline} records={control.messages.map((message) => ({ id: message.id, bookingId: message.bookingId, ref: bookings.find((booking) => booking.id === message.bookingId)?.ref ?? 'Booking not linked', templateKey: message.templateKey, scheduledForISO: message.scheduledForISO, status: message.status, body: message.body, queueId: message.queueId }))} />
     </div>
   );
   });

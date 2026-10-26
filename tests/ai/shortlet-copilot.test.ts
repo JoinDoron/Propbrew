@@ -241,7 +241,7 @@ describe('Shortlet shared real-AI Copilot interface', () => {
   it('retains the same conversation, draft suggestions, bottom composer and mounted safeguards panels', () => {
     const html = renderToStaticMarkup(createElement(ShortletCopilotWorkspace, { snapshotISO: NOW, suggestions: SHORTLET_QUESTIONS }));
     expect(html.match(/role="tabpanel"/g)).toHaveLength(2);
-    for (const value of ['Ask about your stays', 'Shortlet conversation', 'Suggested questions', 'role="log"', 'Shortlet copilot conversation', 'Ask the Shortlet copilot', 'Review &amp; safeguards', 'A connected AI provider is required', 'Conversation stays in this browser session', 'Guest messaging remains a planning preview']) expect(html).toContain(value);
+    for (const value of ['Ask about your stays', 'Shortlet conversation', 'Suggested questions', 'role="log"', 'Shortlet copilot conversation', 'Ask the Shortlet copilot', 'Review &amp; safeguards', 'A connected AI provider is required', 'Conversation stays in this browser session', 'Guest messages enter manager approval']) expect(html).toContain(value);
     expect(html.match(/<textarea/g)).toHaveLength(1);
     expect(html).toContain('maxLength="2000"');
     expect(html).not.toContain('No external AI provider');
