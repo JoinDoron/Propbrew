@@ -1,0 +1,15 @@
+.stack { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; padding: 0; border: 0; }
+.fields label, .item label { display: flex; flex-direction: column; gap: 7px; min-width: 0; color: var(--text); font-size: 13px; line-height: 1.6; }
+.fields input, .fields select, .item input:not([type='checkbox']), .item select { width: 100%; min-width: 0; min-height: 44px; border: 1px solid var(--border); border-radius: var(--radius-control, 10px); background: var(--surface); color: var(--text); padding: 10px 12px; font: inherit; }
+:is(.fields, .item) :is(input, select):focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.wide { grid-column: 1 / -1; }
+.item { display: grid; grid-template-columns: minmax(0, 1fr) 150px; align-items: end; gap: 14px; border: 1px solid var(--border); border-radius: var(--radius-card, 12px); padding: 16px; }
+.item legend { color: var(--text-2); font-size: 12px; padding: 0 5px; }
+.item .checkbox { flex-direction: row; align-items: center; gap: 8px; }
+.checkbox input { width: 17px; height: 17px; }
+.description { color: var(--text-3); font-size: 13px; line-height: 1.7; }
+.notice { padding: 15px; border: 1px solid var(--border); border-radius: var(--radius-control, 10px); background: var(--surface-2); color: var(--text-2); font-size: 13px; line-height: 1.7; }
+.error { color: var(--tone-danger); font-size: 13px; line-height: 1.6; }
+.actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 12px; }
+@media (max-width: 560px) { .fields, .item { grid-template-columns: 1fr; } }

@@ -14,14 +14,14 @@ export const EXPIRING_WINDOW_DAYS = 30; // amber threshold
 
 export type ComplianceState = 'valid' | 'expiring' | 'expired' | 'never';
 
-export function daysUntil(iso: string): number {
-  return Math.round((Date.parse(iso) - NOW_MS) / DAY);
+export function daysUntil(iso: string, nowMs = NOW_MS): number {
+  return Math.round((Date.parse(iso) - nowMs) / DAY);
 }
 
 /** RAG state of an obligation from its expiry. */
-export function complianceState(validUntil: string | null): ComplianceState {
+export function complianceState(validUntil: string | null, nowMs = NOW_MS): ComplianceState {
   if (!validUntil) return 'never';
-  const d = daysUntil(validUntil);
+  const d = daysUntil(validUntil, nowMs);
   if (d < 0) return 'expired';
   if (d <= EXPIRING_WINDOW_DAYS) return 'expiring';
   return 'valid';
@@ -62,7 +62,7 @@ export const SEVERITY_TONE: Record<InspectionSeverity, 'danger' | 'warn' | 'neut
  * contributes its criticality weight; valid = full credit, expiring = 60%,
  * expired/never = 0. A single expired statutory obligation drags it down hard.
  */
-export function auditReadiness(obligations: readonly ComplianceObligation[]): { score: number; valid: number; expiring: number; expired: number; total: number } {
+export function auditReadiness(obligations: readonly ComplianceObligation[], nowMs = NOW_MS): { score: number; valid: number; expiring: number; expired: number; total: number } {
   let earned = 0;
   let possible = 0;
   let valid = 0;
@@ -71,7 +71,7 @@ export function auditReadiness(obligations: readonly ComplianceObligation[]): { 
   for (const o of obligations) {
     const w = CRITICALITY_WEIGHT[o.criticality] ?? 1;
     possible += w;
-    const state = complianceState(o.validUntil);
+    const state = complianceState(o.validUntil, nowMs);
     if (state === 'valid') { earned += w; valid++; }
     else if (state === 'expiring') { earned += w * 0.6; expiring++; }
     else { expired++; }

@@ -49,6 +49,8 @@ export type MeterReading = TenantScoped & {
 
 export type Part = TenantScoped & {
   id: string; name: string; category: string; sku: string; location: string;
+  /** New operational stock is owned by one site. Legacy rows require adoption. */
+  siteId?: string;
   stock: number; reorderPoint: number; usedPerMonth: number; unitCost: Money;
 };
 

@@ -1,4 +1,5 @@
 import type { PpmOccurrence, AssetRuntime, RiskAssessment } from '@/domain/ppm';
+import type { MaintenanceSetupData } from '@/server/reads/facility-maintenance';
 
 /** Serializable views passed from the PPM page (server) into the client shell. */
 export type OccView = PpmOccurrence;
@@ -29,6 +30,7 @@ export type RuntimeView = AssetRuntime & { assetName: string };
 export type GapView = { id: string; name: string; category: string; locationLabel: string; status: string };
 
 export type PpmData = {
+  setup?: MaintenanceSetupData;
   now: string;
   canMutate: boolean;
   occurrences: OccView[];

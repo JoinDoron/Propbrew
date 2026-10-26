@@ -4,6 +4,7 @@ import { validCopilotSource } from '@/lib/ai/copilot-protocol';
 import { collectCopilotRecords } from '@/server/ai/context/records';
 import { buildEstateContext } from '@/server/ai/context/estate';
 import { buildFacilityContext } from '@/server/ai/context/facility';
+import { runWithRecordContext, type WorkspaceRecordState } from '@/server/data/record-context';
 
 const fixture = vi.hoisted(() => ({ rows: {} as Record<string, Array<Record<string, unknown>>>, calls: [] as string[] }));
 vi.mock('@/server/data', async () => {
@@ -259,5 +260,25 @@ it('uses the native current clock and issued-only receivables after Estate setup
     const residents = context.facts.residents as { recordedBalance?: unknown; loadedInvoiceBalances: { balances: { minor: number }[] } }[];
     expect(residents[0].loadedInvoiceBalances.balances[0].minor).toBe(10050); expect(residents[0].recordedBalance).toBeUndefined();
     expect(Math.abs(Date.now() - Date.parse(context.snapshotISO))).toBeLessThan(60_000);
+  } finally { vi.unstubAllEnvs(); }
+});
+
+it('uses the native Facility clock and scoped service/stock history without exposing private evidence', async () => {
+  vi.stubEnv('PROPBREW_AUTH_MODE', 'company');
+  try {
+    fixture.rows.assets = [{ id: 'asset-a', tenantId: 'tenant-a', siteId: 'estate-a', name: 'Recorded generator' }];
+    fixture.rows.facilityParts = [{ id: 'part-a', tenantId: 'tenant-a', siteId: 'estate-a', name: 'Oil filter', unitCost: { minor: 550025, currency: 'NGN' } }];
+    const service = { id: 'service-a', tenantId: 'tenant-a', assetId: 'asset-a', siteId: 'estate-a', planId: 'plan-a', servicedOn: '2026-10-20', checkedIds: ['filter-check'], evidence: [{ url: 'PRIVATE-FILE-URL', name: 'PRIVATE-FILENAME' }], runtimeAtService: 500, notes: 'PRIVATE-SERVICE-NOTE', at: '2026-10-20T10:00:00Z' };
+    const movement = { id: '99100000-0000-4000-8000-000000000001', tenantId: 'tenant-a', partId: 'part-a', siteId: 'estate-a', kind: 'issue', delta: -1, quantity: 1, stockBefore: 4, stockAfter: 3, unitCostMinor: 550025, currency: 'NGN', reason: 'Recorded service use', reference: 'STOCK-ISSUE-1', at: '2026-10-20T10:00:00Z', actorId: 'manager-a', actorName: 'PRIVATE-STOCK-OPERATOR' };
+    const state: WorkspaceRecordState = { schemaVersion: 1, collections: {}, history: {}, sequences: {}, auxiliary: {
+      facilityMaintenance: { tenantId: 'tenant-a', plans: [], receipts: [], services: [service, { ...service, id: 'hidden-service', siteId: 'estate-b', servicedOn: '2099-01-01' }], audit: [], runtimeReadings: [], archivedOccurrenceIds: [] },
+      facilityInventory: { tenantId: 'tenant-a', parts: [], movements: [movement, { ...movement, id: '99100000-0000-4000-8000-000000000002', siteId: 'estate-b', delta: -999, quantity: 999, stockBefore: 1000, stockAfter: 1 }], receipts: [], audit: [] },
+    } };
+    const context = await runWithRecordContext({ state, domainTenantId: 'tenant-a', mode: 'read' }, () => buildFacilityContext(facilityManager));
+    expect(Math.abs(Date.now() - Date.parse(context.snapshotISO))).toBeLessThan(60_000);
+    expect(context.facts.serviceHistory).toEqual([expect.objectContaining({ servicedOn: '2026-10-20', savedEvidenceFiles: 1 })]);
+    expect(context.facts.stockMovements).toEqual([expect.objectContaining({ kind: 'issue', delta: -1, stockAfter: 3 })]);
+    for (const text of ['PRIVATE-FILE-URL', 'PRIVATE-FILENAME', 'PRIVATE-SERVICE-NOTE', 'PRIVATE-STOCK-OPERATOR', '2099-01-01', '-999']) expect(JSON.stringify(context)).not.toContain(text);
+    expect(context.notices.join(' ')).toContain('does not extend a statutory certificate expiry');
   } finally { vi.unstubAllEnvs(); }
 });

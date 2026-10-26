@@ -42,12 +42,12 @@ export function RiskPanel({ data }: { data: PpmData }) {
       </Card>
 
       {/* Breakdown */}
-      {sel && <Breakdown a={sel} canMutate={data.canMutate} />}
+      {sel && <Breakdown a={sel} data={data} canMutate={data.canMutate} />}
     </div>
   );
 }
 
-function Breakdown({ a, canMutate }: { a: RiskView; canMutate: boolean }) {
+function Breakdown({ a, canMutate, data }: { a: RiskView; canMutate: boolean; data: PpmData }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -58,6 +58,9 @@ function Breakdown({ a, canMutate }: { a: RiskView; canMutate: boolean }) {
     setError(null);
     start(async () => { try {
       const r = await decidePpmSuggestion(String(a.assetId), decision, {
+        expectedCompanyId: data.setup?.companyId,
+        planId: String(a.planId),
+        expectedPlanVersion: data.setup?.plans.find((p) => p.planId === String(a.planId))?.version,
         date: a.suggestedDate,
         confidence: a.confidence,
         driver: a.topDriver,

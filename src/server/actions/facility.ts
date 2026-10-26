@@ -25,6 +25,7 @@ import type { WorkOrder } from '@/domain/entities';
 import { nowISO } from '@/server/clock';
 import { isFacilityDate } from '@/server/facility-guards';
 import { CopilotConnectionError, resolveCopilotProvider } from '@/server/ai/copilot-provider';
+import { nativeAuthEnabled } from '@/server/auth/mode';
 
 const PATHS = ['/control-center', '/facility', '/energy', '/inventory', '/contracts', '/safety', '/access', '/sustainability', '/copilot', '/work-orders', '/dashboard'];
 const revalidate = () => PATHS.forEach((p) => revalidatePath(p));
@@ -115,6 +116,7 @@ export async function logMeterReading(meterId: string, reading: number): Promise
 export async function receiveStock(partId: string, qty: number): Promise<Res> {
   return withDurableMutation(async () => {
   const g = await gate('update'); if ('ok' in g) return g;
+  if (nativeAuthEnabled()) return { ok: false, error: 'Record a stock movement in Inventory so the delivery has a reference and audit history.' };
   const p = scopedMutableGet(g.actor, 'assets_ppm', db.facilityParts, partId, 'update');
   if (!p) return { ok: false, error: 'Part not found.' };
   if (!Number.isSafeInteger(qty) || qty <= 0 || !Number.isSafeInteger(p.stock + qty)) return { ok: false, error: 'Enter a positive whole quantity within the stock limit.' };

@@ -11,12 +11,15 @@ import { stockSignal, type Part } from '@/domain/facility';
 import { receiveStock } from '@/server/actions/facility';
 import layout from '@/components/ui/workspace-layout.module.css';
 import styles from './facility-specialists.module.css';
+import { FacilityInventorySetup, type FacilityInventorySetupProps } from './inventory-setup';
 
 export type PartRow = Part;
 
-export function InventoryWorkspace({ parts, kpis, canMutate = false }: {
-  parts: PartRow[]; kpis: { total: number; belowReorder: number; stockValueMinor: number; stockoutsSoon: number }; canMutate?: boolean;
-}) {
+type InventoryWorkspaceProps = { parts: PartRow[]; kpis: { total: number; belowReorder: number; stockValueMinor: number; stockoutsSoon: number }; canMutate?: boolean; setup?: FacilityInventorySetupProps };
+export function InventoryWorkspace(props: InventoryWorkspaceProps) {
+  return props.setup ? <FacilityInventorySetup {...props.setup} /> : <LegacyInventoryWorkspace {...props} />;
+}
+function LegacyInventoryWorkspace({ parts, kpis, canMutate = false }: InventoryWorkspaceProps) {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('all');
   const [receiveFor, setReceiveFor] = useState<PartRow | null>(null);

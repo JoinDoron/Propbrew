@@ -69,14 +69,14 @@ describe('Estate and Facility native operations use the current Nigerian operati
     });
   });
 
-  it('dates service completion and the next maintenance period from the current WAT day', async () => {
+  it('refuses native service completion based on an unverified evidence count', async () => {
     await run(async () => {
       const occurrence = rows().ppmOccurrences.find((row) => row.status !== 'completed')!;
       const plan = rows().ppmPlans.find((row) => row.id === occurrence.planId)!;
       plan.frequency = 'monthly';
-      expect(await completePpmOccurrence(occurrence.id, { checkedIds: plan.checklist.map((item) => item.id), photoCount: 1 })).toMatchObject({ ok: true });
-      expect(plan.lastServicedAt).toBe('2026-10-25');
-      expect(plan.nextDue).toBe('2026-11-24');
+      const before = { lastServicedAt: plan.lastServicedAt, nextDue: plan.nextDue, status: occurrence.status };
+      expect(await completePpmOccurrence(occurrence.id, { checkedIds: plan.checklist.map((item) => item.id), photoCount: 1 })).toMatchObject({ ok: false });
+      expect({ lastServicedAt: plan.lastServicedAt, nextDue: plan.nextDue, status: occurrence.status }).toEqual(before);
     });
   });
 

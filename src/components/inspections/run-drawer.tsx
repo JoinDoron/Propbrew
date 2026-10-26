@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useRef, useState, useTransition } from 'react';
 import { FacilityDialog } from '@/components/facility/facility-ui';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -10,13 +10,14 @@ import layout from '@/components/ui/workspace-layout.module.css';
 import styles from './maintenance-clinexa.module.css';
 import { humanizeStatus, type Tone } from '@/lib/status-tones';
 import { SEVERITY_TONE, SEVERITY_PRIORITY } from '@/domain/inspections';
+import { EvidencePicker } from '@/components/facility/evidence-picker';
 import { runInspection } from '@/server/actions/inspections';
 import type { InspView, InspectionsData } from './types';
 
 type R = 'pass' | 'fail' | 'na';
 const INSP_TONE: Record<string, Tone> = { scheduled: 'info', in_progress: 'progress', passed: 'success', failed: 'danger', overdue: 'warn' };
 
-export function RunInspectionDrawer({ inspection, canMutate, workOrderBasePath = '/work-orders', onClose }: { inspection: InspView; canMutate: boolean; workOrderBasePath?: InspectionsData['workOrderBasePath']; onClose: () => void }) {
+export function RunInspectionDrawer({ inspection, canMutate, expectedCompanyId, workOrderBasePath = '/work-orders', onClose }: { inspection: InspView; canMutate: boolean; expectedCompanyId?: string; workOrderBasePath?: InspectionsData['workOrderBasePath']; onClose: () => void }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -26,21 +27,27 @@ export function RunInspectionDrawer({ inspection, canMutate, workOrderBasePath =
     Object.fromEntries(inspection.checklist.filter((c) => c.result).map((c) => [c.id, c.result as R])),
   );
   const [photos, setPhotos] = useState(0);
+  const [evidenceIds, setEvidenceIds] = useState<string[]>(inspection.operation?.evidenceIds ?? []);
+  const [notes, setNotes] = useState<Record<string, string>>(() => Object.fromEntries(inspection.checklist.map((item) => [item.id, item.note ?? ''])));
+  const native = Boolean(expectedCompanyId && inspection.operation);
+  const submitting = useRef(false), requestKey = useRef<string | null>(null);
   const [review, setReview] = useState(false);
 
-  const set = (id: string, r: R) => setResults((prev) => ({ ...prev, [id]: r }));
+  const set = (id: string, r: R) => { setResults((prev) => ({ ...prev, [id]: r })); requestKey.current = null; };
   const allMarked = inspection.checklist.every((c) => results[c.id]);
   const fails = inspection.checklist.filter((c) => results[c.id] === 'fail');
   const photoNeeded = inspection.checklist.some((c) => c.requiresPhoto && results[c.id] && results[c.id] !== 'na');
-  const canComplete = allMarked && (!photoNeeded || photos > 0);
+  const findingsComplete = !native || inspection.checklist.every((item) => !results[item.id] || results[item.id] === 'pass' || (notes[item.id]?.trim().length ?? 0) >= 3);
+  const canComplete = allMarked && findingsComplete && (!photoNeeded || (native ? evidenceIds.length > 0 : photos > 0));
 
-  const submit = () => { if (pending) return;
+  const submit = () => { if (pending || submitting.current) return;
+    submitting.current = true; if (!requestKey.current) requestKey.current = crypto.randomUUID();
     setError(null);
     start(async () => { try {
-      const r = await runInspection(inspection.id, { results: inspection.checklist.map((c) => ({ itemId: c.id, result: results[c.id] })), photoCount: photos });
+      const r = await runInspection(inspection.id, { results: inspection.checklist.map((c) => ({ itemId: c.id, result: results[c.id], ...(native ? { note: notes[c.id] } : {}) })), photoCount: native ? 0 : photos, ...(native ? { expectedCompanyId, idempotencyKey: requestKey.current!, expectedVersion: inspection.operation!.version, expectedChecklistHash: inspection.operation!.checklistHash, evidenceIds } : {}) });
       if (!r.ok) setError(r.error);
       else { onClose(); router.refresh(); }
-     } catch { setError('The save could not be confirmed. Your entries are still here; refresh the record before retrying.'); } });
+     } catch { setError('The save could not be confirmed. Your entries are still here; refresh the record before retrying.'); } finally { submitting.current = false; } });
   };
 
   return (
@@ -77,16 +84,19 @@ export function RunInspectionDrawer({ inspection, canMutate, workOrderBasePath =
                       {r ? <StatusPill status={r === 'na' ? 'N/A' : r} tone={r === 'pass' ? 'success' : r === 'fail' ? 'danger' : 'muted'} /> : <span className="text-[12px] text-text-3">not recorded</span>}
                     </div>
                   )}
+                  {native && <label className={styles.finding}><span>{results[c.id] === 'na' ? 'Reason not applicable' : 'Finding or observation'} · {c.label}</span><textarea aria-label={`Finding for ${c.label}`} rows={3} maxLength={2000} disabled={!isRunnable || pending} value={notes[c.id] ?? ''} onChange={(event) => { setNotes((current) => ({ ...current, [c.id]: event.target.value })); requestKey.current = null; }} /></label>}
                 </Card>
               );
             })}
           </div>
 
+          {native && <EvidencePicker expectedCompanyId={expectedCompanyId!} resourceType="obligation" resourceId={inspection.obligationId} selectedIds={evidenceIds} onChange={(ids) => { setEvidenceIds(ids); requestKey.current = null; }} disabled={!isRunnable || pending} />}
+          {native && <p className={styles.metadata}>Operational findings and saved files support this inspection. This result does not certify regulatory compliance or extend a certificate expiry.</p>}
           {/* Evidence + submit / results */}
           {isRunnable ? (
             <Card className={styles.checklistCard}>
               <CardHeader title="Review & complete" subtitle="Check the recorded results and any follow-up work orders before confirming." />
-              {photoNeeded && (
+              {!native && photoNeeded && (
                 <Button onClick={() => setPhotos((p) => p + 1)} className={styles.evidence}>
                   <Camera size={14} className="text-text-3" />
                   {photos > 0 ? `${photos} demo evidence item(s) recorded` : 'Record demo evidence count (required)'}
@@ -95,9 +105,9 @@ export function RunInspectionDrawer({ inspection, canMutate, workOrderBasePath =
               {fails.length > 0 && (
                 <p className={`${styles.text} ${styles.danger}`}>{fails.length} fail(s) → {fails.length} work order(s) will be raised on submit.</p>
               )}
-              <p className={styles.metadata}>Evidence count is a demo input only. No photo file is uploaded or verified by this control.</p>
+              {!native && <p className={styles.metadata}>Evidence count is a demo input only. No photo file is uploaded or verified by this control.</p>}
               <Button variant="primary" disabled={pending || !canComplete} onClick={() => setReview(true)}>
-                {canComplete ? 'Review inspection result' : `${inspection.checklist.filter((c) => !results[c.id]).length} item(s) left${photoNeeded && photos === 0 ? ' + evidence' : ''}`}
+                {canComplete ? 'Review inspection result' : `${inspection.checklist.filter((c) => !results[c.id]).length} item(s) left${!findingsComplete ? ' + finding notes' : photoNeeded && (native ? evidenceIds.length === 0 : photos === 0) ? ' + evidence' : ''}`}
               </Button>
               {review && <div className={styles.review}><p className={styles.text}>Confirm the recorded result. {fails.length ? `${fails.length} failed item(s) will raise ${fails.length} work order(s).` : 'The inspection will be marked passed.'} This completes the inspection record.</p><div className={layout.actions}><Button disabled={pending} onClick={() => setReview(false)}>Go back</Button><Button variant="primary" disabled={pending || !canComplete} onClick={submit}>{pending ? 'Saving…' : 'Confirm inspection result'}</Button></div></div>}
             </Card>

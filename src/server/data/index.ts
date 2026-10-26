@@ -234,7 +234,7 @@ export const repos = {
   facilityAlarms: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', db.facilityAlarms, o ?? { limit: 100 }) },
   facilityGenerators: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', db.facilityGenerators, o ?? { limit: 100 }) },
   facilityMeters: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', db.facilityMeters, o ?? { limit: 100 }) },
-  facilityParts: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', db.facilityParts, o ?? { limit: 200 }) },
+  facilityParts: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', db.facilityParts.filter((part) => !currentRecordContext()?.companyPrincipal || a.allEstates || Boolean(part.siteId)), o ?? { limit: 200 }) },
   facilityContracts: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', db.facilityContracts, o ?? { limit: 100 }) },
   facilityPermits: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', db.facilityPermits, o ?? { limit: 100 }) },
   facilityIncidents: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'assets_ppm', db.facilityIncidents, o ?? { limit: 100 }) },
@@ -303,8 +303,9 @@ export const repos = {
  * inherited from the asset scope.
  */
 export function runtimeForActor(actor: Actor) {
-  const ids = new Set(repos.assets.list(actor).items.map((x) => String(x.id)));
-  return db.assetRuntime.filter((r) => ids.has(String(r.assetId)));
+  const assets = applyScope(fixtureOrStoredRows('assets', seed.assets), assertCan(actor, 'assets_ppm', 'read'));
+  const ids = new Set(assets.map((x) => `${x.tenantId}:${x.id}`));
+  return db.assetRuntime.filter((r) => ids.has(`${r.tenantId}:${r.assetId}`));
 }
 
 export { seed };

@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { ScopeBanner } from '@/components/domain';
 import { MaintenanceWorkspace } from '@/components/ppm/maintenance-workspace';
 import type { PpmData } from '@/components/ppm/types';
+import { readFacilityMaintenanceSetup } from '@/server/reads/facility-maintenance';
 import { withDurableRead } from '@/server/data/durable-records';
 
 /** FM-02 preventive maintenance + AI-F-01 predictive maintenance — a calendar-
@@ -21,14 +22,20 @@ export default async function PpmPage() {
   const clock = operatingClock();
   const canMutate = effectiveLevel(actor, 'assets_ppm') === 'M' || effectiveLevel(actor, 'assets_ppm') === 'F';
 
-  const plans = repos.ppmPlans.list(actor).items;
-  const nameById = new Map(repos.assets.list(actor).items.map((a) => [String(a.id), a.name]));
+  const plans: Array<ReturnType<typeof repos.ppmPlans.list>['items'][number]> = [];
+  let cursor: string | null = null;
+  do { const page = repos.ppmPlans.list(actor, { limit: 500, cursor }); plans.push(...page.items); cursor = page.cursor; } while (cursor !== null);
+  const occurrences: Array<ReturnType<typeof repos.ppmOccurrences.list>['items'][number]> = [];
+  do { const page = repos.ppmOccurrences.list(actor, { limit: 500, cursor }); occurrences.push(...page.items); cursor = page.cursor; } while (cursor !== null);
+  const setup = readFacilityMaintenanceSetup(actor);
+  const nameById = new Map((setup?.assets ?? repos.assets.list(actor).items).map((a) => [String(a.id), a.name]));
 
   const data: PpmData = {
+    setup,
     now: clock.dateISO,
     canMutate,
     weeklyCapacityHours: WEEKLY_CAPACITY_HOURS,
-    occurrences: [...repos.ppmOccurrences.list(actor).items],
+    occurrences: occurrences.filter((row) => !setup?.archivedOccurrenceIds.includes(row.id) && (row.status === 'completed' || setup?.plans.find((p) => p.planId === String(row.planId))?.enabled !== false)).map((row) => !row.workOrderRef && ['scheduled', 'overdue'].includes(row.status) ? { ...row, status: row.dueDate < clock.dateISO ? 'overdue' as const : 'scheduled' as const } : row),
     plans: plans.map((p) => ({
       id: String(p.id),
       assetId: String(p.assetId),

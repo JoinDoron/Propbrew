@@ -5,12 +5,12 @@ import { Play } from 'lucide-react';
 import { Button, Card, CardHeader, EmptyState, StatusPill } from '@/components/ui';
 import styles from './maintenance-clinexa.module.css';
 import { humanizeStatus, type Tone } from '@/lib/status-tones';
-import type { InspectionsData } from './types';
+import type { InspectionsData, InspView } from './types';
 
 const INSP_TONE: Record<string, Tone> = { scheduled: 'info', in_progress: 'progress', passed: 'success', failed: 'danger', overdue: 'warn' };
 const STATUSES = ['all', 'overdue', 'scheduled', 'failed', 'passed'];
 
-export function InspectionsList({ data, onRun }: { data: InspectionsData; onRun: (id: string) => void }) {
+export function InspectionsList({ data, onRun, onReschedule }: { data: InspectionsData; onRun: (id: string) => void; onReschedule?: (inspection: InspView) => void }) {
   const [filter, setFilter] = useState('all');
   const counts = data.inspections.reduce<Record<string, number>>((a, i) => ((a[i.status] = (a[i.status] ?? 0) + 1), a), {});
   const rows = useMemo(() => (filter === 'all' ? data.inspections : data.inspections.filter((i) => i.status === filter)), [data.inspections, filter]);
@@ -50,6 +50,7 @@ export function InspectionsList({ data, onRun }: { data: InspectionsData; onRun:
                   </td>
                   <td className={styles.numeric}>{i.raisedWorkOrders || '—'}</td>
                   <td className={styles.numeric}>
+                    {onReschedule && ['scheduled', 'overdue'].includes(i.status) && <Button variant="ghost" aria-label={`Reschedule inspection ${i.ref}`} onClick={() => onReschedule(i)}>Reschedule</Button>}
                     {data.canMutate && ['scheduled', 'overdue'].includes(i.status)
                       ? <Button variant="primary" icon={<Play size={14} />} aria-label={`Run inspection ${i.ref}`} onClick={(e) => { e.stopPropagation(); onRun(i.id); }}>Run</Button>
                       : <Button variant="ghost" aria-label={`View inspection ${i.ref}`} onClick={(e) => { e.stopPropagation(); onRun(i.id); }}>View →</Button>}

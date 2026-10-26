@@ -14,11 +14,13 @@ import { RuntimeView } from './runtime-view';
 import { RiskPanel } from './risk-panel';
 import { PpmList } from './list-view';
 import { PlanDrawer } from './plan-drawer';
+import { MaintenanceSetupControls, MaintenancePlanForm, ServiceHistory } from './maintenance-setup';
 
 const OPEN = ['scheduled', 'overdue', 'wo_generated', 'in_progress'];
 
 export function MaintenanceWorkspace(data: PpmData) {
   const [selected, setSelected] = useState<string | null>(null);
+  const [editing, setEditing] = useState<{ planId?: string; assetId?: string } | null>(null);
 
   const now = data.now;
   const overdue = data.occurrences.filter((o) => o.status === 'overdue');
@@ -33,6 +35,7 @@ export function MaintenanceWorkspace(data: PpmData) {
   return (
     <div className={layout.layout}>
       <p className={layout.metadata}>Recorded schedule snapshot · {data.now}. AI-F-01 uses deterministic risk rules and signal completeness; it is advisory, not a calibrated failure forecast.</p>
+      <MaintenanceSetupControls data={data} onCreate={() => setEditing({})} />
       {/* KPIs */}
       <div className={layout.metrics}>
         <KpiCard label="Due this month" value={String(dueThisMonth)} icon={<CalendarDays size={18} />} />
@@ -49,7 +52,7 @@ export function MaintenanceWorkspace(data: PpmData) {
             {data.gaps.map((g) => (
               <div key={g.id} className={styles.gapItem}>
                 <div><p className={layout.title}>{g.name}</p><p className={styles.metadata}>{g.category} · {g.locationLabel}</p></div>
-                {data.canMutate && <Button disabled title="New plan creation is not connected">Add plan · unavailable</Button>}
+                {data.canMutate && (data.setup ? <Button onClick={() => setEditing({ assetId: g.id })}>Add plan</Button> : <Button disabled title="New plan creation is not connected">Add plan · unavailable</Button>)}
               </div>
             ))}
           </div>
@@ -80,11 +83,13 @@ export function MaintenanceWorkspace(data: PpmData) {
         { id: 'calendar', label: 'Calendar', content: <MaintenanceCalendar data={data} onSelect={setSelected} /> },
         { id: 'runtime', label: 'Runtime', content: <RuntimeView data={data} onSelect={setSelected} /> },
         { id: 'risk', label: 'AI risk', content: <RiskPanel data={data} /> },
-        { id: 'list', label: 'Plan register', content: <PpmList data={data} onSelect={setSelected} /> },
+        { id: 'list', label: 'Plan register', content: <PpmList data={data} onSelect={setSelected} onEdit={(id) => setEditing({ planId: id })} /> },
+        ...(data.setup ? [{ id: 'history', label: 'Service history', content: <ServiceHistory data={data} /> }] : []),
       ]} />
 
+      {editing && data.setup && <MaintenancePlanForm key={editing.planId ?? editing.assetId ?? 'new'} data={data} plan={data.plans.find((p) => p.id === editing.planId)} assetId={editing.assetId} onClose={() => setEditing(null)} />}
       {selOcc && selPlan && (
-        <PlanDrawer occ={selOcc} plan={selPlan} risk={selRisk} canMutate={data.canMutate} onClose={() => setSelected(null)} />
+        <PlanDrawer data={data} occ={selOcc} plan={selPlan} risk={selRisk} canMutate={data.canMutate} onClose={() => setSelected(null)} />
       )}
     </div>
   );

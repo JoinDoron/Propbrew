@@ -154,11 +154,11 @@ const DAY_MS = 86_400_000;
 const REACTIVE_ORIGINS = ['resident_request', 'manager', 'failed_inspection'];
 const STATUS_PENALTY: Record<string, number> = { operational: 0, under_maintenance: 0.3, degraded: 0.6, out_of_service: 1 };
 
-function yearsSince(iso: string): number {
-  return (NOW_MS - Date.parse(iso)) / (365 * DAY_MS);
+function yearsSince(iso: string, nowMS = NOW_MS): number {
+  return (nowMS - Date.parse(iso)) / (365 * DAY_MS);
 }
-function daysSince(iso: string): number {
-  return (NOW_MS - Date.parse(iso)) / DAY_MS;
+function daysSince(iso: string, nowMS = NOW_MS): number {
+  return (nowMS - Date.parse(iso)) / DAY_MS;
 }
 
 /**
@@ -167,12 +167,16 @@ function daysSince(iso: string): number {
  * src/server/data/ppm-risk.ts feeds this from the actor's repos.
  */
 export function computeAllRisk(input: {
+  now?: string;
+  planRuntimeBaselines?: Readonly<Record<string, number>>;
   assets: readonly Asset[];
   plans: readonly PpmPlan[];
   workOrders: readonly WorkOrder[];
   runtime: readonly AssetRuntime[];
 }): RiskAssessment[] {
-  const season = seasonOf(NOW);
+  const now = input.now ?? NOW, nowMS = Date.parse(`${now}T00:00:00Z`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(now) || !Number.isFinite(nowMS) || new Date(nowMS).toISOString().slice(0, 10) !== now) throw new Error('A valid risk assessment date is required.');
+  const season = seasonOf(now);
   const planByAsset = new Map(input.plans.map((p) => [String(p.assetId), p]));
   const runtimeByAsset = new Map(input.runtime.map((r) => [String(r.assetId), r]));
   const out: RiskAssessment[] = [];
@@ -183,25 +187,27 @@ export function computeAllRisk(input: {
     if (!plan) continue; // no plan → coverage-gap radar's job
     const rt = runtimeByAsset.get(String(asset.id));
 
+    const baseline = input.planRuntimeBaselines?.[String(plan.id)] ?? rt?.runtimeHoursAtLastService ?? 0;
+    const serviceInterval = plan.runtimeIntervalHours ?? rt?.runtimeServiceInterval ?? 0;
     let runtimeStress: number | null = null;
     if (rt && (plan.basis === 'runtime' || plan.basis === 'both')) {
-      runtimeStress = clamp01((rt.runtimeHours - rt.runtimeHoursAtLastService) / rt.runtimeServiceInterval);
+      runtimeStress = clamp01((rt.runtimeHours - baseline) / serviceInterval);
     }
 
     const interval = INTERVAL_DAYS[plan.frequency];
     const anchor = plan.lastServicedAt ?? addDays(plan.nextDue, -interval);
-    const calendarStress = clamp01(daysSince(anchor) / interval);
+    const calendarStress = clamp01(daysSince(anchor, nowMS) / interval);
 
     const reactive = input.workOrders.filter(
       (w) => String(w.assetId) === String(asset.id) &&
         REACTIVE_ORIGINS.includes(w.origin) &&
-        w.createdAt && Date.parse(w.createdAt) >= NOW_MS - 90 * DAY_MS,
+        w.createdAt && Date.parse(w.createdAt) >= nowMS - 90 * DAY_MS,
     ).length;
     const failureSignal = clamp01(reactive / 3);
 
     const statusPenalty = STATUS_PENALTY[asset.status] ?? 0;
     const life = EXPECTED_LIFE_YEARS[asset.category] ?? 12;
-    const ageFactor = clamp01(clamp01(yearsSince(asset.purchaseDate) / life) + (Date.parse(asset.warrantyExpiry) < NOW_MS ? 0.15 : 0));
+    const ageFactor = clamp01(clamp01(yearsSince(asset.purchaseDate, nowMS) / life) + (Date.parse(asset.warrantyExpiry) < nowMS ? 0.15 : 0));
     const seasonalFactor = SEASON_SENSITIVITY[asset.category]?.[season] ?? 0;
 
     const hasRuntime = runtimeStress !== null;
@@ -214,18 +220,18 @@ export function computeAllRisk(input: {
     const band: RiskBand = score >= 70 ? 'critical' : score >= 45 ? 'elevated' : 'healthy';
 
     const drivers: RiskDriver[] = ([
-      hasRuntime && { key: 'runtime', label: 'Runtime since service', value: `${Math.round(rt!.runtimeHours - rt!.runtimeHoursAtLastService)}h of ${rt!.runtimeServiceInterval}h`, contribution: wRuntime * rs },
-      { key: 'calendar', label: 'Calendar overdue', value: `${Math.round(daysSince(anchor))}d since service (${plan.frequency})`, contribution: wCalendar * calendarStress },
+      hasRuntime && { key: 'runtime', label: 'Runtime since service', value: `${Math.round(rt!.runtimeHours - baseline)}h of ${serviceInterval}h`, contribution: wRuntime * rs },
+      { key: 'calendar', label: 'Calendar overdue', value: `${Math.round(daysSince(anchor, nowMS))}d since service (${plan.frequency})`, contribution: wCalendar * calendarStress },
       { key: 'failure', label: 'Recent failures', value: `${reactive} reactive job(s) in 90d`, contribution: 0.18 * failureSignal },
       { key: 'status', label: 'Condition', value: asset.status.replace(/_/g, ' '), contribution: 0.14 * statusPenalty },
-      { key: 'age', label: 'Age & warranty', value: `${yearsSince(asset.purchaseDate).toFixed(1)}y${Date.parse(asset.warrantyExpiry) < NOW_MS ? ' · out of warranty' : ''}`, contribution: 0.1 * ageFactor },
+      { key: 'age', label: 'Age & warranty', value: `${yearsSince(asset.purchaseDate, nowMS).toFixed(1)}y${Date.parse(asset.warrantyExpiry) < nowMS ? ' · out of warranty' : ''}`, contribution: 0.1 * ageFactor },
       { key: 'season', label: `${season} season`, value: seasonalFactor > 0 ? `${asset.category} sensitivity` : 'low', contribution: 0.1 * seasonalFactor },
     ].filter(Boolean) as RiskDriver[]).sort((a, b) => b.contribution - a.contribution);
     const topDriver = drivers[0]?.key ?? 'calendar';
 
     const signalsPresent =
       (hasRuntime ? 1 : 0) +
-      (plan.lastServicedAt && daysSince(plan.lastServicedAt) >= 90 ? 1 : 0) +
+      (plan.lastServicedAt && daysSince(plan.lastServicedAt, nowMS) >= 90 ? 1 : 0) +
       (reactive >= 1 ? 1 : 0) +
       (rt ? 1 : 0);
     const confidence = signalsPresent / 4;
@@ -236,18 +242,18 @@ export function computeAllRisk(input: {
     if (band !== 'healthy' && (topDriver === 'runtime' || topDriver === 'failure')) {
       let baseDue = plan.nextDue;
       if (rt && plan.runtimeIntervalHours) {
-        const remaining = Math.max(0, plan.runtimeIntervalHours - (rt.runtimeHours - rt.runtimeHoursAtLastService));
+        const remaining = Math.max(0, plan.runtimeIntervalHours - (rt.runtimeHours - baseline));
         const d = rt.dailyRuntimeHours > 0 ? Math.ceil(remaining / rt.dailyRuntimeHours) : 9999;
-        const runtimeDue = addDays(NOW, d);
+        const runtimeDue = addDays(now, d);
         if (Date.parse(runtimeDue) < Date.parse(baseDue)) baseDue = runtimeDue;
       }
       const pull = Math.round((score / 100) * MAX_PULL_DAYS[plan.frequency]);
-      const earliest = addDays(NOW, plan.leadTimeDays);
+      const earliest = addDays(now, plan.leadTimeDays);
       const proposed = addDays(baseDue, -pull);
       suggestedDate = Date.parse(proposed) < Date.parse(earliest) ? earliest : proposed;
-      predictedWindowDays = Math.max(0, Math.round((Date.parse(baseDue) - NOW_MS) / DAY_MS));
+      predictedWindowDays = Math.max(0, Math.round((Date.parse(baseDue) - nowMS) / DAY_MS));
       suggestReason = topDriver === 'runtime'
-        ? `${Math.round(rt!.runtimeHours - rt!.runtimeHoursAtLastService)}h since last service — interval is ${rt!.runtimeServiceInterval}h`
+        ? `${Math.round(rt!.runtimeHours - baseline)}h since last service — interval is ${serviceInterval}h`
         : `${reactive} reactive failures in the last 90 days`;
     }
 

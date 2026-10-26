@@ -9,22 +9,25 @@ import { useRouter } from 'next/navigation';
 import { Gauge, Plus } from 'lucide-react';
 import { Button } from '@/components/ui';
 import { addDays } from '@/domain/ppm';
+import { recordFacilityRuntimeReading } from '@/server/actions/facility-maintenance-setup';
 import { logRuntimeReading, generatePpmWorkOrder } from '@/server/actions/ppm';
 import type { PpmData } from './types';
 
 export function RuntimeView({ data, onSelect }: { data: PpmData; onSelect: (id: string) => void }) {
   const cards = data.runtime
-    .map((rt) => {
-      const plan = data.plans.find((p) => String(p.assetId) === String(rt.assetId));
-      const accrued = rt.runtimeHours - rt.runtimeHoursAtLastService;
-      const remaining = Math.max(0, rt.runtimeServiceInterval - accrued);
-      const daysToRuntime = rt.dailyRuntimeHours > 0 ? Math.ceil(remaining / rt.dailyRuntimeHours) : 9999;
-      const runtimeDue = addDays(data.now, daysToRuntime);
-      const calendarDue = plan?.nextDue ?? runtimeDue;
-      const runtimeWins = Date.parse(runtimeDue) < Date.parse(calendarDue);
-      const winner = runtimeWins ? runtimeDue : calendarDue;
+    .flatMap((rt) => (data.setup ? data.plans.filter((p) => p.assetId === String(rt.assetId) && p.basis !== 'calendar') : [data.plans.find((p) => String(p.assetId) === String(rt.assetId))]).map((plan) => ({ rt, plan })))
+    .map(({ rt, plan }) => {
+      const meta = data.setup?.plans.find((p) => p.planId === plan?.id);
+      const serviceInterval = plan?.runtimeIntervalHours ?? rt.runtimeServiceInterval;
+      const accrued = Math.max(0, Math.round((rt.runtimeHours - (meta?.baselineRuntimeHours ?? rt.runtimeHoursAtLastService)) * 100) / 100);
+      const remaining = Math.max(0, Math.round((serviceInterval - accrued) * 100) / 100);
+      const daysToRuntime = remaining === 0 ? 0 : rt.dailyRuntimeHours > 0 ? Math.ceil(remaining / rt.dailyRuntimeHours) : null;
+      const runtimeDue = daysToRuntime === null ? null : addDays(data.now, daysToRuntime);
+      const calendarDue = plan?.basis === 'runtime' ? null : plan?.nextDue;
+      const runtimeWins = !!runtimeDue && (!calendarDue || runtimeDue < calendarDue);
+      const winner = runtimeWins ? runtimeDue! : calendarDue ?? 'Meter threshold not reached';
       const occ = data.occurrences.filter((o) => o.planId === plan?.id && o.status !== 'completed').sort((a, b) => (a.dueDate < b.dueDate ? -1 : 1))[0];
-      return { rt, plan, accrued, remaining, daysToRuntime, runtimeDue, calendarDue, runtimeWins, winner, occId: occ?.id, pct: Math.min(100, Math.round((accrued / rt.runtimeServiceInterval) * 100)) };
+      return { rt, plan, meta, serviceInterval, accrued, remaining, daysToRuntime, runtimeDue, calendarDue, runtimeWins, winner, occId: occ?.id, pct: Math.min(100, Math.round((accrued / serviceInterval) * 100)) };
     })
     .sort((a, b) => (a.winner < b.winner ? -1 : 1));
 
@@ -33,13 +36,13 @@ export function RuntimeView({ data, onSelect }: { data: PpmData; onSelect: (id: 
   return (
     <div className={styles.runtimeGrid}>
       {cards.map((c) => (
-        <Card key={String(c.rt.assetId)} className={styles.runtimeCard}>
-          <CardHeader title={c.rt.assetName} subtitle={`${c.rt.dailyRuntimeHours}h/day · ${c.plan?.runtimeIntervalHours ?? c.rt.runtimeServiceInterval}h service interval`} action={c.runtimeWins ? <StatusPill status="Runtime-driven" tone="warn" /> : <Gauge size={20} className="text-primary" />} />
+        <Card key={c.plan?.id ?? String(c.rt.assetId)} className={styles.runtimeCard}>
+          <CardHeader title={c.rt.assetName} subtitle={`${c.meta?.title ? `${c.meta.title} · ` : ''}${c.rt.dailyRuntimeHours > 0 ? `${c.rt.dailyRuntimeHours}h/day · ` : 'Manual cumulative meter · '}${c.serviceInterval}h service interval${c.meta?.enabled === false ? ' · paused' : ''}`} action={c.runtimeWins ? <StatusPill status="Runtime-driven" tone="warn" /> : <Gauge size={20} className="text-primary" />} />
 
           {/* Big run-hours + gauge */}
           <div className={styles.runtimeGauge}>
             <div>
-              <div className={styles.runtimeValue}>{c.accrued}<span className={styles.runtimeUnit}> / {c.rt.runtimeServiceInterval}h</span></div>
+              <div className={styles.runtimeValue}>{c.accrued}<span className={styles.runtimeUnit}> / {c.serviceInterval}h</span></div>
               <div className={styles.metadata}>Since last service</div>
             </div>
             <div className={styles.gauge}>
@@ -52,16 +55,16 @@ export function RuntimeView({ data, onSelect }: { data: PpmData; onSelect: (id: 
 
           {/* Dual countdown */}
           <div className={styles.callout}>
-            <p className={styles.text}>Service in <strong className={c.runtimeWins ? 'text-warning' : ''}>{c.remaining} running-hrs (~{c.daysToRuntime}d)</strong> or by <strong className={!c.runtimeWins ? 'text-warning' : ''}>{c.calendarDue}</strong> — whichever comes first.</p>
-            <p className={styles.metadata}>Next service: <strong className="text-text-2">{c.winner}</strong></p>
+            <p className={styles.text}>Service in <strong className={c.runtimeWins ? 'text-warning' : ''}>{c.remaining} running-hrs{c.daysToRuntime === null ? '' : ` (~${c.daysToRuntime}d)`}</strong> {c.calendarDue && <>or by <strong className={!c.runtimeWins ? 'text-warning' : ''}>{c.calendarDue}</strong> — whichever comes first.</>}</p>
+            <p className={styles.metadata}>Next service: <strong className="text-text-2">{c.winner}</strong>{c.daysToRuntime === null && ' · No forecast without a recorded daily runtime rate.'}</p>
           </div>
 
           {data.canMutate && (
             <div className={styles.toolbar}>
               <div className={styles.inline}>
-              <LogReadingButton assetId={String(c.rt.assetId)} />
+              <LogReadingButton data={data} assetId={String(c.rt.assetId)} previousHours={c.rt.runtimeHours} />
               {c.occId && (
-                <GenerateButton occId={c.occId} generated={!!data.occurrences.find((o) => o.id === c.occId)?.workOrderRef} />
+                <GenerateButton expectedCompanyId={data.setup?.companyId} paused={c.meta?.enabled === false} occId={c.occId} generated={!!data.occurrences.find((o) => o.id === c.occId)?.workOrderRef} />
               )}
               </div>
               {c.occId && <Button variant="ghost" onClick={() => onSelect(c.occId!)} aria-label={`View runtime maintenance details for ${c.rt.assetName}`}>Details →</Button>}
@@ -73,18 +76,20 @@ export function RuntimeView({ data, onSelect }: { data: PpmData; onSelect: (id: 
   );
 }
 
-function LogReadingButton({ assetId }: { assetId: string }) {
+function LogReadingButton({ data, assetId, previousHours }: { data: PpmData; assetId: string; previousHours: number }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [open, setOpen] = useState(false);
-  const [hours, setHours] = useState('');
+  const [hours, setHours] = useState(data.setup ? String(previousHours) : '');
+  const [submissionKey, setSubmissionKey] = useState(() => crypto.randomUUID());
+  const asset = data.setup?.assets.find((row) => row.id === assetId);
   const [error, setError] = useState<string | null>(null);
-  function submit() { if (pending || !(Number(hours) > 0)) return; setError(null); start(async () => { try { const result = await logRuntimeReading(assetId, Number(hours)); if (!result.ok) { setError(result.error); return; } setOpen(false); setHours(''); router.refresh(); } catch { setError('The runtime entry could not be confirmed. Refresh before retrying.'); } }); }
-  return <><Button icon={<Plus size={16} />} onClick={() => setOpen(true)}>Log runtime</Button>{open && (
-    <FacilityDialog title="Log additional runtime" onClose={() => setOpen(false)} pending={pending}>
+  function submit() { if (pending || !(Number(hours) > 0)) return; setError(null); start(async () => { try { const result = data.setup && asset ? await recordFacilityRuntimeReading({ expectedCompanyId: data.setup.companyId, expectedSiteId: asset.siteId, expectedUnitId: asset.unitId, assetId, readingHours: Number(hours), expectedPreviousHours: previousHours, idempotencyKey: submissionKey }) : await logRuntimeReading(assetId, Number(hours)); if (!result.ok) { setError(result.error); return; } setOpen(false); setHours(''); router.refresh(); } catch { setError('The runtime entry could not be confirmed. Refresh before retrying.'); } }); }
+  return <><Button icon={<Plus size={16} />} disabled={!!data.setup && !asset} onClick={() => { setSubmissionKey(crypto.randomUUID()); setHours(data.setup ? String(previousHours) : ''); setOpen(true); }}>Log runtime</Button>{open && (
+    <FacilityDialog title={data.setup ? "Record cumulative runtime" : "Log additional runtime"} onClose={() => setOpen(false)} pending={pending}>
       <div className={styles.stack}>
-        <p className={layout.body}>Enter the additional running hours since the last recorded reading. This is a manual maintenance input, not a connected meter reading.</p>
-        <label className={layout.field}><span>Additional running hours</span><input className={layout.control} type="number" min="0.01" step="0.01" inputMode="decimal" value={hours} disabled={pending} onChange={(event) => setHours(event.target.value)} required /></label>
+        <p className={layout.body}>{data.setup ? `Enter the meter’s total running hours. The last saved reading is ${previousHours}h; a lower reading cannot be saved. This is a manual input, not a connected meter reading.` : 'Enter the additional running hours since the last recorded reading. This is a manual maintenance input, not a connected meter reading.'}</p>
+        <label className={layout.field}><span>{data.setup ? 'Cumulative meter reading (h)' : 'Additional running hours'}</span><input className={layout.control} type="number" min={data.setup ? previousHours : 0.01} max="100000000" step="0.01" inputMode="decimal" value={hours} disabled={pending} onChange={(event) => setHours(event.target.value)} required /></label>
         {error && <p role="alert" className="text-[14px] text-negative">{error}</p>}
         <div className={layout.actions}><Button disabled={pending} onClick={() => setOpen(false)}>Cancel</Button><Button variant="primary" disabled={pending || !(Number(hours) > 0)} onClick={submit}>{pending ? 'Saving…' : 'Save runtime'}</Button></div>
       </div>
@@ -92,14 +97,14 @@ function LogReadingButton({ assetId }: { assetId: string }) {
   )}</>;
 }
 
-function GenerateButton({ occId, generated }: { occId: string; generated: boolean }) {
+function GenerateButton({ occId, generated, expectedCompanyId, paused }: { occId: string; generated: boolean; expectedCompanyId?: string; paused?: boolean }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   if (generated) return <span className="text-[12px] text-positive font-medium">WO generated ✓</span>;
-  function generate() { if (pending) return; setError(null); start(async () => { try { const result = await generatePpmWorkOrder(occId); if (!result.ok) { setError(result.error); return; } setOpen(false); router.refresh(); } catch { setError('Work-order creation could not be confirmed. Refresh before retrying.'); } }); }
-  return <><Button variant="primary" onClick={() => setOpen(true)}>Generate WO</Button>{open && (
+  function generate() { if (pending) return; setError(null); start(async () => { try { const result = await generatePpmWorkOrder(occId, expectedCompanyId); if (!result.ok) { setError(result.error); return; } setOpen(false); router.refresh(); } catch { setError('Work-order creation could not be confirmed. Refresh before retrying.'); } }); }
+  return <><Button variant="primary" disabled={paused} onClick={() => setOpen(true)}>Generate WO</Button>{open && (
     <FacilityDialog title="Generate maintenance work order" onClose={() => setOpen(false)} pending={pending}>
       <div className={styles.stack}>
         <p className={layout.body}>Creates a work order for this maintenance occurrence. Review the plan and assignment before field work begins.</p>

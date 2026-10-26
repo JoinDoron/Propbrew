@@ -26,7 +26,7 @@ try {
   await run(process.execPath, ['node_modules/vitest/vitest.mjs', 'run', '--no-file-parallelism',
     'tests/data/workspace-postgres.integration.test.ts', 'tests/data/native-postgres.integration.test.ts',
     'tests/data/company-accounts.integration.test.ts', 'tests/data/company-ai-budget.integration.test.ts',
-    'tests/data/demo-sandboxes.integration.test.ts', 'tests/data/company-onboarding.integration.test.ts', 'tests/data/estate-operational-setup.integration.test.ts',
+    'tests/data/demo-sandboxes.integration.test.ts', 'tests/data/company-onboarding.integration.test.ts', 'tests/data/estate-operational-setup.integration.test.ts', 'tests/data/facility-operational-setup.integration.test.ts',
   ], { visible: true, env: { ...process.env, PROPBREW_TEST_DATABASE_URL: `postgresql://propbrew_workspace_test_admin@127.0.0.1:${port}/postgres` } });
 } finally {
   if (started) await run(program('pg_ctl'), ['-D', data, '-m', 'immediate', '-w', 'stop']);

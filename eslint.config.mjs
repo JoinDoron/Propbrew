@@ -11,6 +11,8 @@ const eslintConfig = defineConfig([
     ".next/**",
     "out/**",
     "build/**",
+    // Private local release helpers and evidence are not application sources.
+    ".propbrew-local/**",
     "next-env.d.ts",
   ]),
 ]);

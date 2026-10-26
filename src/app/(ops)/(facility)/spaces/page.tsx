@@ -3,6 +3,9 @@ import { can } from '@/lib/authz';
 import { repos } from '@/server/data';
 import type { Page } from '@/domain/primitives';
 import { ScopeBanner } from '@/components/domain';
+import { FacilitySiteCreate } from '@/components/spaces/facility-site-create';
+import { currentRecordContext } from '@/server/data/record-context';
+import { nativeAuthEnabled } from '@/server/auth/mode';
 import { SpacesExplorer } from '@/components/spaces/spaces-explorer';
 import { PageHeader } from '@/components/ui/page-header';
 import { withDurableRead } from '@/server/data/durable-records';
@@ -52,6 +55,7 @@ export default async function SpacesPage() {
   return (
     <div className="pb-page">
       <PageHeader title="Spaces" subtitle="Explore your properties, buildings and units in one place."
+        actions={nativeAuthEnabled() && currentRecordContext()?.companyPrincipal && actor.tenantId ? <FacilitySiteCreate companyId={actor.tenantId} canCreate={actor.allEstates && can(actor, 'assets_ppm', 'create').allowed} /> : undefined}
         scope={<ScopeBanner label={actor.allEstates ? 'all estates' : `${actor.estateIds.length} estate(s)`} />}
       />
       <SpacesExplorer

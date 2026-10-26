@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { operatingClock } from '@/server/operating-clock';
 import { can } from '@/lib/authz';
 import { PageHeader } from '@/components/ui/page-header';
@@ -31,6 +32,7 @@ export default async function ControlCenterPage() {
   return (
     <div className="pb-page">
       <PageHeader title="Facility overview" subtitle="Building systems, sensor readings and operational alarms." />
+      {sites.size === 0 && <p className="mb-6 text-sm text-text-2">Start with your operating location. <Link href="/spaces" className="text-primary underline">Set up your first facility site in Spaces</Link>.</p>}
       <ControlCenter
         canCreate={can(actor, 'assets_ppm', 'create').allowed}
         canUpdate={can(actor, 'assets_ppm', 'update').allowed}

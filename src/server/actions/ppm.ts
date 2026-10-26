@@ -2,7 +2,9 @@
 
 import { withDurableMutation } from '@/server/data/durable-records';
 
-import { nextRecordSequence } from '@/server/data/record-context';
+import { currentRecordContext, nextRecordSequence } from '@/server/data/record-context';
+import { nativeAuthEnabled } from '@/server/auth/mode';
+import { createMaintenanceWorkOrder, facilityMaintenanceState, maintenanceMetadataForPlan, metadataBindingValid } from '@/domain/facility/maintenance';
 
 /**
  * PPM server actions (FM-02 / AI-F-01). Same contract as fireWoTransition: assert
@@ -27,7 +29,8 @@ export type PpmResult = { ok: true; ref?: string } | { ok: false; error: string 
 
 const REVALIDATE = ['/ppm', '/work-orders', '/estate/work-orders', '/people', '/facility', '/dashboard', '/assets'];
 
-function gate(actor: Actor): PpmResult | null {
+function gate(actor: Actor, expectedCompanyId?: string): PpmResult | null {
+  if (nativeAuthEnabled() && (!actor.tenantId || expectedCompanyId !== actor.tenantId)) return { ok: false, error: 'Your company changed. Reopen Maintenance before saving.' };
   try {
     assertCan(actor, 'assets_ppm', 'transition'); // FM (M) only; V roles rejected
     return null;
@@ -37,7 +40,7 @@ function gate(actor: Actor): PpmResult | null {
   }
 }
 function actorName(actor: Actor): string {
-  return ROLE_LABELS[(actor.roles as Role[])[0]] ?? actor.userId;
+  return currentRecordContext()?.companyPrincipal?.user.name ?? ROLE_LABELS[(actor.roles as Role[])[0]] ?? actor.userId;
 }
 function scopedOccurrence(actor: Actor, id: string) {
   return scopedMutableGet(actor, 'assets_ppm', db.ppmOccurrences, id, 'transition');
@@ -45,10 +48,10 @@ function scopedOccurrence(actor: Actor, id: string) {
 
 /** Generate the work order for an occurrence. Idempotent: no-op if an open
  *  ppm_schedule WO already exists for the asset. */
-export async function generatePpmWorkOrder(occurrenceId: string): Promise<PpmResult> {
+export async function generatePpmWorkOrder(occurrenceId: string, expectedCompanyId?: string): Promise<PpmResult> {
   return withDurableMutation(async () => {
   const actor = await getActor();
-  const denied = gate(actor);
+  const denied = gate(actor, expectedCompanyId);
   if (denied) return denied;
 
   const occ = scopedOccurrence(actor, occurrenceId);
@@ -60,6 +63,16 @@ export async function generatePpmWorkOrder(occurrenceId: string): Promise<PpmRes
   // A retry belongs to the same occurrence even when its linked job has closed.
   const linked = occ.workOrderRef ? db.workOrders.find((row) => row.tenantId === occ.tenantId && row.ref === occ.workOrderRef) : null;
   if (occ.workOrderRef) return linked ? { ok: true, ref: linked.ref } : { ok: false, error: 'The linked work order could not be found. Review this occurrence before retrying.' };
+
+  if (nativeAuthEnabled()) {
+    const context = currentRecordContext();
+    if (!context || context.domainTenantId !== actor.tenantId) return { ok: false, error: 'Reopen Maintenance in the current company.' };
+    const meta = maintenanceMetadataForPlan(context.state, actor.tenantId!, plan);
+    const data = facilityMaintenanceState(context.state, actor.tenantId!);
+    if (!meta.enabled || data.archivedOccurrenceIds.includes(occ.id) || !metadataBindingValid(context.state, actor.tenantId!, meta)) return { ok: false, error: 'The plan is paused or its asset/location needs review.' };
+    const result = createMaintenanceWorkOrder(context.state, actor.tenantId!, occ.id, { id: actor.userId, name: actorName(actor), role: 'facility_manager' }, operatingNowISO());
+    revalidate(); return { ok: true, ref: result.ref };
+  }
 
   // idempotency — reuse an existing open PPM work order for this asset
   const existing = db.workOrders.find(
@@ -113,6 +126,7 @@ export async function generatePpmWorkOrder(occurrenceId: string): Promise<PpmRes
 export async function completePpmOccurrence(occurrenceId: string, input: { checkedIds: string[]; photoCount: number }): Promise<PpmResult> {
   return withDurableMutation(async () => {
   const actor = await getActor();
+  if (nativeAuthEnabled()) return { ok: false, error: 'Record service with its actual service date, stored evidence and cumulative meter reading in Maintenance.' };
   const denied = gate(actor);
   if (denied) return denied;
 
@@ -146,10 +160,10 @@ export async function completePpmOccurrence(occurrenceId: string, input: { check
 }
 
 /** Reschedule an occurrence. Statutory occurrences clamp at their legal deadline. */
-export async function reschedulePpmOccurrence(occurrenceId: string, newDate: string): Promise<PpmResult> {
+export async function reschedulePpmOccurrence(occurrenceId: string, newDate: string, expectedCompanyId?: string, expectedPlanVersion?: number): Promise<PpmResult> {
   return withDurableMutation(async () => {
   const actor = await getActor();
-  const denied = gate(actor);
+  const denied = gate(actor, expectedCompanyId);
   if (denied) return denied;
 
   const occ = scopedOccurrence(actor, occurrenceId);
@@ -162,6 +176,15 @@ export async function reschedulePpmOccurrence(occurrenceId: string, newDate: str
 
   const live = occ;
   const plan = scopedMutableGet(actor, 'assets_ppm', db.ppmPlans, String(occ.planId), 'transition');
+  if (nativeAuthEnabled()) {
+    const context = currentRecordContext();
+    if (!context || !plan || !actor.tenantId) return { ok: false, error: 'Plan not found.' };
+    const meta = maintenanceMetadataForPlan(context.state, actor.tenantId, plan), data = facilityMaintenanceState(context.state, actor.tenantId);
+    if (meta.version !== expectedPlanVersion || !meta.enabled || !metadataBindingValid(context.state, actor.tenantId, meta) || data.archivedOccurrenceIds.includes(occ.id)) return { ok: false, error: 'This plan changed. Refresh before rescheduling.' };
+    if (occ.workOrderRef) return { ok: false, error: 'A work order is linked. Review its dates through the work-order workflow.' };
+    if (data.plans.some((row) => row.planId === meta.planId)) { meta.version++; meta.updatedAt = operatingNowISO(); }
+    plan.nextDue = newDate; plan.overdue = newDate < operatingDateISO();
+  }
   const from = live.status;
   live.dueDate = newDate;
   live.generateDate = addDays(newDate, -(plan?.leadTimeDays ?? 0));
@@ -180,20 +203,28 @@ export async function reschedulePpmOccurrence(occurrenceId: string, newDate: str
 export async function decidePpmSuggestion(
   assetId: string,
   decision: 'approve' | 'override',
-  input: { date?: string; reason?: string; confidence?: number; driver?: string },
+  input: { date?: string; reason?: string; confidence?: number; driver?: string; expectedCompanyId?: string; planId?: string; expectedPlanVersion?: number },
 ): Promise<PpmResult> {
   return withDurableMutation(async () => {
   const actor = await getActor();
-  const denied = gate(actor);
+  const denied = gate(actor, input.expectedCompanyId);
   if (denied) return denied;
   if (!['approve', 'override'].includes(decision)) return { ok: false, error: 'Choose approve or override.' };
   if (input.confidence !== undefined && (!Number.isFinite(input.confidence) || input.confidence < 0 || input.confidence > 1)) return { ok: false, error: 'The suggestion confidence must be between zero and one.' };
   if (decision === 'override' && !input.reason?.trim()) return { ok: false, error: 'Record a reason for keeping the existing date.' };
 
-  const plan = repos.ppmPlans.list(actor).items.find((p) => String(p.assetId) === String(assetId));
-  if (!plan) return { ok: false, error: 'Plan not found.' };
+  const plan = nativeAuthEnabled() ? scopedMutableGet(actor, 'assets_ppm', db.ppmPlans, input.planId ?? '', 'transition') : repos.ppmPlans.list(actor).items.find((p) => String(p.assetId) === String(assetId));
+  if (!plan || String(plan.assetId) !== String(assetId)) return { ok: false, error: 'Plan not found.' };
   const live = db.ppmPlans.find((p) => p.id === plan.id)!;
 
+  if (nativeAuthEnabled()) {
+    const context = currentRecordContext();
+    if (!context || !actor.tenantId) return { ok: false, error: 'Plan not found.' };
+    const binding = maintenanceMetadataForPlan(context.state, actor.tenantId, live);
+    if (binding.version !== input.expectedPlanVersion || !binding.enabled || !metadataBindingValid(context.state, actor.tenantId, binding)) return { ok: false, error: 'This plan changed. Refresh before reviewing the suggestion.' };
+    const linked = db.ppmOccurrences.some((row) => row.tenantId === actor.tenantId && row.planId === plan.id && row.status !== 'completed' && row.workOrderRef);
+    if (decision === 'approve' && linked) return { ok: false, error: 'Finish the linked work order before changing its maintenance date.' };
+  }
   const meta = JSON.stringify({ confidence: input.confidence, driver: input.driver, reason: input.reason });
 
   if (decision === 'approve') {
@@ -230,6 +261,7 @@ export async function decidePpmSuggestion(
 /** Log a fresh runtime reading (simulated sensor feed). Recomputes the projection. */
 export async function logRuntimeReading(assetId: string, addHours: number): Promise<PpmResult> {
   return withDurableMutation(async () => {
+  if (nativeAuthEnabled()) return { ok: false, error: 'Enter the cumulative meter reading in Maintenance so retries cannot add duplicate hours.' };
   const actor = await getActor();
   const denied = gate(actor);
   if (denied) return denied;

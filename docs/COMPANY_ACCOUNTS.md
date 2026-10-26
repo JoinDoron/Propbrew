@@ -69,6 +69,8 @@ The native draft and completion live in the existing tenant-isolated `workspace_
 
 Native Estate managers can create and issue invoice drafts, configure recurring draft schedules, record tenancy agreements and configure bookable amenities. See [Estate operating setup](ESTATE_OPERATIONS.md) for controls, migration 012, the Railway background worker and verification. Provider payment/message activation remains separate.
 
+Native Facility managers can configure maintenance, record evidenced asset services, manage site-owned inventory movements and track compliance obligations/inspections. See [Facility operating setup](FACILITY_OPERATIONS.md) for migration 013, private evidence storage, scheduler controls and verification. Automatic jobs remain unassigned until the field-team work-order process is configured.
+
 ## Editable private demo sandboxes
 
 Sign-up and login offer Estate, Facility, Shortlet and Construction demo entry.
