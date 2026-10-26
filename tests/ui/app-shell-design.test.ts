@@ -146,6 +146,16 @@ describe('Clinexa-adapted Propbrew application shell', () => {
     expect(brandRule).toMatch(/background:\s*var\(--primary\)/);
     expect(css).not.toMatch(/--primary\s*:/);
   });
+
+  it('uses neutral black dark surfaces without the previous navy cast', () => {
+    const css = readFileSync(new URL('../../src/app/globals.css', import.meta.url), 'utf8');
+    const dark = css.match(/\[data-theme='dark'\]\s*\{([\s\S]*?)\n\}/)?.[1] ?? '';
+    expect(dark).toContain('--app: #000000');
+    expect(dark).toContain('--surface: #0b0b0c');
+    expect(dark).toContain('--surface-2: #131315');
+    expect(dark).toContain('--surface-3: #1c1c1f');
+    for (const navy of ['#0b1120', '#111827', '#172033', '#202b40']) expect(dark).not.toContain(navy);
+  });
 });
 
 describe('mobile navigation keyboard boundary', () => {

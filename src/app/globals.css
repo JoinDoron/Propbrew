@@ -69,13 +69,14 @@
 }
 
 [data-theme='dark'] {
-  --app: #0b1120;
-  --surface: #111827;
-  --surface-2: #172033;
-  --surface-3: #202b40;
+  /* Neutral black foundation: depth comes from luminance, never a navy cast. */
+  --app: #000000;
+  --surface: #0b0b0c;
+  --surface-2: #131315;
+  --surface-3: #1c1c1f;
 
-  --border: #29364a;
-  --border-2: #3b4a61;
+  --border: #29292d;
+  --border-2: #3d3d43;
 
   --text: #f8fafc;
   --text-2: #cbd5e1;
@@ -86,7 +87,7 @@
   --primary-hover: #c0c0f9;
   --primary-weak: #222344;
   --primary-weak-2: #32345b;
-  --on-primary: #0b1120;
+  --on-primary: #09090b;
 
   --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 6px 20px rgb(0 0 0 / 0.35);
   --shadow-lg: 0 12px 48px rgb(0 0 0 / 0.5);

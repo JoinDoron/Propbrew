@@ -152,6 +152,20 @@ describe('safe workspace route classification', () => {
 });
 
 describe('workspace-scoped operator navigation', () => {
+  it('sections every operator rail by business purpose', () => {
+    const person = actor(['executive']);
+    const expected: Record<WorkspaceId, string[]> = {
+      estate: ['Overview', 'Estate portfolio', 'Estate operations', 'Community & governance', 'Finance & commerce', 'Estate insights'],
+      facility: ['Overview', 'Facility operations', 'Asset care', 'Building services', 'Facility commercial'],
+      shortlet: ['Shortlet overview', 'Reservations', 'Guest operations', 'Revenue & growth', 'Workspace'],
+      construction: ['Construction overview', 'Planning & controls', 'Commercial & procurement', 'Site delivery', 'Collaboration & intelligence'],
+    };
+
+    for (const workspace of WORKSPACES) {
+      expect(visibleNav('ops', person, workspace.id).map((group) => group.label)).toEqual(expected[workspace.id]);
+    }
+  });
+
   it.each(['executive', 'estate_manager', 'facility_manager'] as const)
     ('puts estate overview, residents and properties first for %s without duplicates', (role) => {
       const items = visibleNav('ops', actor([role]), 'estate').flatMap((group) => group.items);

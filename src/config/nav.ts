@@ -56,50 +56,80 @@ const OPS_NAV: NavGroup[] = [
     items: [{ id: 'dashboard', label: 'Dashboard', href: '/dashboard', icon: 'gauge', capability: 'reports_analytics' }],
   },
   {
-    label: 'Facility',
+    label: 'Facility operations',
     items: [
       { id: 'field', label: 'My Day', href: '/field', icon: 'checks', capability: 'work_orders', roles: ['technician'], proposed: true },
       { id: 'control-center', label: 'Control Center', href: '/control-center', icon: 'gauge', capability: 'assets_ppm', proposed: true },
-      { id: 'copilot', label: 'AI Copilot', href: '/copilot', icon: 'sparkles', capability: 'assets_ppm', proposed: true },
       { id: 'work-orders', label: 'Work Orders', href: '/work-orders', icon: 'wrench', capability: 'work_orders' },
+      { id: 'copilot', label: 'AI Copilot', href: '/copilot', icon: 'sparkles', capability: 'assets_ppm', proposed: true },
+    ],
+  },
+  {
+    label: 'Asset care',
+    items: [
       { id: 'assets', label: 'Assets', href: '/assets', icon: 'boxes', capability: 'assets_ppm' },
       { id: 'ppm', label: 'Maintenance Plans', href: '/ppm', icon: 'calendar', capability: 'assets_ppm' },
       { id: 'inspections', label: 'Inspections', href: '/inspections', icon: 'clipboard', capability: 'inspections_compliance' },
-      { id: 'energy', label: 'Energy & Utilities', href: '/energy', icon: 'trending', capability: 'assets_ppm', proposed: true },
       { id: 'inventory', label: 'Inventory', href: '/inventory', icon: 'package', capability: 'assets_ppm', proposed: true },
-      { id: 'contracts', label: 'Contracts & SLAs', href: '/contracts', icon: 'scroll', capability: 'assets_ppm', proposed: true },
-      { id: 'safety', label: 'Safety & Permits', href: '/safety', icon: 'shield', capability: 'assets_ppm', proposed: true },
-      { id: 'access', label: 'Access & Visitors', href: '/access', icon: 'users', capability: 'assets_ppm', proposed: true },
-      { id: 'sustainability', label: 'Sustainability', href: '/sustainability', icon: 'trending', capability: 'assets_ppm', proposed: true },
-      { id: 'spaces', label: 'Spaces', href: '/spaces', icon: 'grid', capability: 'assets_ppm', proposed: true },
       { id: 'vendors', label: 'Vendors', href: '/vendors', icon: 'truck', capability: 'work_orders', proposed: true },
     ],
   },
   {
-    label: 'Estate',
+    label: 'Building services',
+    items: [
+      { id: 'energy', label: 'Energy & Utilities', href: '/energy', icon: 'trending', capability: 'assets_ppm', proposed: true },
+      { id: 'safety', label: 'Safety & Permits', href: '/safety', icon: 'shield', capability: 'assets_ppm', proposed: true },
+      { id: 'access', label: 'Access & Visitors', href: '/access', icon: 'users', capability: 'assets_ppm', proposed: true },
+      { id: 'sustainability', label: 'Sustainability', href: '/sustainability', icon: 'trending', capability: 'assets_ppm', proposed: true },
+      { id: 'spaces', label: 'Spaces', href: '/spaces', icon: 'grid', capability: 'assets_ppm', proposed: true },
+    ],
+  },
+  {
+    label: 'Facility commercial',
+    items: [
+      { id: 'contracts', label: 'Contracts & SLAs', href: '/contracts', icon: 'scroll', capability: 'assets_ppm', proposed: true },
+    ],
+  },
+  {
+    label: 'Estate portfolio',
     items: [
       { id: 'people', label: 'Residents', href: '/people', icon: 'users', capability: 'users_roles' },
       { id: 'properties', label: 'Properties', href: '/properties', icon: 'building', capability: 'assets_ppm', proposed: true },
+      { id: 'tenancy', label: 'Tenancy', href: '/tenancy', icon: 'building', capability: 'users_roles', proposed: true },
+    ],
+  },
+  {
+    label: 'Estate operations',
+    items: [
       { id: 'estate-work-orders', label: 'Work Orders', href: '/estate/work-orders', icon: 'wrench', capability: 'work_orders' },
       { id: 'estate-inspections', label: 'Inspections & Compliance', href: '/estate/inspections', icon: 'clipboard', capability: 'inspections_compliance' },
       { id: 'community', label: 'Community Pulse', href: '/community', icon: 'sparkles', capability: 'announcements', proposed: true },
-      { id: 'billing', label: 'Billing', href: '/billing', icon: 'banknote', capability: 'charges_invoicing' },
-      { id: 'collections', label: 'Collections', href: '/collections', icon: 'banknote', capability: 'charges_invoicing', proposed: true },
-      { id: 'tenancy', label: 'Tenancy', href: '/tenancy', icon: 'building', capability: 'users_roles', proposed: true },
-      { id: 'announcements', label: 'Announcements', href: '/announcements', icon: 'bell', capability: 'announcements' },
-      { id: 'governance', label: 'Governance', href: '/governance', icon: 'scroll', capability: 'announcements', proposed: true },
-      { id: 'board', label: 'Board & Committee', href: '/board', icon: 'users', capability: 'announcements', proposed: true },
-      { id: 'rewards', label: 'Rewards', href: '/rewards', icon: 'sparkles', capability: 'announcements', proposed: true },
       { id: 'bookings', label: 'Bookings', href: '/bookings', icon: 'calendar', capability: 'bookings_amenities' },
       { id: 'events', label: 'Events & Amenities', href: '/events', icon: 'calendar', capability: 'bookings_amenities', proposed: true },
       { id: 'security', label: 'Security & SOS', href: '/security', icon: 'shield', capability: 'security_sos' },
       { id: 'parcels', label: 'Parcels & Lockers', href: '/parcels', icon: 'package', capability: 'security_sos', proposed: true },
-      { id: 'marketplace', label: 'Marketplace', href: '/marketplace', icon: 'store', capability: 'marketplace' },
+    ],
+  },
+  {
+    label: 'Community & governance',
+    items: [
+      { id: 'announcements', label: 'Announcements', href: '/announcements', icon: 'bell', capability: 'announcements' },
+      { id: 'governance', label: 'Governance', href: '/governance', icon: 'scroll', capability: 'announcements', proposed: true },
+      { id: 'board', label: 'Board & Committee', href: '/board', icon: 'users', capability: 'announcements', proposed: true },
+      { id: 'rewards', label: 'Rewards', href: '/rewards', icon: 'sparkles', capability: 'announcements', proposed: true },
       { id: 'documents', label: 'Documents', href: '/documents', icon: 'file', capability: 'announcements', proposed: true },
     ],
   },
   {
-    label: 'Insights',
+    label: 'Finance & commerce',
+    items: [
+      { id: 'billing', label: 'Billing', href: '/billing', icon: 'banknote', capability: 'charges_invoicing' },
+      { id: 'collections', label: 'Collections', href: '/collections', icon: 'banknote', capability: 'charges_invoicing', proposed: true },
+      { id: 'marketplace', label: 'Marketplace', href: '/marketplace', icon: 'store', capability: 'marketplace' },
+    ],
+  },
+  {
+    label: 'Estate insights',
     items: [
       { id: 'finance', label: 'Finance Centre', href: '/finance', icon: 'banknote', capability: 'charges_invoicing', proposed: true },
       { id: 'portfolio', label: 'Portfolio', href: '/portfolio', icon: 'grid', capability: 'reports_analytics', proposed: true },
@@ -155,39 +185,57 @@ const OPS_NAV: NavGroup[] = [
     ],
   },
   {
-    // ConstructionOS (new module). Rides the §7 reports_analytics capability
-    // (matrix is CR-locked); role-restricted to the delivery/commercial personas.
-    label: 'Construction',
+    label: 'Construction overview',
     items: [
       { id: 'con-home', label: 'Command Center', href: '/construction', icon: 'gauge', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
       { id: 'con-projects', label: 'Projects', href: '/construction/projects', icon: 'building', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
+      { id: 'con-copilot', label: 'Copilot', href: '/construction/copilot', icon: 'sparkles', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
+      { id: 'con-digest', label: 'Weekly Digest', href: '/construction/digest', icon: 'sparkles', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
+    ],
+  },
+  {
+    label: 'Planning & controls',
+    items: [
       { id: 'con-operations', label: 'Operations', href: '/construction/operations', icon: 'checks', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
       { id: 'con-evm', label: 'Earned Value', href: '/construction/evm', icon: 'trending', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
       { id: 'con-schedule', label: 'Critical Path', href: '/construction/schedule', icon: 'calendar', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
+      { id: 'con-risk', label: 'Risk Radar', href: '/construction/risk', icon: 'shield', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
+      { id: 'con-simulator', label: 'What-If', href: '/construction/simulator', icon: 'gauge', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
+    ],
+  },
+  {
+    label: 'Commercial & procurement',
+    items: [
       { id: 'con-procurement', label: 'Procurement', href: '/construction/procurement', icon: 'truck', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
       { id: 'con-materials', label: 'Materials', href: '/construction/materials', icon: 'package', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
       { id: 'con-boq', label: 'BOQ Import', href: '/construction/boq', icon: 'file', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
-      { id: 'con-timesheets', label: 'Timesheets', href: '/construction/timesheets', icon: 'clipboard', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
-      { id: 'con-stock', label: 'Stock', href: '/construction/stock', icon: 'boxes', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
+      { id: 'con-fx', label: 'FX Exposure', href: '/construction/fx', icon: 'banknote', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
       { id: 'con-approvals', label: 'Approvals', href: '/construction/approvals', icon: 'checks', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
       { id: 'con-audit', label: 'Audit Log', href: '/construction/audit', icon: 'scroll', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
-      { id: 'con-fx', label: 'FX Exposure', href: '/construction/fx', icon: 'banknote', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
-      { id: 'con-docs', label: 'Documents & RFIs', href: '/construction/documents', icon: 'scroll', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
+    ],
+  },
+  {
+    label: 'Site delivery',
+    items: [
       { id: 'con-site', label: 'Site Log', href: '/construction/site', icon: 'clipboard', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
       { id: 'con-field', label: 'Field Capture', href: '/construction/field', icon: 'checks', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
       { id: 'con-workforce', label: 'Workforce', href: '/construction/workforce', icon: 'users', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
-      { id: 'con-risk', label: 'Risk Radar', href: '/construction/risk', icon: 'shield', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
-      { id: 'con-digest', label: 'Weekly Digest', href: '/construction/digest', icon: 'sparkles', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
-      { id: 'con-copilot', label: 'Copilot', href: '/construction/copilot', icon: 'sparkles', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
-      { id: 'con-simulator', label: 'What-If', href: '/construction/simulator', icon: 'gauge', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
-      { id: 'con-twin', label: 'Site Twin', href: '/construction/twin', icon: 'building', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
-      { id: 'con-league', label: 'Sub League', href: '/construction/league', icon: 'checks', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
+      { id: 'con-timesheets', label: 'Timesheets', href: '/construction/timesheets', icon: 'clipboard', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
+      { id: 'con-stock', label: 'Stock', href: '/construction/stock', icon: 'boxes', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
       { id: 'con-safety', label: 'Site Safety', href: '/construction/safety', icon: 'shield', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
       { id: 'con-watch', label: 'Build Watch', href: '/construction/build-watch', icon: 'grid', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
     ],
   },
   {
-    label: 'Admin',
+    label: 'Collaboration & intelligence',
+    items: [
+      { id: 'con-docs', label: 'Documents & RFIs', href: '/construction/documents', icon: 'scroll', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
+      { id: 'con-twin', label: 'Site Twin', href: '/construction/twin', icon: 'building', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
+      { id: 'con-league', label: 'Sub League', href: '/construction/league', icon: 'checks', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
+    ],
+  },
+  {
+    label: 'Estate workspace',
     items: [{ id: 'settings', label: 'Settings', href: '/settings', icon: 'settings', capability: 'tenant_config' }],
   },
 ];
@@ -256,10 +304,10 @@ const NAV_BY_SHELL: Record<Shell, NavGroup[]> = {
 };
 
 const WORKSPACE_GROUPS: Record<WorkspaceId, readonly string[]> = {
-  estate: ['Estate', 'Insights', 'Admin'],
-  facility: ['Facility'],
+  estate: ['Estate portfolio', 'Estate operations', 'Community & governance', 'Finance & commerce', 'Estate insights', 'Estate workspace'],
+  facility: ['Facility operations', 'Asset care', 'Building services', 'Facility commercial'],
   shortlet: ['Shortlet overview', 'Reservations', 'Guest operations', 'Revenue & growth', 'Workspace'],
-  construction: ['Construction'],
+  construction: ['Construction overview', 'Planning & controls', 'Commercial & procurement', 'Site delivery', 'Collaboration & intelligence'],
 };
 
 /** Nav groups visible to this actor, limited to the selected operator portal. */
