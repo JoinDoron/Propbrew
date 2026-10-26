@@ -38,8 +38,8 @@
 .metricNote { font-size: 11px; color: var(--text-3); line-height: 1.55; margin-top: 7px; }
 .overviewGrid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr); gap: var(--layout-gap); align-items: start; }
 .primaryGrid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(310px, 1fr); gap: var(--layout-gap); align-items: start; }
-.commandGrid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(320px, .85fr); gap: 14px; align-items: stretch; }
-.operationsGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: stretch; }
+.commandGrid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(320px, .85fr); gap: var(--dashboard-grid-gap); align-items: stretch; }
+.operationsGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--dashboard-grid-gap); align-items: stretch; }
 .chartPanel, .pulsePanel { min-height: 410px; }
 .chartPanel { display: flex; flex-direction: column; }
 .chartPanel figure { display: flex; min-height: 0; flex: 1; flex-direction: column; justify-content: center; }
