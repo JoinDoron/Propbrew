@@ -52,3 +52,10 @@
 }
 
 @media (pointer: coarse) { .enter, .locked { min-height: 44px; } }
+
+.setupPrompt { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 18px 20px; margin: 0 0 24px; border: 1px solid color-mix(in srgb, var(--primary) 24%, var(--border)); border-radius: var(--radius-card, 12px); background: color-mix(in srgb, var(--primary) 5%, var(--surface)); }
+.setupPrompt strong { font-size: 14px; font-weight: 600; }
+.setupPrompt p { margin: 5px 0 0; color: var(--text-2); font-size: 13px; line-height: 1.7; }
+.setupPrompt a { display: inline-flex; align-items: center; gap: 8px; flex: none; padding: 10px 14px; border-radius: var(--radius-control, 10px); background: var(--primary); color: #fff; text-decoration: none; font-size: 13px; min-height: 42px; }
+.setupPrompt a:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+@media (max-width: 620px) { .setupPrompt { align-items: flex-start; flex-direction: column; } }

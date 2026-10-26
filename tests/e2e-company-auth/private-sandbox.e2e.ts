@@ -38,6 +38,8 @@ test('two visitors using the same demo login keep independent edits and reset ca
     await customer.getByLabel('Company name', { exact: true }).fill(`Real account isolation ${id}`);
     await customer.getByLabel('Password', { exact: true }).fill('Disposable sandbox browser test passphrase!');
     await customer.getByRole('button', { name: 'Create account & company', exact: true }).click();
+    await expect(customer).toHaveURL(/\/onboarding$/);
+    await customer.getByRole('link', { name: 'Set up later', exact: true }).click();
     await expect(customer).toHaveURL(/\/workspaces$/); await addProperty(customer, customerName);
     const a = await companyId(page), b = await companyId(second), c = await companyId(customer);
     expect(new Set([a, b, c]).size).toBe(3);

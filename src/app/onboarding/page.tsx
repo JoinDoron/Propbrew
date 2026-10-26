@@ -12,5 +12,5 @@ export default async function OwnerOnboardingPage() {
   if (!identity) redirect('/login');
   const record = await getOwnerSetup(identity.subject);
   if (record.completedAt) redirect('/onboarding/complete');
-  return <OwnerSetupWizard initial={record} mode={identity.mode} homeRoute={identity.homeRoute} hasWorkspace={identity.hasWorkspace} />;
+  return <OwnerSetupWizard initial={record} mode={identity.mode} homeRoute={identity.homeRoute} hasWorkspace={identity.hasWorkspace} companyName={identity.companyName} scope={identity.subject} />;
 }

@@ -23,7 +23,7 @@ export async function createCompany(form:FormData):Promise<Result|void> {
   const user=await identity();const parsed=z.string().trim().min(2).max(120).safeParse(form.get('companyName'));
   if(!parsed.success)return {error:'Enter a company name between 2 and 120 characters.'};
   try {await consumeAuthAttempt('company-create',user.user.id,5,24*3600);await provisionCompany(user,parsed.data);}catch{return {error:'The company could not be created. Please try again later.'};}
-  redirect('/workspaces');
+  redirect('/onboarding');
 }
 export async function selectCompany(companyId:string):Promise<Result|void> {
   const user=await identity();if(!uuid.safeParse(companyId).success)return {error:'Choose an available company.'};

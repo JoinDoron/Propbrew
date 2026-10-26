@@ -12,6 +12,9 @@ import { withDurableRead } from '@/server/data/durable-records';
 import { isDemoAccount } from '@/server/auth/demo-config';
 import { DemoNotice } from '@/components/auth/demo-notice';
 import { currentRecordContext } from '@/server/data/record-context';
+import { getOwnerSetup } from '@/server/onboarding/repository';
+import { canUseCompanyModule } from '@/lib/auth/company-policy';
+import { db } from '@/server/data/store';
 
 export const metadata: Metadata = { title: 'Choose your workspace · Propbrew', robots: { index: false, follow: false } };
 export const dynamic = 'force-dynamic';
@@ -25,6 +28,12 @@ export default async function WorkspacesPage({ searchParams }: { searchParams: P
   const available = availableWorkspaces(actor);
   const name = session.key === 'clerk' ? session.label : session.label.split(' — ')[0];
   const demo = session.key !== 'clerk' && devIdentityEnabled();
+  const principal = currentRecordContext()?.companyPrincipal;
+  const ownerSetup = principal?.membership.companyRole === 'owner' && !isDemoAccount(actor.userId)
+    && canUseCompanyModule(actor, 'estate', 'create')
+    ? await getOwnerSetup(`company:${principal.company.id}`) : null;
+  const showSetup = ownerSetup && !ownerSetup.completedAt && (ownerSetup.version > 0
+    || !db.sites.some((site) => site.tenantId === actor.tenantId && site.kind === 'estate'));
 
   return (
     <main className={styles.page}>
@@ -40,6 +49,11 @@ export default async function WorkspacesPage({ searchParams }: { searchParams: P
           <h1 id="workspace-title">Choose your workspace</h1>
           <p>Different operations deserve different views. Enter the portal built for the work you need to do—each with its own home, navigation, and tools.</p>
         </section>
+        {showSetup && <section className={styles.setupPrompt} aria-label="Portfolio setup">
+          <div><strong>{ownerSetup.version > 0 ? 'Your portfolio setup is saved' : 'Make this company your own'}</strong>
+            <p>{ownerSetup.version > 0 ? 'Continue from your last saved step and create your first property and units.' : 'Set up your portfolio and create your first property and units when you are ready.'}</p></div>
+          <Link href="/onboarding">{ownerSetup.version > 0 ? 'Resume portfolio setup' : 'Start portfolio setup'}<ArrowRight size={15} aria-hidden="true" /></Link>
+        </section>}
         <p className={styles.accessNote}><ShieldCheck size={14} aria-hidden="true" /><span><strong>{available.length} of 4 workspaces</strong> available to your current role. Your account, organisation, and permissions stay the same.</span></p>
         <div className={styles.grid}>
           {WORKSPACES.map((workspace) => {

@@ -9,6 +9,10 @@ async function createAccount(page: Page, name: string, email: string, company?: 
   if (company) await page.getByLabel('Company name', { exact: true }).fill(company);
   await page.getByLabel('Password', { exact: true }).fill(passphrase);
   await page.getByRole('button', { name: company ? 'Create account & company' : 'Create account & join', exact: true }).click();
+  if (company) {
+    await expect(page).toHaveURL(/\/onboarding$/);
+    await page.getByRole('link', { name: 'Set up later', exact: true }).click();
+  }
   await expect(page).toHaveURL(/\/workspaces$/);
   await expect(page.getByRole('heading', { name: 'Choose your workspace', exact: true })).toBeVisible();
 }

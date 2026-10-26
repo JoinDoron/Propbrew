@@ -31,11 +31,13 @@ const CHOICE_STEPS = [
   { field: 'priority', options: PRIORITIES },
 ] as const;
 
-export function OwnerSetupWizard({ initial, mode, hasWorkspace, homeRoute }: {
+export function OwnerSetupWizard({ initial, mode, hasWorkspace, homeRoute, companyName, scope }: {
   initial: OwnerSetupRecord;
-  mode: 'local' | 'clerk';
+  mode: 'local' | 'clerk' | 'company';
   hasWorkspace: boolean;
   homeRoute: string;
+  companyName?: string;
+  scope: string;
 }) {
   const [draft, setDraft] = useState<OwnerSetupDraft>(() => ({ ...initial.draft, step: ownerSetupResumeStep(initial.draft) }));
   const [version, setVersion] = useState(initial.version);
@@ -45,17 +47,27 @@ export function OwnerSetupWizard({ initial, mode, hasWorkspace, homeRoute }: {
   const [error, setError] = useState('');
   const [pending, start] = useTransition();
   const heading = useRef<HTMLHeadingElement>(null);
+  const errorBanner = useRef<HTMLDivElement>(null);
+  const submitting = useRef(false);
   const firstRender = useRef(true);
   const router = useRouter();
   const step = draft.step;
   const choice = step < 5 ? CHOICE_STEPS[step] : null;
   const plan = recommendOwnerPlan(draft);
   const missingCurrentAnswer = Boolean(choice && !draft[choice.field]) || (step === 3 && draft.rentPaymentMethods.length === 0);
+  const companySetup = mode === 'company';
+  const submitLabel = pending
+    ? companySetup && step === 6 ? 'Creating your property…' : 'Saving…'
+    : step === 6 ? companySetup ? 'Create property & open workspace' : 'Finish setup' : 'Continue';
 
   useEffect(() => {
     if (firstRender.current) { firstRender.current = false; return; }
     heading.current?.focus();
   }, [step]);
+
+  useEffect(() => {
+    if (error) errorBanner.current?.focus();
+  }, [error]);
 
   useEffect(() => {
     if (!dirty) return;
@@ -73,7 +85,7 @@ export function OwnerSetupWizard({ initial, mode, hasWorkspace, homeRoute }: {
   }
 
   function persist(nextStep: number, complete = false) {
-    if (pending) return;
+    if (pending || submitting.current) return;
     if (nextStep > step || complete) {
       const invalid = validateOwnerStep(draft, step);
       if (Object.keys(invalid).length) {
@@ -83,11 +95,12 @@ export function OwnerSetupWizard({ initial, mode, hasWorkspace, homeRoute }: {
       }
     }
     const next = { ...draft, step: nextStep };
+    submitting.current = true;
     start(async () => {
       try {
         const result = complete
-          ? await completeOwnerSetupAction(next, version)
-          : await saveOwnerSetupAction(next, version);
+          ? await completeOwnerSetupAction(next, version, scope)
+          : await saveOwnerSetupAction(next, version, scope);
         if (!result.ok) {
           setError(result.error);
           setErrors(result.errors ?? {});
@@ -102,6 +115,8 @@ export function OwnerSetupWizard({ initial, mode, hasWorkspace, homeRoute }: {
         if (complete || result.record.completedAt) router.replace('/onboarding/complete');
       } catch {
         setError('Connection interrupted. Your answers are still here. Reconnect and try again.');
+      } finally {
+        submitting.current = false;
       }
     });
   }
@@ -130,7 +145,7 @@ export function OwnerSetupWizard({ initial, mode, hasWorkspace, homeRoute }: {
       <div className={styles.frame}>
         <aside className={styles.sidebar} aria-label="Portfolio setup progress">
           <Link href="/" className={styles.logo} aria-label="Propbrew home"><PropbrewMark />propbrew</Link>
-          <p className={styles.eyebrow}>Propbrew setup</p>
+          <p className={styles.eyebrow}>{companySetup && companyName ? companyName : 'Propbrew setup'}</p>
           <h2>A clearer operating view starts here.</h2>
           <p className={styles.intro}>We’ll learn how your portfolio works, capture the first property, and recommend a plan that fits the way you manage rent, records, and repairs.</p>
           <div className={styles.progressLabel}><span>Setup progress</span><span>{ownerSetupProgress(step)}%</span></div>
@@ -148,8 +163,8 @@ export function OwnerSetupWizard({ initial, mode, hasWorkspace, homeRoute }: {
             </ol>
           </nav>
           <div className={styles.sidebarNote}>
-            <strong>Prepare the portfolio. Start when you’re ready.</strong>
-            <p>Capture the shape of your portfolio now. Tenant invitations, rent collection, reminders, documents, and repair workflows come after workspace activation.</p>
+            <strong>{companySetup ? 'One property. A working starting point.' : 'Prepare the portfolio. Start when you’re ready.'}</strong>
+            <p>{companySetup ? 'Finish setup to create your first property and its vacant units. Add residents and start organising operations from your company workspace.' : 'Capture the shape of your portfolio now. Tenant invitations, rent collection, reminders, documents, and repair workflows come after workspace activation.'}</p>
           </div>
         </aside>
 
@@ -249,21 +264,21 @@ export function OwnerSetupWizard({ initial, mode, hasWorkspace, homeRoute }: {
                 <ul className={styles.reasons}>{plan.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
                 <div className={styles.summary}><h3>Your first property</h3><p>{draft.firstProperty.name} · {draft.firstProperty.units} unit{draft.firstProperty.units === 1 ? '' : 's'}</p><p>{draft.firstProperty.city}, {draft.firstProperty.state}</p></div>
                 <div className={styles.summary}><h3>Rent payment methods</h3><p>{RENT_PAYMENT_METHODS.filter((option) => draft.rentPaymentMethods.includes(option.key)).map((option) => option.label).join(' · ')}</p></div>
-                <p className={styles.notice} style={{ marginTop: 20, marginBottom: 0 }}>No payment is taken and no trial starts here. Pricing, workspace access, and paid features are confirmed separately. This recommendation uses your answers, not an AI decision.</p>
+                <p className={styles.notice} style={{ marginTop: 20, marginBottom: 0 }}>{companySetup ? 'Finishing creates this property and its vacant units in your company. Your plan fit is guidance; no subscription, payment or trial starts here.' : 'No payment is taken and no trial starts here. Pricing, workspace access, and paid features are confirmed separately. This recommendation uses your answers, not an AI decision.'}</p>
               </div>
             )}
 
-            {error && <div className={styles.errorBanner} role="alert">{error}</div>}
+            {error && <div className={styles.errorBanner} role="alert" ref={errorBanner} tabIndex={-1}>{error}</div>}
             <div className={styles.footer}>
               <button className={styles.back} type="button" disabled={step === 0 || pending} onClick={() => persist(step - 1)}><ArrowLeft size={14} aria-hidden="true" />Back</button>
               <button className={styles.primary} type="submit" disabled={pending || missingCurrentAnswer}>
-                {pending ? 'Saving…' : step === 6 ? 'Finish setup' : 'Continue'}<ArrowRight size={14} aria-hidden="true" />
+                {submitLabel}<ArrowRight size={14} aria-hidden="true" />
               </button>
             </div>
           </form>
           <p className={styles.saveStatus} role="status" aria-live="polite"><CloudCheck size={13} aria-hidden="true" />{message}</p>
-          <p className={styles.saveStatus}><LockKeyhole size={12} aria-hidden="true" />Your setup is private to your account. No tenant invitations are sent.</p>
-          {hasWorkspace && !dirty && <Link className={styles.save} style={{ display: 'inline-block', marginTop: 12 }} href={homeRoute}>Return to existing workspace</Link>}
+          <p className={styles.saveStatus}><LockKeyhole size={12} aria-hidden="true" />{companySetup ? 'Your setup stays in this company. No tenant invitations are sent.' : 'Your setup is private to your account. No tenant invitations are sent.'}</p>
+          {hasWorkspace && !dirty && <Link className={styles.save} style={{ display: 'inline-block', marginTop: 12 }} href={companySetup ? '/workspaces' : homeRoute}>{companySetup ? 'Set up later' : 'Return to existing workspace'}</Link>}
         </section>
       </div>
     </main>

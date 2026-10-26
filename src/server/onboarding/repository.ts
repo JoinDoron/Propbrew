@@ -11,19 +11,10 @@ import {
   type OwnerSetupDraft,
 } from '@/domain/owner-onboarding';
 
-export type OwnerSetupRecord = {
-  draft: OwnerSetupDraft;
-  version: number;
-  completedAt: string | null;
-  updatedAt: string | null;
-};
-
-export class OnboardingConflictError extends Error {
-  constructor() {
-    super('Your setup changed in another tab. Reload the latest saved version before continuing.');
-    this.name = 'OnboardingConflictError';
-  }
-}
+import { OnboardingConflictError, type OwnerSetupRecord } from './contracts';
+export { OnboardingConflictError, type OwnerSetupRecord } from './contracts';
+import { nativeAuthEnabled } from '@/server/auth/mode';
+import { getNativeOwnerSetup, saveNativeOwnerSetup, completeNativeOwnerSetup } from './native-repository';
 
 type Completion = {
   property: OwnerSetupDraft['firstProperty'];
@@ -147,6 +138,7 @@ async function withLocalLock<T>(subject: string, work: () => Promise<T>): Promis
 
 /** Subject must come from the server's authenticated identity, not form data. */
 export async function getOwnerSetup(subject: string): Promise<OwnerSetupRecord> {
+  if (nativeAuthEnabled()) return getNativeOwnerSetup(subject);
   assertSubject(subject);
   const query = connection();
   if (!query) return (await readLocal(subject)).record;
@@ -159,6 +151,7 @@ export async function getOwnerSetup(subject: string): Promise<OwnerSetupRecord> 
 
 /** Draft saves never reopen or overwrite a completed setup. */
 export async function saveOwnerSetup(subject: string, input: OwnerSetupDraft, expectedVersion: number): Promise<OwnerSetupRecord> {
+  if (nativeAuthEnabled()) return saveNativeOwnerSetup(subject, input, expectedVersion);
   assertSubject(subject);
   assertVersion(expectedVersion);
   const query = connection();
@@ -196,6 +189,7 @@ function completion(draft: OwnerSetupDraft): Completion {
 
 /** Immutable pending-activation submission, not tenant provisioning or billing. */
 export async function completeOwnerSetup(subject: string, input: OwnerSetupDraft, expectedVersion: number): Promise<OwnerSetupRecord> {
+  if (nativeAuthEnabled()) return completeNativeOwnerSetup(subject, input, expectedVersion);
   assertSubject(subject);
   const query = connection();
   const existing = await getOwnerSetup(subject);

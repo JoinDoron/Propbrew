@@ -2,10 +2,15 @@ import 'server-only';
 
 import { getSession } from '@/server/session';
 import { homeRouteFor } from '@/config/shells';
+import { nativeAuthEnabled } from '@/server/auth/mode';
+import { getCompanyPrincipal } from '@/server/auth/company';
+import { isDemoAccount } from '@/server/auth/demo-config';
+import { canUseCompanyModule } from '@/lib/auth/company-policy';
 
 export type OwnerIdentity = {
   subject: string;
-  mode: 'local' | 'clerk';
+  mode: 'local' | 'clerk' | 'company';
+  companyName?: string;
   hasWorkspace: boolean;
   onboardingRequired: boolean;
   homeRoute: string;
@@ -17,6 +22,15 @@ export function clerkConfigured(): boolean {
 
 /** A setup identity is NOT an Actor: creating a draft grants no tenant access. */
 export async function getOwnerIdentity(): Promise<OwnerIdentity | null> {
+  if (nativeAuthEnabled()) {
+    const principal = await getCompanyPrincipal();
+    if (!principal || isDemoAccount(principal.user.id) || principal.membership.companyRole !== 'owner'
+      || !canUseCompanyModule(principal.actor, 'estate', 'create')) return null;
+    return {
+      subject: `company:${principal.company.id}`, mode: 'company', companyName: principal.company.name,
+      hasWorkspace: true, onboardingRequired: false, homeRoute: '/estate',
+    };
+  }
   if (clerkConfigured()) {
     const { auth } = await import('@clerk/nextjs/server');
     const session = await auth();

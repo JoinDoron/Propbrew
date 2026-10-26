@@ -55,6 +55,16 @@ Before changing the live auth mode, back up the current database and verify an i
 Rollback must use a compatible database-backed application version and preserve the new auth tables. Do not switch real company records to a development memory adapter. A rollback to review mode must not expose or reassign native company records.
 
 Before adding account email in a later release, require verified mailbox ownership before company creation or recipient-bound invitation acceptance. Verification must not create a full session that bypasses an enrolled authenticator; require the normal password/MFA sign-in afterward or explicitly enforce the second factor. Include existing unverified sessions in that migration plan. Keep delivery receipts free of addresses, credentials, message bodies and tokens, and distinguish provider acceptance from inbox delivery.
+## Owner portfolio onboarding
+
+New owner registration and creating another company open `/onboarding` in the selected company. Invited teammates enter their assigned workspaces. Native owner setup uses the verified PostgreSQL session and active owner membership; it does not require Clerk. Demo accounts, administrators and ordinary members cannot submit owner setup. Existing companies retain their operational records and can continue directly to their workspaces.
+
+Each company has its own resumable seven-step profile. Drafts save on Continue, Back and Save progress; Set up later opens the workspace chooser, which offers Start/Resume portfolio setup for an empty company or an existing draft. A form is bound to the company in which it was rendered. Switching company in another tab makes that stale form fail without applying its answers to the newly selected company. Optimistic draft versions also prevent one tab overwriting another tab's newer answers.
+
+Completing native setup commits the profile, first property, one initial building, exact vacant-unit inventory, creator provenance and property audit together inside the existing company workspace transaction. It uses the schema's supported 1–10,000 units; invalid or incomplete details fail before mutation. Repeated or concurrent successful completion returns the original property reference. It does not duplicate inventory or replace existing company records. Completion links to the Estate overview, residents, properties and all four workspaces. The suggested plan remains guidance: no subscription, trial, payment, tenant invitation or provider send is activated.
+
+The native draft and completion live in the existing tenant-isolated `workspace_records` auxiliary state, so this release needs no additional SQL migration. They survive logout/login and application restarts. The older Clerk/local setup adapter retains its separate pending-activation behaviour and never supplies native-company authority.
+
 ## Editable private demo sandboxes
 
 Sign-up and login offer Estate, Facility, Shortlet and Construction demo entry.

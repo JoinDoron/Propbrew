@@ -264,8 +264,8 @@ describe('Entry, onboarding and exceptional states are part of the review', () =
     expect(compact).toContain('<progressclassName={styles.progress}value={step+1}max={7}');
     expect(compact).toContain('onClick={()=>persist(index)}');
     expect(compact).toContain('validateOwnerStep(draft,step)');
-    expect(compact).toContain('awaitcompleteOwnerSetupAction(next,version)');
-    expect(compact).toContain('awaitsaveOwnerSetupAction(next,version)');
+    expect(compact).toContain('awaitcompleteOwnerSetupAction(next,version,scope)');
+    expect(compact).toContain('awaitsaveOwnerSetupAction(next,version,scope)');
     expect(compact).toContain("router.replace('/onboarding/complete')");
     expect(compact).toContain('RENT_PAYMENT_METHODS.map((option)');
     expect(compact).toContain('checked={draft.rentPaymentMethods.includes(option.key)}');

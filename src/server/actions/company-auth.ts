@@ -34,7 +34,7 @@ export async function registerAccount(_state: FormState, form: FormData): Promis
       await activateCompany(identity,companyId);
     } else await provisionCompany(identity,companyName);
   } catch { redirect(invitationToken?`/invite/${invitationToken}`:'/companies?setup=retry'); }
-  redirect('/workspaces');
+  redirect(invitationToken ? '/workspaces' : '/onboarding');
 }
 
 export async function loginAccount(_state: FormState, form: FormData): Promise<FormState> {
