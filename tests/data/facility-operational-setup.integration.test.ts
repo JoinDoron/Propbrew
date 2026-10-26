@@ -145,7 +145,9 @@ describe.skipIf(!testUrl)('Facility operations from an empty company with real s
     expect((await admin.query("select count(*)::int n from audit_events where tenant_id=$1 and action='facility.evidence.stored'", [company])).rows[0].n).toBe(1);
     expect((await rawEvidenceIds(owner)).rows).toEqual([{ id: evidenceId }]);
     const saved = await snapshot(); expect((await upload('asset', assetId, randomUUID(), Buffer.concat([bytes, Buffer.from([0])]))).status).toBe(413); expect(await snapshot()).toEqual(saved);
-  });
+    // Two maximum-size multipart requests, a private byte-for-byte download and
+    // a rejected oversized request use real PostgreSQL on shared CI runners.
+  }, 15_000);
   it('records the actual service checklist and image once, advances its calendar and meters the next runtime cycle', async () => {
     await select(owner, company); const input = planInput('Weekly generator service');
     const created = await createFacilityMaintenancePlan(input); expect(created.ok).toBe(true); if (!created.ok) throw new Error('Maintenance plan unavailable.');

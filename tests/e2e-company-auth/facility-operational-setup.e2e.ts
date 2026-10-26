@@ -111,6 +111,24 @@ test('a fresh company operates asset maintenance, exact stock movements and evid
   await part.getByLabel('Opening count reference', { exact: true }).fill('COUNT-001');
   await part.getByLabel('Opening count reason', { exact: true }).fill('Verified initial physical stock count');
   await part.getByRole('button', { name: 'Create part', exact: true }).click(); await expect(part).toHaveCount(0);
+  const stockRow = page.getByRole('row').filter({ hasText: partName });
+  await expect(stockRow.getByRole('cell', { name: '10 each', exact: true })).toBeVisible();
+  await expect(stockRow).toContainText('Active · v1');
+  let holdRefresh = true, refreshHeld = false;
+  let releaseRefresh!: () => void;
+  const refreshGate = new Promise<void>((resolve) => { releaseRefresh = resolve; });
+  const inventoryRoute = (url: URL) => url.pathname === '/inventory';
+  // Delay a read only. The receipt POST is submitted exactly once. A held RSC
+  // response reproduces the slow-refresh window seen in CI without retrying a
+  // financial/stock operation or changing the server's concurrency checks.
+  await page.route(inventoryRoute, async (route) => {
+    const request = route.request();
+    if (holdRefresh && request.method() === 'GET' && request.headers().rsc === '1') {
+      holdRefresh = false; refreshHeld = true; await refreshGate;
+    }
+    await route.continue();
+  });
+  let stockVersion = 1;
   for (const movement of [
     { trigger: `Receive stock for ${partName}`, title: 'Receive stock', field: 'Quantity received', count: '5', reference: 'DELIVERY-001', balance: '15' },
     { trigger: `Issue stock for ${partName}`, title: 'Issue stock', field: 'Quantity issued', count: '4', reference: 'JOB-001', balance: '11' },
@@ -121,9 +139,21 @@ test('a fresh company operates asset maintenance, exact stock movements and evid
     await dialog.getByLabel(movement.field, { exact: true }).fill(movement.count);
     await dialog.getByLabel('Movement reference', { exact: true }).fill(movement.reference);
     await dialog.getByLabel('Movement reason', { exact: true }).fill('Verified synthetic physical movement');
-    await dialog.getByRole('button', { name: 'Record movement', exact: true }).click(); await expect(dialog).toHaveCount(0);
+    try {
+      await dialog.getByRole('button', { name: 'Record movement', exact: true }).click(); await expect(dialog).toHaveCount(0);
+      if (movement.title === 'Receive stock') {
+        await expect.poll(() => refreshHeld).toBe(true);
+        await expect(page.getByRole('status').filter({ hasText: 'Updating stock register…' })).toBeVisible();
+        for (const action of [`Edit inventory part ${partName}`, `Receive stock for ${partName}`, `Issue stock for ${partName}`, `Adjust stock for ${partName}`]) await expect(page.getByRole('button', { name: action, exact: true })).toBeDisabled();
+        await expect(page.getByRole('button', { name: 'Add part', exact: true })).toBeDisabled();
+      }
+    } finally { releaseRefresh(); }
     await expect(page.getByRole('status').filter({ hasText: `New stock balance: ${movement.balance}.` })).toBeVisible();
+    await expect(stockRow.getByRole('cell', { name: `${movement.balance} each`, exact: true })).toBeVisible();
+    await expect(stockRow).toContainText(`Active · v${++stockVersion}`);
+    await expect(page.getByRole('button', { name: `Issue stock for ${partName}`, exact: true })).toBeEnabled();
   }
+  await page.unroute(inventoryRoute);
   await expect(page.getByRole('row').filter({ hasText: partName })).toContainText('₦0.29');
   await expect(page.getByRole('row').filter({ hasText: partName })).toContainText('Reorder review');
   await section(page, /^Movement history(?: \d+)?$/);

@@ -97,7 +97,8 @@ describe('Facility maintenance Clinexa polish', () => {
     expect(html).toContain('Access · Lekki Gardens');
     expect(html).toContain('Overdue maintenance');
     expect(html).toContain('aria-label="Overdue maintenance plans, scroll horizontally"');
-    expect(html).toContain('not a calibrated failure forecast');
+    expect(html).toContain('Risk scores support planning');
+    expect(html).toContain('review the asset condition before approving a date change');
     expect(html).not.toContain('never scrolls away');
     expect(html).not.toContain('Add plan · unavailable');
   });

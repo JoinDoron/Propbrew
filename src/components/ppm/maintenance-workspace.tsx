@@ -34,7 +34,7 @@ export function MaintenanceWorkspace(data: PpmData) {
 
   return (
     <div className={layout.layout}>
-      <p className={layout.metadata}>Recorded schedule snapshot · {data.now}. AI-F-01 uses deterministic risk rules and signal completeness; it is advisory, not a calibrated failure forecast.</p>
+      <p className={layout.metadata}>Recorded maintenance snapshot · {data.now}. Risk scores support planning; review the asset condition before approving a date change.</p>
       <MaintenanceSetupControls data={data} onCreate={() => setEditing({})} />
       {/* KPIs */}
       <div className={layout.metrics}>
