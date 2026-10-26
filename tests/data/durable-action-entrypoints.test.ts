@@ -19,7 +19,7 @@ const expectedModules: Record<string, readonly string[]> = {
   'admin-users.ts': ['estate', 'facility', 'shortlet', 'construction'],
   'announcements.ts': ['estate'], 'billing.ts': ['estate'], 'construction.ts': ['construction'],
   'documents.ts': ['estate', 'construction'], 'estate.ts': ['estate'], 'estate-registration.ts': ['estate'],
-  'estate-work-orders.ts': ['estate'], 'facility.ts': ['facility'], 'facility-registration.ts': ['facility'],
+  'estate-work-orders.ts': ['estate'], 'estate-billing-setup.ts': ['estate'], 'estate-tenancy-setup.ts': ['estate'], 'estate-amenity-setup.ts': ['estate'], 'facility.ts': ['facility'], 'facility-registration.ts': ['facility'],
   'inbox.ts': ['estate', 'facility', 'shortlet', 'construction'], 'inspections.ts': ['facility'],
   'ppm.ts': ['facility'], 'resident-bills.ts': ['estate'], 'resident-bookings.ts': ['estate'],
   'resident-community.ts': ['estate'], 'resident-home.ts': ['estate'], 'resident-orders.ts': ['estate'],
@@ -35,11 +35,11 @@ const entries = readdirSync(directory).filter((file) => file.endsWith('.ts')).fl
 const operational = entries.filter(({ key }) => !nonOperational.has(key));
 
 describe('operational action durability coverage', () => {
-  it('accounts for all 150 operational actions and the explicit separate account/onboarding actions', () => {
-    expect(operational).toHaveLength(150);
+  it('accounts for all 163 operational actions and the explicit separate account/onboarding actions', () => {
+    expect(operational).toHaveLength(163);
     expect(entries.filter(({ key }) => nonOperational.has(key)).map(({ key }) => key).sort()).toEqual([...nonOperational].sort());
     expect(operational.filter(({ key }) => readOnly.has(key))).toHaveLength(2);
-    expect(operational.filter(({ key }) => !readOnly.has(key))).toHaveLength(148);
+    expect(operational.filter(({ key }) => !readOnly.has(key))).toHaveLength(161);
   });
 
   it.each(operational)('protects the entire authenticated $key body', ({ ast, fn, key, file }) => {

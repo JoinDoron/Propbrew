@@ -209,7 +209,7 @@ describe('Clinexa-aligned Billing workspace', () => {
     const page = read('src/app/(ops)/(estate)/billing/page.tsx');
     expect(page).toContain("requireCapability('charges_invoicing', 'read', 'estate')");
     expect(page).toContain("effectiveLevel(actor, 'charges_invoicing')");
-    expect(page).toContain('repos.invoices.list(actor)');
+    expect(page).toContain('repos.invoices.list(actor, { cursor, limit: 500 })');
     expect(view()).not.toMatch(/from ['"]@\/server\/(?:data|session)['"]/);
   });
 

@@ -77,7 +77,7 @@ describe('Clinexa-derived authenticated page framing', () => {
     for (const property of ['seesBills', 'seesRequests', 'seesBookings', 'canMutate']) {
       expect(page).toContain(`${property}={${property}}`);
     }
-    expect(page).toContain("balanceLabel: seesBills ? formatMoney(r.balance) : '—'");
+    expect(page).toContain("balanceLabel: !seesBills ? '—'");
     expect(page).toContain('residents={rows}');
   });
 

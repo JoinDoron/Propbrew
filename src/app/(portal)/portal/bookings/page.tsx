@@ -6,6 +6,10 @@ import { bookingMachine } from '@/domain/workflows';
 import { legalEvents } from '@/lib/legal-events';
 import { BookingsWorkspace, type BookingView } from '@/components/portal/bookings-workspace';
 import { withDurableRead } from '@/server/data/durable-records';
+import { estateAmenitiesFor } from '@/server/estate/amenities';
+import { nativeAuthEnabled } from '@/server/auth/mode';
+import { getActiveUnitId } from '@/server/active-unit';
+import { operatingDateISO } from '@/server/operating-clock';
 
 /** EM-05 (resident view, §7 O) — my amenity bookings. A resident books from a
  *  day/time picker; the amenity's auto-approval rule decides instant vs
@@ -24,11 +28,12 @@ export default async function MyBookingsPage() {
     actions: can(actor, 'bookings_amenities', 'transition').allowed ? legalEvents(bookingMachine, b.status, actor) : [],
   }));
 
+  const activeUnitId = nativeAuthEnabled() ? await getActiveUnitId(actor.unitIds) : null;
   return (
     <div className="pb-page">
       <PageHeader title="My bookings" subtitle="Reserve shared amenities and track your bookings." />
       <div className="w-full min-w-0 flex flex-col gap-6">
-      <BookingsWorkspace bookings={bookings} canCreate={can(actor, 'bookings_amenities', 'create').allowed} canTransition={can(actor, 'bookings_amenities', 'transition').allowed} />
+      <BookingsWorkspace amenities={nativeAuthEnabled() ? estateAmenitiesFor(actor) : undefined} expectedCompanyId={nativeAuthEnabled() ? actor.tenantId ?? undefined : undefined} expectedUnitId={activeUnitId ?? undefined} todayISO={operatingDateISO()} bookings={bookings} canCreate={can(actor, 'bookings_amenities', 'create').allowed} canTransition={can(actor, 'bookings_amenities', 'transition').allowed} />
       </div>
     </div>
   );

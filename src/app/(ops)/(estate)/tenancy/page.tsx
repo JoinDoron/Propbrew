@@ -8,6 +8,7 @@ import { repos } from '@/server/data';
 import { depositExposureMinor, leaseRunwayDays } from '@/domain/estate';
 import { TenancyWorkspace, type TenancyRow } from '@/components/estate/tenancy-workspace';
 import { withDurableRead } from '@/server/data/durable-records';
+import { tenancyAgreementFor, tenancyResidentOptions } from '@/server/reads/tenancy-setup';
 
 const IN_MOTION = new Set(['approved', 'moving_in', 'notice', 'moving_out']);
 
@@ -21,7 +22,7 @@ export default async function TenancyPage() {
 
   const rows: TenancyRow[] = tenancies.map((t) => ({
     id: t.id, residentName: t.residentName, unitLabel: t.unitLabel, stage: t.stage, applicationISO: t.applicationISO,
-    moveInISO: t.moveInISO, leaseEndISO: t.leaseEndISO, moveOutISO: t.moveOutISO, rentMinor: t.rentMinor, depositMinor: t.depositMinor, depositStatus: t.depositStatus,
+    moveInISO: t.moveInISO, leaseEndISO: t.leaseEndISO, moveOutISO: t.moveOutISO, rentMinor: t.rentMinor, depositMinor: t.depositMinor, depositStatus: t.depositStatus, agreement: tenancyAgreementFor(actor, t.id),
   }));
 
   return (
@@ -30,6 +31,8 @@ export default async function TenancyPage() {
         scope={<ScopeBanner label={actor.allEstates ? 'all estates' : `${actor.estateIds.length} estate(s)`} />} />
       <TenancyWorkspace
         tenancies={rows}
+        companyScope={actor.tenantId ?? undefined}
+        residents={can(actor, 'users_roles', 'create').allowed ? tenancyResidentOptions(actor) : []}
         kpis={{
           active: tenancies.filter((t) => t.stage === 'active').length,
           inMotion: tenancies.filter((t) => IN_MOTION.has(t.stage)).length,

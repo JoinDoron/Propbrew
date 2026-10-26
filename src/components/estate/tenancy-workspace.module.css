@@ -96,3 +96,5 @@
 }
 @media (max-width: 420px) { .metrics, .lifecycleList { grid-template-columns: minmax(0, 1fr); } }
 @media (pointer: coarse) { .search, .search input, .stageFilter select { min-height: 44px; } }
+
+.setupActions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }

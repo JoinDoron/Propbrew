@@ -14,6 +14,8 @@ import { NOW } from '@/domain/ppm';
 import { isReviewActor, reviewModeEnabled } from '@/server/review-auth';
 import { withDurableRead } from '@/server/data/durable-records';
 import { nativeEstateCreationReady } from '@/server/data/company-estate-access';
+import { residentInvoiceBalances } from '@/domain/estate/invoice-balances';
+import { money } from '@/domain/primitives';
 
 function allRows<T>(read: (cursor?: string | null) => Page<T>): T[] {
   const rows: T[] = [];
@@ -43,8 +45,9 @@ export default async function PeoplePage() {
   const seesBookings = can(actor, 'bookings_amenities', 'read').allowed;
   const seesSpaces = can(actor, 'assets_ppm', 'read').allowed;
 
+  const invoiceRecords = seesBills ? allRows((cursor) => repos.invoices.list(actor, { cursor, limit: 200 })) : [];
   const bills = seesBills
-    ? allRows((cursor) => repos.invoices.list(actor, { cursor, limit: 200 })).map((i) => ({ id: i.id, ref: i.ref, ownerUserId: i.ownerUserId, unitId: i.unitId, status: i.status, amountLabel: formatMoney(i.amount), dueDate: i.dueDate }))
+    ? invoiceRecords.map((i) => ({ id: i.id, ref: i.ref, ownerUserId: i.ownerUserId, unitId: i.unitId, status: i.status, amountLabel: formatMoney(i.amount), dueDate: i.dueDate }))
     : [];
   const requests = seesRequests
     ? allRows((cursor) => repos.workOrders.list(actor, { cursor, limit: 200 })).map((w) => ({ id: w.id, ref: w.ref, requesterUserId: w.requesterUserId, unitId: w.unitId, title: w.title, status: w.status }))
@@ -74,6 +77,8 @@ export default async function PeoplePage() {
 
   const rows = residents.map((r) => {
     const unit = unitById.get(keyFor(r.tenantId, r.unitId));
+    const ledger = actor.companyAccess && seesBills ? residentInvoiceBalances(invoiceRecords, r.tenantId, r.userId, r.unitId) : null;
+    const currentBalances = ledger?.balances.length ? ledger.balances : [money(0, r.balance.currency)];
     return {
       id: r.id,
       userId: r.userId,
@@ -85,8 +90,8 @@ export default async function PeoplePage() {
       unitType: unit?.type ?? '',
       status: r.status,
       household: r.household,
-      balanceLabel: seesBills ? formatMoney(r.balance) : '—',
-      balanceOwed: seesBills && r.balance.minor > 0,
+      balanceLabel: !seesBills ? '—' : ledger ? ledger.invalid ? 'Balance requires review' : currentBalances.map(formatMoney).join(' · ') : formatMoney(r.balance),
+      balanceOwed: seesBills && (ledger ? ledger.invalid > 0 || currentBalances.some((value) => value.minor > 0) : r.balance.minor > 0),
       moveInDate: r.moveInDate,
     };
   });

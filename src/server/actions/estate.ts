@@ -18,6 +18,7 @@ import { db, recordProxyReturnNotice } from '@/server/data/store';
 import { operatingDateISO, operatingNowISO, operatingNowMs } from '@/server/operating-clock';
 import { nextDunningStage, nextTenancyStage, motionOutcome, motionTally, isEventFull, tierFor, EARN_POINTS, electionWinner, cascadeRevokeUpstream, type VoteChoice, type EarnReason } from '@/domain/estate';
 import { reviewCollectionInvoice } from '@/domain/estate/collection-review';
+import { tenancySetupState } from '@/server/reads/tenancy-setup';
 
 const PATHS = ['/community', '/collections', '/tenancy', '/parcels', '/governance', '/events', '/rewards', '/billing', '/people', '/estate', '/dashboard'];
 const revalidate = () => PATHS.forEach((p) => revalidatePath(p));
@@ -130,15 +131,20 @@ export async function recordPromise(caseId: string, amountMajor: number, dueISO:
 }
 
 /* --- tenancy -------------------------------------------------------------- */
-export async function advanceTenancy(id: string): Promise<Res> {
+export async function advanceTenancy(id: string, expectedStage?: string): Promise<Res> {
   return withDurableMutation(async () => {
   const g = await gate('users_roles'); if (!g.ok) return g;
   const t = scoped(g, db.tenancies, id);
   if (!t) return { ok: false, error: 'Tenancy not found.' };
   if (t.stage === 'closed') return { ok: false, error: 'This tenancy is closed.' };
+  const setup = tenancySetupState();
+  const managed = setup.agreements.some((row) => row.tenantId === g.actor.tenantId && row.tenancyId === t.id);
+  if ((managed || expectedStage !== undefined) && expectedStage !== t.stage) return { ok: false, error: 'This tenancy stage changed. Refresh the record before advancing it.' };
+  const previousStage = t.stage;
   t.stage = nextTenancyStage(t.stage);
   if (t.stage === 'active' && !t.moveInISO) t.moveInISO = operatingDateISO();
-  if (t.stage === 'moving_in' && t.depositStatus === 'pending') t.depositStatus = 'held';
+  // A stage change does not prove a deposit was received or transfer money.
+  setup.audit.push({ tenantId: g.actor.tenantId!, actorId: g.actor.userId, tenancyId: t.id, estateId: t.estateId, action: 'stage.changed', at: operatingNowISO(), from: previousStage, to: t.stage });
   revalidate();
   return { ok: true };
 

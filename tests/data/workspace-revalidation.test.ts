@@ -139,9 +139,8 @@ describe('workspace overview cache refresh after existing mutations', () => {
 
   it('refreshes Estate when a manager issues a charge', async () => {
     const actor = actAs('estate_manager');
-    const invoice = repos.invoices.list(actor).items[0];
+    const invoice = repos.invoices.list(actor).items.find((row) => row.status === 'draft' && row.paid.minor === 0)!;
     expect(invoice).toBeDefined();
-    invoice.status = 'draft';
     expect(await issueInvoice(invoice.ref)).toEqual({ ok: true, to: 'issued' });
     expectRefresh('/billing', '/estate', '/dashboard');
   });

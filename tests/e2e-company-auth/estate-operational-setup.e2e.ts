@@ -1,0 +1,144 @@
+import { randomUUID } from 'node:crypto';
+import { expect, test, type Page } from '@playwright/test';
+import { openDialog, selectTab } from './dialog';
+
+const dayAfter = (date: string, days: number) => new Date(Date.parse(`${date}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+async function section(page: Page, name: string | RegExp) {
+  await selectTab(page.getByRole('tab', { name, exact: typeof name === 'string' }), page.getByRole('tabpanel', { name, exact: typeof name === 'string' }));
+}
+
+test('a fresh company creates and persists invoices, recurring charges, tenancy terms and approved amenity reservations', async ({ page }) => {
+  test.setTimeout(240_000);
+  const suffix = randomUUID().slice(0, 8);
+  const propertyName = `Operating Court ${suffix}`, residentName = `Operating Resident ${suffix}`;
+  const invoiceDescription = `Initial service charge ${suffix}`, recurringDescription = `Monthly estate charge ${suffix}`, amenityName = `Community Room ${suffix}`;
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Lagos', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const tomorrow = dayAfter(today, 1);
+
+  await page.goto('/sign-up');
+  await page.getByLabel('Your full name', { exact: true }).fill('Disposable Estate Operations Owner');
+  await page.getByLabel('Email address', { exact: true }).fill(`estate-operations-${suffix}@example.test`);
+  await page.getByLabel('Company name', { exact: true }).fill(`Estate Operations Company ${suffix}`);
+  await page.getByLabel('Password', { exact: true }).fill('Disposable estate operations browser passphrase 2026!');
+  await page.getByRole('button', { name: 'Create account & company', exact: true }).click();
+  await expect(page).toHaveURL(/\/onboarding$/);
+  await page.getByRole('link', { name: 'Set up later', exact: true }).click();
+  await expect(page).toHaveURL(/\/workspaces$/);
+  await page.getByRole('link', { name: 'Enter Estate workspace', exact: true }).click();
+
+  const property = page.getByRole('dialog', { name: 'Add property', exact: true });
+  await openDialog(page.getByRole('button', { name: 'Add property', exact: true }), property);
+  await property.getByLabel('Property name', { exact: true }).fill(propertyName);
+  await property.getByLabel('Property address', { exact: true }).fill('24 Synthetic Operations Avenue, Lagos, Nigeria');
+  await property.getByLabel('Number of units', { exact: true }).fill('2');
+  await property.getByRole('button', { name: 'Add property', exact: true }).click();
+  await expect(property.getByRole('heading', { name: 'Property added', exact: true })).toBeVisible();
+  await property.getByRole('button', { name: 'Done', exact: true }).click();
+  const resident = page.getByRole('dialog', { name: 'Add tenant', exact: true });
+  await openDialog(page.getByRole('button', { name: 'Add tenant', exact: true }), resident);
+  await resident.getByLabel('Tenant full name', { exact: true }).fill(residentName);
+  await resident.getByRole('combobox', { name: 'Property and unit', exact: true }).selectOption({ label: `${propertyName} · Unit 1` });
+  await resident.getByLabel('Move-in date', { exact: true }).fill(dayAfter(today, -1));
+  await resident.getByRole('button', { name: 'Add tenant', exact: true }).click();
+  await expect(resident.getByRole('heading', { name: 'Tenant record added', exact: true })).toBeVisible();
+  await resident.getByRole('button', { name: 'Done', exact: true }).click();
+
+  // Every submission below is a single attempt; only read-only tabs and dialog
+  // openers use readiness retries on a cold development build.
+  await page.goto('/billing');
+  const invoice = page.getByRole('dialog', { name: 'Create invoice', exact: true });
+  await openDialog(page.getByRole('button', { name: 'Create invoice', exact: true }), invoice);
+  await invoice.getByRole('combobox', { name: 'Resident', exact: true }).selectOption({ label: `${residentName} · ${propertyName} · Unit 1` });
+  await invoice.getByLabel('Charge description', { exact: true }).fill(invoiceDescription);
+  await invoice.getByLabel(/^Amount \(₦\)/).fill('25000.50');
+  await invoice.getByLabel('Due date', { exact: true }).fill(dayAfter(today, 7));
+  await invoice.getByRole('button', { name: 'Save invoice draft', exact: true }).click();
+  await expect(invoice).toHaveCount(0);
+  await section(page, 'Invoices');
+  const oneOff = page.getByRole('row').filter({ hasText: invoiceDescription });
+  await expect(oneOff).toHaveCount(1); await expect(oneOff).toContainText('₦25,000.5'); await expect(oneOff).toContainText('Draft');
+  const issue = page.getByRole('dialog', { name: 'Issue invoice', exact: true });
+  await openDialog(oneOff.getByRole('button', { name: /^Issue invoice / }), issue);
+  await issue.getByRole('button', { name: 'Confirm issue invoice', exact: true }).click();
+  await expect(issue).toHaveCount(0); await expect(oneOff).toContainText('Issued');
+
+  await section(page, 'Recurring charges');
+  const recurring = page.getByRole('dialog', { name: 'Create recurring charge', exact: true });
+  await openDialog(page.getByRole('button', { name: 'Create recurring charge', exact: true }), recurring);
+  await recurring.getByRole('combobox', { name: 'Resident', exact: true }).selectOption({ label: `${residentName} · ${propertyName} · Unit 1` });
+  await recurring.getByLabel('Charge description', { exact: true }).fill(recurringDescription);
+  await recurring.getByLabel(/^Amount \(₦\)/).fill('12500.25');
+  await recurring.getByRole('combobox', { name: 'Frequency', exact: true }).selectOption('monthly');
+  await recurring.getByLabel('First cycle date', { exact: true }).fill(today);
+  await recurring.getByLabel('Due after cycle (days)', { exact: true }).fill('0');
+  await recurring.getByRole('button', { name: 'Save recurring charge', exact: true }).click();
+  await expect(recurring).toHaveCount(0);
+  await expect(page.getByRole('row').filter({ hasText: recurringDescription })).toContainText('Active');
+  const generate = page.getByRole('dialog', { name: 'Generate due invoice drafts', exact: true });
+  await openDialog(page.getByRole('button', { name: 'Generate due drafts', exact: true }), generate);
+  await generate.getByRole('button', { name: 'Confirm generate due invoice drafts', exact: true }).click();
+  await expect(generate).toHaveCount(0);
+  await expect(page.getByRole('status').filter({ hasText: '1 invoice draft generated.' })).toBeVisible();
+  await openDialog(page.getByRole('button', { name: 'Generate due drafts', exact: true }), generate);
+  await generate.getByRole('button', { name: 'Confirm generate due invoice drafts', exact: true }).click();
+  await expect(generate).toHaveCount(0);
+  await expect(page.getByRole('status').filter({ hasText: '0 invoice drafts generated.' })).toBeVisible();
+  await section(page, 'Invoices');
+  const recurringInvoice = page.getByRole('row').filter({ hasText: recurringDescription });
+  await expect(recurringInvoice).toHaveCount(1); await expect(recurringInvoice).toContainText('₦12,500.25'); await expect(recurringInvoice).toContainText('Draft');
+  await page.reload(); await section(page, 'Invoices');
+  await expect(page.getByRole('row').filter({ hasText: recurringDescription })).toHaveCount(1);
+  await expect(page.getByRole('row').filter({ hasText: invoiceDescription })).toContainText('Issued');
+
+  await page.goto('/tenancy');
+  const agreement = page.getByRole('dialog', { name: 'Create tenancy agreement', exact: true });
+  await openDialog(page.getByRole('button', { name: 'Create agreement', exact: true }), agreement);
+  await agreement.getByRole('combobox', { name: 'Resident and unit', exact: true }).selectOption({ label: `${residentName} · ${propertyName} · Unit 1` });
+  await agreement.getByLabel('Lease start', { exact: true }).fill(tomorrow);
+  await agreement.getByLabel('Lease end', { exact: true }).fill(dayAfter(tomorrow, 364));
+  await agreement.getByLabel('Rent per cycle (₦)', { exact: true }).fill('1200000.25');
+  await agreement.getByRole('combobox', { name: 'Rent cycle', exact: true }).selectOption('yearly');
+  await agreement.getByLabel('Deposit agreed (₦)', { exact: true }).fill('50000.25');
+  await agreement.getByLabel('Agreement reference (optional)', { exact: true }).fill(`AG-${suffix}`);
+  await agreement.getByLabel('Agreed terms or notes (optional)', { exact: true }).fill('Synthetic reviewed agreement terms.');
+  await agreement.getByRole('button', { name: 'Create agreement', exact: true }).click();
+  await expect(agreement).toHaveCount(0);
+  const tenancy = page.getByRole('row').filter({ hasText: residentName });
+  await expect(tenancy).toHaveCount(1); await expect(tenancy).toContainText('₦1,200,000.25'); await expect(tenancy).toContainText('₦50,000.25');
+  await expect(tenancy).toContainText('Applied'); await expect(tenancy).toContainText('Deposit due');
+  await page.reload();
+  await expect(page.getByRole('row').filter({ hasText: residentName })).toContainText('Deposit due');
+
+  await page.goto('/bookings');
+  await section(page, /^Amenities(?: \d+)?$/);
+  const amenity = page.getByRole('dialog', { name: 'Add amenity', exact: true });
+  await openDialog(page.getByRole('button', { name: 'Add amenity', exact: true }), amenity);
+  await amenity.getByRole('combobox', { name: 'Estate property', exact: true }).selectOption({ label: propertyName });
+  await amenity.getByLabel('Amenity name', { exact: true }).fill(amenityName);
+  await amenity.getByLabel('Simultaneous booking capacity', { exact: true }).fill('1');
+  await amenity.getByLabel('Fee per reservation (₦)', { exact: true }).fill('0.00');
+  await amenity.getByLabel('Opening time · WAT', { exact: true }).fill('08:00');
+  await amenity.getByLabel('Closing time · WAT', { exact: true }).fill('22:00');
+  await amenity.getByLabel('Reservation length (minutes)', { exact: true }).fill('60');
+  await amenity.getByRole('combobox', { name: 'Approval rule', exact: true }).selectOption('manual');
+  await amenity.getByRole('button', { name: 'Create amenity', exact: true }).click();
+  await expect(amenity).toHaveCount(0);
+  await expect(page.getByRole('row').filter({ hasText: amenityName })).toContainText('Manager approval');
+  const booking = page.getByRole('dialog', { name: 'New amenity booking', exact: true });
+  await openDialog(page.getByRole('button', { name: 'New booking', exact: true }), booking);
+  await booking.getByRole('combobox', { name: 'Amenity', exact: true }).selectOption({ label: `${amenityName} · ₦0.00` });
+  await booking.getByRole('combobox', { name: 'Resident and unit', exact: true }).selectOption({ label: `${residentName} · Unit 1` });
+  await booking.getByLabel('Start date and time · WAT', { exact: true }).fill(`${tomorrow}T10:00`);
+  await booking.getByRole('button', { name: 'Record booking', exact: true }).click();
+  await expect(booking).toHaveCount(0);
+  await section(page, /^Approval queue(?: \d+)?$/);
+  const review = page.getByRole('dialog', { name: 'Review booking action', exact: true });
+  await openDialog(page.getByRole('button', { name: `Review approve for ${residentName} at ${amenityName}`, exact: true }), review);
+  await review.getByRole('button', { name: 'Confirm approve', exact: true }).click();
+  await expect(review).toHaveCount(0);
+  await section(page, 'Booking register');
+  const reservation = page.getByRole('row').filter({ hasText: amenityName });
+  await expect(reservation).toHaveCount(1); await expect(reservation).toContainText('Confirmed'); await expect(reservation).toContainText('Free'); await expect(reservation).toContainText('WAT');
+  await page.reload(); await section(page, 'Booking register');
+  await expect(page.getByRole('row').filter({ hasText: amenityName })).toContainText('Confirmed');
+});

@@ -1,5 +1,5 @@
 import { requireCapability } from '@/server/guard';
-import { can } from '@/lib/authz';
+import { can, assertCan, matchesScope } from '@/lib/authz';
 import { repos } from '@/server/data';
 import { bookingMachine } from '@/domain/workflows';
 import { legalEvents } from '@/lib/legal-events';
@@ -7,6 +7,9 @@ import { PageHeader } from '@/components/ui/page-header';
 import { ScopeBanner } from '@/components/domain';
 import { BookingsWorkspace, type BookingView } from '@/components/bookings/bookings-workspace';
 import { withDurableRead } from '@/server/data/durable-records';
+import { estateAmenitiesFor } from '@/server/estate/amenities';
+import { db } from '@/server/data/store';
+import { nativeAuthEnabled } from '@/server/auth/mode';
 
 /** EM-05 — amenity bookings. An availability heatmap, per-amenity utilisation,
  *  auto-approval rule hints, conflict detection and an approval queue sit over
@@ -19,7 +22,7 @@ export default async function BookingsPage() {
   const canMutate = can(actor, 'bookings_amenities', 'transition').allowed;
 
   const bookings: BookingView[] = repos.bookings.list(actor).items.map((b) => ({
-    id: b.id,
+    id: b.id, amenityId: b.amenityId, endISO: b.endISO, estateId: b.estateId,
     amenity: b.amenity,
     residentName: b.residentName,
     status: b.status,
@@ -29,12 +32,17 @@ export default async function BookingsPage() {
     actions: legalEvents(bookingMachine, b.status, actor),
   }));
 
+  const native = nativeAuthEnabled();
+  const scope = assertCan(actor, 'bookings_amenities', 'read');
+  const sites = native ? db.sites.filter((site) => site.kind === 'estate' && matchesScope({ ...site, siteId: site.id }, scope)).map((site) => ({ id: String(site.id), name: site.name })) : [];
+  const residents = native && canMutate ? db.residents.filter((resident) => matchesScope({ ...resident, ownerUserId: resident.userId }, scope) && ['active', 'invited'].includes(resident.status)).map((resident) => ({ id: String(resident.id), name: resident.name, siteId: String(resident.siteId), unitId: String(resident.unitId), unitLabel: db.units.find((unit) => unit.tenantId === actor.tenantId && unit.id === resident.unitId)?.label ?? 'Recorded unit' })) : [];
+
   return (
     <div className="pb-page">
       <PageHeader title="Bookings" subtitle="Availability, utilisation, conflict detection and auto-approval — over the §10 booking machine"
         scope={<ScopeBanner label={actor.allEstates ? 'all estates' : `${actor.estateIds.length} estate(s)`} />}
       />
-      <BookingsWorkspace bookings={bookings} canMutate={canMutate} />
+      <BookingsWorkspace bookings={bookings} canMutate={canMutate} amenities={native ? estateAmenitiesFor(actor, true) : undefined} sites={sites} residents={residents} expectedCompanyId={actor.tenantId ?? ''} />
     </div>
   );
   });

@@ -395,6 +395,10 @@ export type MarketplaceOrder = TenantScoped & {
 export type Booking = TenantScoped & {
   id: string;
   amenity: string;
+  /** New scoped registry and duration references; legacy bookings retain snapshots. */
+  amenityId?: string;
+  endISO?: ISODateTime;
+  unitId?: UnitId;
   estateId: SiteId;
   ownerUserId: UserId;
   residentName: string;

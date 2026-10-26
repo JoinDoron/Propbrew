@@ -1,5 +1,6 @@
 import type { TenancyStage, DepositStatus } from '@/domain/estate';
 import type { Tone } from '@/lib/status-tones';
+import type { TenancyAgreementDetails } from '@/domain/estate/tenancy-setup';
 
 export type TenancyRow = {
   id: string;
@@ -13,6 +14,7 @@ export type TenancyRow = {
   rentMinor: number;
   depositMinor: number;
   depositStatus: DepositStatus;
+  agreement?: TenancyAgreementDetails;
 };
 
 export const DEPOSIT_TONE: Record<DepositStatus, Tone> = { pending: 'info', held: 'progress', partially_refunded: 'warn', refunded: 'success', withheld: 'danger' };

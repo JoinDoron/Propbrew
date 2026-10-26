@@ -27,7 +27,10 @@ import {
   type Machine,
 } from '@/domain/workflows';
 import type { Role } from '@/domain/enums';
+import { nativeAuthEnabled } from '@/server/auth/mode';
 import { nowISO } from '@/server/clock';
+import { bookingTransitionError } from '@/server/estate/amenities';
+import type { Booking } from '@/domain/entities';
 
 export type TxResult = { ok: true; to: string } | { ok: false; error: string };
 
@@ -69,11 +72,15 @@ export async function transition(machineKey: 'booking' | 'sos-event' | 'marketpl
   );
   if (!t) return { ok: false, error: `“${event}” is not a legal move from “${row.status}” for your role.` };
 
+  if (machineKey === 'booking') {
+    const blocked = bookingTransitionError(actor, row as unknown as Booking, event, t.to);
+    if (blocked) return { ok: false, error: blocked };
+  }
   const from = row.status;
   const firingRole = (actor.roles as Role[]).find((r) => (t.actors as string[]).includes(r)) ?? actor.roles[0];
 
   // Live row in the store (visible list may be a scoped copy of the same object).
-  const live = reg.rows().find((r) => r.id === id)!;
+  const live = reg.rows().find((r) => r.id === id && r.tenantId === actor.tenantId)!;
   live.status = t.to;
 
   // Machine-specific effects.
@@ -96,8 +103,17 @@ export async function transition(machineKey: 'booking' | 'sos-event' | 'marketpl
     actorRole: firingRole,
   });
 
+  // A free booking needs no payment evidence. Preserve both legal machine
+  // events instead of leaving manager-approved free reservations stranded.
+  const fee = live.fee as { minor?: number } | null | undefined;
+  if (machineKey === 'booking' && event === 'APPROVE' && (fee === null || fee?.minor === 0)) {
+    const confirm = bookingMachine.transitions.find((candidate) => candidate.from === 'approved' && candidate.event === 'CONFIRM' && candidate.actors.includes('system_rule'));
+    if (!confirm) throw new Error('The fee-free confirmation rule is unavailable.');
+    live.status = confirm.to;
+    recordHistory('booking', id, { at: nowISO(), event: 'CONFIRM', from: 'approved', to: confirm.to, actorId: 'system:amenity-confirm', actorName: 'Fee-free booking rule', actorRole: 'system_rule', note: 'No fee is due; manager approval confirmed this reservation.' });
+  }
   reg.paths.forEach((p) => revalidatePath(p));
-  return { ok: true, to: t.to };
+  return { ok: true, to: live.status };
 
   }, 'estate');
 }
@@ -109,9 +125,10 @@ function readerFor(machineKey: 'booking' | 'sos-event' | 'marketplace-order'): '
 /* --- billing (EM-01 / SC-02) ---------------------------------------------- */
 
 /** Manager issues a draft charge (Draft → Issued). */
-export async function issueInvoice(ref: string): Promise<TxResult> {
+export async function issueInvoice(ref: string, expectedCompanyId?: string): Promise<TxResult> {
   return withDurableMutation(async () => {
   const actor = await getActor();
+  if ((nativeAuthEnabled() || expectedCompanyId !== undefined) && expectedCompanyId !== actor.tenantId) return { ok: false, error: 'Your company changed. Reopen Billing before issuing this charge.' };
   try {
     assertCan(actor, 'charges_invoicing', 'transition');
   } catch (e) {
@@ -120,7 +137,10 @@ export async function issueInvoice(ref: string): Promise<TxResult> {
   }
   const inv = repos.invoices.getByRef(actor, ref);
   if (!inv) return { ok: false, error: 'Invoice not found.' };
-  const live = db.invoices.find((i) => i.id === inv.id)!;
+  const live = db.invoices.find((i) => i.id === inv.id && i.tenantId === actor.tenantId);
+  const resident = live && db.residents.find((row) => row.tenantId === actor.tenantId && row.userId === live.ownerUserId && row.unitId === live.unitId && row.siteId === live.estateId && ['active', 'invited'].includes(row.status));
+  const unit = resident && db.units.find((row) => row.tenantId === actor.tenantId && row.id === resident.unitId && row.siteId === resident.siteId && ['occupied', 'reserved'].includes(row.occupancy));
+  if (!live || !resident || !unit || !Number.isSafeInteger(live.amount.minor) || live.amount.minor <= 0 || live.paid.minor !== 0 || live.amount.currency !== live.paid.currency) return { ok: false, error: 'Review the resident, unit and exact unpaid draft amount before issuing this charge.' };
   const t = fire(serviceChargeMachine, live.status, 'ISSUE', ['estate_manager'], actor.roles as Role[]);
   if (!t) return { ok: false, error: `Cannot issue from “${live.status}”.` };
   live.status = t as typeof live.status;

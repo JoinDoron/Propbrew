@@ -178,10 +178,10 @@ describe('Clinexa-aligned Tenancy workspace', () => {
     expect(source).toContain("if (!canMutate || pending || !advancing || advancing.stage === 'closed') return;");
     expect(source).toContain('canMutate && settleFor && canRecordDeposit(settleFor) && <TenancyDepositDialog');
     expect(source).toContain('canMutate && advancing && <PortalDialog');
-    expect(source).toContain('advanceTenancy(t.id)');
+    expect(source).toContain('advanceTenancy(t.id, t.stage)');
     expect(source).toContain('Confirm stage change');
-    expect(source).toContain('The pending deposit will be marked as held.');
-    expect(source).toContain('Verify the deposit receipt before continuing.');
+    expect(source).toContain('The deposit stays marked as due.');
+    expect(source).toContain('Verify any deposit against the underlying payment records.');
     expect(source).toContain('A move-in date will be recorded.');
     expect(source).toContain('not a newly entered move-in date.');
     expect(source).toContain('No automated housing decisions.');

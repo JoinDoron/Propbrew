@@ -65,6 +65,10 @@ Completing native setup commits the profile, first property, one initial buildin
 
 The native draft and completion live in the existing tenant-isolated `workspace_records` auxiliary state, so this release needs no additional SQL migration. They survive logout/login and application restarts. The older Clerk/local setup adapter retains its separate pending-activation behaviour and never supplies native-company authority.
 
+## Estate operating setup
+
+Native Estate managers can create and issue invoice drafts, configure recurring draft schedules, record tenancy agreements and configure bookable amenities. See [Estate operating setup](ESTATE_OPERATIONS.md) for controls, migration 012, the Railway background worker and verification. Provider payment/message activation remains separate.
+
 ## Editable private demo sandboxes
 
 Sign-up and login offer Estate, Facility, Shortlet and Construction demo entry.

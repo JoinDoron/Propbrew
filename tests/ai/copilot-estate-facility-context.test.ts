@@ -247,3 +247,17 @@ describe('module context entry boundaries', () => {
     expect(fixture.calls).toHaveLength(0);
   });
 });
+
+it('uses the native current clock and issued-only receivables after Estate setup', async () => {
+  vi.stubEnv('PROPBREW_AUTH_MODE', 'company');
+  try {
+    fixture.rows.invoices = [invoice('issued-new', 10050), { ...invoice('draft-proposal', 999999), status: 'draft' }];
+    fixture.rows.residents = [{ id: 'resident-a', tenantId: 'tenant-a', userId: 'private-owner-id', siteId: 'estate-a', unitId: 'unit-a', name: 'Authorised resident', status: 'active', household: 1, moveInDate: '2026-01-01', balance: { minor: 999999, currency: 'NGN' } }];
+    const context = await buildEstateContext(manager);
+    const totals = context.facts.invoiceTotals as { byCurrency: { billedMinor: number }[] };
+    expect(totals.byCurrency[0].billedMinor).toBe(10050);
+    const residents = context.facts.residents as { recordedBalance?: unknown; loadedInvoiceBalances: { balances: { minor: number }[] } }[];
+    expect(residents[0].loadedInvoiceBalances.balances[0].minor).toBe(10050); expect(residents[0].recordedBalance).toBeUndefined();
+    expect(Math.abs(Date.now() - Date.parse(context.snapshotISO))).toBeLessThan(60_000);
+  } finally { vi.unstubAllEnvs(); }
+});

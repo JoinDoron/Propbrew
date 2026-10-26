@@ -13,6 +13,7 @@ import type { Invoice } from '@/domain/entities';
 import type { CurrencyCode } from '@/domain/primitives';
 import { sendReminderCampaign } from '@/server/actions/billing';
 import styles from './billing-workspace.module.css';
+import { InvoiceCreateButton, InvoiceIssueButton, InvoiceEditButton, RecurringChargesPanel, type BillingSetupProps } from './estate-billing-setup';
 
 const currencyNames: Record<CurrencyCode, string> = { NGN: 'NGN · Nigerian naira', USD: 'USD · US dollar', GHS: 'GHS · Ghanaian cedi', KES: 'KES · Kenyan shilling' };
 const balance = (invoice: Invoice) => Math.max(0, invoice.amount.minor - invoice.paid.minor);
@@ -20,7 +21,7 @@ const money = (minor: number, currency: CurrencyCode) => new Intl.NumberFormat('
 const compactMoney = (minor: number, currency: CurrencyCode) => new Intl.NumberFormat('en-NG', { style: 'currency', currency, notation: 'compact', maximumFractionDigits: 1 }).format(minor / 100);
 const riskLabel = (risk: DefaulterRisk) => risk.band === 'ok' ? 'Low risk' : risk.band === 'watch' ? 'Watch' : 'High risk';
 
-export function BillingWorkspace({ invoices, canMutate }: { invoices: Invoice[]; canMutate: boolean }) {
+export function BillingWorkspace({ invoices, canMutate, setup }: { invoices: Invoice[]; canMutate: boolean; setup?: BillingSetupProps }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [selected, setSelected] = useState<string | null>(null);
@@ -28,6 +29,7 @@ export function BillingWorkspace({ invoices, canMutate }: { invoices: Invoice[];
   const [toast, setToast] = useState<string | null>(null);
   const [chosenCurrency, setChosenCurrency] = useState<CurrencyCode | null>(null);
   const [query, setQuery] = useState('');
+  const [pageTab, setPageTab] = useState('overview');
   const [status, setStatus] = useState('all');
   const currencies = useMemo(() => [...new Set(invoices.map((invoice) => invoice.amount.currency))].sort(), [invoices]);
   const currency = chosenCurrency && currencies.includes(chosenCurrency) ? chosenCurrency : currencies.includes('NGN') ? 'NGN' : currencies[0] ?? 'NGN';
@@ -64,12 +66,13 @@ export function BillingWorkspace({ invoices, canMutate }: { invoices: Invoice[];
 
   return <div className="pb-section">
     <div className={styles.context}>
+      {canMutate && setup && <InvoiceCreateButton companyId={setup.companyId} residents={setup.residents} onCreated={() => { setChosenCurrency('NGN'); setStatus('all'); setQuery(''); setPageTab('invoices'); }} />}
       <p className={styles.metadata}>{currencyInvoices.length} recorded invoice{currencyInvoices.length === 1 ? '' : 's'} · Amounts in {currency}</p>
       <label className={styles.currency}>Currency<select value={currency} disabled={currencies.length < 2} onChange={(event) => { setChosenCurrency(event.target.value as CurrencyCode); setSelected(null); setCampaign(null); }}>
         {(currencies.length ? currencies : ['NGN'] as CurrencyCode[]).map((code) => <option key={code} value={code}>{currencyNames[code]}</option>)}
       </select></label>
     </div>
-    <PageTabs label="Billing sections" items={[
+    <PageTabs label="Billing sections" activeTab={pageTab} onTabChange={setPageTab} items={[
       { id: 'overview', label: 'Overview', content: <div className="pb-section">
         <div className={styles.metrics}>
           <KpiCard label="Total billed" value={compactMoney(forecast.billedMinor, currency)} icon={<FileText size={18} />} />
@@ -112,13 +115,14 @@ export function BillingWorkspace({ invoices, canMutate }: { invoices: Invoice[];
                 <td><time dateTime={invoice.dueDate}>{formatDate(invoice.dueDate)}</time></td><td><DomainStatus type="invoice" status={invoice.status} /></td>
                 <td className={styles.numeric}>{amount(invoice.amount.minor)}</td><td className={styles.numeric}>{invoice.status === 'draft' ? <span className={styles.metadata}>Not issued</span> : amount(balance(invoice))}</td>
                 <td>{invoice.status === 'draft' ? <span className={styles.metadata}>—</span> : balance(invoice) === 0 ? <span className={styles.metadata}>Settled</span> : invoice.agingDays > 0 ? <span className="text-warning">{invoice.agingDays}d overdue</span> : <span className={styles.metadata}>Current</span>}</td>
-                <td className={styles.rowAction}><Button variant="ghost" aria-label={`View statement for ${invoice.residentName}, ${invoice.ref}`} onClick={() => setSelected(String(invoice.ownerUserId))}>View <ArrowUpRight size={15} aria-hidden="true" /></Button></td>
+                <td className={styles.rowAction}>{canMutate && setup && invoice.status === 'draft' && <><InvoiceEditButton companyId={setup.companyId} invoice={invoice} /><InvoiceIssueButton companyId={setup.companyId} invoice={invoice} /></>}<Button variant="ghost" aria-label={`View statement for ${invoice.residentName}, ${invoice.ref}`} onClick={() => setSelected(String(invoice.ownerUserId))}>View <ArrowUpRight size={15} aria-hidden="true" /></Button></td>
               </tr>)}</tbody>
             </table>
           </div> : <EmptyState icon={<FileText size={22} />} title={currencyInvoices.length ? 'No matching invoices' : 'No invoices recorded'} description={currencyInvoices.length ? 'Try another resident, invoice reference or status.' : 'Invoices in your estate scope will appear here.'} action={currencyInvoices.length ? <Button onClick={() => { setQuery(''); setStatus('all'); }}>Clear filters</Button> : undefined} />}
           <p className={styles.registerFooter}>Showing {visibleInvoices.length} of {currencyInvoices.length} recorded invoices · {currency} · Drafts are excluded from collection totals.</p>
         </Card>
       </div> },
+      ...(setup ? [{ id: 'recurring', label: 'Recurring charges', content: <RecurringChargesPanel {...setup} /> }] : []),
       { id: 'risk', label: 'Risk & reminders', content: <div className="pb-section">
         <div className={styles.notice}><ShieldCheck size={18} aria-hidden="true" /><p>Review signals, not automatic decisions.<span>Risk scores use recorded arrears and invoice status. A manager must review any follow-up; penalties are never automatic.</span></p></div>
         <Card padded={false} className={styles.panel}>

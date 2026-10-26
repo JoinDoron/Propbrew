@@ -38,14 +38,14 @@ export function PayButton({ invoiceRef }: { invoiceRef: string }) {
   );
 }
 
-export function IssueButton({ invoiceRef }: { invoiceRef: string }) {
+export function IssueButton({ invoiceRef, companyId }: { invoiceRef: string; companyId?: string }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   return (
     <button
       disabled={pending}
       onClick={() => start(async () => {
-        await issueInvoice(invoiceRef);
+        await issueInvoice(invoiceRef, companyId);
         router.refresh();
       })}
       className="pb-action h-7 px-2.5 rounded-lg text-[12px] font-medium border border-border bg-surface text-primary hover:bg-surface-2 transition-colors disabled:opacity-50"

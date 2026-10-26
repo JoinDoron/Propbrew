@@ -1,13 +1,16 @@
 'use client';
 
+import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, ArrowUpRight, CalendarClock, Home, Info, KeyRound, LogIn, Search, ShieldCheck, Wallet, X } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, CalendarClock, Home, Info, KeyRound, LogIn, Search, ShieldCheck, Wallet, X, Plus, Pencil } from 'lucide-react';
 import { Avatar, Button, Card, CardHeader, EmptyState, IconButton, KpiCard, StatusPill } from '@/components/ui';
 import { PageTabs } from '@/components/ui/page-tabs';
 import { PortalDialog } from '@/components/portal/portal-dialog';
 import { TENANCY_FLOW, TENANCY_LABEL, tenancyStageTone, leaseRunwayDays, nextTenancyStage, type DepositStatus } from '@/domain/estate';
 import { advanceTenancy } from '@/server/actions/estate';
+import { TenancySetupDialog } from './tenancy-setup-dialog';
+import { RENT_FREQUENCY_LABELS, type TenancyResidentOption } from '@/domain/estate/tenancy-setup';
 import { TenancyDepositDialog } from './tenancy-deposit-dialog';
 import { tenancyMoney as money, tenancyDate, canRecordDeposit, DEPOSIT_LABEL, DEPOSIT_TONE, type TenancyRow } from './tenancy-types';
 import styles from './tenancy-workspace.module.css';
@@ -23,17 +26,21 @@ function runwayLabel(days: number) {
   return days < 0 ? `Expired ${-days}d ago` : days === 0 ? 'Due at snapshot' : `${days}d remaining`;
 }
 
-export function TenancyWorkspace({ tenancies, kpis, nowMs, canMutate }: {
+export function TenancyWorkspace({ tenancies, kpis, nowMs, canMutate, companyScope, residents = [] }: {
   tenancies: TenancyRow[];
   kpis: { active: number; inMotion: number; renewalsSoon: number; depositExposureMinor: number };
   nowMs: number;
   canMutate: boolean;
+  companyScope?: string;
+  residents?: TenancyResidentOption[];
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [advanceFor, setAdvanceFor] = useState<string | null>(null);
   const [settleFor, setSettleFor] = useState<TenancyRow | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [editFor, setEditFor] = useState<TenancyRow | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [stage, setStage] = useState('all');
@@ -53,7 +60,7 @@ export function TenancyWorkspace({ tenancies, kpis, nowMs, canMutate }: {
     const t = advancing;
     start(async () => {
       try {
-        const result = await advanceTenancy(t.id);
+        const result = await advanceTenancy(t.id, t.stage);
         if (!result.ok) { setMessage(result.error); return; }
         setAdvanceFor(null);
         setMessage(`Tenancy stage recorded as ${TENANCY_LABEL[nextTenancyStage(t.stage)]}.`);
@@ -63,7 +70,8 @@ export function TenancyWorkspace({ tenancies, kpis, nowMs, canMutate }: {
   }
 
   return <div className="pb-section">
-    <div className={styles.context}><p className={styles.metadata}>{tenancies.length} recorded tenanc{tenancies.length === 1 ? 'y' : 'ies'} · NGN (₦) · Snapshot {snapshotISO ? <time dateTime={snapshotISO}>{tenancyDate(snapshotISO)}</time> : 'date unavailable'}</p><StatusPill status={canMutate ? 'Manager access' : 'Read-only access'} tone="info" /></div>
+    <div className={styles.context}><p className={styles.metadata}>{tenancies.length} recorded tenanc{tenancies.length === 1 ? 'y' : 'ies'} · NGN (₦) · Snapshot {snapshotISO ? <time dateTime={snapshotISO}>{tenancyDate(snapshotISO)}</time> : 'date unavailable'}</p><div className={styles.setupActions}><StatusPill status={canMutate ? 'Manager access' : 'Read-only access'} tone="info" />{canMutate && companyScope && <Button variant="primary" icon={<Plus size={16} />} onClick={() => setCreating(true)} disabled={!residents.length}>Create agreement</Button>}</div></div>
+    {canMutate && companyScope && !residents.length && <p className={styles.metadata}>Add a tenant to a property unit before creating an agreement. <Link href="/people">Open Residents</Link></p>}
     <PageTabs label="Tenancy sections" items={[
       { id: 'tenancies', label: 'Tenancies', content: <div className="pb-section">
         <Card padded={false} className={styles.panel}>
@@ -71,12 +79,12 @@ export function TenancyWorkspace({ tenancies, kpis, nowMs, canMutate }: {
             <div className={styles.toolbar}><label className={styles.search}><Search size={17} aria-hidden="true" /><span className="sr-only">Search tenancies</span><input type="search" placeholder="Search resident or unit…" value={query} onChange={(event) => setQuery(event.target.value)} /></label><label className={styles.stageFilter}><span className="sr-only">Tenancy stage</span><select value={stage} onChange={(event) => setStage(event.target.value)}><option value="all">All stages</option>{TENANCY_FLOW.map((s) => <option key={s} value={s}>{TENANCY_LABEL[s]}</option>)}</select></label></div>
           </div>
           {filtered.length ? <div className="pb-table-scroll" role="region" aria-label="Tenancy register" tabIndex={0}><table className={`pb-data-table ${styles.tenancyTable}`}>
-            <thead><tr>{['Resident / unit', 'Annual rent', 'Current stage', 'Lease end', 'Recorded deposit', 'Record'].map((heading) => <th key={heading} scope="col" className={heading === 'Annual rent' ? styles.numeric : undefined}>{heading}</th>)}</tr></thead>
+            <thead><tr>{['Resident / unit', 'Rent / cycle', 'Current stage', 'Lease end', 'Recorded deposit', 'Record'].map((heading) => <th key={heading} scope="col" className={heading === 'Rent / cycle' ? styles.numeric : undefined}>{heading}</th>)}</tr></thead>
             <tbody>{filtered.map((t) => {
               const days = runway(t, nowMs);
               return <tr key={t.id}>
                 <td><div className={styles.person}><Avatar name={t.residentName} size={32} /><div><span className={styles.recordTitle}>{t.residentName}</span><span className={styles.metadata}>{t.unitLabel}</span></div></div></td>
-                <td className={styles.numeric}>{money(t.rentMinor)}</td><td><StatusPill status={TENANCY_LABEL[t.stage]} tone={tenancyStageTone(t.stage)} /></td>
+                <td className={styles.numeric}>{money(t.rentMinor)}<span className={styles.metadata} style={{ display: 'block' }}>{RENT_FREQUENCY_LABELS[t.agreement?.rentFrequency ?? 'yearly']}</span></td><td><StatusPill status={TENANCY_LABEL[t.stage]} tone={tenancyStageTone(t.stage)} /></td>
                 <td>{t.leaseEndISO ? <div className={styles.signal}><time dateTime={t.leaseEndISO}>{tenancyDate(t.leaseEndISO)}</time>{t.stage === 'active' && days !== null && <span className={days <= 45 ? styles.renewalWarning : styles.metadata}>{runwayLabel(days)}</span>}</div> : <span className={styles.metadata}>Not recorded</span>}</td>
                 <td><div className={styles.signal}><span className={styles.recordTitle}>{money(t.depositMinor)}</span><StatusPill status={DEPOSIT_LABEL[t.depositStatus]} tone={DEPOSIT_TONE[t.depositStatus]} /></div></td>
                 <td className={styles.rowAction}><Button variant="ghost" aria-label={`View tenancy for ${t.residentName}, ${t.unitLabel}`} onClick={() => openTenancy(t)}>View <ArrowUpRight size={15} aria-hidden="true" /></Button></td>
@@ -115,16 +123,18 @@ export function TenancyWorkspace({ tenancies, kpis, nowMs, canMutate }: {
       <div className={styles.drawer}><header className={styles.dialogHeader}><div className={styles.person}><Avatar name={selected.residentName} size={40} /><div><h2 className={styles.dialogTitle}>{selected.residentName}</h2><p className={styles.metadata}>{selected.unitLabel}</p></div></div><IconButton aria-label="Close tenancy record" disabled={pending} onClick={() => setSelectedId(null)}><X size={18} /></IconButton></header>
         <div className={styles.dialogBody}>
           {message && !advanceFor && !settleFor && <TenancyFeedback message={message} onDismiss={() => setMessage(null)} />}
-          <div className={styles.identitySummary}><StatusPill status={TENANCY_LABEL[selected.stage]} tone={tenancyStageTone(selected.stage)} /><span className={styles.metadata}>Annual rent · NGN</span><span className={styles.rentValue}>{money(selected.rentMinor)}</span></div>
+          <div className={styles.identitySummary}><StatusPill status={TENANCY_LABEL[selected.stage]} tone={tenancyStageTone(selected.stage)} /><span className={styles.metadata}>{RENT_FREQUENCY_LABELS[selected.agreement?.rentFrequency ?? 'yearly']} rent · NGN</span><span className={styles.rentValue}>{money(selected.rentMinor)}</span></div>
           <section aria-label="Lease dates"><h3 className={styles.sectionTitle}>Lease dates</h3><dl className={styles.facts}>{[['Applied', selected.applicationISO], ['Move-in date', selected.moveInISO], ['Lease end', selected.leaseEndISO], ['Move-out date', selected.moveOutISO]].map(([label, date]) => <div key={label}><dt>{label}</dt><dd>{date ? <time dateTime={date}>{tenancyDate(date)}</time> : 'Not recorded'}</dd></div>)}</dl>{selected.stage === 'active' && runway(selected, nowMs) !== null && <p className={styles.leaseNote}><CalendarClock size={16} aria-hidden="true" /><span>{runwayLabel(runway(selected, nowMs)!)} · As of {snapshotISO ? tenancyDate(snapshotISO) : 'snapshot'}</span></p>}</section>
+          {selected.agreement && <section aria-label="Agreement terms"><h3 className={styles.sectionTitle}>Agreement terms</h3><dl className={styles.facts}><div><dt>Rent cycle</dt><dd>{RENT_FREQUENCY_LABELS[selected.agreement.rentFrequency]}</dd></div><div><dt>Reference</dt><dd>{selected.agreement.agreementReference || 'Not recorded'}</dd></div><div><dt>Terms version</dt><dd>{selected.agreement.version}</dd></div></dl>{selected.agreement.notes && <p className={styles.footnote} style={{ whiteSpace: 'pre-wrap' }}>{selected.agreement.notes}</p>}<p className={styles.footnote}>These are recorded terms. No legal signature or deposit receipt is created by this record.</p></section>}
           <section aria-label="Tenancy lifecycle"><h3 className={styles.sectionTitle}>Tenancy lifecycle</h3><ol className={styles.lifecycleList}>{TENANCY_FLOW.map((s, index) => <li key={s} className={styles.lifecycleItem} data-current={s === selected.stage} aria-current={s === selected.stage ? 'step' : undefined}><span className={styles.stageNumber}>{index + 1}</span><span>{TENANCY_LABEL[s]}</span>{s === selected.stage && <span className={styles.currentLabel}>Current stage</span>}</li>)}</ol></section>
           <section aria-label="Deposit record"><div className={styles.sectionHeader}><h3 className={styles.sectionTitle}>Deposit record</h3><StatusPill status={DEPOSIT_LABEL[selected.depositStatus]} tone={DEPOSIT_TONE[selected.depositStatus]} /></div><div className={styles.depositPanel}><span className={styles.metadata}>Recorded deposit amount</span><span className={styles.depositValue}>{money(selected.depositMinor)}</span></div><p className={styles.footnote}>A status flag is not proof of receipt or payment. Actual refund amounts and payment evidence are not stored in this record.</p></section>
-          {canMutate ? <div className={styles.recordActions}>{selected.stage !== 'closed' && <Button variant="primary" icon={<ArrowRight size={16} />} disabled={pending} onClick={() => { setMessage(null); setAdvanceFor(selected.id); }}>Review next stage</Button>}{canRecordDeposit(selected) && <Button icon={<KeyRound size={16} />} disabled={pending} onClick={() => { setMessage(null); setSettleFor(selected); }}>Record deposit settlement</Button>}{selected.stage === 'closed' && !canRecordDeposit(selected) && <p className={styles.metadata}>This tenancy is closed. No further lifecycle action is available.</p>}</div> : <p className={styles.bodySecondary}>Read-only access. An authorised operator can update this tenancy.</p>}
+          {canMutate ? <div className={styles.recordActions}>{selected.agreement && companyScope && ['applied', 'screening'].includes(selected.stage) && <Button icon={<Pencil size={16} />} onClick={() => { setSelectedId(null); setEditFor(selected); }}>Edit draft agreement</Button>}{selected.stage !== 'closed' && <Button variant="primary" icon={<ArrowRight size={16} />} disabled={pending} onClick={() => { setMessage(null); setAdvanceFor(selected.id); }}>Review next stage</Button>}{canRecordDeposit(selected) && <Button icon={<KeyRound size={16} />} disabled={pending} onClick={() => { setMessage(null); setSettleFor(selected); }}>Record deposit settlement</Button>}{selected.stage === 'closed' && !canRecordDeposit(selected) && <p className={styles.metadata}>This tenancy is closed. No further lifecycle action is available.</p>}</div> : <p className={styles.bodySecondary}>Read-only access. An authorised operator can update this tenancy.</p>}
           <p className={styles.safetyNote}><ShieldCheck size={16} aria-hidden="true" />Lifecycle changes require human review. No automated housing decisions.</p>
         </div>
       </div>
     </PortalDialog>}
 
+    {canMutate && companyScope && (creating || editFor) && <TenancySetupDialog companyScope={companyScope} residents={residents} agreement={editFor ?? undefined} onClose={() => { setCreating(false); setEditFor(null); }} onDone={() => { setCreating(false); setEditFor(null); setMessage('Tenancy agreement saved to your company.'); router.refresh(); }} />}
     {canMutate && settleFor && canRecordDeposit(settleFor) && <TenancyDepositDialog t={settleFor} onClose={() => setSettleFor(null)} onDone={() => { setSettleFor(null); setMessage('Deposit status recorded. No money was transferred.'); router.refresh(); }} />}
     {canMutate && advancing && <PortalDialog label="Review tenancy stage change" width={540} canClose={!pending} onClose={() => setAdvanceFor(null)}>
       <div className={styles.modal}><header className={styles.dialogHeader}><div><h2 className={styles.dialogTitle}>Review tenancy stage change</h2><p className={styles.metadata}>{advancing.residentName} · {advancing.unitLabel}</p></div><IconButton aria-label="Close tenancy confirmation" disabled={pending} onClick={() => setAdvanceFor(null)}><X size={18} /></IconButton></header>
@@ -132,7 +142,7 @@ export function TenancyWorkspace({ tenancies, kpis, nowMs, canMutate }: {
           {message && <TenancyFeedback message={message} onDismiss={() => setMessage(null)} />}
           <div className={styles.stageChange}><StatusPill status={TENANCY_LABEL[advancing.stage]} tone={tenancyStageTone(advancing.stage)} /><ArrowRight size={18} aria-label="moves to" /><StatusPill status={TENANCY_LABEL[nextTenancyStage(advancing.stage)]} tone={tenancyStageTone(nextTenancyStage(advancing.stage))} /></div>
           <p className={styles.bodySecondary}>Check the lease, agreed dates and supporting records before saving. This changes the recorded lifecycle stage, not the lease contract or payment ledger.</p>
-          {nextTenancyStage(advancing.stage) === 'moving_in' && advancing.depositStatus === 'pending' && <div className={styles.notice}><Info size={18} aria-hidden="true" /><p>The pending deposit will be marked as held.<span>The current workflow changes this flag automatically at Moving in. Verify the deposit receipt before continuing.</span></p></div>}
+          {nextTenancyStage(advancing.stage) === 'moving_in' && advancing.depositStatus === 'pending' && <div className={styles.notice}><Info size={18} aria-hidden="true" /><p>The deposit stays marked as due.<span>A tenancy stage change does not confirm receipt. Verify any deposit against the underlying payment records.</span></p></div>}
           {nextTenancyStage(advancing.stage) === 'active' && !advancing.moveInISO && <div className={styles.notice}><Info size={18} aria-hidden="true" /><p>A move-in date will be recorded.<span>The current workflow uses the workspace reference date{snapshotISO ? ` (${tenancyDate(snapshotISO)})` : ''}, not a newly entered move-in date.</span></p></div>}
           <div className={styles.dialogActions}><Button disabled={pending} onClick={() => setAdvanceFor(null)}>Cancel</Button><Button variant="primary" disabled={pending || advancing.stage === 'closed'} onClick={confirmAdvance}>{pending ? 'Saving…' : 'Confirm stage change'}</Button></div>
         </div>
