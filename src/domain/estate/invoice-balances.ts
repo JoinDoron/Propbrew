@@ -16,3 +16,8 @@ export function residentInvoiceBalances(invoices: readonly Invoice[], tenantId: 
   }
   return { balances: [...groups].map(([currency, minor]) => money(minor, currency)), invalid };
 }
+
+/** Native operational ledgers retain kobo in every displayed balance. */
+export function formatInvoiceMoney(value: Money): string {
+  return new Intl.NumberFormat('en-NG', { style: 'currency', currency: value.currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value.minor / 100);
+}

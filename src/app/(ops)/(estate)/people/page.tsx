@@ -14,7 +14,7 @@ import { NOW } from '@/domain/ppm';
 import { isReviewActor, reviewModeEnabled } from '@/server/review-auth';
 import { withDurableRead } from '@/server/data/durable-records';
 import { nativeEstateCreationReady } from '@/server/data/company-estate-access';
-import { residentInvoiceBalances } from '@/domain/estate/invoice-balances';
+import { residentInvoiceBalances, formatInvoiceMoney } from '@/domain/estate/invoice-balances';
 import { money } from '@/domain/primitives';
 
 function allRows<T>(read: (cursor?: string | null) => Page<T>): T[] {
@@ -47,7 +47,7 @@ export default async function PeoplePage() {
 
   const invoiceRecords = seesBills ? allRows((cursor) => repos.invoices.list(actor, { cursor, limit: 200 })) : [];
   const bills = seesBills
-    ? invoiceRecords.map((i) => ({ id: i.id, ref: i.ref, ownerUserId: i.ownerUserId, unitId: i.unitId, status: i.status, amountLabel: formatMoney(i.amount), dueDate: i.dueDate }))
+    ? invoiceRecords.map((i) => ({ id: i.id, ref: i.ref, ownerUserId: i.ownerUserId, unitId: i.unitId, status: i.status, amountLabel: actor.companyAccess ? formatInvoiceMoney(i.amount) : formatMoney(i.amount), dueDate: i.dueDate }))
     : [];
   const requests = seesRequests
     ? allRows((cursor) => repos.workOrders.list(actor, { cursor, limit: 200 })).map((w) => ({ id: w.id, ref: w.ref, requesterUserId: w.requesterUserId, unitId: w.unitId, title: w.title, status: w.status }))
@@ -90,7 +90,7 @@ export default async function PeoplePage() {
       unitType: unit?.type ?? '',
       status: r.status,
       household: r.household,
-      balanceLabel: !seesBills ? '—' : ledger ? ledger.invalid ? 'Balance requires review' : currentBalances.map(formatMoney).join(' · ') : formatMoney(r.balance),
+      balanceLabel: !seesBills ? '—' : ledger ? ledger.invalid ? 'Balance requires review' : currentBalances.map(formatInvoiceMoney).join(' · ') : formatMoney(r.balance),
       balanceOwed: seesBills && (ledger ? ledger.invalid > 0 || currentBalances.some((value) => value.minor > 0) : r.balance.minor > 0),
       moveInDate: r.moveInDate,
     };

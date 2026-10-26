@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { Invoice } from '@/domain/entities';
-import { residentInvoiceBalances } from '@/domain/estate/invoice-balances';
+import { residentInvoiceBalances, formatInvoiceMoney } from '@/domain/estate/invoice-balances';
 const invoice = (values: Partial<Invoice> = {}) => ({ tenantId: 'a', ownerUserId: 'resident', unitId: 'unit', status: 'issued', amount: { minor: 1250050, currency: 'NGN' }, paid: { minor: 1000000, currency: 'NGN' }, ...values } as Invoice);
 const totals = (rows: Invoice[]) => residentInvoiceBalances(rows, 'a', 'resident', 'unit');
 describe('resident invoice-derived balances', () => {
+  it('retains kobo when an issued resident balance is displayed', () => {
+    expect(formatInvoiceMoney({ minor: 1250050, currency: 'NGN' })).toBe('₦12,500.50');
+    expect(formatInvoiceMoney({ minor: 1, currency: 'NGN' })).toBe('₦0.01');
+  });
   it('includes issued balances and excludes draft proposals, other units and foreign companies', () => {
     expect(totals([invoice(), invoice({ status: 'draft' }), invoice({ tenantId: 'b' as Invoice['tenantId'] }), invoice({ unitId: 'other' as Invoice['unitId'] })])).toEqual({ balances: [{ minor: 250050, currency: 'NGN' }], invalid: 0 });
   });
