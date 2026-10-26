@@ -153,7 +153,7 @@ describe('Complete Shortlet Clinexa design coverage', () => {
     expect(helper).toContain("role={switchLabel ? 'switch' : undefined}");
     expect(helper).toContain('aria-checked={switchLabel ? checked : undefined}');
     const primitives = read('src/components/ui/primitives.module.css');
-    expect(primitives).toContain('min-height: 40px');
+    expect(primitives).toContain('min-height: var(--control-height)');
     expect(primitives).toContain('min-height: 44px');
     const plan = component('plan-workspace');
     expect(plan).toContain('aria-label="Annual billing"');

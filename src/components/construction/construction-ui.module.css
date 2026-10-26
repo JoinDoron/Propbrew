@@ -2,7 +2,7 @@
 .workspace .workspace > [data-construction-snapshot] { display: none; }
 .section { min-width: 0; }
 .panel { min-width: 0; overflow: hidden; }
-.panelHeader { background: var(--surface-2); }
+.panelHeader { background: var(--surface); }
 .panelHeader > div { margin-bottom: 0; }
 .metric { min-width: 0; }
 .metric > div > div:last-child { min-height: 76px; display: flex; flex-direction: column; justify-content: center; }
@@ -10,16 +10,16 @@
 .summary { min-width: 0; }
 .summary h2 { margin-top: 4px; font-size: 20px; line-height: 1.5; font-weight: 500; letter-spacing: -.03em; }
 .summary :global(.construction-summary-icon) { display: inline-grid; place-items: center; flex: none; width: 44px; height: 44px; border-radius: var(--radius-control); background: var(--primary-weak); color: var(--primary); }
-.workspace :global(.pb-section) { min-width: 0; gap: 24px; }
-.workspace :global(.pb-form-control) { min-height: 40px; border: 1px solid var(--border); border-radius: var(--radius-control); padding: 8px 12px; font-size: 14px; line-height: 1.5; }
+.workspace :global(.pb-section) { min-width: 0; gap: var(--layout-gap); }
+.workspace :global(.pb-form-control) { min-height: 38px; border: 1px solid var(--border); border-radius: var(--radius-control); padding: 7px 11px; font-size: 13px; line-height: 1.5; }
 .workspace :global(.pb-form-label) { display: block; margin-bottom: 8px; font-size: 13px; line-height: 1.5; font-weight: 500; text-transform: none; letter-spacing: normal; color: var(--text); }
-.workspace :global(.pb-search) { min-height: 40px; border-color: var(--border); border-radius: var(--radius-control); }
+.workspace :global(.pb-search) { min-height: 38px; border-color: var(--border); border-radius: var(--radius-control); }
 .workspace :global(.pb-search) input { min-width: 0; min-height: 38px; font-size: 14px; }
-.workspace :global(.pb-action), .workspace :global(.pb-filter) { min-height: 40px; height: auto; padding: 8px 12px; border-radius: var(--radius-control); font-size: 13px; line-height: 1.5; white-space: normal; }
-.workspace :global(.pb-icon-action) { min-width: 40px; min-height: 40px; width: 40px; height: 40px; border-radius: var(--radius-control); }
+.workspace :global(.pb-action), .workspace :global(.pb-filter) { min-height: 38px; height: auto; padding: 7px 11px; border-radius: var(--radius-control); font-size: 13px; line-height: 1.5; white-space: normal; }
+.workspace :global(.pb-icon-action) { min-width: 38px; min-height: 38px; width: 38px; height: 38px; border-radius: var(--radius-control); }
 .workspace :global(.pb-data-table) { min-width: 760px; }
-.workspace :global(.pb-data-table) th { height: 40px; padding: 10px 16px; background: var(--surface-2); font-size: 12px; line-height: 1.5; text-transform: none; font-weight: 500; }
-.workspace :global(.pb-data-table) td { height: 64px; padding: 16px; font-size: 14px; line-height: 1.5; }
+.workspace :global(.pb-data-table) th { height: 36px; padding: 7px 13px; background: var(--surface-2); font-size: 10px; line-height: 1.5; letter-spacing: .04em; text-transform: uppercase; font-weight: 600; }
+.workspace :global(.pb-data-table) td { height: var(--table-row-height); padding: 10px 13px; font-size: 13px; line-height: 1.45; }
 .workspace :global(.pb-data-table) td :global(.text-text-3) { font-size: 12px; }
 .workspace a:focus-visible, .workspace button:focus-visible, .workspace input:focus-visible, .workspace select:focus-visible, .workspace textarea:focus-visible, .workspace [tabindex='0']:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
 .workspace :global(label.pb-action):focus-within { outline: 2px solid var(--primary); outline-offset: 3px; }

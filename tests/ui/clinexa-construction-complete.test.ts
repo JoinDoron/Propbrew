@@ -102,9 +102,9 @@ describe('Deep Clinexa composition across the complete Construction module', () 
     expect(helper).not.toContain('delta=');
   });
 
-  it('provides a common readable 24px/16px rhythm, white/slate cards and 40px/44px controls', () => {
+  it('provides a common compact/16px rhythm, quiet cards and 38px/44px controls', () => {
     const css = read('src/components/construction/construction-ui.module.css');
-    for (const token of ['gap: 24px', 'gap: 16px', 'font-size: 14px', 'font-size: 12px', 'min-height: 40px', 'min-height: 44px', 'height: 64px', 'height: 40px', '@media (pointer: coarse)']) expect(css).toContain(token);
+    for (const token of ['gap: var(--layout-gap)', 'gap: 16px', 'font-size: 14px', 'font-size: 12px', 'min-height: 38px', 'min-height: 44px', 'height: var(--table-row-height)', 'height: 36px', '@media (pointer: coarse)']) expect(css).toContain(token);
     for (const filename of constructionFiles) expect(component(filename)).not.toMatch(/text-\[(?:8|9|9\.5|10|10\.5|11|11\.5)px\]/);
   });
 

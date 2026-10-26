@@ -151,14 +151,14 @@ describe('Shared application foundations protect the visual system without chang
   const css = read('src/components/ui/application-foundations.css');
   const global = read('src/app/globals.css');
 
-  it('keeps application sections on the shared full-width 24px rhythm', () => {
-    expect(declarations(css, '.pb-app .pb-page')).toMatchObject({ width: '100%', 'min-width': '0', 'max-width': 'none', gap: '24px' });
-    expect(declarations(css, '.pb-app .pb-section')).toMatchObject({ display: 'flex', 'flex-direction': 'column', gap: '24px' });
-    expect(declarations(css, '.pb-app .pb-panel')).toMatchObject({ padding: '24px', background: 'var(--surface)', 'border-radius': 'var(--radius-card)' });
+  it('keeps application sections on the shared compact operational rhythm', () => {
+    expect(declarations(css, '.pb-app .pb-page')).toMatchObject({ width: '100%', 'min-width': '0', 'max-width': 'none', gap: 'var(--layout-gap)' });
+    expect(declarations(css, '.pb-app .pb-section')).toMatchObject({ display: 'flex', 'flex-direction': 'column', gap: 'var(--layout-gap)' });
+    expect(declarations(css, '.pb-app .pb-panel')).toMatchObject({ padding: 'var(--panel-padding)', background: 'var(--surface)', 'border-radius': 'var(--radius-card)' });
   });
 
-  it('sets explicit 40px controls, with equally specific 44px coarse-pointer overrides', () => {
-    for (const name of ['pb-form-control', 'pb-action', 'pb-filter', 'pb-search']) expect(declarations(css, '.pb-app .' + name)['min-height']).toBe('40px');
+  it('sets compact 38px controls, with equally specific 44px coarse-pointer overrides', () => {
+    for (const name of ['pb-form-control', 'pb-action', 'pb-filter', 'pb-search']) expect(declarations(css, '.pb-app .' + name)['min-height']).toBe('38px');
     const coarse = block(css, '@media (pointer: coarse)');
     const overrides = rules(coarse).filter((rule) => rule.declarations['min-height'] === '44px');
     for (const name of ['pb-form-control', 'pb-action', 'pb-filter', 'pb-search']) {
@@ -169,10 +169,10 @@ describe('Shared application foundations protect the visual system without chang
     expect(declarations(coarse, '.pb-app .pb-icon-action')).toMatchObject({ width: '44px', height: '44px', 'min-height': '44px' });
   });
 
-  it('keeps the 40px table head and 64px record rhythm, without recolouring financial cells', () => {
-    expect(declarations(css, '.pb-app .pb-data-table thead th')).toMatchObject({ height: '40px', 'font-size': '12px', 'font-weight': '500', background: 'var(--surface-2)' });
+  it('keeps a dense register rhythm without recolouring financial cells', () => {
+    expect(declarations(css, '.pb-app .pb-data-table thead th')).toMatchObject({ height: '36px', 'font-size': '10px', 'font-weight': '600', background: 'var(--surface-2)', 'text-transform': 'uppercase' });
     const records = declarations(css, '.pb-app .pb-data-table tbody :where(td, th)');
-    expect(records).toMatchObject({ height: '64px', 'font-size': '14px' });
+    expect(records).toMatchObject({ height: 'var(--table-row-height)', 'font-size': '13px' });
     expect(records).not.toHaveProperty('color');
     expect(declarations(css, '.pb-app .pb-action')).not.toHaveProperty('color');
     expect(declarations(css, '.pb-app .pb-panel')).not.toHaveProperty('color');
@@ -180,7 +180,7 @@ describe('Shared application foundations protect the visual system without chang
   });
 
   it('uses the actual indigo/slate theme and preserves distinct light/dark action inks', () => {
-    expect(declarations(global, ':root')).toMatchObject({ '--primary': '#4242ee', '--surface': '#ffffff', '--surface-2': '#f8fafc', '--border': '#e2e8f0' });
+    expect(declarations(global, ':root')).toMatchObject({ '--primary': '#4242ee', '--surface': '#ffffff', '--surface-2': '#f7f9fb', '--border': '#dde4e9' });
     const dark = declarations(global, "[data-theme='dark']");
     expect(dark['--primary']).not.toBe(declarations(global, ':root')['--primary']);
     expect(dark['--on-primary']).toBeDefined();

@@ -77,7 +77,7 @@ describe('Clinexa Estate and Facility responsive polish', () => {
     expect(billing).toContain('action={canMutate && highRisk.length > 0 ? <Button');
     expect(billing).toContain('onClick={() => { setToast(null); setCampaign(highRisk); }}>Review reminders</Button>');
     const css = read('ui/application-foundations.css');
-    expect(css).toContain('.pb-app .pb-action { display: inline-flex; min-height: 40px;');
+    expect(css).toContain('.pb-app .pb-action { display: inline-flex; min-height: 38px;');
     expect(css).toContain('.pb-app :is(.pb-form-control, .pb-action) { min-height: 44px; }');
     expect(css).toContain('.pb-app .pb-icon-action { width: 44px;');
   });

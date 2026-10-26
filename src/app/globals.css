@@ -20,14 +20,14 @@
      cannot silently fall back to the old Clinexa/Inter adaptation. */
   --font-product: 'Neue Jothama', var(--font-inter), system-ui, sans-serif;
   /* Surfaces */
-  --app: #f8fafc;
+  --app: #f5f7f9;
   --surface: #ffffff;
-  --surface-2: #f8fafc;
-  --surface-3: #f1f5f9;
+  --surface-2: #f7f9fb;
+  --surface-3: #eef2f5;
 
   /* Lines */
-  --border: #e2e8f0;
-  --border-2: #cbd5e1;
+  --border: #dde4e9;
+  --border-2: #c7d0d8;
 
   /* Type */
   --text: #020817;
@@ -46,13 +46,16 @@
   --on-brand-solid: #ffffff;
 
   /* Elevation */
-  --shadow: 0 1px 2px rgb(2 8 23 / 0.06);
-  --shadow-lg: 0 12px 36px rgb(2 8 23 / 0.12), 0 2px 6px rgb(2 8 23 / 0.04);
+  --shadow: 0 1px 1px rgb(2 8 23 / 0.035);
+  --shadow-lg: 0 14px 40px rgb(2 8 23 / 0.1), 0 2px 6px rgb(2 8 23 / 0.04);
   --space-unit: 4px;
   --radius-card: 12px;
-  --radius-control: 10px;
+  --radius-control: 9px;
   --radius-overlay: 16px;
-  --control-height: 40px;
+  --control-height: 38px;
+  --layout-gap: 18px;
+  --panel-padding: 18px;
+  --table-row-height: 52px;
 
   /* Semantic tones (light). Domain status → tone in src/lib/status-tones.ts. */
   --tone-neutral: #475569; /* draft, placed, requested */

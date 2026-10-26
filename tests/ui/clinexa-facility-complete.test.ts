@@ -50,7 +50,7 @@ describe('Clinexa-complete Facility module', () => {
       expect(source).not.toMatch(/text-\[(?:8|9|9\.5|10|10\.5|11|11\.5)px\]/);
       expect(source).toMatch(/<(?:Card|KpiCard|FacilityKpi|Kpi|HealthKpi|MaintenanceCalendar|ComplianceRegister)/);
     }
-    expect(read('src/components/facility/facility-workspaces.module.css')).toContain('gap: 24px');
+    expect(read('src/components/facility/facility-workspaces.module.css')).toContain('gap: var(--layout-gap)');
     expect(read('src/components/facility/facility-workspaces.module.css')).toContain('gap: 16px');
   });
 

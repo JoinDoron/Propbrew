@@ -25,11 +25,12 @@ describe('Clinexa-derived Propbrew foundations', () => {
   it('uses the inspected palette and dimensions, not an unrelated dashboard theme', () => {
     expect(light['--primary'].toLowerCase()).toBe('#4242ee');
     expect(light['--surface'].toLowerCase()).toBe('#ffffff');
-    expect(light['--surface-2'].toLowerCase()).toBe('#f8fafc');
-    expect(light['--border'].toLowerCase()).toBe('#e2e8f0');
+    expect(light['--surface-2'].toLowerCase()).toBe('#f7f9fb');
+    expect(light['--border'].toLowerCase()).toBe('#dde4e9');
     expect(light['--text'].toLowerCase()).toBe('#020817');
     expect(globals).toContain('--radius-card: 12px');
-    expect(globals).toContain('--radius-control: 10px');
+    expect(globals).toContain('--radius-control: 9px');
+    expect(globals).toContain('--layout-gap: 18px');
     expect(globals).not.toContain('--radius-card: var(--radius-card)');
   });
 
@@ -77,12 +78,12 @@ describe('Clinexa-derived Propbrew foundations', () => {
     expect(css).toContain('max-width: none');
     expect(css).toContain('.pb-app .pb-filter');
     expect(css).toContain(".pb-filter[aria-pressed='true']");
-    expect(css).toContain('min-height: 40px');
+    expect(css).toContain('min-height: 38px');
     expect(css).toContain('.pb-app .pb-table-frame');
     const cells = css.match(/\.pb-app \.pb-data-table tbody :where\(td, th\) \{([^}]+)\}/)?.[1] ?? '';
-    expect(cells).toContain('height: 64px');
-    expect(cells).toContain('padding: 14px 16px');
-    expect(cells).toContain('font-size: 14px');
+    expect(cells).toContain('height: var(--table-row-height)');
+    expect(cells).toContain('padding: 10px 13px');
+    expect(cells).toContain('font-size: 13px');
     expect(cells).not.toMatch(/\bcolor:/);
   });
 

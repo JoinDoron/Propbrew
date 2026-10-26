@@ -32,7 +32,7 @@ export function FinanceCommandCenter({ snapshot, payables, certificates, whtElig
   };
   return <div className={styles.workspace}>
     <PageHeader title="Finance Command Centre" subtitle="One company view of money due, money owed, bank evidence and forward cash pressure." actions={<Button icon={<Download size={16} />} onClick={exportReport}>Export executive report</Button>} />
-    <Card className={styles.hero}><div className={styles.heroCopy}><span className={styles.heroIcon}><Banknote size={24} /></span><div><p className={styles.eyebrow}>COMPANY FINANCE · NGN CONTROL PLANE</p><h2>See the whole portfolio before cash becomes a surprise.</h2><p>Estate, Facility, Shortlet and Construction remain independent operating ledgers. This centre consolidates authorised records without silently converting currency or treating approvals as bank settlement.</p></div></div></Card>
+    <Card className="pb-finance-context"><span className="pb-finance-context-icon"><Banknote size={18} /></span><div><p className="pb-finance-context-label">Company finance · NGN control plane</p><h2>See the whole portfolio before cash becomes a surprise.</h2><p>Estate, Facility, Shortlet and Construction remain independent operating ledgers. This centre consolidates authorised records without silently converting currency or treating approvals as bank settlement.</p></div></Card>
     <div className={styles.metrics}>
       <KpiCard label="Receivables outstanding" value={money(snapshot.totals.receivableMinor)} icon={<TrendingUp size={18} />} />
       <KpiCard label="Approved & pending payables" value={money(snapshot.totals.payableMinor)} icon={<ReceiptText size={18} />} />

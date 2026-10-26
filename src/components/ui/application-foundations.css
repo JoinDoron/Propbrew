@@ -15,33 +15,38 @@
 .pb-app :where(a, button, input, textarea, select, [tabindex]):focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
 .pb-app :where(a, button) { -webkit-tap-highlight-color: transparent; }
 /* Explicit register opt-ins keep dense charts, calendars and status pills intact. */
-.pb-app .pb-page { width: 100%; max-width: none; min-width: 0; margin-inline: 0; display: flex; flex-direction: column; gap: 24px; }
-.pb-app .pb-section { display: flex; min-width: 0; flex-direction: column; gap: 24px; }
-.pb-app .pb-panel { min-width: 0; padding: 24px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); box-shadow: var(--shadow); }
-.pb-app .pb-panel-title { margin: 0; color: var(--text); font-size: 16px; font-weight: 500; line-height: 1.5; letter-spacing: -.02em; }
+.pb-app .pb-page { width: 100%; max-width: none; min-width: 0; margin-inline: 0; display: flex; flex-direction: column; gap: var(--layout-gap); }
+.pb-app .pb-section { display: flex; min-width: 0; flex-direction: column; gap: var(--layout-gap); }
+.pb-app .pb-panel { min-width: 0; padding: var(--panel-padding); border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); box-shadow: var(--shadow); }
+.pb-app .pb-panel-title { margin: 0; color: var(--text); font-size: 15px; font-weight: 600; line-height: 1.45; letter-spacing: -.02em; }
 .pb-app .pb-form-label { display: block; margin-bottom: 6px; color: var(--text-2); font-size: 13px; font-weight: 500; line-height: 1.5; letter-spacing: -.02em; text-transform: none; }
-.pb-app .pb-form-control { width: 100%; min-width: 0; min-height: 40px; padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface); color: var(--text); font-size: 14px; font-weight: 400; line-height: 1.5; }
+.pb-app .pb-form-control { width: 100%; min-width: 0; min-height: 38px; padding: 8px 11px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface); color: var(--text); font-size: 13px; font-weight: 400; line-height: 1.5; }
 .pb-app .pb-form-control:disabled { background: var(--surface-2); opacity: .65; }
 .pb-app .pb-dialog-title { margin: 0; color: var(--text); font-size: 20px; font-weight: 500; line-height: 1.4; letter-spacing: -.03em; }
-.pb-app .pb-action { display: inline-flex; min-height: 40px; align-items: center; justify-content: center; gap: 8px; padding: 8px 12px; border-radius: var(--radius-control); font-size: 13px; font-weight: 500; line-height: 1.5; }
-.pb-app .pb-icon-action { display: inline-grid; width: 40px; min-width: 40px; height: 40px; min-height: 40px; padding: 0; place-items: center; flex-shrink: 0; border-radius: var(--radius-control); }
+.pb-app .pb-action { display: inline-flex; min-height: 38px; align-items: center; justify-content: center; gap: 8px; padding: 7px 11px; border-radius: var(--radius-control); font-size: 13px; font-weight: 500; line-height: 1.5; }
+.pb-app .pb-icon-action { display: inline-grid; width: 38px; min-width: 38px; height: 38px; min-height: 38px; padding: 0; place-items: center; flex-shrink: 0; border-radius: var(--radius-control); }
 .pb-app :where(.pb-action, .pb-icon-action):disabled { cursor: not-allowed; opacity: .5; }
 .pb-app .pb-register-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
-.pb-app .pb-filter { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface); color: var(--text-2); font-size: 13px; font-weight: 500; line-height: 1.5; white-space: nowrap; cursor: pointer; }
+.pb-app .pb-filter { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; padding: 7px 11px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface); color: var(--text-2); font-size: 13px; font-weight: 500; line-height: 1.5; white-space: nowrap; cursor: pointer; }
 .pb-app .pb-filter:hover { background: var(--surface-2); color: var(--text); }
 .pb-app .pb-filter[aria-pressed='true'] { border-color: var(--primary); background: var(--primary-weak); color: var(--primary); }
-.pb-app .pb-search { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 40px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface); color: var(--text-3); }
+.pb-app .pb-search { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 38px; padding: 0 11px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface); color: var(--text-3); }
 .pb-app .pb-search:focus-within { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-weak); }
 .pb-app .pb-search input { min-width: 0; width: 100%; min-height: 38px; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--text); font-size: 13px; line-height: 1.5; outline: none; }
 .pb-app .pb-search input:focus-visible { outline: none; }
 .pb-app .pb-table-frame { position: relative; min-width: 0; overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); }
 .pb-app .pb-table-scroll { position: relative; width: 100%; min-width: 0; overflow-x: auto; overscroll-behavior-x: contain; }
 .pb-app .pb-data-table { width: 100%; border-collapse: collapse; text-align: left; }
-.pb-app .pb-data-table thead th { height: 40px; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface-2); color: var(--text-3); font-size: 12px; font-weight: 500; line-height: 1.5; white-space: nowrap; }
-.pb-app .pb-data-table tbody :where(td, th) { height: 64px; padding: 14px 16px; border-bottom: 1px solid var(--border); font-size: 14px; line-height: 1.5; }
+.pb-app .pb-data-table thead th { height: 36px; padding: 7px 13px; border-bottom: 1px solid var(--border); background: var(--surface-2); color: var(--text-3); font-size: 10px; font-weight: 600; line-height: 1.5; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
+.pb-app .pb-data-table tbody :where(td, th) { height: var(--table-row-height); padding: 10px 13px; border-bottom: 1px solid var(--border); font-size: 13px; line-height: 1.45; }
 .pb-app .pb-data-table tbody tr:last-child :where(td, th) { border-bottom: 0; }
 .pb-app .pb-data-table tbody tr:hover { background: var(--surface-2); }
 .pb-app .pb-data-table caption { padding: 12px 16px; color: var(--text-2); font-size: 13px; text-align: left; }
+.pb-app .pb-finance-context { display: flex; align-items: flex-start; gap: 12px; padding: 14px var(--panel-padding); }
+.pb-app .pb-finance-context-icon { display: grid; width: 32px; height: 32px; flex: none; place-items: center; border: 1px solid var(--primary-weak-2); border-radius: 8px; background: var(--primary-weak); color: var(--primary); }
+.pb-app .pb-finance-context-label { margin: 0 0 2px; color: var(--primary); font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+.pb-app .pb-finance-context h2 { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.45; letter-spacing: -.025em; }
+.pb-app .pb-finance-context h2 + p { max-width: 980px; margin: 3px 0 0; color: var(--text-2); font-size: 12px; line-height: 1.55; }
 .pb-app.pb-state { display: grid; min-height: 70dvh; place-items: center; padding: 32px 16px; background: var(--app); color: var(--text); }
 .pb-app .pb-state-card { display: flex; width: 100%; max-width: 520px; flex-direction: column; align-items: center; gap: 16px; padding: 32px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); box-shadow: var(--shadow); text-align: center; }
 .pb-app .pb-state-icon { display: grid; width: 48px; height: 48px; place-items: center; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--primary-weak); color: var(--primary); }
