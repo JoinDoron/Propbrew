@@ -130,7 +130,8 @@ describe('Clinexa-complete Facility module', () => {
 
   it('keeps maintenance runtime, compliance, statutory and evidence content truthful', () => {
     const ppm = renderToStaticMarkup(createElement(MaintenanceWorkspace, { now: '2026-07-26', canMutate: false, plans: [], occurrences: [], assessments: [], runtime: [], gaps: [], weeklyCapacityHours: 40 }));
-    expect(ppm).toContain('not a calibrated failure forecast');
+    expect(ppm).toContain('Risk scores support planning');
+    expect(ppm).toContain('review the asset condition before approving a date change');
     expect(ppm).toContain('No runtime-metered assets');
     const inspections = renderToStaticMarkup(createElement(InspectionsWorkspace, { now: '2026-07-26', canMutate: false, obligations: [], inspections: [], workOrderBasePath: '/estate/work-orders' }));
     expect(inspections).toContain('Audit readiness');
