@@ -108,28 +108,48 @@ const OPS_NAV: NavGroup[] = [
       { id: 'investors', label: 'Investors', href: '/investors', icon: 'building', capability: 'investor_projects' },
     ],
   },
+  // Short-Let PMS rides the §7 bookings capability (matrix is CR-locked).
+  // Purpose-led groups keep the long operator rail scannable on desktop.
   {
-    // Short-Let PMS (new module). Rides the §7 bookings capability (matrix is
-    // CR-locked); role-restricted to operator personas so Security doesn't see it.
-    label: 'Short-Let',
+    label: 'Shortlet overview',
     items: [
       { id: 'sl-dash', label: 'Dashboard', href: '/shortlet', icon: 'gauge', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
       { id: 'sl-properties', label: 'Properties', href: '/shortlet/properties', icon: 'boxes', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
+      { id: 'sl-copilot', label: 'Ask Copilot', href: '/shortlet/copilot', icon: 'sparkles', capability: 'bookings_amenities', roles: ['executive', 'estate_manager'], proposed: true },
+    ],
+  },
+  {
+    label: 'Reservations',
+    items: [
       { id: 'sl-calendar', label: 'Calendar', href: '/shortlet/calendar', icon: 'calendar', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
       { id: 'sl-bookings', label: 'Bookings', href: '/shortlet/bookings', icon: 'receipt', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
-      { id: 'sl-operations', label: 'Operations', href: '/shortlet/operations', icon: 'checks', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
       { id: 'sl-booking-page', label: 'Booking page', href: '/shortlet/booking-page', icon: 'store', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
+      { id: 'sl-channels', label: 'Channels', href: '/shortlet/channels', icon: 'store', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
+    ],
+  },
+  {
+    label: 'Guest operations',
+    items: [
+      { id: 'sl-operations', label: 'Operations', href: '/shortlet/operations', icon: 'checks', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
+      { id: 'sl-guests', label: 'Guests', href: '/shortlet/guests', icon: 'users', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
       { id: 'sl-inspections', label: 'Inspections', href: '/shortlet/inspections', icon: 'clipboard', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
+      { id: 'sl-maintenance', label: 'Maintenance', href: '/shortlet/maintenance', icon: 'wrench', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
+      { id: 'sl-whatsapp', label: 'WhatsApp', href: '/shortlet/whatsapp', icon: 'bell', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
+      { id: 'sl-reviews', label: 'Reviews', href: '/shortlet/reviews', icon: 'clipboard', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
+    ],
+  },
+  {
+    label: 'Revenue & growth',
+    items: [
+      { id: 'sl-pricing', label: 'Seasonal pricing', href: '/shortlet/pricing', icon: 'trending', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
       { id: 'sl-expenses', label: 'Expenses', href: '/shortlet/expenses', icon: 'banknote', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
       { id: 'sl-analytics', label: 'Analytics', href: '/shortlet/analytics', icon: 'trending', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
-      { id: 'sl-copilot', label: 'Ask Copilot', href: '/shortlet/copilot', icon: 'sparkles', capability: 'bookings_amenities', roles: ['executive', 'estate_manager'], proposed: true },
-      { id: 'sl-guests', label: 'Guests', href: '/shortlet/guests', icon: 'users', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
-      { id: 'sl-reviews', label: 'Reviews', href: '/shortlet/reviews', icon: 'clipboard', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
-      { id: 'sl-pricing', label: 'Seasonal pricing', href: '/shortlet/pricing', icon: 'trending', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
-      { id: 'sl-maintenance', label: 'Maintenance', href: '/shortlet/maintenance', icon: 'wrench', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
       { id: 'sl-agents', label: 'Agents', href: '/shortlet/agents', icon: 'store', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
-      { id: 'sl-whatsapp', label: 'WhatsApp', href: '/shortlet/whatsapp', icon: 'bell', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
-      { id: 'sl-channels', label: 'Channels', href: '/shortlet/channels', icon: 'store', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
+    ],
+  },
+  {
+    label: 'Workspace',
+    items: [
       { id: 'sl-team', label: 'Team', href: '/shortlet/team', icon: 'users', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
       { id: 'sl-plan', label: 'Plan & billing', href: '/shortlet/plan', icon: 'banknote', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
     ],
@@ -238,7 +258,7 @@ const NAV_BY_SHELL: Record<Shell, NavGroup[]> = {
 const WORKSPACE_GROUPS: Record<WorkspaceId, readonly string[]> = {
   estate: ['Estate', 'Insights', 'Admin'],
   facility: ['Facility'],
-  shortlet: ['Short-Let'],
+  shortlet: ['Shortlet overview', 'Reservations', 'Guest operations', 'Revenue & growth', 'Workspace'],
   construction: ['Construction'],
 };
 
