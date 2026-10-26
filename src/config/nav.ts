@@ -114,6 +114,7 @@ const OPS_NAV: NavGroup[] = [
     label: 'Short-Let',
     items: [
       { id: 'sl-dash', label: 'Dashboard', href: '/shortlet', icon: 'gauge', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
+      { id: 'sl-properties', label: 'Properties', href: '/shortlet/properties', icon: 'boxes', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
       { id: 'sl-calendar', label: 'Calendar', href: '/shortlet/calendar', icon: 'calendar', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
       { id: 'sl-bookings', label: 'Bookings', href: '/shortlet/bookings', icon: 'receipt', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
       { id: 'sl-operations', label: 'Operations', href: '/shortlet/operations', icon: 'checks', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
@@ -129,7 +130,6 @@ const OPS_NAV: NavGroup[] = [
       { id: 'sl-agents', label: 'Agents', href: '/shortlet/agents', icon: 'store', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
       { id: 'sl-whatsapp', label: 'WhatsApp', href: '/shortlet/whatsapp', icon: 'bell', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
       { id: 'sl-channels', label: 'Channels', href: '/shortlet/channels', icon: 'store', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
-      { id: 'sl-properties', label: 'Properties', href: '/shortlet/properties', icon: 'boxes', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
       { id: 'sl-team', label: 'Team', href: '/shortlet/team', icon: 'users', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
       { id: 'sl-plan', label: 'Plan & billing', href: '/shortlet/plan', icon: 'banknote', capability: 'bookings_amenities', roles: ['executive', 'estate_manager', 'platform_admin'], proposed: true },
     ],
