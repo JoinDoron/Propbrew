@@ -16,6 +16,9 @@
    ========================================================================== */
 
 :root {
+  /* Product typography. Application surfaces consume this token so a module
+     cannot silently fall back to the old Clinexa/Inter adaptation. */
+  --font-product: 'Neue Jothama', var(--font-inter), system-ui, sans-serif;
   /* Surfaces */
   --app: #f8fafc;
   --surface: #ffffff;
@@ -132,7 +135,7 @@
   --shadow-card: var(--shadow);
   --shadow-float: var(--shadow-lg);
 
-  --font-sans: 'Neue Jothama', var(--font-inter), system-ui, sans-serif;
+  --font-sans: var(--font-product);
   --font-mono: var(--font-jetbrains-mono), 'JetBrains Mono', ui-monospace, monospace;
 
   --radius-card: 12px;
@@ -147,7 +150,7 @@
   body {
     background: var(--app);
     color: var(--text);
-    font-family: 'Neue Jothama', var(--font-inter), system-ui, sans-serif;
+    font-family: var(--font-product);
     font-size: 14px;
     -webkit-font-smoothing: antialiased;
   }

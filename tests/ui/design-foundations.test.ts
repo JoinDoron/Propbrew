@@ -55,6 +55,8 @@ describe('Clinexa-derived Propbrew foundations', () => {
     expect(layout).toContain("display: 'swap'");
     expect(read('src/app/globals.css')).toContain("font-family: 'Neue Jothama'");
     expect(read('src/app/globals.css')).toContain("neue-jothama-variable.woff2");
+    expect(read('src/components/ui/application-foundations.css')).toContain('font-family: var(--font-product)');
+    expect(read('src/components/onboarding/owner-setup.module.css')).toContain('font-family: var(--font-product)');
     expect(read('src/app/(marketing)/marketing.css')).toContain('--pb-cobalt: #2346f0');
     expect(read('src/app/(marketing)/marketing.css')).toContain('font-family: var(--font-manrope)');
     expect(read('src/components/ui/application-foundations.css')).toContain('.pb-app thead th');

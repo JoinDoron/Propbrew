@@ -1,5 +1,5 @@
 .page {
-  font-family: var(--font-inter), Inter, system-ui, sans-serif;
+  font-family: var(--font-product);
   --setup-ink: var(--text);
   --setup-muted: var(--text-3);
   --setup-accent: var(--primary);

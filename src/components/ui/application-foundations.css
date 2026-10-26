@@ -1,5 +1,5 @@
 /* Application-only adaptation: the public marketing site keeps its own system. */
-.pb-app { font-family: var(--font-inter), 'Inter', system-ui, sans-serif; font-size: 14px; line-height: 1.5; letter-spacing: -.02em; }
+.pb-app { font-family: var(--font-product); font-size: 14px; line-height: 1.5; letter-spacing: -.02em; }
 .pb-app :where(button, input, select, textarea) { font-family: inherit; }
 .pb-app :where(h1, h2, h3) { text-wrap: pretty; }
 .pb-app :where(input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not([type='hidden']), select, textarea) { border-radius: var(--radius-control); accent-color: var(--primary); }
