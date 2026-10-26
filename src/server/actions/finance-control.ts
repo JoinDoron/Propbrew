@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { canEnterWorkspace } from '@/config/workspaces';
 import { payableDeductions, type FinanceModule } from '@/domain/finance/control';
 import { assertCan, ForbiddenError, type Action } from '@/lib/authz';
+import { canUseCompanyModule } from '@/lib/auth/company-policy';
 import { durableAudit } from '@/server/audit';
 import { constructionControl } from '@/server/construction-control';
 import { withDurableMutation } from '@/server/data/durable-records';
@@ -20,6 +21,7 @@ type Result = { ok: true; id?: string; message: string } | { ok: false; error: s
 const refresh = () => ['/finance', '/billing', '/collections', '/shortlet/operations', '/construction/operations'].forEach((path) => revalidatePath(path));
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => Number.isFinite(Date.parse(value)));
 const identifier = z.string().min(1).max(200).regex(/^[A-Za-z0-9_:-]+$/);
+const moduleAllowed = (actor: Awaited<ReturnType<typeof getActor>>, module: FinanceModule, action: Action) => canUseCompanyModule(actor, module, action);
 
 async function gate(action: Action) {
   const actor = await getActor();
@@ -42,6 +44,7 @@ export async function createFinancePayable(input: z.input<typeof payableSchema>)
   return withDurableMutation(async () => {
     const access = await gate('create'); if (!access.actor) return { ok: false, error: access.error };
     const parsed = payableSchema.safeParse(input); if (!parsed.success || parsed.data.dueDateISO < parsed.data.invoiceDateISO) return { ok: false, error: 'Enter a valid supplier invoice, source reference, dates, NGN value and WHT rate.' };
+    if (!moduleAllowed(access.actor, parsed.data.module, 'create')) return { ok: false, error: 'Your current role cannot create a payable for that workspace.' };
     const state = financeControl(access.actor.tenantId!);
     if (state.payables.some((row) => row.module === parsed.data.module && row.sourceRef.toLowerCase() === parsed.data.sourceRef.toLowerCase() && row.status !== 'rejected')) return { ok: false, error: 'This module and source reference already have an active payable.' };
     const grossMinor = Math.round(parsed.data.grossNaira * 100); if (!Number.isSafeInteger(grossMinor)) return { ok: false, error: 'The invoice amount is outside the supported range.' };
@@ -58,6 +61,7 @@ export async function decideFinancePayable(id: string, decision: 'approved' | 'r
     const access = await gate('approve'); if (!access.actor) return { ok: false, error: access.error };
     const row = financeControl(access.actor.tenantId!).payables.find((item) => item.id === id && item.status === 'pending_approval');
     if (!row) return { ok: false, error: 'Pending payable not found.' };
+    if (!moduleAllowed(access.actor, row.module, 'approve')) return { ok: false, error: 'Your current role cannot approve this workspace payable.' };
     row.status = decision; row.reviewedBy = access.actor.userId; row.reviewedAtISO = nowISO(); row.reviewNote = note.trim().slice(0, 500) || undefined;
     await audit(access.actor.tenantId!, access.actor.userId, `finance.payable.${decision}`, 'finance_payable', row.id, { ref: row.ref, module: row.module, netPayableMinor: row.netPayableMinor });
     refresh(); return { ok: true, id: row.id, message: `${row.ref} ${decision}. No bank transfer has been executed.` };
@@ -69,6 +73,7 @@ export async function markFinancePayablePaid(id: string, bankReference: string):
     const access = await gate('update'); if (!access.actor) return { ok: false, error: access.error };
     const reference = bankReference.trim(); const row = financeControl(access.actor.tenantId!).payables.find((item) => item.id === id && item.status === 'approved');
     if (!row || reference.length < 3 || reference.length > 160) return { ok: false, error: 'An approved payable and actual bank reference are required.' };
+    if (!moduleAllowed(access.actor, row.module, 'update')) return { ok: false, error: 'Your current role cannot update this workspace payable.' };
     row.status = 'paid'; row.bankReference = reference; row.paidAtISO = nowISO();
     await audit(access.actor.tenantId!, access.actor.userId, 'finance.payable.paid', 'finance_payable', row.id, { ref: row.ref, module: row.module, bankReference: reference, netPayableMinor: row.netPayableMinor });
     refresh(); return { ok: true, id: row.id, message: `${row.ref} marked paid from the recorded bank reference.` };
@@ -84,8 +89,9 @@ export async function issueWhtCertificate(sourceType: 'finance_payable' | 'const
     let source: { module: FinanceModule; sourceRef: string; beneficiary: string; grossMinor: number; ratePct: number; amountMinor: number } | undefined;
     if (sourceType === 'finance_payable') {
       const row = state.payables.find((item) => item.id === sourceId && item.status === 'paid' && item.whtMinor > 0);
-      if (row) source = { module: row.module, sourceRef: row.ref, beneficiary: row.counterparty, grossMinor: row.grossMinor, ratePct: row.whtPct, amountMinor: row.whtMinor };
+      if (row && moduleAllowed(access.actor, row.module, 'approve')) source = { module: row.module, sourceRef: row.ref, beneficiary: row.counterparty, grossMinor: row.grossMinor, ratePct: row.whtPct, amountMinor: row.whtMinor };
     } else {
+      if (!moduleAllowed(access.actor, 'construction', 'approve')) return { ok: false, error: 'Your current role cannot issue Construction certificates.' };
       const row = constructionControl(access.actor.tenantId!).payments.find((item) => item.id === sourceId && item.status === 'paid' && item.whtMinor > 0);
       if (row) { const order = repos.constructionOrders.list(access.actor, { limit: 5000 }).items.find((item) => item.id === row.poId); source = { module: 'construction', sourceRef: row.ref, beneficiary: order?.vendorName ?? row.invoiceRef, grossMinor: row.invoiceMinor, ratePct: row.invoiceMinor ? row.whtMinor / row.invoiceMinor * 100 : 0, amountMinor: row.whtMinor }; }
     }
