@@ -140,6 +140,7 @@ const OPS_NAV: NavGroup[] = [
     items: [
       { id: 'con-home', label: 'Command Center', href: '/construction', icon: 'gauge', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
       { id: 'con-projects', label: 'Projects', href: '/construction/projects', icon: 'building', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
+      { id: 'con-operations', label: 'Operations', href: '/construction/operations', icon: 'checks', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
       { id: 'con-evm', label: 'Earned Value', href: '/construction/evm', icon: 'trending', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
       { id: 'con-schedule', label: 'Critical Path', href: '/construction/schedule', icon: 'calendar', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
       { id: 'con-procurement', label: 'Procurement', href: '/construction/procurement', icon: 'truck', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
@@ -329,6 +330,7 @@ export const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   '/settings': { title: 'Settings', subtitle: 'Estate configuration and preferences' },
   '/construction': { title: 'Command Center', subtitle: 'Every project, cost and crew — live' },
   '/construction/projects': { title: 'Projects', subtitle: 'The delivery side of the off-plan portfolio' },
+  '/construction/operations': { title: 'Construction Operations', subtitle: 'Subcontractors, field approvals, claims, evidence and payments' },
   '/construction/evm': { title: 'Earned Value', subtitle: 'CPI, SPI, EAC and the S-curve' },
   '/construction/schedule': { title: 'Critical Path', subtitle: 'Float, slip cascade and forecast finish' },
   '/construction/procurement': { title: 'Procurement', subtitle: 'Request → RFQ → scored award → PO' },

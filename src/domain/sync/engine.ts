@@ -86,6 +86,7 @@ export const OP_LABEL: Record<OpKind, string> = {
   material_request: 'Material request',
   task_progress: 'Task progress',
   safety_event: 'Safety event',
+  evidence_pack: 'Evidence pack',
 };
 
 export const STATUS_TONE: Record<OpStatus, Tone> = {

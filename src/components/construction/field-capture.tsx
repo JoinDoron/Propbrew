@@ -65,6 +65,7 @@ export function FieldCapture({ projects, tasks, workers, todayISO, canCapture = 
         { id: 'report', label: 'Daily report', content: <fieldset disabled={!canCapture} className={styles.fieldset}><legend className="sr-only">Daily report capture</legend>{!canCapture && <p className={styles.notice}>Read-only access · construction capture permission is required.</p>}<ReportForm owner={owner} projects={projects} todayISO={todayISO} onCaptured={flash} online={online} /></fieldset> },
         { id: 'issue', label: 'Raise issue', content: <fieldset disabled={!canCapture} className={styles.fieldset}><legend className="sr-only">Issue capture</legend><IssueForm owner={owner} projects={projects} onCaptured={flash} online={online} /></fieldset> },
         { id: 'progress', label: 'Task progress', content: <fieldset disabled={!canCapture} className={styles.fieldset}><legend className="sr-only">Progress capture</legend><ProgressForm owner={owner} projects={projects} tasks={tasks} onCaptured={flash} online={online} /></fieldset> },
+        { id: 'evidence', label: 'Evidence pack', content: <fieldset disabled={!canCapture} className={styles.fieldset}><legend className="sr-only">Evidence pack capture</legend><EvidencePackForm owner={owner} projects={projects} tasks={tasks} onCaptured={flash} online={online} /></fieldset> },
         {
           id: 'attendance', label: 'Quick attendance', content: (
             <ConstructionPanel >
@@ -200,6 +201,44 @@ function ProgressForm({ owner, projects, tasks, onCaptured, online }: { owner?: 
       </div>
     </ConstructionPanel>
   );
+}
+
+function EvidencePackForm({ owner, projects, tasks, onCaptured, online }: { owner?: string; projects: FieldProject[]; tasks: FieldTask[]; onCaptured: (m: string) => void; online: boolean }) {
+  const [projectId, setProjectId] = useState(projects[0]?.id ?? '');
+  const availableTasks = tasks.filter((task) => task.projectId === projectId);
+  const [subject, setSubject] = useState('quality_gate');
+  const [subjectRef, setSubjectRef] = useState('');
+  const [title, setTitle] = useState('');
+  const [files, setFiles] = useState<File[]>([]);
+  const [pending, setPending] = useState(false);
+  const submit = async () => {
+    if (pending) return;
+    setPending(true);
+    try {
+      await capture(owner, 'evidence_pack', `Evidence · ${title.trim()}`, { projectId, subject, subjectRef: subjectRef.trim(), title: title.trim() }, files);
+      setTitle(''); setSubjectRef(''); setFiles([]);
+      onCaptured(online ? 'Evidence pack captured — queued for upload and review' : 'Evidence pack saved on this device — it will upload when signal returns');
+    } catch (error) { onCaptured(error instanceof Error ? error.message : 'Evidence capture failed. Your files were kept in the form.'); }
+    finally { setPending(false); }
+  };
+  return <ConstructionPanel>
+    <div className={styles.header}><CardHeader title="Mobile evidence pack" subtitle="Photos upload from the device outbox, retain their content references and require independent review before work can be approved." /></div>
+    <div className={`${styles.body} ${styles.stack}`}>
+      <div className={styles.formGrid}>
+        <Field label="Project"><select value={projectId} onChange={(event) => { setProjectId(event.target.value); setSubjectRef(''); }}>{projects.length ? projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>) : <option value="">No projects available</option>}</select></Field>
+        <Field label="Evidence type"><select value={subject} onChange={(event) => setSubject(event.target.value)}><option value="quality_gate">Quality gate</option><option value="task">Task progress</option><option value="delivery">Delivery</option><option value="daily_report">Daily report</option><option value="variation">Variation</option><option value="claim">Claim</option></select></Field>
+        <Field label="Related record"><input list="construction-evidence-records" value={subjectRef} onChange={(event) => setSubjectRef(event.target.value)} placeholder="Task, GRN, variation or claim reference" /><datalist id="construction-evidence-records">{availableTasks.map((task) => <option key={task.id} value={task.id}>{task.name}</option>)}</datalist></Field>
+        <Field label="Evidence title"><input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="e.g. L4 slab reinforcement inspection" /></Field>
+      </div>
+      <div className={styles.toolbar}>
+        <label className={styles.fileButton}><Camera size={18} /> Add photos or PDFs<input type="file" aria-label="Add construction evidence files" accept="image/*,application/pdf" multiple className="sr-only" onChange={(event) => { setFiles((current) => [...current, ...Array.from(event.target.files ?? [])].slice(0, 20)); event.target.value = ''; }} /></label>
+        <span className={styles.metadata}>{files.length} file{files.length === 1 ? '' : 's'} held on this device</span>
+        <Button variant="primary" type="button" disabled={pending || !owner || !projectId || !subjectRef.trim() || !title.trim() || files.length === 0} onClick={submit}><Check size={16} /> {pending ? 'Saving…' : 'Capture evidence'}</Button>
+      </div>
+      {files.length ? <ul className={styles.list} aria-label="Construction evidence files">{files.map((file, index) => <li key={`${file.name}-${index}`} className={styles.listEntry}><span>{file.name} · {Math.ceil(file.size / 1024)} KB</span><IconButton type="button" aria-label={`Remove ${file.name}`} onClick={() => setFiles((current) => current.filter((_, itemIndex) => itemIndex !== index))}><X size={14} /></IconButton></li>)}</ul> : null}
+      <p className={styles.metadata}>A captured file is not proof that work is correct. Its synced evidence pack must be reviewed, then linked to a field approval.</p>
+    </div>
+  </ConstructionPanel>;
 }
 
 /* --- outbox inspector ----------------------------------------------------- */

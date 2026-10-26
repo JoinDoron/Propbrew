@@ -15,7 +15,8 @@ export type OpKind =
   | 'attendance'
   | 'material_request'
   | 'task_progress'
-  | 'safety_event';
+  | 'safety_event'
+  | 'evidence_pack';
 
 /** Server-computed ownership namespace; an old account's queue must never drain as a new user. */
 export const outboxOwnerKey = (tenantId: string | null, userId: string): string | undefined => tenantId ? JSON.stringify([tenantId, userId]) : undefined;

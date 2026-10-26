@@ -6,6 +6,7 @@ import type { Money } from '@/domain/primitives';
 import { NOW } from '@/domain/ppm';
 import { repos } from '@/server/data';
 import { collectCopilotRecords } from './records';
+import { constructionControl } from '@/server/construction-control';
 
 const money = (value: Money) => ({ currency: value.currency, minor: value.minor });
 const dependsOn = (value: { coverage: CopilotCoverage }, parents: CopilotCoverage[]) => ({ coverage: parents.every((parent) => parent.complete) ? value.coverage : { ...value.coverage, total: null, complete: false } });
@@ -15,6 +16,7 @@ const source = (id: string, label: string, href: string): CopilotSource => ({ id
 export async function buildConstructionCopilotContext(actor: Actor): Promise<CopilotContext> {
   if (!actor.tenantId?.trim()) throw new ForbiddenError('reports_analytics', 'read', 'no_tenant_context');
   const scope = assertCan(actor, 'reports_analytics', 'read');
+  const controls = constructionControl(actor.tenantId);
   const commercial = ['F', 'M'].includes(effectiveLevel(actor, 'reports_analytics'));
   const accepted = (row: ScopableRow) => row.tenantId === actor.tenantId && matchesScope(row, scope);
   const projects = await collectCopilotRecords('Construction projects', (options) => repos.constructionProjects.list(actor, options), { accept: accepted });
@@ -93,8 +95,12 @@ export async function buildConstructionCopilotContext(actor: Actor): Promise<Cop
       timesheets: sheets.items.map((s) => ({ ref: s.ref, projectId: s.projectId, workerId: s.workerId, weekEndingISO: s.weekEndingISO, normalHours: s.normalHours, overtimeHours: s.overtimeHours, status: s.status, postedMinor: s.postedMinor ?? null, postedCurrency: codes.items.find((c) => c.projectId === s.projectId && c.code === s.costCode)?.actual.currency ?? null })),
       subcontractors: subcontractors.items.map((s) => ({ name: s.name, trade: s.trade, projectIds: s.projectIds.filter((id) => projectIds.has(id)), tasksCompleted: s.tasksCompleted, tasksOnTime: s.tasksOnTime, defects: s.defects, safetyIncidents: s.safetyIncidents, crewSize: s.crewSize, reworkCost: money(s.reworkCost), contractValue: money(s.contractValue) })),
       approvals: approvals.items.map((a) => ({ ref: a.ref, projectId: a.projectId, subject: a.subject, subjectRef: a.subjectRef, status: a.status, amountMinor: a.amountMinor, currency: null, raisedISO: a.raisedISO, steps: a.steps.map((s) => ({ order: s.order, role: s.role, status: s.status, slaHours: s.slaHours })) })),
+      certifiedClaims: controls.claims.filter((row) => projectIds.has(row.projectId)).map((row) => ({ ref: row.ref, projectId: row.projectId, periodEndISO: row.periodEndISO, status: row.status, claimedMinor: row.claimedMinor, assessedMinor: row.assessedMinor ?? null, retentionMinor: row.retentionMinor, whtMinor: row.whtMinor, certifiedMinor: row.certifiedMinor ?? null })),
+      procurementPayments: controls.payments.filter((row) => projectIds.has(row.projectId)).map((row) => ({ ref: row.ref, projectId: row.projectId, poId: row.poId, status: row.status, invoiceMinor: row.invoiceMinor, payableMinor: row.payableMinor, threeWayMatched: row.threeWayMatched })),
+      fieldApprovals: controls.fieldApprovals.filter((row) => projectIds.has(row.projectId)).map((row) => ({ projectId: row.projectId, kind: row.kind, subjectRef: row.subjectRef, status: row.status, evidencePackCount: row.evidencePackIds.length })),
+      evidenceCoverage: controls.evidencePacks.filter((row) => projectIds.has(row.projectId)).map((row) => ({ projectId: row.projectId, subject: row.subject, subjectRef: row.subjectRef, status: row.status, fileCount: row.mediaRefs.length, capturedAtISO: row.capturedAtISO })),
     };
-    sources.push(source('construction-commercials', 'Native-currency cost records', '/construction/evm'), source('construction-timesheets', 'Recorded timesheet costs', '/construction/timesheets'), source('construction-approvals', 'Approval request register', '/construction/approvals'));
+    sources.push(source('construction-commercials', 'Native-currency cost records', '/construction/evm'), source('construction-timesheets', 'Recorded timesheet costs', '/construction/timesheets'), source('construction-approvals', 'Approval request register', '/construction/approvals'), source('construction-operations', 'Construction operational controls', '/construction/operations'));
   }
   return {
     module: 'construction', scopeLabel: scope.ownership ? 'Your assigned Construction projects' : 'Your authorised Construction records', snapshotISO: NOW,

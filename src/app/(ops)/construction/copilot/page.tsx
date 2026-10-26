@@ -19,7 +19,7 @@ export default async function ConstructionCopilotPage() {
 
   return (
     <div className="pb-page">
-      <CopilotWorkspace suggestions={suggestedQuestions(world, NOW_MS)} canSeeCommercials={canSeeCommercials} />
+      <CopilotWorkspace suggestions={[...suggestedQuestions(world, NOW_MS), 'Forecast cost and delay risk for the next 30, 60 and 90 days.', 'Which claims, variations or supplier payments could change project out-turn?'].slice(0, 7)} canSeeCommercials={canSeeCommercials} />
     </div>
   );
   });

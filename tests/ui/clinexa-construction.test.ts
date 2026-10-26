@@ -34,7 +34,8 @@ const coverage = [
   ['digest', 'digest-workspace', ['draft', 'overview', 'draft']],
   ['documents', 'documents-workspace', ['register', 'rfis', 'overview']],
   ['evm', 'evm-cockpit', ['overview', 'overview', 'curve', 'costs']],
-  ['field', 'field-capture', ['report', 'issue', 'progress', 'attendance', 'queue']],
+  ['field', 'field-capture', ['report', 'issue', 'progress', 'evidence', 'attendance', 'queue']],
+  ['operations', 'operations-workspace', ['subcontractors', 'field', 'claims', 'payments', 'forecast']],
   ['fx', 'fx-workspace', ['overview', 'rates', 'commitments']],
   ['league', 'league-workspace', ['scorecards', 'overview', 'methodology']],
   ['materials', 'materials-workspace', ['stock', 'overview', 'movements']],
@@ -52,11 +53,11 @@ const coverage = [
 ] as const;
 
 describe('Clinexa coverage of every Construction page', () => {
-  it('has an explicit entry for all 24 routes and all 24 workspace components', () => {
+  it('has an explicit entry for all 25 routes and all 25 workspace components', () => {
     const root = resolve(process.cwd(), 'src/app/(ops)/construction');
     const routes = ['', ...readdirSync(root, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name)];
     expect(coverage.map(([route]) => route).sort()).toEqual(routes.sort());
-    expect(coverage).toHaveLength(24);
+    expect(coverage).toHaveLength(25);
     expect(coverage.map(([, file]) => file + '.tsx').sort()).toEqual(readdirSync(resolve(process.cwd(), 'src/components/construction')).filter((file) => file.endsWith('.tsx') && file !== 'construction-ui.tsx').sort());
     const composed = view('construction-ui');
     for (const primitive of ['Card', 'CardHeader', 'KpiCard', 'Button', 'IconButton', 'PortalDialog']) expect(composed).toMatch(new RegExp(`<${primitive}(?:\\s|>)`));
@@ -248,7 +249,7 @@ describe('Construction records, permissions and specialised views survive the vi
 
   it('keeps offline forms, outbox and capture semantics mounted with labelled controls', () => {
     const html = renderToStaticMarkup(createElement(FieldCapture, { projects: [{ id: 'project-a', name: 'Atlantic Court', code: 'ATC' }], tasks: [], workers: [], todayISO: '2026-07-26' }));
-    expect(html.match(/role="tab"/g)).toHaveLength(5);
+    expect(html.match(/role="tab"/g)).toHaveLength(6);
     expect(html).toContain('aria-label="Completed today"');
     expect(html).toContain('aria-label="Add to completed today"');
     expect(html).toContain('Device outbox');

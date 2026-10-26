@@ -59,7 +59,7 @@ describe('Construction delivery Clinexa composition', () => {
   it.each([
     ['schedule-workspace', ['network', 'milestones', 'overview']], ['site-workspace', ['reports', 'issues', 'diary', 'overview']],
     ['twin-workspace', ['building', 'overview']], ['projects-workspace', ['register', 'overview']],
-    ['field-capture', ['report', 'issue', 'progress', 'attendance', 'queue']], ['safety-workspace', ['permits', 'events', 'overview']],
+    ['field-capture', ['report', 'issue', 'progress', 'evidence', 'attendance', 'queue']], ['safety-workspace', ['permits', 'events', 'overview']],
     ['workforce-workspace', ['attendance', 'overview']], ['timesheets-workspace', ['sheets', 'costs', 'overview']],
   ])('preserves every %s tab ID and its original order', (name, ids) => {
     const code = source(name as string); let previous = -1;
@@ -67,7 +67,7 @@ describe('Construction delivery Clinexa composition', () => {
   });
 
   it('keeps all 23 delivery panels mounted with honest recorded snapshot context', () => {
-    const screens = [[renderToStaticMarkup(createElement(ScheduleWorkspace, schedule)), 3], [renderToStaticMarkup(createElement(SiteWorkspace, site)), 4], [renderToStaticMarkup(createElement(TwinWorkspace, twin)), 2], [renderToStaticMarkup(createElement(ProjectsWorkspace, projects)), 2], [renderToStaticMarkup(createElement(FieldCapture, field)), 5], [renderToStaticMarkup(createElement(SafetyWorkspace, safety)), 3], [renderToStaticMarkup(createElement(WorkforceWorkspace, workforce)), 2], [renderToStaticMarkup(createElement(TimesheetsWorkspace, timesheets)), 3]] as const;
+    const screens = [[renderToStaticMarkup(createElement(ScheduleWorkspace, schedule)), 3], [renderToStaticMarkup(createElement(SiteWorkspace, site)), 4], [renderToStaticMarkup(createElement(TwinWorkspace, twin)), 2], [renderToStaticMarkup(createElement(ProjectsWorkspace, projects)), 2], [renderToStaticMarkup(createElement(FieldCapture, field)), 6], [renderToStaticMarkup(createElement(SafetyWorkspace, safety)), 3], [renderToStaticMarkup(createElement(WorkforceWorkspace, workforce)), 2], [renderToStaticMarkup(createElement(TimesheetsWorkspace, timesheets)), 3]] as const;
     for (const [html, count] of screens) { expect(html.match(/role="tabpanel"/g)).toHaveLength(count); expect(html.match(/hidden=""/g)).toHaveLength(count - 1); expect(html).toContain('Recorded snapshot'); expect(html).toContain('WAT'); expect(html).not.toMatch(/NaN|Infinity|undefined/); }
   });
 
@@ -190,7 +190,7 @@ describe('Construction delivery Clinexa composition', () => {
     for (const worker of field.workers) expect(html).toContain(worker.name);
     expect(html).toContain('recorded 07:00 WAT clock-in');
     expect(html).toContain('does not verify physical presence or a geofence');
-    expect(html.match(/<fieldset disabled=""/g)).toHaveLength(3);
+    expect(html.match(/<fieldset disabled=""/g)).toHaveLength(4);
     expect(html).toContain('aria-label="Attach site photos"');
     expect(html).toContain('aria-valuetext="40% complete"');
     expect(html).toContain('quota or storage failures can prevent persistence');

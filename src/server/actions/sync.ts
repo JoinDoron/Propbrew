@@ -12,6 +12,8 @@ import { canEnterWorkspace } from '@/config/workspaces';
 import { db } from '@/server/data/store';
 import { scopedMutableGet } from '@/server/data';
 import { money } from '@/domain/primitives';
+import { createHash } from 'node:crypto';
+import { constructionControl } from '@/server/construction-control';
 
 import { outboxOwnerKey, type OpKind, type SyncOutcome } from '@/domain/sync';
 import { syncFingerprint, syncInputSchema } from '@/server/sync-validation';
@@ -111,6 +113,19 @@ export async function syncOperation(raw: SyncInput): Promise<SyncOutcome> {
     case 'safety_event': {
       const p = input.payload;
       db.constructionSafetyEvents.unshift({ tenantId: project.tenantId, id: rowId, projectId: p.projectId, kind: p.eventKind, title: p.title, zoneId: p.zoneId, atISO: input.capturedISO.slice(0, 10), reportedBy: nameOf(actor), lostDays: p.lostDays, closed: false, action: p.action });
+      ref = p.title; break;
+    }
+    case 'evidence_pack': {
+      const p = input.payload;
+      const state = constructionControl(actor.tenantId!);
+      const sha256 = createHash('sha256').update(JSON.stringify([p.projectId, p.subject, p.subjectRef, p.title, p.mediaRefs])).digest('hex');
+      const existing = state.evidencePacks.find((row) => row.sha256 === sha256);
+      if (existing) { ref = existing.title; break; }
+      state.evidencePacks.unshift({
+        tenantId: project.tenantId, id: rowId, projectId: p.projectId, subject: p.subject,
+        subjectRef: p.subjectRef, title: p.title, mediaRefs: p.mediaRefs, sha256,
+        capturedBy: actor.userId, capturedAtISO: input.capturedISO, status: 'pending_review',
+      });
       ref = p.title; break;
     }
   }

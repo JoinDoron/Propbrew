@@ -28,7 +28,7 @@ const tabCount = (html: string) => [...html.matchAll(/role="tab"/g)].length;
 describe('Construction and platform page sections', () => {
   const constructionRoutes = [
     '', 'approvals', 'audit', 'boq', 'build-watch', 'copilot', 'digest', 'documents',
-    'evm', 'field', 'fx', 'league', 'materials', 'procurement', 'projects', 'risk',
+    'evm', 'field', 'fx', 'league', 'materials', 'operations', 'procurement', 'projects', 'risk',
     'safety', 'schedule', 'simulator', 'site', 'stock', 'timesheets', 'twin', 'workforce',
   ];
 
@@ -52,7 +52,7 @@ describe('Construction and platform page sections', () => {
 
   it('does not leave a Construction workspace outside the shared tab pattern', () => {
     const files = readdirSync(resolve(process.cwd(), 'src/components/construction')).filter((file) => file.endsWith('.tsx') && file !== 'construction-ui.tsx');
-    expect(files).toHaveLength(24);
+    expect(files).toHaveLength(25);
     for (const file of files) {
       const workspace = source(`src/components/construction/${file}`);
       expect(workspace).toContain('<PageTabs ');
@@ -99,10 +99,11 @@ describe('Construction and platform page sections', () => {
     const html = renderToStaticMarkup(createElement(FieldCapture, {
       projects: [], tasks: [], workers: [], todayISO: '2026-10-23',
     }));
-    expect(tabCount(html)).toBe(5);
+    expect(tabCount(html)).toBe(6);
     expect(html).toContain('Submit report');
     expect(html).toContain('Raise issue');
     expect(html).toContain('Record progress');
+    expect(html).toContain('Mobile evidence pack');
     expect(html).toContain('Quick attendance');
     expect(html).toContain('Device outbox');
     expect(html).toMatch(/role="tabpanel"[^>]*hidden=""/);

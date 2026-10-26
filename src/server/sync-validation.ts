@@ -32,6 +32,10 @@ export const syncInputSchema = z.discriminatedUnion('kind', [
   z.strictObject({ ...envelope, kind: z.literal('safety_event'), payload: z.strictObject({
     ...common, eventKind: z.enum(['near_miss', 'first_aid', 'lost_time', 'observation']), title: text, zoneId: identifier.optional(), lostDays: count, action: z.string().trim().max(2000).optional(),
   }) }),
+  z.strictObject({ ...envelope, kind: z.literal('evidence_pack'), payload: z.strictObject({
+    ...common, subject: z.enum(['daily_report', 'task', 'quality_gate', 'delivery', 'variation', 'claim']),
+    subjectRef: text, title: text,
+  }).refine((p) => p.mediaRefs.length > 0, { message: 'An evidence pack needs at least one successfully uploaded file.' }) }),
 ]);
 
 /** Sort every object key so a retry with reordered JSON has the same receipt. */
