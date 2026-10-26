@@ -162,7 +162,8 @@ describe('Clinexa-adapted Propbrew application shell', () => {
     const profile = readFileSync(new URL('../../src/components/inbox/profile-menu.tsx', import.meta.url), 'utf8');
     expect(shell).toContain('demoPersonaId={identity.demoPersonaId}');
     expect(profile).toContain('aria-label="Switch demo user type"');
-    expect(profile).toContain('DEMO_PERSONAS.map');
+    expect(profile).toContain('label="Estate user types"');
+    expect(profile).toContain('estatePersonas.map');
   });
 });
 

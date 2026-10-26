@@ -8,7 +8,7 @@
  */
 
 import { CAPABILITIES, ROLES, levelFor, type Capability, type Level, type Role } from './matrix';
-import { companyCapabilityAccess, type CompanyAccess } from '@/lib/auth/company-policy';
+import { companyCapabilityAccess, companyCapabilityActionAllowed, type CompanyAccess } from '@/lib/auth/company-policy';
 import {
   actionsFor,
   ESTATE_SCOPED_ROLES,
@@ -132,7 +132,8 @@ export function can(actor: Actor, capability: Capability, action: Action): Decis
   if (!(CAPABILITIES as readonly string[]).includes(capability)) return deny('unknown_capability');
   const companyAccess = companyCapabilityAccess(actor, capability);
   if (companyAccess === 'none' || companyAccess !== null && (action === 'configure'
-    || companyAccess === 'view' && action !== 'read' && action !== 'export')) return deny('no_grant');
+    || companyAccess === 'view' && action !== 'read' && action !== 'export')
+    || !companyCapabilityActionAllowed(actor, capability, action)) return deny('no_grant');
 
   let result: Decision = deny('no_grant');
 

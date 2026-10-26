@@ -24,6 +24,10 @@ export function ProfileMenu({ name, roleSummary, tenantLabel, workspace, company
   const trigger = useRef<HTMLButtonElement>(null);
   const panelId = useId();
   const activePersona = demoPersonaId ? DEMO_PERSONAS.find((persona) => persona.id === demoPersonaId) : undefined;
+  const accountPersonas = DEMO_PERSONAS.filter((persona) => Object.keys(persona.modules).length > 1);
+  const estatePersonas = DEMO_PERSONAS.filter((persona) => Object.keys(persona.modules).length === 1
+    && 'estate' in persona.modules && Boolean(persona.modules.estate));
+  const otherPersonas = DEMO_PERSONAS.filter((persona) => !accountPersonas.includes(persona) && !estatePersonas.includes(persona));
 
   return (
     <Popover
@@ -87,7 +91,15 @@ export function ProfileMenu({ name, roleSummary, tenantLabel, workspace, company
                   onChange={(event) => start(() => switchDemoPersona(event.target.value))}
                   className="pb-form-control w-full"
                 >
-                  {DEMO_PERSONAS.map((persona) => <option key={persona.id} value={persona.id}>{persona.label}</option>)}
+                  <optgroup label="Company-wide">
+                    {accountPersonas.map((persona) => <option key={persona.id} value={persona.id}>{persona.label}</option>)}
+                  </optgroup>
+                  <optgroup label="Estate user types">
+                    {estatePersonas.map((persona) => <option key={persona.id} value={persona.id}>{persona.label}</option>)}
+                  </optgroup>
+                  <optgroup label="Other modules">
+                    {otherPersonas.map((persona) => <option key={persona.id} value={persona.id}>{persona.label}</option>)}
+                  </optgroup>
                 </select>
               </label>
               <p className="mt-2 text-[11.5px] leading-5 text-text-3">{pending ? 'Switching user type…' : activePersona.description}</p>

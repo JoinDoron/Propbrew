@@ -12,6 +12,8 @@ export const COMPANY_ROLES = ['owner', 'admin', 'member'] as const;
 export type CompanyRole = (typeof COMPANY_ROLES)[number];
 export type CompanyModuleAccess = 'manage' | 'view';
 export type CompanyModuleGrants = Readonly<Partial<Record<WorkspaceId, CompanyModuleAccess>>>;
+export type CompanyCapabilityGrants = Readonly<Partial<Record<Capability, CompanyModuleAccess>>>;
+export type CompanyCapabilityActions = Readonly<Partial<Record<Capability, readonly Action[]>>>;
 export const FACILITY_ROLES = ['manager', 'technician', 'vendor'] as const;
 export type FacilityRole = (typeof FACILITY_ROLES)[number];
 
@@ -19,6 +21,10 @@ export type CompanyAccess = {
   readonly membershipId: string;
   readonly companyRole: CompanyRole;
   readonly modules: CompanyModuleGrants;
+  /** Optional deny-by-default job profile. Used by verified demo personas now
+   * and by persisted operational roles when a company assigns one. */
+  readonly capabilities?: CompanyCapabilityGrants;
+  readonly capabilityActions?: CompanyCapabilityActions;
 };
 
 /** A database membership joined to its company, never a request payload. */
@@ -49,7 +55,7 @@ const ALL_MODULES: CompanyModuleGrants = Object.freeze({
  * the page/API/action boundary, especially for mixed manager/viewer accounts.
  */
 export const COMPANY_MODULE_CAPABILITIES: Readonly<Record<WorkspaceId, readonly Capability[]>> = {
-  estate: ['tenant_config', 'users_roles', 'assets_ppm', 'work_orders', 'inspections_compliance', 'charges_invoicing', 'announcements', 'bookings_amenities', 'security_sos', 'marketplace', 'reports_analytics'],
+  estate: ['tenant_config', 'users_roles', 'assets_ppm', 'work_orders', 'inspections_compliance', 'charges_invoicing', 'payments_in_app', 'announcements', 'bookings_amenities', 'security_sos', 'marketplace', 'reports_analytics'],
   facility: ['users_roles', 'assets_ppm', 'work_orders', 'inspections_compliance', 'announcements', 'reports_analytics'],
   shortlet: ['users_roles', 'bookings_amenities', 'reports_analytics'],
   construction: ['users_roles', 'reports_analytics'],
@@ -68,6 +74,26 @@ function validModules(value: unknown): value is CompanyModuleGrants {
     && (access === 'manage' || access === 'view'));
 }
 
+function validCapabilities(value: unknown): value is CompanyCapabilityGrants {
+  if (value === undefined) return true;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) return false;
+  return Object.entries(value).every(([capability, access]) =>
+    COMPANY_MODULE_CAPABILITIES.estate.includes(capability as Capability)
+    && (access === 'manage' || access === 'view'));
+}
+
+function validCapabilityActions(value: unknown): value is CompanyCapabilityActions {
+  if (value === undefined) return true;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) return false;
+  return Object.entries(value).every(([capability, actions]) =>
+    COMPANY_MODULE_CAPABILITIES.estate.includes(capability as Capability)
+    && Array.isArray(actions) && actions.every((action) => ACTIONS.includes(action as Action)));
+}
+
 function grantFor(modules: CompanyModuleGrants, workspace: WorkspaceId): CompanyModuleAccess | undefined {
   return Object.prototype.hasOwnProperty.call(modules, workspace) ? modules[workspace] : undefined;
 }
@@ -75,7 +101,8 @@ function grantFor(modules: CompanyModuleGrants, workspace: WorkspaceId): Company
 function validAccess(actor: Actor): actor is Actor & { companyAccess: CompanyAccess } {
   const access = actor.companyAccess;
   return Boolean(access && identifier(access.membershipId) && COMPANY_ROLES.includes(access.companyRole)
-    && validModules(access.modules) && identifier(actor.tenantId) && typeof actor.allEstates === 'boolean'
+    && validModules(access.modules) && validCapabilities(access.capabilities)
+    && validCapabilityActions(access.capabilityActions) && identifier(actor.tenantId) && typeof actor.allEstates === 'boolean'
     && Array.isArray(actor.estateIds) && actor.estateIds.every(identifier)
     && !actor.roles.includes('platform_admin'));
 }
@@ -140,6 +167,9 @@ export function canUseCompanyModule(actor: Actor, module: unknown, action: Actio
 export function companyCapabilityAccess(actor: Actor, capability: Capability): CompanyModuleAccess | 'none' | null {
   if (actor.companyAccess === undefined) return null;
   if (!validAccess(actor)) return 'none';
+  if (actor.companyAccess.capabilities !== undefined) {
+    return actor.companyAccess.capabilities[capability] ?? 'none';
+  }
   let best: CompanyModuleAccess | 'none' = 'none';
   for (const workspace of MODULES) {
     if (!COMPANY_MODULE_CAPABILITIES[workspace].includes(capability)) continue;
@@ -148,6 +178,15 @@ export function companyCapabilityAccess(actor: Actor, capability: Capability): C
     if (access === 'view') best = 'view';
   }
   return best;
+}
+
+/** Optional verb-level ceiling for a job profile. Absence preserves the
+ * original company-module policy; presence can only narrow it. */
+export function companyCapabilityActionAllowed(actor: Actor, capability: Capability, action: Action): boolean {
+  if (actor.companyAccess === undefined) return true;
+  if (!validAccess(actor)) return false;
+  const actions = actor.companyAccess.capabilityActions?.[capability];
+  return actions === undefined || actions.includes(action);
 }
 
 /** Operational users_roles grants do not grant company membership authority. */

@@ -7,9 +7,14 @@ export function projectDemoSandboxActor(actor: Actor, persona: DemoPersona): Act
   return Object.freeze({
     ...actor,
     roles: Object.freeze([...persona.roles]),
+    estateIds: persona.estateIds ? Object.freeze([...persona.estateIds]) : actor.estateIds,
+    allEstates: persona.allEstates ?? actor.allEstates,
+    unitIds: persona.unitIds ? Object.freeze([...persona.unitIds]) : actor.unitIds,
     companyAccess: Object.freeze({
       ...actor.companyAccess,
       modules: Object.freeze({ ...persona.modules }),
+      ...(persona.capabilities ? { capabilities: Object.freeze({ ...persona.capabilities }) } : {}),
+      ...(persona.capabilityActions ? { capabilityActions: Object.freeze({ ...persona.capabilityActions }) } : {}),
     }),
   });
 }

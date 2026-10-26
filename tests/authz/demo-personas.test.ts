@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEMO_PERSONAS, demoPersonaById } from '@/config/demo-personas';
 import { canUseCompanyModule } from '@/lib/auth/company-policy';
+import { can } from '@/lib/authz';
 import { projectDemoSandboxActor } from '@/lib/auth/demo-persona';
 import type { Actor } from '@/lib/authz';
 import type { WorkspaceId } from '@/config/workspaces';
@@ -28,7 +29,9 @@ describe('private demo personas', () => {
     expect(projected).not.toBe(base);
     expect(projected.userId).toBe(base.userId);
     expect(projected.tenantId).toBe(base.tenantId);
-    expect(projected.estateIds).toEqual(base.estateIds);
+    expect(projected.estateIds).toEqual('estateIds' in persona ? persona.estateIds : base.estateIds);
+    expect(projected.allEstates).toBe('allEstates' in persona ? persona.allEstates : base.allEstates);
+    expect(projected.unitIds).toEqual('unitIds' in persona ? persona.unitIds : base.unitIds);
     expect(projected.roles).toEqual(persona.roles);
     expect(projected.companyAccess?.modules).toEqual(persona.modules);
     expect(base).toEqual(before);
@@ -39,6 +42,25 @@ describe('private demo personas', () => {
       expect(canUseCompanyModule(projected, workspace, 'read')).toBe(Boolean(access));
       expect(canUseCompanyModule(projected, workspace, 'update')).toBe(access === 'manage');
     }
+  });
+
+  it('enforces distinct Estate job-profile ceilings instead of label-only personas', () => {
+    const finance = projectDemoSandboxActor(base, demoPersonaById('finance-officer'));
+    expect(can(finance, 'charges_invoicing', 'update').allowed).toBe(true);
+    expect(can(finance, 'security_sos', 'read').allowed).toBe(false);
+
+    const auditor = projectDemoSandboxActor(base, demoPersonaById('auditor'));
+    expect(can(auditor, 'reports_analytics', 'read').allowed).toBe(true);
+    expect(can(auditor, 'reports_analytics', 'update').allowed).toBe(false);
+
+    const guard = projectDemoSandboxActor(base, demoPersonaById('security-guard'));
+    expect(can(guard, 'security_sos', 'transition').allowed).toBe(true);
+    expect(can(guard, 'security_sos', 'approve').allowed).toBe(false);
+    expect(can(guard, 'charges_invoicing', 'read').allowed).toBe(false);
+
+    const board = projectDemoSandboxActor(base, demoPersonaById('board-approver'));
+    expect(can(board, 'bookings_amenities', 'approve').allowed).toBe(true);
+    expect(can(board, 'bookings_amenities', 'update').allowed).toBe(false);
   });
 
   it('cannot project an unverified actor without a company membership', () => {
