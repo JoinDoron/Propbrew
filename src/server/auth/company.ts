@@ -1,5 +1,5 @@
 import 'server-only';
-import { headers } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { randomBytes, createHash } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { actorForCompanyMember, canManageCompanyMembers, type CompanyMembershipRecord, type CompanyModuleGrants, type CompanyRole, type FacilityRole } from '@/lib/auth/company-policy';
@@ -9,6 +9,8 @@ import { nativeAuthEnabled } from './mode';
 import { blankCompanyWorkspaceState } from '@/server/data/store';
 import { assertDemoCompany, assertNotDemoAccount, demoAccountsEnabled, DEMO_TENANT_ID, isDemoAccount } from './demo-config';
 import { ensureDemoSandbox, findDemoSandbox } from './demo-sandbox';
+import { DEMO_PERSONA_COOKIE, demoPersonaById } from '@/config/demo-personas';
+import { projectDemoSandboxActor } from '@/lib/auth/demo-persona';
 export { consumeAuthAttempt } from './rate-limit';
 
 export type NativeUser = { id: string; name: string; email: string; twoFactorEnabled?: boolean | null };
@@ -28,6 +30,8 @@ export async function getNativeIdentity(): Promise<NativeIdentity | null> {
 export async function companyPrincipalFor(identity: NativeIdentity) {
   if (isDemoAccount(identity.user.id) && !demoAccountsEnabled()) return null;
   const sandbox = isDemoAccount(identity.user.id) ? await ensureDemoSandbox(identity) : undefined;
+  const cookieStore = sandbox ? await cookies() : undefined;
+  const demoPersona = sandbox ? demoPersonaById(cookieStore?.get?.(DEMO_PERSONA_COOKIE)?.value) : undefined;
   return withAuthTransaction(identity.user.id, async (client) => {
     const selected = sandbox?.id ?? identity.session.activeCompanyId;
     if (selected && !/^[0-9a-f-]{36}$/i.test(selected)) return null;
@@ -39,10 +43,10 @@ export async function companyPrincipalFor(identity: NativeIdentity) {
       || Object.keys(row.modules).length !== 4 || Object.values(row.modules).some((access) => access !== 'manage'))) return null;
     const projected = actorForCompanyMember(membershipDto(row), identity.user.id);
     if (!projected) return null;
-    // Sandbox operators can exercise normal field-team transitions after
-    // assigning work to themselves. These roles never reach a real company.
-    const actor = sandbox ? Object.freeze({ ...projected, roles: Object.freeze([...new Set([...projected.roles, 'technician' as const, 'security' as const])]) }) : projected;
-    return { ...identity, actor, sandbox, company: { id: row.tenant_id, name: row.name }, membership: { ...membershipDto(row), version: row.version } };
+    // A demo persona narrows the real sandbox membership. It cannot widen a
+    // company account because this branch is reachable only by reserved demo IDs.
+    const actor = sandbox && demoPersona ? projectDemoSandboxActor(projected, demoPersona) : projected;
+    return { ...identity, actor, sandbox, ...(demoPersona ? { demoPersona } : {}), company: { id: row.tenant_id, name: row.name }, membership: { ...membershipDto(row), version: row.version } };
   }, identity.session.id);
 }
 export async function getCompanyPrincipal() {

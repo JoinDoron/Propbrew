@@ -1,6 +1,6 @@
 'use server';
 
-import { headers } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { getNativeAuth } from '@/server/auth/auth';
@@ -9,6 +9,7 @@ import { authDatabasePool } from '@/server/auth/database';
 import { consumeAuthAttempt } from '@/server/auth/rate-limit';
 import { DEMO_ACCOUNTS, demoAccountsEnabled, isDemoAccount } from '@/server/auth/demo-config';
 import { ensureDemoSandbox, resetDemoSandboxFor } from '@/server/auth/demo-sandbox';
+import { DEMO_PERSONAS, DEMO_PERSONA_COOKIE } from '@/config/demo-personas';
 
 type DemoState = { error?: string; message?: string };
 
@@ -51,4 +52,22 @@ export async function resetDemoSandbox(_state: DemoState, form: FormData): Promi
   } catch { return { error: 'Your sandbox could not be reset. Please refresh and try again.' }; }
   revalidatePath('/', 'layout');
   return { message: 'Your sandbox has been reset to fresh sample data across all four modules.' };
+}
+
+export async function switchDemoPersona(id: string): Promise<void> {
+  if (!demoAccountsEnabled()) throw new Error('Demo user types are unavailable.');
+  const identity = await getNativeIdentity();
+  if (!identity || !isDemoAccount(identity.user.id)) throw new Error('A signed-in demo account is required.');
+  const persona = DEMO_PERSONAS.find((entry) => entry.id === id);
+  if (!persona) throw new Error('Choose an available demo user type.');
+  await consumeAuthAttempt('demo-persona-switch', identity.session.id, 120, 3600);
+  const store = await cookies();
+  store.set(DEMO_PERSONA_COOKIE, persona.id, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 60 * 60 * 24 * 30,
+  });
+  redirect(persona.home);
 }

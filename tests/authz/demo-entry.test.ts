@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEMO_ACCOUNTS } from '@/server/auth/demo-config';
+import { DEMO_PERSONAS, DEMO_PERSONA_COOKIE } from '@/config/demo-personas';
 
 const boundary = vi.hoisted(() => ({
   getIdentity: vi.fn(), activateCompany: vi.fn(), signIn: vi.fn(),
   pool: vi.fn(), query: vi.fn(), consume: vi.fn(), headers: vi.fn(),
-  auth: vi.fn(), redirect: vi.fn(), ensureSandbox: vi.fn(), resetSandbox: vi.fn(), revalidate: vi.fn(),
+  auth: vi.fn(), redirect: vi.fn(), ensureSandbox: vi.fn(), resetSandbox: vi.fn(), revalidate: vi.fn(), cookies: vi.fn(), setCookie: vi.fn(),
 }));
-vi.mock('next/headers', () => ({ headers: boundary.headers }));
+vi.mock('next/headers', () => ({ headers: boundary.headers, cookies: boundary.cookies }));
 vi.mock('next/navigation', () => ({ redirect: boundary.redirect }));
 vi.mock('next/cache', () => ({ revalidatePath: boundary.revalidate }));
 vi.mock('@/server/auth/demo-sandbox', () => ({ ensureDemoSandbox: boundary.ensureSandbox, resetDemoSandboxFor: boundary.resetSandbox }));
@@ -15,7 +16,7 @@ vi.mock('@/server/auth/database', () => ({ authDatabasePool: boundary.pool }));
 vi.mock('@/server/auth/company', () => ({ getNativeIdentity: boundary.getIdentity, activateCompany: boundary.activateCompany }));
 vi.mock('@/server/auth/rate-limit', () => ({ consumeAuthAttempt: boundary.consume }));
 
-import { enterDemoAccount, resetDemoSandbox } from '@/server/actions/demo-auth';
+import { enterDemoAccount, resetDemoSandbox, switchDemoPersona } from '@/server/actions/demo-auth';
 
 const PASSWORD = 'server-only-demo-fixture-credential-00001';
 const SESSION_ID = 'cba55389-e0dc-4f0c-8a74-fbf5981f0824';
@@ -32,6 +33,7 @@ beforeEach(() => {
   vi.stubEnv('PROPBREW_DEMO_PASSWORD', PASSWORD);
   boundary.getIdentity.mockResolvedValue(null);
   boundary.headers.mockResolvedValue(headers);
+  boundary.cookies.mockResolvedValue({ set: boundary.setCookie });
   boundary.consume.mockResolvedValue(undefined);
   boundary.activateCompany.mockResolvedValue(undefined);
   boundary.ensureSandbox.mockResolvedValue({ id: SANDBOX_ID, expiresAt: '2026-10-25T12:00:00.000Z' });
@@ -41,6 +43,24 @@ beforeEach(() => {
   boundary.query.mockResolvedValue({ rowCount: 1, rows: [{ id: SESSION_ID }] });
   boundary.signIn.mockResolvedValue({ token: TOKEN, user: userFor(DEMO_ACCOUNTS[0]) });
   boundary.redirect.mockImplementation((path: string) => { throw new Error(`REDIRECT:${path}`); });
+});
+
+describe('demo user type switch', () => {
+  it('refuses real company accounts and unknown personas without setting a cookie', async () => {
+    boundary.getIdentity.mockResolvedValue({ user: { id: '9d91d49f-f40d-4a4d-935b-04635d510e7c' }, session: { id: SESSION_ID } });
+    await expect(switchDemoPersona('company-owner')).rejects.toThrow(/demo account/i);
+    boundary.getIdentity.mockResolvedValue({ user: userFor(DEMO_ACCOUNTS[0]), session: { id: SESSION_ID } });
+    await expect(switchDemoPersona('platform-admin')).rejects.toThrow(/available demo user type/i);
+    expect(boundary.setCookie).not.toHaveBeenCalled();
+  });
+
+  it.each(DEMO_PERSONAS)('sets only the allowlisted $label persona and redirects to its safe home', async (persona) => {
+    boundary.getIdentity.mockResolvedValue({ user: userFor(DEMO_ACCOUNTS[0]), session: { id: SESSION_ID } });
+    await expect(switchDemoPersona(persona.id)).rejects.toThrow(`REDIRECT:${persona.home}`);
+    expect(boundary.consume).toHaveBeenCalledExactlyOnceWith('demo-persona-switch', SESSION_ID, 120, 3600);
+    expect(boundary.setCookie).toHaveBeenCalledExactlyOnceWith(DEMO_PERSONA_COOKIE, persona.id, expect.objectContaining({ httpOnly: true, sameSite: 'lax', path: '/' }));
+    expect(boundary.redirect).toHaveBeenCalledExactlyOnceWith(persona.home);
+  });
 });
 afterEach(() => vi.unstubAllEnvs());
 

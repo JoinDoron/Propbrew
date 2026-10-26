@@ -10,6 +10,7 @@ const nonOperational = new Set([
   'company-auth.ts:registerAccount', 'company-auth.ts:loginAccount', 'company-auth.ts:verifySecondFactor',
   'demo-auth.ts:enterDemoAccount',
   'demo-auth.ts:resetDemoSandbox',
+  'demo-auth.ts:switchDemoPersona',
   'companies.ts:createCompany', 'companies.ts:selectCompany', 'companies.ts:createCompanyInvite',
   'companies.ts:updateCompanyMember', 'companies.ts:removeCompanyMember', 'companies.ts:acceptCompanyInvite',
 ]);

@@ -20,9 +20,11 @@ import { REVIEW_COOKIE_OPTIONS, REVIEW_CSRF_COOKIE, REVIEW_SESSION_COOKIE, revie
 import { nativeAuthEnabled } from '@/server/auth/mode';
 import { getNativeAuth } from '@/server/auth/auth';
 import { headers } from 'next/headers';
+import { DEMO_PERSONA_COOKIE } from '@/config/demo-personas';
 
 export async function signOut(): Promise<void> {
   if (nativeAuthEnabled()) {
+    (await cookies()).set(DEMO_PERSONA_COOKIE, '', { path: '/', httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 0 });
     await getNativeAuth().api.signOut({ headers: await headers() });
     redirect('/login');
   }

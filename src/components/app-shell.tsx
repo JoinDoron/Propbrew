@@ -26,6 +26,7 @@ import { ProfileMenu } from '@/components/inbox/profile-menu';
 import { signOut } from '@/server/actions/auth';
 import type { Notification, Thread } from '@/server/data/inbox';
 import type { Workspace } from '@/config/workspaces';
+import type { DemoPersonaId } from '@/config/demo-personas';
 import styles from './app-shell.module.css';
 
 const SIDEBAR_WIDTH = 248;
@@ -51,6 +52,7 @@ export type ShellIdentity = {
   companyAccount?: boolean;
   canManageTeam?: boolean;
   demoAccount?: boolean;
+  demoPersonaId?: DemoPersonaId;
 };
 
 export function AppShell({
@@ -246,6 +248,7 @@ export function AppShell({
           <span className={styles.headerDivider} aria-hidden="true" />
           <ProfileMenu name={identity.name} roleSummary={identity.roleSummary} tenantLabel={identity.tenantLabel}
             companyAccount={identity.companyAccount} canManageTeam={identity.canManageTeam}
+            demoPersonaId={identity.demoPersonaId}
             workspace={workspace ? { id: workspace.id, name: workspace.name, icon: workspace.icon } : undefined} />
         </div>
         </div>

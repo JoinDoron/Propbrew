@@ -156,6 +156,14 @@ describe('Clinexa-adapted Propbrew application shell', () => {
     expect(dark).toContain('--surface-3: #1c1c1f');
     for (const navy of ['#0b1120', '#111827', '#172033', '#202b40']) expect(dark).not.toContain(navy);
   });
+
+  it('places the demo-only user type control in the account menu', () => {
+    const shell = readFileSync(new URL('../../src/components/app-shell.tsx', import.meta.url), 'utf8');
+    const profile = readFileSync(new URL('../../src/components/inbox/profile-menu.tsx', import.meta.url), 'utf8');
+    expect(shell).toContain('demoPersonaId={identity.demoPersonaId}');
+    expect(profile).toContain('aria-label="Switch demo user type"');
+    expect(profile).toContain('DEMO_PERSONAS.map');
+  });
 });
 
 describe('mobile navigation keyboard boundary', () => {

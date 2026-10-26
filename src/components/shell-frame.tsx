@@ -14,6 +14,7 @@ import { canManageCompanyMembers } from '@/lib/auth/company-policy';
 import { isDemoAccount } from '@/server/auth/demo-config';
 import { DemoNotice } from '@/components/auth/demo-notice';
 import { currentRecordContext } from '@/server/data/record-context';
+import type { DemoPersonaId } from '@/config/demo-personas';
 
 /**
  * Server frame for an authenticated route group. Redirects to /login when there
@@ -36,15 +37,17 @@ export async function ShellFrame({ expected, workspace, children }: { expected: 
   if (expected === 'ops' && (!workspace || !canEnterWorkspace(actor, workspace))) notFound();
 
   const groups = visibleNav(shell, actor, workspace);
+  const companyPrincipal = currentRecordContext()?.companyPrincipal;
 
   const identity: ShellIdentity = {
     name: session.key === 'clerk' ? session.label : session.label.split(' — ')[0],
     roleSummary: session.roleSummary,
     tenantLabel: session.tenantLabel,
     outboxOwner: actor.tenantId ? JSON.stringify([actor.tenantId, actor.userId]) : undefined,
-    companyAccount: Boolean(actor.companyAccess),
-    canManageTeam: Boolean(actor.companyAccess) && canManageCompanyMembers(actor),
-    demoAccount: isDemoAccount(actor.userId) && !currentRecordContext()?.companyPrincipal?.sandbox,
+    companyAccount: Boolean(actor.companyAccess) && !companyPrincipal?.sandbox,
+    canManageTeam: Boolean(actor.companyAccess) && !companyPrincipal?.sandbox && canManageCompanyMembers(actor),
+    demoAccount: isDemoAccount(actor.userId) && !companyPrincipal?.sandbox,
+    demoPersonaId: companyPrincipal?.demoPersona?.id as DemoPersonaId | undefined,
   };
 
   const canReadWorkOrders = can(actor, 'work_orders', 'read').allowed;
@@ -72,7 +75,7 @@ export async function ShellFrame({ expected, workspace, children }: { expected: 
       unreadMessages={unreadMessages}
       devSwitcher={devIdentityEnabled() ? <RoleSwitcher currentKey={session.key} /> : undefined}
     >
-      {isDemoAccount(actor.userId) && <DemoNotice editable={Boolean(currentRecordContext()?.companyPrincipal?.sandbox)} outboxOwner={currentRecordContext()?.companyPrincipal?.sandbox ? identity.outboxOwner : undefined} />}
+      {isDemoAccount(actor.userId) && <DemoNotice editable={Boolean(companyPrincipal?.sandbox)} outboxOwner={companyPrincipal?.sandbox ? identity.outboxOwner : undefined} />}
       {children}
     </AppShell>
   );

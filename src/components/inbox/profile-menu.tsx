@@ -8,22 +8,26 @@ import { Icon } from '@/components/icon';
 import type { Workspace } from '@/config/workspaces';
 import { Popover } from './popover';
 import { signOut } from '@/server/actions/auth';
+import { switchDemoPersona } from '@/server/actions/demo-auth';
+import { DEMO_PERSONAS, type DemoPersonaId } from '@/config/demo-personas';
 
-export function ProfileMenu({ name, roleSummary, tenantLabel, workspace, companyAccount, canManageTeam }: {
+export function ProfileMenu({ name, roleSummary, tenantLabel, workspace, companyAccount, canManageTeam, demoPersonaId }: {
   name: string;
   roleSummary: string;
   tenantLabel: string;
   workspace?: Pick<Workspace, 'id' | 'name' | 'icon'>;
   companyAccount?: boolean;
   canManageTeam?: boolean;
+  demoPersonaId?: DemoPersonaId;
 }) {
   const [pending, start] = useTransition();
   const trigger = useRef<HTMLButtonElement>(null);
   const panelId = useId();
+  const activePersona = demoPersonaId ? DEMO_PERSONAS.find((persona) => persona.id === demoPersonaId) : undefined;
 
   return (
     <Popover
-      width={260}
+      width={demoPersonaId ? 300 : 260}
       trigger={({ open, toggle }) => (
         <button
           ref={trigger}
@@ -70,6 +74,23 @@ export function ProfileMenu({ name, roleSummary, tenantLabel, workspace, company
                 </span>
                 <ChevronRight size={16} className="shrink-0 text-text-2" aria-hidden="true" />
               </Link>
+            </div>
+          )}
+          {activePersona && (
+            <div className="p-3.5 border-b border-border">
+              <label className="grid gap-1.5 text-[12px] font-medium text-text-2">
+                Demo user type
+                <select
+                  aria-label="Switch demo user type"
+                  value={activePersona.id}
+                  disabled={pending}
+                  onChange={(event) => start(() => switchDemoPersona(event.target.value))}
+                  className="pb-form-control w-full"
+                >
+                  {DEMO_PERSONAS.map((persona) => <option key={persona.id} value={persona.id}>{persona.label}</option>)}
+                </select>
+              </label>
+              <p className="mt-2 text-[11.5px] leading-5 text-text-3">{pending ? 'Switching user type…' : activePersona.description}</p>
             </div>
           )}
           <div className="p-1.5">
