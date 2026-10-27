@@ -70,6 +70,20 @@ export function toWhere(scope: ScopeFilter): Record<string, unknown> {
     ];
   }
 
+  if (scope.buildingIds && scope.buildingIds !== 'all') {
+    where.AND = [
+      ...((where.AND as unknown[]) ?? []),
+      { OR: [{ buildingId: { in: scope.buildingIds } }, { buildingId: null }] },
+    ];
+  }
+
+  if (scope.unitIds && scope.unitIds !== 'all') {
+    where.AND = [
+      ...((where.AND as unknown[]) ?? []),
+      { OR: [{ unitId: { in: scope.unitIds } }, { unitId: null }] },
+    ];
+  }
+
   if (scope.ownership) {
     if (scope.ownership.length === 0) {
       throw new Error('empty ownership clause — refusing to build a match-everything filter');
@@ -84,6 +98,7 @@ export type ScopableRow = {
   tenantId?: string;
   siteId?: string;
   estateId?: string;
+  buildingId?: string;
   ownerUserId?: string;
   requesterUserId?: string;
   assigneeUserId?: string;
@@ -119,6 +134,11 @@ export function matchesScope(row: ScopableRow, scope: ScopeFilter): boolean {
     // A row with no estate dimension is not estate-scoped; let it through.
     if (estate !== undefined && !scope.estateIds.includes(estate)) return false;
   }
+
+  if (scope.buildingIds && scope.buildingIds !== 'all'
+    && row.buildingId !== undefined && !scope.buildingIds.includes(row.buildingId)) return false;
+  if (scope.unitIds && scope.unitIds !== 'all'
+    && row.unitId !== undefined && !scope.unitIds.includes(row.unitId)) return false;
 
   if (scope.ownership) {
     if (scope.ownership.length === 0) {

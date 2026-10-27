@@ -39,7 +39,8 @@ const members: CompanyMember[] = [
   { id: 'owner-member', userId: 'owner', name: 'Ada Okafor', email: 'ada@example.test', companyRole: 'owner', modules: { estate: 'manage', facility: 'manage', shortlet: 'manage', construction: 'manage' }, isCurrentUser: true },
   { id: 'staff-member', userId: 'staff', name: 'Emeka Obi', email: 'emeka@example.test', companyRole: 'member', modules: { estate: 'view', facility: 'manage' }, isCurrentUser: false },
 ];
-const team = (canManage: boolean, values = members) => renderToStaticMarkup(createElement(CompanyTeam, { companyName: 'Palm Court', members: values, canManage, createCompanyInvite: companyAction, updateCompanyMember: companyAction, removeCompanyMember: companyAction }));
+const assignments = { vendors: [{ id: 'vendor-1', name: 'Vendor One' }], estates: [{ id: 'estate-1', name: 'Palm Court' }], buildings: [{ id: 'block-1', siteId: 'estate-1', name: 'Block A' }], units: [{ id: 'unit-1', siteId: 'estate-1', buildingId: 'block-1', name: 'A-01' }] };
+const team = (canManage: boolean, values = members) => renderToStaticMarkup(createElement(CompanyTeam, { companyName: 'Palm Court', members: values, assignments, canManage, createCompanyInvite: companyAction, updateCompanyMember: companyAction, removeCompanyMember: companyAction }));
 type Props = { children?: ReactNode; name?: string; type?: string; disabled?: boolean; checked?: boolean; 'aria-label'?: string; onClick?: () => void; action?: (form: FormData) => Promise<void> };
 function elements(root: ReactNode): ReactElement<Props>[] {
   if (Array.isArray(root)) return root.flatMap(elements);

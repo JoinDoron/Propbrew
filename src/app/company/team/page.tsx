@@ -11,6 +11,11 @@ export const dynamic = 'force-dynamic';
 export default async function CompanyTeamPage() {
   if(!nativeAuthEnabled())notFound(); const current=await getCompanyPrincipal();if(!current)redirect('/companies');
   if(!canManageCompanyMembers(current.actor))notFound();
-  const vendors=await withDurableRead(async()=>repos.vendors.list(current.actor,{limit:200}).items.map((vendor)=>({id:String(vendor.id),name:vendor.name})));
-  return <main className="pb-app min-h-screen bg-app p-5 md:p-8"><Link href="/workspaces" className="pb-link">← Workspaces</Link><CompanyTeam companyName={current.company.name} members={await listCompanyMembers(current)} vendors={vendors} canManage={true} createCompanyInvite={createCompanyInvite} updateCompanyMember={updateCompanyMember} removeCompanyMember={removeCompanyMember}/></main>;
+  const assignments=await withDurableRead(async()=>({
+    vendors:repos.vendors.list(current.actor,{limit:200}).items.map((row)=>({id:String(row.id),name:row.name})),
+    estates:repos.sites.list(current.actor,{limit:500}).items.map((row)=>({id:String(row.id),name:row.name})),
+    buildings:repos.buildings.list(current.actor,{limit:2000}).items.map((row)=>({id:String(row.id),siteId:String(row.siteId),name:row.name})),
+    units:repos.units.list(current.actor,{limit:5000}).items.map((row)=>({id:String(row.id),siteId:String(row.siteId),buildingId:String(row.buildingId),name:row.label})),
+  }));
+  return <main className="pb-app min-h-screen bg-app p-5 md:p-8"><Link href="/workspaces" className="pb-link">← Workspaces</Link><CompanyTeam companyName={current.company.name} members={await listCompanyMembers(current)} assignments={assignments} canManage={true} createCompanyInvite={createCompanyInvite} updateCompanyMember={updateCompanyMember} removeCompanyMember={removeCompanyMember}/></main>;
 }

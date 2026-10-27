@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import type { CompanyModuleGrants, FacilityRole } from '@/lib/auth/company-policy';
+import { operationalProfileById, type OperationalProfile } from '@/config/operational-profiles';
 import { nativeAuthEnabled } from '@/server/auth/mode';
 import { getNativeIdentity,getCompanyPrincipal,activateCompany,provisionCompany,withCompanyManagement,companyAudit,newInvitationToken,invitationHash,consumeAuthAttempt } from '@/server/auth/company';
 import { withAuthTransaction } from '@/server/auth/database';
@@ -14,15 +15,45 @@ type Result = { error?: string; message?: string; inviteUrl?: string };
 const uuid = z.uuid();
 async function identity() { if (!nativeAuthEnabled()) throw new Error('Company accounts are unavailable.'); const current=await getNativeIdentity(); if(!current) redirect('/login'); return current; }
 async function principal() { await identity(); const current=await getCompanyPrincipal(); if(!current) redirect('/companies'); return current; }
-function access(form:FormData) {
+const selectedIds = (form: FormData, name: string) => [...new Set(form.getAll(name).map(String).filter((value) => /^[A-Za-z0-9_:-]{1,200}$/.test(value)))];
+async function scopeFor(current: Awaited<ReturnType<typeof principal>>, profile: OperationalProfile | undefined, form: FormData) {
+  if (!profile || profile.scope === 'company') return { estateIds: [] as string[], buildingIds: [] as string[], unitIds: [] as string[], allEstates: true };
+  const requestedEstates = selectedIds(form, 'estateIds');
+  const requestedBuildings = selectedIds(form, 'buildingIds');
+  const requestedUnits = selectedIds(form, 'unitIds');
+  const records = await withDurableRead(async () => ({
+    sites: repos.sites.list(current.actor, { limit: 500 }).items,
+    buildings: repos.buildings.list(current.actor, { limit: 2000 }).items,
+    units: repos.units.list(current.actor, { limit: 5000 }).items,
+  }));
+  const sites = new Set(records.sites.map((row) => String(row.id)));
+  const buildings = new Map(records.buildings.map((row) => [String(row.id), String(row.siteId)]));
+  const units = new Map(records.units.map((row) => [String(row.id), { siteId: String(row.siteId), buildingId: String(row.buildingId) }]));
+  if (requestedEstates.some((id) => !sites.has(id)) || requestedBuildings.some((id) => !buildings.has(id)) || requestedUnits.some((id) => !units.has(id))) throw new Error('Assignment unavailable.');
+  if (profile.scope === 'estate' && !requestedEstates.length) throw new Error('Choose at least one property or site.');
+  if (profile.scope === 'building' && !requestedBuildings.length) throw new Error('Choose at least one block or building.');
+  if (profile.scope === 'unit' && !requestedUnits.length) throw new Error('Choose at least one resident unit.');
+  const estateIds = new Set(requestedEstates);
+  requestedBuildings.forEach((id) => estateIds.add(buildings.get(id)!));
+  requestedUnits.forEach((id) => estateIds.add(units.get(id)!.siteId));
+  const unitIds = profile.scope === 'building'
+    ? records.units.filter((row) => requestedBuildings.includes(String(row.buildingId))).map((row) => String(row.id))
+    : requestedUnits;
+  return { estateIds: [...estateIds], buildingIds: requestedBuildings, unitIds, allEstates: false };
+}
+async function access(form:FormData, current: Awaited<ReturnType<typeof principal>>) {
   const role=z.enum(['admin','member']).parse(form.get('companyRole'));
-  const modules:Record<string,'view'|'manage'>={};
-  for(const key of ['estate','facility','shortlet','construction']) { const value=z.enum(['none','view','manage']).parse(form.get(`module:${key}`)??'none');if(value!=='none')modules[key]=value; }
+  const profile = operationalProfileById(form.get('operationalProfileId'));
+  if (role === 'member' && !profile) throw new Error('Choose an operational user type.');
+  const modules:Record<string,'view'|'manage'> = profile ? { [profile.workspace]: profile.access } : {};
+  if (!profile) for(const key of ['estate','facility','shortlet','construction']) { const value=z.enum(['none','view','manage']).parse(form.get(`module:${key}`)??'none');if(value!=='none')modules[key]=value; }
   if(!Object.keys(modules).length)throw new Error('Choose at least one workspace.');
-  const facilityRole = modules.facility === 'manage' ? z.enum(['manager','technician','vendor']).parse(form.get('facilityRole') ?? 'manager') : null;
+  const facilityRole = profile?.id === 'field-technician' ? 'technician' : profile?.id === 'vendor-technician' ? 'vendor'
+    : modules.facility === 'manage' ? 'manager' : null;
   const vendorOrgId = facilityRole === 'vendor' ? z.string().trim().min(1).max(200).parse(form.get('vendorOrgId')) : null;
   if ((facilityRole === 'technician' || facilityRole === 'vendor') && Object.entries(modules).some(([key,value]) => key !== 'facility' && value === 'manage')) throw new Error('Field roles cannot also hold another manager role.');
-  return {role,modules:modules as CompanyModuleGrants,facilityRole:facilityRole as FacilityRole|null,vendorOrgId};
+  const scope = await scopeFor(current, profile, form);
+  return {role,modules:modules as CompanyModuleGrants,facilityRole:facilityRole as FacilityRole|null,vendorOrgId,operationalProfileId: profile?.id ?? null,...scope};
 }
 async function vendorExists(current: Awaited<ReturnType<typeof principal>>, vendorOrgId: string | null) {
   if (!vendorOrgId) return true;
@@ -42,7 +73,7 @@ export async function selectCompany(companyId:string):Promise<Result|void> {
 export async function createCompanyInvite(form:FormData):Promise<Result> {
   const current=await principal();
   try {
-    const email=z.email().max(254).parse(form.get('email')).toLowerCase();const {role,modules,facilityRole,vendorOrgId}=access(form);
+    const email=z.email().max(254).parse(form.get('email')).toLowerCase();const assignment=await access(form,current); const {role,modules,facilityRole,vendorOrgId,operationalProfileId,estateIds,buildingIds,unitIds,allEstates}=assignment;
     if(!(await vendorExists(current,vendorOrgId)))throw new Error('Vendor unavailable.');
     await consumeAuthAttempt('company-invite',current.user.id,30,3600);
     const token=newInvitationToken();
@@ -50,8 +81,8 @@ export async function createCompanyInvite(form:FormData):Promise<Result> {
       const existing=await client.query('select m.id from company_memberships m join auth_users u on u.id=m.user_id where m.tenant_id=$1::uuid and lower(u.email)=$2 and m.status=$3',[current.company.id,email,'active']);
       if(existing.rowCount)throw new Error('Already a member.');
       await client.query('update company_invitations set cancelled_at=now() where tenant_id=$1::uuid and lower(email)=$2 and accepted_at is null and cancelled_at is null',[current.company.id,email]);
-      const saved=await client.query('insert into company_invitations(tenant_id,email,token_hash,company_role,modules,facility_role,vendor_org_id,created_by,expires_at) values($1::uuid,$2,$3,$4,$5::jsonb,$6,$7,$8::uuid,now()+interval \'48 hours\') returning id',[current.company.id,email,token.hash,role,JSON.stringify(modules),facilityRole,vendorOrgId,current.user.id]);
-      await companyAudit(client,current.company.id,current.user.id,'company.invitation.created',saved.rows[0].id,{role,modules,facilityRole,vendorOrgId});
+      const saved=await client.query('insert into company_invitations(tenant_id,email,token_hash,company_role,modules,facility_role,vendor_org_id,operational_profile,estate_ids,building_ids,unit_ids,all_estates,created_by,expires_at) values($1::uuid,$2,$3,$4,$5::jsonb,$6,$7,$8,$9::jsonb,$10::jsonb,$11::jsonb,$12,$13::uuid,now()+interval \'48 hours\') returning id',[current.company.id,email,token.hash,role,JSON.stringify(modules),facilityRole,vendorOrgId,operationalProfileId,JSON.stringify(estateIds),JSON.stringify(buildingIds),JSON.stringify(unitIds),allEstates,current.user.id]);
+      await companyAudit(client,current.company.id,current.user.id,'company.invitation.created',saved.rows[0].id,assignment);
     });
     return {inviteUrl:new URL(`/invite/${token.token}`,process.env.BETTER_AUTH_URL??process.env.NEXT_PUBLIC_SITE_URL).toString(),message:'Invitation created. Share this private link with the named teammate. It expires in 48 hours.'};
   }catch{return {error:'The invitation could not be created. Check the email, role and workspace choices.'};}
@@ -59,14 +90,14 @@ export async function createCompanyInvite(form:FormData):Promise<Result> {
 export async function updateCompanyMember(form:FormData):Promise<Result> {
   const current=await principal();
   try {
-    const id=uuid.parse(form.get('memberId'));const {role,modules,facilityRole,vendorOrgId}=access(form);
+    const id=uuid.parse(form.get('memberId'));const assignment=await access(form,current); const {role,modules,facilityRole,vendorOrgId,operationalProfileId,estateIds,buildingIds,unitIds,allEstates}=assignment;
     if(!(await vendorExists(current,vendorOrgId)))throw new Error('Vendor unavailable.');
     await withCompanyManagement(current,async(client)=>{
       const target=(await client.query('select id,user_id,company_role from company_memberships where id=$1::uuid and tenant_id=$2::uuid and status=$3 for update',[id,current.company.id,'active'])).rows[0];
       if(!target||target.company_role==='owner')throw new Error('Owner access is protected.');
       if(target.user_id===current.user.id)throw new Error('Ask another owner to change your own account access.');
-      await client.query('update company_memberships set company_role=$1,modules=$2::jsonb,facility_role=$3,vendor_org_id=$4,version=version+1,updated_at=now() where id=$5::uuid and tenant_id=$6::uuid',[role,JSON.stringify(modules),facilityRole,vendorOrgId,id,current.company.id]);
-      await companyAudit(client,current.company.id,current.user.id,'company.member.access_changed',id,{role,modules,facilityRole,vendorOrgId});
+      await client.query('update company_memberships set company_role=$1,modules=$2::jsonb,facility_role=$3,vendor_org_id=$4,operational_profile=$5,estate_ids=$6::jsonb,building_ids=$7::jsonb,unit_ids=$8::jsonb,all_estates=$9,version=version+1,updated_at=now() where id=$10::uuid and tenant_id=$11::uuid',[role,JSON.stringify(modules),facilityRole,vendorOrgId,operationalProfileId,JSON.stringify(estateIds),JSON.stringify(buildingIds),JSON.stringify(unitIds),allEstates,id,current.company.id]);
+      await companyAudit(client,current.company.id,current.user.id,'company.member.access_changed',id,assignment);
     });
     revalidatePath('/company/team');revalidatePath('/workspaces');return {message:'Access updated. The new permissions apply on the next request.'};
   }catch{return {error:'Access could not be changed. Owner access and your own management access are protected.'};}

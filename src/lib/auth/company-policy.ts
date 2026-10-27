@@ -4,6 +4,7 @@
  * Neither signup fields, session metadata nor a selected workspace grant roles.
  */
 import type { WorkspaceId } from '@/config/workspaces';
+import { operationalProfileById, type OperationalProfileId } from '@/config/operational-profiles';
 import type { Actor } from '@/lib/authz/can';
 import type { Capability, Role } from '@/lib/authz/matrix';
 import { ACTIONS, type Action } from '@/lib/authz/policy';
@@ -21,6 +22,7 @@ export type CompanyAccess = {
   readonly membershipId: string;
   readonly companyRole: CompanyRole;
   readonly modules: CompanyModuleGrants;
+  readonly operationalProfileId?: OperationalProfileId;
   /** Optional deny-by-default job profile. Used by verified demo personas now
    * and by persisted operational roles when a company assigns one. */
   readonly capabilities?: CompanyCapabilityGrants;
@@ -39,7 +41,10 @@ export type CompanyMembershipRecord = {
   modules?: CompanyModuleGrants;
   facilityRole?: FacilityRole | null;
   vendorOrgId?: string | null;
+  operationalProfileId?: OperationalProfileId | null;
   estateIds: readonly string[];
+  buildingIds?: readonly string[];
+  unitIds?: readonly string[];
   allEstates: boolean;
 };
 
@@ -122,29 +127,43 @@ export function actorForCompanyMember(record: CompanyMembershipRecord, authentic
   if (record.facilityRole != null && !FACILITY_ROLES.includes(record.facilityRole)) return null;
   if (record.facilityRole === 'vendor' && !identifier(record.vendorOrgId)) return null;
   if (record.facilityRole !== 'vendor' && record.vendorOrgId != null) return null;
+  const operationalProfile = record.operationalProfileId ? operationalProfileById(record.operationalProfileId) : undefined;
+  if (record.operationalProfileId && !operationalProfile) return null;
+  if (operationalProfile && grantFor(modules, operationalProfile.workspace) !== operationalProfile.access) return null;
+  if (record.buildingIds?.some((id) => !identifier(id)) || record.unitIds?.some((id) => !identifier(id))) return null;
 
   const roles = new Set<Role>();
-  for (const workspace of MODULES) {
-    const access = grantFor(modules, workspace);
-    if (access === 'manage') {
-      if (workspace !== 'facility') roles.add('estate_manager');
-      else roles.add(record.facilityRole === 'technician' ? 'technician' : record.facilityRole === 'vendor' ? 'vendor' : 'facility_manager');
+  if (operationalProfile) {
+    operationalProfile.roles.forEach((role) => roles.add(role));
+  } else {
+    for (const workspace of MODULES) {
+      const access = grantFor(modules, workspace);
+      if (access === 'manage') {
+        if (workspace !== 'facility') roles.add('estate_manager');
+        else roles.add(record.facilityRole === 'technician' ? 'technician' : record.facilityRole === 'vendor' ? 'vendor' : 'facility_manager');
+      }
+      if (access === 'view') roles.add('executive');
     }
-    if (access === 'view') roles.add('executive');
   }
   const companyAccess: CompanyAccess = Object.freeze({
     membershipId: record.membershipId,
     companyRole: record.companyRole,
     modules: Object.freeze({ ...modules }),
+    ...(operationalProfile ? {
+      operationalProfileId: operationalProfile.id as OperationalProfileId,
+      ...(operationalProfile.capabilities ? { capabilities: operationalProfile.capabilities } : {}),
+      ...(operationalProfile.capabilityActions ? { capabilityActions: operationalProfile.capabilityActions } : {}),
+    } : {}),
   });
   return Object.freeze({
     userId: authenticatedUserId,
     tenantId: record.companyId,
     roles: Object.freeze([...roles]),
     estateIds: Object.freeze([...new Set(record.estateIds)]),
+    buildingIds: Object.freeze([...new Set(record.buildingIds ?? [])]),
     allEstates: record.allEstates,
-    unitIds: Object.freeze([]),
-    vendorOrgId: record.facilityRole === 'vendor' ? record.vendorOrgId! : null,
+    unitIds: Object.freeze([...new Set(record.unitIds ?? [])]),
+    vendorOrgId: operationalProfile?.scope === 'vendor' || record.facilityRole === 'vendor' ? record.vendorOrgId! : null,
     investorProjectIds: Object.freeze([]),
     companyAccess,
   });

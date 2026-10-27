@@ -8,8 +8,10 @@ export function projectDemoSandboxActor(actor: Actor, persona: DemoPersona): Act
     ...actor,
     roles: Object.freeze([...persona.roles]),
     estateIds: persona.estateIds ? Object.freeze([...persona.estateIds]) : actor.estateIds,
+    buildingIds: persona.buildingIds ? Object.freeze([...persona.buildingIds]) : actor.buildingIds,
     allEstates: persona.allEstates ?? actor.allEstates,
     unitIds: persona.unitIds ? Object.freeze([...persona.unitIds]) : actor.unitIds,
+    vendorOrgId: persona.vendorOrgId ?? actor.vendorOrgId,
     companyAccess: Object.freeze({
       ...actor.companyAccess,
       modules: Object.freeze({ ...persona.modules }),

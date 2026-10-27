@@ -26,6 +26,8 @@ export type Actor = {
   roles: readonly Role[];
   /** Estates this user is assigned to (EstM/FacM/Sec/Tech). */
   estateIds: readonly string[];
+  /** Optional block/building assignments for persisted operational profiles. */
+  buildingIds?: readonly string[];
   /** true for tenant-wide roles (Executive). */
   allEstates: boolean;
   /** Units linked to a resident, incl. household (EM-02). */
@@ -48,6 +50,10 @@ export type ScopeFilter = {
   /** '*' ONLY for platform_admin (§8.2). */
   tenantId: string | '*';
   estateIds: readonly string[] | 'all';
+  /** Optional persisted block assignment. Rows without a block dimension pass. */
+  buildingIds?: readonly string[] | 'all';
+  /** Optional persisted unit assignment. Rows without a unit dimension pass. */
+  unitIds?: readonly string[] | 'all';
   /** null = no row-level restriction. Non-null = OR of clauses. */
   ownership: readonly OwnershipClause[] | null;
 };
@@ -162,8 +168,10 @@ export function can(actor: Actor, capability: Capability, action: Action): Decis
     const estateIds = actor.allEstates ? result.scope.estateIds
       : result.scope.estateIds === 'all' ? actor.estateIds
         : result.scope.estateIds.filter((id) => actor.estateIds.includes(id));
+    const buildingIds = actor.buildingIds?.length ? actor.buildingIds : 'all';
+    const unitIds = actor.unitIds.length ? actor.unitIds : 'all';
     return { ...result, level: companyAccess === 'view' ? 'V' : result.level === 'F' ? 'M' : result.level,
-      scope: { ...result.scope, estateIds } };
+      scope: { ...result.scope, estateIds, buildingIds, unitIds } };
   }
   return result;
 }

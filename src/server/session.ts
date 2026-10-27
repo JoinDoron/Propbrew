@@ -20,6 +20,7 @@ import { nativeAuthEnabled } from './auth/mode';
 import { assertNativeAuthReadiness } from './auth/auth';
 import { getCompanyPrincipal, getNativeIdentity } from './auth/company';
 import { currentRecordContext } from './data/record-context';
+import { operationalProfileById } from '@/config/operational-profiles';
 
 export const DEV_IDENTITY_COOKIE = 'vesta_dev_identity';
 export const SIGNED_OUT_COOKIE = 'vesta_signed_out';
@@ -65,6 +66,7 @@ export async function getSession(): Promise<DevIdentity | null> {
     const principal = currentRecordContext()?.companyPrincipal ?? await getCompanyPrincipal();
     if (!principal) return null;
     const roleSummary = principal.demoPersona?.label
+      ?? operationalProfileById(principal.membership.operationalProfileId)?.label
       ?? (principal.membership.companyRole === 'member' ? 'Team member' : principal.membership.companyRole === 'owner' ? 'Company owner' : 'Company administrator');
     return { key: 'company', label: principal.user.name, roleSummary, tenantLabel: principal.company.name, actor: principal.actor };
   }

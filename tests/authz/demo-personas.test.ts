@@ -30,6 +30,7 @@ describe('private demo personas', () => {
     expect(projected.userId).toBe(base.userId);
     expect(projected.tenantId).toBe(base.tenantId);
     expect(projected.estateIds).toEqual('estateIds' in persona ? persona.estateIds : base.estateIds);
+    expect(projected.buildingIds).toEqual('buildingIds' in persona ? persona.buildingIds : base.buildingIds);
     expect(projected.allEstates).toBe('allEstates' in persona ? persona.allEstates : base.allEstates);
     expect(projected.unitIds).toEqual('unitIds' in persona ? persona.unitIds : base.unitIds);
     expect(projected.roles).toEqual(persona.roles);

@@ -27,7 +27,7 @@ function member(modules: CompanyModuleGrants | undefined, overrides: Partial<Com
 
 describe('trusted company membership projection', () => {
   it('binds the company and account to a verified active membership, ignoring supplied legacy roles', () => {
-    const record = { ...membership(), roles: ['platform_admin'], tenantId: 'company-abroad', unitIds: ['somebody-elses-unit'] };
+    const record = { ...membership(), roles: ['platform_admin'], tenantId: 'company-abroad' };
     const actor = actorForCompanyMember(record, 'account-ade')!;
     expect(actor.userId).toBe('account-ade');
     expect(actor.tenantId).toBe('company-lagos');
@@ -97,6 +97,47 @@ describe('trusted company membership projection', () => {
     expect(vendor.vendorOrgId).toBe('vendor-lagos');
     expect(actorForCompanyMember(membership({ modules: { facility: 'manage' }, facilityRole: 'vendor', vendorOrgId: null }), 'account-ade')).toBeNull();
     expect(actorForCompanyMember(membership({ modules: { facility: 'manage' }, facilityRole: 'technician', vendorOrgId: 'vendor-lagos' }), 'account-ade')).toBeNull();
+  });
+
+  it('projects a persisted operational profile and its property, block and resident-unit assignments', () => {
+    const actor = member({ estate: 'manage' }, {
+      operationalProfileId: 'resident',
+      estateIds: ['estate-ikeja'], buildingIds: ['block-c'], unitIds: ['unit-c12b'], allEstates: false,
+    });
+    expect(actor.roles).toEqual(['resident']);
+    expect(actor.companyAccess?.operationalProfileId).toBe('resident');
+    expect(actor.estateIds).toEqual(['estate-ikeja']);
+    expect(actor.buildingIds).toEqual(['block-c']);
+    expect(actor.unitIds).toEqual(['unit-c12b']);
+    expect(can(actor, 'bookings_amenities', 'create').allowed).toBe(true);
+    expect(can(actor, 'reports_analytics', 'read').allowed).toBe(false);
+  });
+
+  it('compiles block and unit assignments into the server-side record scope', () => {
+    const actor = member({ estate: 'manage' }, {
+      operationalProfileId: 'property-manager', estateIds: ['estate-ikeja'],
+      buildingIds: ['block-a'], unitIds: ['unit-a1', 'unit-a2'], allEstates: false,
+    });
+    const decision = can(actor, 'work_orders', 'read');
+    expect(decision.allowed).toBe(true);
+    if (!decision.allowed) throw new Error('Expected a scoped block-manager grant');
+    expect(decision.scope.buildingIds).toEqual(['block-a']);
+    expect(decision.scope.unitIds).toEqual(['unit-a1', 'unit-a2']);
+    expect(applyScope([
+      { id: 'asset-a', tenantId: 'company-lagos', estateId: 'estate-ikeja', buildingId: 'block-a' },
+      { id: 'asset-b', tenantId: 'company-lagos', estateId: 'estate-ikeja', buildingId: 'block-b' },
+      { id: 'request-a1', tenantId: 'company-lagos', estateId: 'estate-ikeja', unitId: 'unit-a1' },
+      { id: 'request-b1', tenantId: 'company-lagos', estateId: 'estate-ikeja', unitId: 'unit-b1' },
+    ], decision.scope).map((row) => row.id)).toEqual(['asset-a', 'request-a1']);
+  });
+
+  it('rejects forged operational profile grants and vendor profiles without a vendor assignment', () => {
+    expect(actorForCompanyMember(membership({
+      operationalProfileId: 'resident', modules: { estate: 'view' }, unitIds: ['unit-c12b'],
+    }), 'account-ade')).toBeNull();
+    expect(actorForCompanyMember(membership({
+      operationalProfileId: 'vendor-technician', modules: { facility: 'manage' }, facilityRole: 'vendor', vendorOrgId: null,
+    }), 'account-ade')).toBeNull();
   });
 
   it('a member without module grants has no portal or capability access', () => {

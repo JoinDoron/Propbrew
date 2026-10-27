@@ -25,9 +25,8 @@ export function ProfileMenu({ name, roleSummary, tenantLabel, workspace, company
   const panelId = useId();
   const activePersona = demoPersonaId ? DEMO_PERSONAS.find((persona) => persona.id === demoPersonaId) : undefined;
   const accountPersonas = DEMO_PERSONAS.filter((persona) => Object.keys(persona.modules).length > 1);
-  const estatePersonas = DEMO_PERSONAS.filter((persona) => Object.keys(persona.modules).length === 1
-    && 'estate' in persona.modules && Boolean(persona.modules.estate));
-  const otherPersonas = DEMO_PERSONAS.filter((persona) => !accountPersonas.includes(persona) && !estatePersonas.includes(persona));
+  const workspacePersonas = (id: 'estate' | 'facility' | 'shortlet' | 'construction') => DEMO_PERSONAS.filter((persona) =>
+    Object.keys(persona.modules).length === 1 && id in persona.modules && Boolean(persona.modules[id]));
 
   return (
     <Popover
@@ -95,10 +94,16 @@ export function ProfileMenu({ name, roleSummary, tenantLabel, workspace, company
                     {accountPersonas.map((persona) => <option key={persona.id} value={persona.id}>{persona.label}</option>)}
                   </optgroup>
                   <optgroup label="Estate user types">
-                    {estatePersonas.map((persona) => <option key={persona.id} value={persona.id}>{persona.label}</option>)}
+                    {workspacePersonas('estate').map((persona) => <option key={persona.id} value={persona.id}>{persona.label}</option>)}
                   </optgroup>
-                  <optgroup label="Other modules">
-                    {otherPersonas.map((persona) => <option key={persona.id} value={persona.id}>{persona.label}</option>)}
+                  <optgroup label="Facility user types">
+                    {workspacePersonas('facility').map((persona) => <option key={persona.id} value={persona.id}>{persona.label}</option>)}
+                  </optgroup>
+                  <optgroup label="Shortlet user types">
+                    {workspacePersonas('shortlet').map((persona) => <option key={persona.id} value={persona.id}>{persona.label}</option>)}
+                  </optgroup>
+                  <optgroup label="Construction user types">
+                    {workspacePersonas('construction').map((persona) => <option key={persona.id} value={persona.id}>{persona.label}</option>)}
                   </optgroup>
                 </select>
               </label>
