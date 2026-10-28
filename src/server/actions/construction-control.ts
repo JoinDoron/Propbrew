@@ -5,8 +5,8 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { canEnterWorkspace } from '@/config/workspaces';
 import { claimPayableMinor, type EvidenceSubject, type FieldApprovalKind } from '@/domain/construction/control';
-import { ForbiddenError, assertCan, type Actor } from '@/lib/authz';
-import { repos, scopedMutableGet } from '@/server/data';
+import { ForbiddenError, assertCan, matchesScope, type Actor, type ScopableRow } from '@/lib/authz';
+import { repos, scopedConstructionProjectGet, scopedMutableGet } from '@/server/data';
 import { withDurableMutation } from '@/server/data/durable-records';
 import { nextRecordSequence } from '@/server/data/record-context';
 import { db } from '@/server/data/store';
@@ -25,6 +25,17 @@ async function gate(action: 'create' | 'update' | 'transition') {
   if (!actor.tenantId || !canEnterWorkspace(actor, 'construction')) return { ok: false as const, error: 'You cannot manage this Construction workspace.' };
   try { assertCan(actor, 'reports_analytics', action); return { actor }; }
   catch (error) { if (error instanceof ForbiddenError) return { ok: false as const, error: 'Your current role cannot perform this Construction action.' }; throw error; }
+}
+function inConstructionScope(actor: Actor, row: ScopableRow) {
+  return matchesScope(row, assertCan(actor, 'reports_analytics', 'read'));
+}
+function scopedSidecar<T extends ScopableRow>(actor: Actor, rows: T[], predicate: (row: T) => boolean) {
+  return rows.find((row) => predicate(row) && inConstructionScope(actor, row));
+}
+function profileAllowed(actor: Actor, profiles: readonly string[]) {
+  const access = actor.companyAccess;
+  return !access || access.companyRole === 'owner' || access.companyRole === 'admin'
+    || !access.operationalProfileId || profiles.includes(access.operationalProfileId);
 }
 const actorName = (actor: Actor) => db.users.find((row) => row.id === actor.userId && row.tenantId === actor.tenantId)?.name ?? 'Construction operator';
 function audit(actor: Actor, action: 'approve' | 'reject' | 'issue' | 'post_cost' | 'override', entity: string, entityRef: string, projectId: string | undefined, summary: string, amountMinor?: number) {
@@ -55,7 +66,8 @@ export async function submitSubcontractorOnboarding(input: z.input<typeof subcon
 export async function decideSubcontractorOnboarding(onboardingId: string, decision: 'approved' | 'rejected' | 'suspended', note = ''): Promise<ConstructionControlResult> {
   return withDurableMutation(async () => {
     const access = await gate('transition'); if (!access.actor) return { ok: false, error: access.error ?? 'Access denied.' };
-    const row = constructionControl(access.actor.tenantId!).subcontractors.find((item) => item.id === onboardingId && item.tenantId === access.actor.tenantId);
+    if (!profileAllowed(access.actor, ['project-director', 'project-manager', 'construction-hse'])) return { ok: false, error: 'Your Construction profile cannot decide subcontractor onboarding.' };
+    const row = constructionControl(access.actor.tenantId!).subcontractors.find((item) => item.id === onboardingId && inConstructionScope(access.actor, { ...item, subcontractorId: item.id }));
     if (!row || !['pending_review', 'approved'].includes(row.status)) return { ok: false, error: 'Reviewable onboarding record not found.' };
     if (decision === 'approved' && (!row.bankVerified || !row.hseInducted || row.insuranceExpiryISO && row.insuranceExpiryISO < nowISO().slice(0, 10))) return { ok: false, error: 'Bank verification, HSE induction and current insurance are required before approval.' };
     row.status = decision; row.reviewedBy = access.actor.userId; row.reviewedAtISO = nowISO(); row.reviewNote = note.trim().slice(0, 500) || undefined;
@@ -69,9 +81,9 @@ export async function submitFieldApproval(input: { projectId: string; kind: Fiel
   return withDurableMutation(async () => {
     const access = await gate('create'); if (!access.actor) return { ok: false, error: access.error ?? 'Access denied.' };
     const parsed = fieldApprovalSchema.safeParse(input); if (!parsed.success) return { ok: false, error: 'Choose a project and at least one synced evidence pack, then describe the field approval.' };
-    if (!scopedMutableGet(access.actor, 'reports_analytics', db.constructionProjects, parsed.data.projectId, 'read')) return { ok: false, error: 'Project not found.' };
+    if (!scopedConstructionProjectGet(access.actor, parsed.data.projectId, 'read')) return { ok: false, error: 'Project not found.' };
     const state = constructionControl(access.actor.tenantId!);
-    const evidence = parsed.data.evidencePackIds.map((packId) => state.evidencePacks.find((row) => row.id === packId && row.projectId === parsed.data.projectId));
+    const evidence = parsed.data.evidencePackIds.map((packId) => scopedSidecar(access.actor, state.evidencePacks, (row) => row.id === packId && row.projectId === parsed.data.projectId));
     if (evidence.some((row) => !row)) return { ok: false, error: 'Every evidence pack must belong to this project.' };
     const row = { tenantId: access.actor.tenantId!, id: `cfa-${randomUUID()}`, ...parsed.data, status: 'pending' as const, requestedBy: access.actor.userId, requestedAtISO: nowISO() };
     state.fieldApprovals.unshift(row); audit(access.actor, 'issue', 'field_approval', row.subjectRef, row.projectId, row.title);
@@ -81,7 +93,8 @@ export async function submitFieldApproval(input: { projectId: string; kind: Fiel
 export async function decideFieldApproval(approvalId: string, decision: 'approved' | 'rejected', note = ''): Promise<ConstructionControlResult> {
   return withDurableMutation(async () => {
     const access = await gate('transition'); if (!access.actor) return { ok: false, error: access.error ?? 'Access denied.' };
-    const state = constructionControl(access.actor.tenantId!); const row = state.fieldApprovals.find((item) => item.id === approvalId && item.status === 'pending');
+    if (!profileAllowed(access.actor, ['project-director', 'project-manager', 'site-manager', 'quality-inspector', 'consultant-approver'])) return { ok: false, error: 'Your Construction profile cannot decide this field approval.' };
+    const state = constructionControl(access.actor.tenantId!); const row = scopedSidecar(access.actor, state.fieldApprovals, (item) => item.id === approvalId && item.status === 'pending');
     if (!row) return { ok: false, error: 'Pending field approval not found.' };
     if (decision === 'approved' && row.evidencePackIds.some((packId) => state.evidencePacks.find((pack) => pack.id === packId)?.status !== 'approved')) return { ok: false, error: 'Approve every linked evidence pack before approving field work.' };
     row.status = decision; row.decidedBy = access.actor.userId; row.decidedAtISO = nowISO(); row.decisionNote = note.trim().slice(0, 500) || undefined;
@@ -92,7 +105,8 @@ export async function decideFieldApproval(approvalId: string, decision: 'approve
 export async function reviewConstructionEvidence(evidenceId: string, decision: 'approved' | 'rejected', note = ''): Promise<ConstructionControlResult> {
   return withDurableMutation(async () => {
     const access = await gate('transition'); if (!access.actor) return { ok: false, error: access.error ?? 'Access denied.' };
-    const row = constructionControl(access.actor.tenantId!).evidencePacks.find((item) => item.id === evidenceId && item.status === 'pending_review');
+    if (!profileAllowed(access.actor, ['project-director', 'project-manager', 'site-manager', 'quality-inspector', 'consultant-approver'])) return { ok: false, error: 'Your Construction profile cannot review this evidence.' };
+    const row = scopedSidecar(access.actor, constructionControl(access.actor.tenantId!).evidencePacks, (item) => item.id === evidenceId && item.status === 'pending_review');
     if (!row) return { ok: false, error: 'Pending evidence pack not found.' };
     row.status = decision; row.reviewedBy = access.actor.userId; row.reviewedAtISO = nowISO(); row.reviewNote = note.trim().slice(0, 500) || undefined;
     audit(access.actor, decision === 'approved' ? 'approve' : 'reject', 'evidence_pack', row.subjectRef, row.projectId, `${row.title} ${decision}`);
@@ -105,9 +119,9 @@ export async function submitConstructionClaim(input: z.input<typeof claimSchema>
   return withDurableMutation(async () => {
     const access = await gate('create'); if (!access.actor) return { ok: false, error: access.error ?? 'Access denied.' };
     const parsed = claimSchema.safeParse(input); if (!parsed.success) return { ok: false, error: 'Enter a valid project, subcontractor, period and NGN claim with retention and WHT.' };
-    if (!scopedMutableGet(access.actor, 'reports_analytics', db.constructionProjects, parsed.data.projectId, 'read')) return { ok: false, error: 'Project not found.' };
+    if (!scopedConstructionProjectGet(access.actor, parsed.data.projectId, 'read')) return { ok: false, error: 'Project not found.' };
     const state = constructionControl(access.actor.tenantId!);
-    const newSub = state.subcontractors.find((row) => row.id === parsed.data.subcontractorId && row.status === 'approved' && row.projectIds.includes(parsed.data.projectId));
+    const newSub = state.subcontractors.find((row) => row.id === parsed.data.subcontractorId && row.status === 'approved' && row.projectIds.includes(parsed.data.projectId) && inConstructionScope(access.actor, { ...row, subcontractorId: row.id }));
     const existingSub = repos.constructionSubcontractors.list(access.actor, { limit: 200 }).items.find((row) => row.id === parsed.data.subcontractorId && row.projectIds.includes(parsed.data.projectId));
     if (!newSub && !existingSub) return { ok: false, error: 'Choose an approved subcontractor assigned to this project.' };
     if (parsed.data.variationId && !repos.constructionVariations.list(access.actor, { limit: 200 }).items.some((row) => row.id === parsed.data.variationId && row.projectId === parsed.data.projectId)) return { ok: false, error: 'The linked variation is unavailable for this project.' };
@@ -121,7 +135,8 @@ export async function submitConstructionClaim(input: z.input<typeof claimSchema>
 export async function assessConstructionClaim(claimId: string, assessedNaira: number, note = ''): Promise<ConstructionControlResult> {
   return withDurableMutation(async () => {
     const access = await gate('update'); if (!access.actor) return { ok: false, error: access.error ?? 'Access denied.' };
-    const row = constructionControl(access.actor.tenantId!).claims.find((item) => item.id === claimId && item.status === 'submitted');
+    if (!profileAllowed(access.actor, ['project-director', 'project-manager', 'quantity-surveyor'])) return { ok: false, error: 'Only the assigned commercial review team can assess a claim.' };
+    const row = scopedSidecar(access.actor, constructionControl(access.actor.tenantId!).claims, (item) => item.id === claimId && item.status === 'submitted');
     const assessedMinor = Math.round(assessedNaira * 100);
     if (!row || !Number.isSafeInteger(assessedMinor) || assessedMinor < 0 || assessedMinor > row.claimedMinor) return { ok: false, error: 'Enter an assessed amount between zero and the submitted claim.' };
     const deductions = claimPayableMinor(assessedMinor, row.retentionPct, row.whtPct);
@@ -132,7 +147,8 @@ export async function assessConstructionClaim(claimId: string, assessedNaira: nu
 export async function decideConstructionClaim(claimId: string, decision: 'approved' | 'rejected', note = ''): Promise<ConstructionControlResult> {
   return withDurableMutation(async () => {
     const access = await gate('transition'); if (!access.actor) return { ok: false, error: access.error ?? 'Access denied.' };
-    const row = constructionControl(access.actor.tenantId!).claims.find((item) => item.id === claimId && ['submitted', 'assessed'].includes(item.status));
+    if (!profileAllowed(access.actor, ['project-director', 'project-manager', 'construction-finance', 'consultant-approver'])) return { ok: false, error: 'Your Construction profile cannot approve this claim.' };
+    const row = scopedSidecar(access.actor, constructionControl(access.actor.tenantId!).claims, (item) => item.id === claimId && ['submitted', 'assessed'].includes(item.status));
     if (!row) return { ok: false, error: 'Reviewable claim not found.' };
     if (decision === 'approved' && (row.status !== 'assessed' || row.certifiedMinor === undefined)) return { ok: false, error: 'The QS assessment must be completed before approval.' };
     row.status = decision; row.reviewedBy = access.actor.userId; row.reviewedAtISO = nowISO(); row.reviewNote = note.trim().slice(0, 500) || undefined;
@@ -157,7 +173,8 @@ export async function requestProcurementPayment(input: z.input<typeof paymentSch
 export async function matchProcurementPayment(paymentId: string): Promise<ConstructionControlResult> {
   return withDurableMutation(async () => {
     const access = await gate('update'); if (!access.actor) return { ok: false, error: access.error ?? 'Access denied.' };
-    const row = constructionControl(access.actor.tenantId!).payments.find((item) => item.id === paymentId && item.status === 'pending_match'); if (!row) return { ok: false, error: 'Payment awaiting match not found.' };
+    if (!profileAllowed(access.actor, ['project-director', 'project-manager', 'procurement-officer', 'quantity-surveyor', 'construction-finance'])) return { ok: false, error: 'Your Construction profile cannot complete a three-way match.' };
+    const row = scopedSidecar(access.actor, constructionControl(access.actor.tenantId!).payments, (item) => item.id === paymentId && item.status === 'pending_match'); if (!row) return { ok: false, error: 'Payment awaiting match not found.' };
     const po = scopedMutableGet(access.actor, 'reports_analytics', db.constructionOrders, row.poId, 'read'); if (!po || po.deliveredQty <= 0 || row.invoiceMinor > Math.round(po.value.minor * po.deliveredQty / Math.max(1, po.qty))) return { ok: false, error: 'PO, supplier invoice and recorded delivery do not match.' };
     row.threeWayMatched = true; row.status = 'pending_approval'; audit(access.actor, 'override', 'procurement_payment', row.ref, row.projectId, `${row.ref} three-way matched`, row.invoiceMinor); refresh(); return { ok: true, id: row.id, message: `${row.ref} matched and ready for finance approval.` };
   }, 'construction');
@@ -165,7 +182,8 @@ export async function matchProcurementPayment(paymentId: string): Promise<Constr
 export async function decideProcurementPayment(paymentId: string, decision: 'approved' | 'rejected', note = ''): Promise<ConstructionControlResult> {
   return withDurableMutation(async () => {
     const access = await gate('transition'); if (!access.actor) return { ok: false, error: access.error ?? 'Access denied.' };
-    const row = constructionControl(access.actor.tenantId!).payments.find((item) => item.id === paymentId && ['pending_match', 'pending_approval'].includes(item.status)); if (!row) return { ok: false, error: 'Reviewable payment not found.' };
+    if (!profileAllowed(access.actor, ['project-director', 'project-manager', 'construction-finance'])) return { ok: false, error: 'Only the assigned finance approval team can decide this payment.' };
+    const row = scopedSidecar(access.actor, constructionControl(access.actor.tenantId!).payments, (item) => item.id === paymentId && ['pending_match', 'pending_approval'].includes(item.status)); if (!row) return { ok: false, error: 'Reviewable payment not found.' };
     if (decision === 'approved' && (!row.threeWayMatched || row.status !== 'pending_approval')) return { ok: false, error: 'Complete the three-way match before finance approval.' };
     row.status = decision; row.reviewedBy = access.actor.userId; row.reviewedAtISO = nowISO(); row.note = note.trim().slice(0, 500) || row.note;
     audit(access.actor, decision === 'approved' ? 'approve' : 'reject', 'procurement_payment', row.ref, row.projectId, `${row.ref} ${decision}`, row.payableMinor); refresh(); return { ok: true, id: row.id, message: `${row.ref} ${decision}. No bank transfer has been executed.` };
@@ -174,7 +192,8 @@ export async function decideProcurementPayment(paymentId: string, decision: 'app
 export async function markProcurementPaymentPaid(paymentId: string, paymentReference: string): Promise<ConstructionControlResult> {
   return withDurableMutation(async () => {
     const access = await gate('transition'); if (!access.actor) return { ok: false, error: access.error ?? 'Access denied.' };
-    const reference = paymentReference.trim(); const row = constructionControl(access.actor.tenantId!).payments.find((item) => item.id === paymentId && item.status === 'approved');
+    if (!profileAllowed(access.actor, ['construction-finance'])) return { ok: false, error: 'Only Construction finance can record the bank payment reference.' };
+    const reference = paymentReference.trim(); const row = scopedSidecar(access.actor, constructionControl(access.actor.tenantId!).payments, (item) => item.id === paymentId && item.status === 'approved');
     if (!row || reference.length < 3 || reference.length > 160) return { ok: false, error: 'Approved payment and bank reference are required.' };
     row.status = 'paid'; row.paymentReference = reference; row.paidAtISO = nowISO(); audit(access.actor, 'post_cost', 'procurement_payment', row.ref, row.projectId, `${row.ref} marked paid · ${reference}`, row.payableMinor); refresh(); return { ok: true, id: row.id, message: `${row.ref} marked paid from the recorded bank reference.` };
   }, 'construction');

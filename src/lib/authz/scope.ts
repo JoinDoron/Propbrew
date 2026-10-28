@@ -83,6 +83,18 @@ export function toWhere(scope: ScopeFilter): Record<string, unknown> {
       { OR: [{ unitId: { in: scope.unitIds } }, { unitId: null }] },
     ];
   }
+  if (scope.constructionProjectIds && scope.constructionProjectIds !== 'all') {
+    where.AND = [...((where.AND as unknown[]) ?? []), { projectId: { in: scope.constructionProjectIds } }];
+  }
+  if (scope.constructionPackageIds && scope.constructionPackageIds !== 'all') {
+    where.AND = [...((where.AND as unknown[]) ?? []), { constructionPackageId: { in: scope.constructionPackageIds } }];
+  }
+  if (scope.constructionSubcontractorIds && scope.constructionSubcontractorIds !== 'all') {
+    where.AND = [...((where.AND as unknown[]) ?? []), { subcontractorId: { in: scope.constructionSubcontractorIds } }];
+  }
+  if (scope.constructionTaskIds && scope.constructionTaskIds !== 'all') {
+    where.AND = [...((where.AND as unknown[]) ?? []), { constructionTaskId: { in: scope.constructionTaskIds } }];
+  }
 
   if (scope.ownership) {
     if (scope.ownership.length === 0) {
@@ -105,6 +117,11 @@ export type ScopableRow = {
   unitId?: string;
   vendorOrgId?: string;
   projectId?: string;
+  projectIds?: readonly string[];
+  costCode?: string;
+  constructionPackageId?: string;
+  subcontractorId?: string;
+  constructionTaskId?: string;
 };
 
 function clauseMatches(row: ScopableRow, c: OwnershipClause): boolean {
@@ -139,6 +156,19 @@ export function matchesScope(row: ScopableRow, scope: ScopeFilter): boolean {
     && row.buildingId !== undefined && !scope.buildingIds.includes(row.buildingId)) return false;
   if (scope.unitIds && scope.unitIds !== 'all'
     && row.unitId !== undefined && !scope.unitIds.includes(row.unitId)) return false;
+
+  if (scope.constructionProjectIds && scope.constructionProjectIds !== 'all') {
+    if (row.projectId !== undefined && !scope.constructionProjectIds.includes(row.projectId)) return false;
+    if (row.projectIds !== undefined && !row.projectIds.some((id) => scope.constructionProjectIds!.includes(id))) return false;
+  }
+  if (scope.constructionPackageIds && scope.constructionPackageIds !== 'all') {
+    const packageId = row.constructionPackageId ?? (row.projectId && row.costCode ? `${row.projectId}:${row.costCode}` : undefined);
+    if (packageId !== undefined && !scope.constructionPackageIds.includes(packageId)) return false;
+  }
+  if (scope.constructionSubcontractorIds && scope.constructionSubcontractorIds !== 'all'
+    && row.subcontractorId !== undefined && !scope.constructionSubcontractorIds.includes(row.subcontractorId)) return false;
+  if (scope.constructionTaskIds && scope.constructionTaskIds !== 'all'
+    && row.constructionTaskId !== undefined && !scope.constructionTaskIds.includes(row.constructionTaskId)) return false;
 
   if (scope.ownership) {
     if (scope.ownership.length === 0) {

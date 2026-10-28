@@ -22,6 +22,11 @@ export type CompanyMember = {
   buildingIds?: string[];
   unitIds?: string[];
   allEstates?: boolean;
+  constructionProjectIds?: string[];
+  constructionPackageIds?: string[];
+  constructionSubcontractorIds?: string[];
+  constructionTaskIds?: string[];
+  allConstructionProjects?: boolean;
   isCurrentUser: boolean;
 };
 const MODULES: { id: WorkspaceId; label: string; detail: string }[] = [
@@ -37,6 +42,10 @@ export type AssignmentOptions = {
   estates: { id: string; name: string }[];
   buildings: { id: string; siteId: string; name: string }[];
   units: { id: string; siteId: string; buildingId: string; name: string }[];
+  constructionProjects: { id: string; name: string }[];
+  constructionPackages: { id: string; projectId: string; name: string }[];
+  constructionSubcontractors: { id: string; projectIds: string[]; name: string }[];
+  constructionTasks: { id: string; projectId: string; name: string }[];
 };
 
 export function CompanyTeam({ companyName, members, assignments, canManage, createCompanyInvite, updateCompanyMember, removeCompanyMember }: { companyName: string; members: CompanyMember[]; assignments: AssignmentOptions; canManage: boolean; createCompanyInvite: CompanyFormAction; updateCompanyMember: CompanyFormAction; removeCompanyMember: CompanyFormAction }) {
@@ -54,7 +63,15 @@ function MemberCard({ member, assignments, companyName, canManage, update, remov
   const [removing, setRemoving] = useState(false);
   const protectedOwner = member.companyRole === 'owner';
   const profile = operationalProfileById(member.operationalProfileId);
-  const scope = profile?.scope === 'company' ? 'All company records' : profile?.scope === 'vendor' ? assignments.vendors.find((row) => row.id === member.vendorOrgId)?.name ?? 'Vendor assignment required' : profile?.scope === 'unit' ? `${member.unitIds?.length ?? 0} assigned unit(s)` : profile?.scope === 'building' ? `${member.buildingIds?.length ?? 0} assigned block(s)` : profile ? `${member.estateIds?.length ?? 0} assigned property/site(s)` : 'Workspace access';
+  const scope = profile?.scope === 'company' ? 'All company records'
+    : profile?.scope === 'vendor' ? assignments.vendors.find((row) => row.id === member.vendorOrgId)?.name ?? 'Vendor assignment required'
+    : profile?.scope === 'unit' ? `${member.unitIds?.length ?? 0} assigned unit(s)`
+    : profile?.scope === 'building' ? `${member.buildingIds?.length ?? 0} assigned block(s)`
+    : profile?.scope === 'construction_project' ? `${member.constructionProjectIds?.length ?? 0} assigned project(s)`
+    : profile?.scope === 'construction_package' ? `${member.constructionPackageIds?.length ?? 0} assigned work package(s)`
+    : profile?.scope === 'construction_subcontractor' ? `${member.constructionSubcontractorIds?.length ?? 0} subcontractor assignment(s)`
+    : profile?.scope === 'construction_task' ? `${member.constructionTaskIds?.length ?? 0} assigned task(s)`
+    : profile ? `${member.estateIds?.length ?? 0} assigned property/site(s)` : 'Workspace access';
   return <Card><div className={styles.memberHeader}><div className={styles.memberIdentity}><Avatar name={member.name || member.email} size={42} /><div><h2>{member.name || 'Company teammate'}{member.isCurrentUser && <span className={styles.you}>You</span>}</h2><p>{member.email}</p></div></div><StatusPill status={member.companyRole} tone={protectedOwner ? 'info' : 'muted'} /></div><div className={styles.memberModules}>{profile && <><div><span>User type</span><strong>{profile.label}</strong></div><div><span>Record assignment</span><strong>{scope}</strong></div></>}{MODULES.map((module) => <div key={module.id}><span>{module.label}</span><strong>{member.modules[module.id] === 'manage' ? 'Manage' : member.modules[module.id] === 'view' ? 'View' : 'No access'}</strong></div>)}{member.modules.facility === 'manage' && <div><span>Facility duty</span><strong>{member.facilityRole === 'technician' ? 'Field technician' : member.facilityRole === 'vendor' ? assignments.vendors.find((vendor) => vendor.id === member.vendorOrgId)?.name ?? 'Vendor team' : 'Facility manager'}</strong></div>}</div>
     {protectedOwner || member.isCurrentUser ? <p className={styles.protected}><LockKeyhole size={14} aria-hidden="true" />{protectedOwner ? 'Owner access is protected.' : 'Another company administrator manages changes to your own access.'}</p> : canManage ? <div className={styles.memberActions}><button type="button" className={styles.secondary} onClick={() => setEditing((value) => !value)} aria-expanded={editing}>{editing ? 'Close access editor' : 'Edit access'}</button><button type="button" className={styles.danger} onClick={() => setRemoving(true)}><Trash2 size={15} aria-hidden="true" />Remove access</button></div> : null}
     {editing && !protectedOwner && canManage && <EditMemberAccess member={member} assignments={assignments} action={update} />}
@@ -69,12 +86,16 @@ function OperationalProfileFields({ profileId = '', member, assignments, onProfi
     {profile?.scope === 'estate' && <MultiAssignment id={`${prefix}-estates`} name="estateIds" label="Assigned properties / sites" values={member?.estateIds} options={assignments.estates} />}
     {profile?.scope === 'building' && <MultiAssignment id={`${prefix}-buildings`} name="buildingIds" label="Assigned blocks / buildings" values={member?.buildingIds} options={assignments.buildings.map((row) => ({ id: row.id, name: `${assignments.estates.find((site) => site.id === row.siteId)?.name ?? 'Property'} · ${row.name}` }))} />}
     {profile?.scope === 'unit' && <MultiAssignment id={`${prefix}-units`} name="unitIds" label="Assigned resident units" values={member?.unitIds} options={assignments.units.map((row) => ({ id: row.id, name: `${assignments.estates.find((site) => site.id === row.siteId)?.name ?? 'Property'} · ${row.name}` }))} />}
+    {profile?.scope === 'construction_project' && <MultiAssignment id={`${prefix}-construction-projects`} name="constructionProjectIds" label="Assigned construction projects" values={member?.constructionProjectIds} options={assignments.constructionProjects} />}
+    {profile?.scope === 'construction_package' && <MultiAssignment id={`${prefix}-construction-packages`} name="constructionPackageIds" label="Assigned work packages / cost codes" values={member?.constructionPackageIds} options={assignments.constructionPackages.map((row) => ({ id: row.id, name: `${assignments.constructionProjects.find((project) => project.id === row.projectId)?.name ?? 'Project'} · ${row.name}` }))} />}
+    {profile?.scope === 'construction_subcontractor' && <><MultiAssignment id={`${prefix}-construction-subs`} name="constructionSubcontractorIds" label="Assigned subcontractor organisations" values={member?.constructionSubcontractorIds} options={assignments.constructionSubcontractors} /><MultiAssignment id={`${prefix}-construction-sub-packages`} name="constructionPackageIds" label="Assigned packages (optional narrowing)" values={member?.constructionPackageIds} required={false} options={assignments.constructionPackages.map((row) => ({ id: row.id, name: `${assignments.constructionProjects.find((project) => project.id === row.projectId)?.name ?? 'Project'} · ${row.name}` }))} /></>}
+    {profile?.scope === 'construction_task' && <MultiAssignment id={`${prefix}-construction-tasks`} name="constructionTaskIds" label="Assigned field tasks" values={member?.constructionTaskIds} options={assignments.constructionTasks.map((row) => ({ id: row.id, name: `${assignments.constructionProjects.find((project) => project.id === row.projectId)?.name ?? 'Project'} · ${row.name}` }))} />}
     {profile?.scope === 'vendor' && <div className={styles.field}><label htmlFor={`${prefix}-vendor`}>Vendor organisation</label><select id={`${prefix}-vendor`} name="vendorOrgId" defaultValue={member?.vendorOrgId ?? ''} required><option value="">Choose a vendor</option>{assignments.vendors.map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.name}</option>)}</select><p className={styles.hint}>This user sees only work assigned to this vendor organisation.</p></div>}
   </div></fieldset>;
 }
 
-function MultiAssignment({ id, name, label, values = [], options }: { id: string; name: string; label: string; values?: string[]; options: { id: string; name: string }[] }) {
-  return <div className={styles.field}><label htmlFor={id}>{label}</label><select id={id} name={name} multiple required defaultValue={values} size={Math.min(6, Math.max(3, options.length))}>{options.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select><p className={styles.hint}>Select one or more. On macOS, hold Command to select multiple; on Windows, hold Ctrl.</p></div>;
+function MultiAssignment({ id, name, label, values = [], options, required = true }: { id: string; name: string; label: string; values?: string[]; options: { id: string; name: string }[]; required?: boolean }) {
+  return <div className={styles.field}><label htmlFor={id}>{label}</label><select id={id} name={name} multiple required={required} defaultValue={values} size={Math.min(6, Math.max(3, options.length))}>{options.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select><p className={styles.hint}>{required ? 'Select one or more.' : 'Optional: leave empty for every package inside the assigned subcontractor projects.'} On macOS, hold Command to select multiple; on Windows, hold Ctrl.</p></div>;
 }
 
 function ModuleAccessFields({ modules = {}, disabled = false }: { modules?: CompanyMember['modules']; disabled?: boolean }) {

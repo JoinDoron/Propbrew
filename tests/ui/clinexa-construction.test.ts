@@ -36,6 +36,7 @@ const coverage = [
   ['evm', 'evm-cockpit', ['overview', 'overview', 'curve', 'costs']],
   ['field', 'field-capture', ['report', 'issue', 'progress', 'evidence', 'attendance', 'queue']],
   ['operations', 'operations-workspace', ['subcontractors', 'field', 'claims', 'payments', 'forecast']],
+  ['portal', 'role-portal', ['overview', 'tools']],
   ['fx', 'fx-workspace', ['overview', 'rates', 'commitments']],
   ['league', 'league-workspace', ['scorecards', 'overview', 'methodology']],
   ['materials', 'materials-workspace', ['stock', 'overview', 'movements']],
@@ -53,18 +54,18 @@ const coverage = [
 ] as const;
 
 describe('Clinexa coverage of every Construction page', () => {
-  it('has an explicit entry for all 25 routes and all 25 workspace components', () => {
+  it('has an explicit entry for all 26 routes and all 26 workspace components', () => {
     const root = resolve(process.cwd(), 'src/app/(ops)/construction');
     const routes = ['', ...readdirSync(root, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name)];
     expect(coverage.map(([route]) => route).sort()).toEqual(routes.sort());
-    expect(coverage).toHaveLength(25);
+    expect(coverage).toHaveLength(26);
     expect(coverage.map(([, file]) => file + '.tsx').sort()).toEqual(readdirSync(resolve(process.cwd(), 'src/components/construction')).filter((file) => file.endsWith('.tsx') && file !== 'construction-ui.tsx').sort());
     const composed = view('construction-ui');
     for (const primitive of ['Card', 'CardHeader', 'KpiCard', 'Button', 'IconButton', 'PortalDialog']) expect(composed).toMatch(new RegExp(`<${primitive}(?:\\s|>)`));
   });
 
   it.each(coverage)('aligns /construction/%s with the page edge and keeps its server guard', (route, component) => {
-    const page = read('src/app/(ops)/construction/' + (route ? route + '/' : '') + 'page.tsx');
+    const page = read('src/app/(ops)/construction/' + (route === 'portal' ? 'portal/[kind]/' : route ? route + '/' : '') + 'page.tsx');
     expect(page).toContain('className="pb-page"');
     expect(page).not.toMatch(/max-w-\[\d+px\] mx-auto/);
     expect(page).toMatch(/requireCapability\([^;]*'construction'\)/);

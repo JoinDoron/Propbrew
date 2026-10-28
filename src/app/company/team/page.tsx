@@ -16,6 +16,10 @@ export default async function CompanyTeamPage() {
     estates:repos.sites.list(current.actor,{limit:500}).items.map((row)=>({id:String(row.id),name:row.name})),
     buildings:repos.buildings.list(current.actor,{limit:2000}).items.map((row)=>({id:String(row.id),siteId:String(row.siteId),name:row.name})),
     units:repos.units.list(current.actor,{limit:5000}).items.map((row)=>({id:String(row.id),siteId:String(row.siteId),buildingId:String(row.buildingId),name:row.label})),
+    constructionProjects:repos.constructionProjects.list(current.actor,{limit:500}).items.map((row)=>({id:String(row.id),name:`${row.code} · ${row.name}`})),
+    constructionPackages:repos.constructionCostCodes.list(current.actor,{limit:5000}).items.map((row)=>({id:`${row.projectId}:${row.code}`,projectId:String(row.projectId),name:`${row.code} · ${row.name}`})),
+    constructionSubcontractors:repos.constructionSubcontractors.list(current.actor,{limit:1000}).items.map((row)=>({id:String(row.id),projectIds:row.projectIds.map(String),name:`${row.name} · ${row.trade}`})),
+    constructionTasks:repos.constructionTasks.list(current.actor,{limit:10000}).items.map((row)=>({id:String(row.id),projectId:String(row.projectId),name:row.name})),
   }));
   return <main className="pb-app min-h-screen bg-app p-5 md:p-8"><Link href="/workspaces" className="pb-link">← Workspaces</Link><CompanyTeam companyName={current.company.name} members={await listCompanyMembers(current)} assignments={assignments} canManage={true} createCompanyInvite={createCompanyInvite} updateCompanyMember={updateCompanyMember} removeCompanyMember={removeCompanyMember}/></main>;
 }

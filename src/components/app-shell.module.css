@@ -9,7 +9,9 @@
   height: calc(100dvh - var(--review-banner-height, 0px));
   overflow: hidden;
   color: var(--text);
-  background: var(--app);
+  /* The working canvas is the cleanest surface; cards retain their own border
+     and elevation while the rail carries the quieter navigation tint. */
+  background: var(--surface);
 }
 
 .sidebar {
@@ -19,7 +21,7 @@
   flex: none;
   flex-direction: column;
   min-height: 0;
-  background: var(--surface);
+  background: var(--app);
   border-right: 1px solid var(--border);
   transition: width 180ms ease;
 }

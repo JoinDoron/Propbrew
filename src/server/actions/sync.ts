@@ -10,7 +10,7 @@ import { getActor } from '@/server/session';
 import { ForbiddenError, assertCan, type Actor } from '@/lib/authz';
 import { canEnterWorkspace } from '@/config/workspaces';
 import { db } from '@/server/data/store';
-import { scopedMutableGet } from '@/server/data';
+import { scopedConstructionProjectGet, scopedConstructionTaskGet, scopedMutableGet } from '@/server/data';
 import { money } from '@/domain/primitives';
 import { createHash } from 'node:crypto';
 import { constructionControl } from '@/server/construction-control';
@@ -24,6 +24,8 @@ export type SyncInput = { id: string; owner: string; kind: OpKind; capturedISO: 
 
 function permitted(actor: Actor, kind: OpKind): boolean {
   if (!actor.tenantId || !canEnterWorkspace(actor, 'construction')) return false;
+  if (actor.companyAccess?.operationalProfileId === 'construction-field-worker'
+    && !['task_progress', 'safety_event', 'evidence_pack'].includes(kind)) return false;
   try { assertCan(actor, 'reports_analytics', kind === 'task_progress' ? 'update' : 'create'); return true; }
   catch (e) { if (e instanceof ForbiddenError) return false; throw e; }
 }
@@ -44,11 +46,15 @@ export async function syncOperation(raw: SyncInput): Promise<SyncOutcome> {
   if (typeof resetAt === 'string' && (!Number.isFinite(Date.parse(resetAt)) || Date.parse(input.capturedISO) <= Date.parse(resetAt))) {
     return conflict('This capture predates your sandbox reset. Discard the old copy and capture a new record.', 'Sandbox reset');
   }
-  const project = scopedMutableGet(actor, 'reports_analytics', db.constructionProjects, p.projectId, 'read');
+  const project = scopedConstructionProjectGet(actor, p.projectId, 'read');
   if (!project) return fail('That project is not available to this account.');
   if (input.kind === 'task_progress') {
-    const task = scopedMutableGet(actor, 'reports_analytics', db.constructionTasks, input.payload.taskId, 'update');
+    const task = scopedConstructionTaskGet(actor, input.payload.taskId, 'update');
     if (!task || task.projectId !== p.projectId) return fail('Task and project assignment not found.');
+  }
+  if (actor.companyAccess?.operationalProfileId === 'construction-field-worker' && input.kind === 'evidence_pack') {
+    const task = input.payload.subject === 'task' ? scopedConstructionTaskGet(actor, input.payload.subjectRef, 'read') : null;
+    if (!task || task.projectId !== p.projectId) return fail('Field workers may attach evidence only to their assigned tasks.');
   }
   if (input.kind === 'attendance') {
     const worker = scopedMutableGet(actor, 'reports_analytics', db.constructionWorkers, input.payload.workerId, 'read');
@@ -98,11 +104,11 @@ export async function syncOperation(raw: SyncInput): Promise<SyncOutcome> {
     }
     case 'task_progress': {
       const p = input.payload;
-      const task = scopedMutableGet(actor, 'reports_analytics', db.constructionTasks, p.taskId, 'update')!;
+      const task = scopedConstructionTaskGet(actor, p.taskId, 'update')!;
       const pct = Math.round(p.percentComplete);
       if ((task.status === 'done' && pct < 100) || task.percentComplete > pct) return conflict(`“${task.name}” is already at ${task.percentComplete}% and cannot be reopened or reduced by offline sync.`, `${task.percentComplete}% complete`);
       if (pct > 0 && task.dependsOn.some((depId) => {
-        const dep = scopedMutableGet(actor, 'reports_analytics', db.constructionTasks, depId, 'read');
+        const dep = db.constructionTasks.find((row) => row.id === depId && row.tenantId === actor.tenantId);
         return !dep || dep.projectId !== task.projectId || dep.status !== 'done';
       })) return conflict('Complete the predecessor tasks before recording progress.', 'Unfinished predecessor tasks');
       task.percentComplete = pct; task.status = pct === 0 ? 'not_started' : pct === 100 ? 'done' : 'in_progress';

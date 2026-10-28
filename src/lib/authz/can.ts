@@ -34,6 +34,13 @@ export type Actor = {
   unitIds: readonly string[];
   vendorOrgId: string | null;
   investorProjectIds: readonly string[];
+  /** Server-owned Construction assignments. Undefined preserves legacy actors;
+   * an explicit empty list is deny-all for that dimension. */
+  constructionProjectIds?: readonly string[];
+  constructionPackageIds?: readonly string[];
+  constructionSubcontractorIds?: readonly string[];
+  constructionTaskIds?: readonly string[];
+  allConstructionProjects?: boolean;
   /** Verified server-side company membership; narrows legacy matrix grants. */
   companyAccess?: CompanyAccess;
 };
@@ -54,6 +61,10 @@ export type ScopeFilter = {
   buildingIds?: readonly string[] | 'all';
   /** Optional persisted unit assignment. Rows without a unit dimension pass. */
   unitIds?: readonly string[] | 'all';
+  constructionProjectIds?: readonly string[] | 'all';
+  constructionPackageIds?: readonly string[] | 'all';
+  constructionSubcontractorIds?: readonly string[] | 'all';
+  constructionTaskIds?: readonly string[] | 'all';
   /** null = no row-level restriction. Non-null = OR of clauses. */
   ownership: readonly OwnershipClause[] | null;
 };
@@ -113,12 +124,18 @@ function scopeForRole(actor: Actor, role: Role, capability: Capability): ScopeFi
 
 /** Union of two grants — the widening rule for multi-role users. */
 function widen(a: ScopeFilter, b: ScopeFilter): ScopeFilter {
+  const union = (left: readonly string[] | 'all' | undefined, right: readonly string[] | 'all' | undefined) =>
+    left === 'all' || right === 'all' ? 'all' as const : left === undefined ? right : right === undefined ? left : Array.from(new Set([...left, ...right]));
   return {
     tenantId: a.tenantId === '*' || b.tenantId === '*' ? '*' : a.tenantId,
     estateIds:
       a.estateIds === 'all' || b.estateIds === 'all'
         ? 'all'
         : Array.from(new Set([...a.estateIds, ...b.estateIds])),
+    constructionProjectIds: union(a.constructionProjectIds, b.constructionProjectIds),
+    constructionPackageIds: union(a.constructionPackageIds, b.constructionPackageIds),
+    constructionSubcontractorIds: union(a.constructionSubcontractorIds, b.constructionSubcontractorIds),
+    constructionTaskIds: union(a.constructionTaskIds, b.constructionTaskIds),
     // null (unrestricted) absorbs any clause list.
     ownership: a.ownership === null || b.ownership === null ? null : [...a.ownership, ...b.ownership],
   };
@@ -170,8 +187,14 @@ export function can(actor: Actor, capability: Capability, action: Action): Decis
         : result.scope.estateIds.filter((id) => actor.estateIds.includes(id));
     const buildingIds = actor.buildingIds?.length ? actor.buildingIds : 'all';
     const unitIds = actor.unitIds.length ? actor.unitIds : 'all';
+    const constructionProjectIds = actor.allConstructionProjects ? 'all' : actor.constructionProjectIds;
     return { ...result, level: companyAccess === 'view' ? 'V' : result.level === 'F' ? 'M' : result.level,
-      scope: { ...result.scope, estateIds, buildingIds, unitIds } };
+      scope: { ...result.scope, estateIds, buildingIds, unitIds,
+        ...(constructionProjectIds !== undefined ? { constructionProjectIds } : {}),
+        ...(actor.constructionPackageIds !== undefined ? { constructionPackageIds: actor.constructionPackageIds } : {}),
+        ...(actor.constructionSubcontractorIds !== undefined ? { constructionSubcontractorIds: actor.constructionSubcontractorIds } : {}),
+        ...(actor.constructionTaskIds !== undefined ? { constructionTaskIds: actor.constructionTaskIds } : {}),
+      } };
   }
   return result;
 }

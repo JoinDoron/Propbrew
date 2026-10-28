@@ -87,9 +87,60 @@ export function scopedMutableGet<T extends ScopableRow & { id: string }>(
   return match ?? null;
 }
 
+/** Construction tasks need their own identity projected into the scope engine.
+ * A task id is not a project id, so applying the generic mutable lookup to the
+ * raw row would enforce the project boundary but silently skip an assigned-task
+ * boundary. Keep that projection in the DAL for reads and writes alike. */
+export function scopedConstructionTaskGet(
+  actor: Actor,
+  id: string,
+  action: Action = 'read',
+) {
+  const scope = assertCan(actor, 'reports_analytics', action);
+  const [match] = applyScope(db.constructionTasks
+    .filter((task) => task.id === id)
+    .map((task) => ({ tenantId: task.tenantId, projectId: task.projectId, constructionTaskId: task.id, task })), scope);
+  return match?.task ?? null;
+}
+
+/** Project.id is the Construction access key. Some legacy projects also carry
+ * an investor-facing projectId, so generic lookup must not use that field as
+ * the security dimension. */
+export function scopedConstructionProjectGet(
+  actor: Actor,
+  id: string,
+  action: Action = 'read',
+) {
+  const scope = assertCan(actor, 'reports_analytics', action);
+  const [match] = applyScope(db.constructionProjects
+    .filter((project) => project.id === id)
+    .map((project) => ({ tenantId: project.tenantId, projectId: project.id, project })), scope);
+  return match?.project ?? null;
+}
+
+/** RFQs inherit package scope from their originating purchase request. */
+export function scopedConstructionRfqGet(
+  actor: Actor,
+  id: string,
+  action: Action = 'read',
+) {
+  const scope = assertCan(actor, 'reports_analytics', action);
+  const candidates = db.constructionRfqs.filter((rfq) => rfq.id === id).map((rfq) => {
+    const request = db.constructionRequests.find((row) => row.tenantId === rfq.tenantId && row.projectId === rfq.projectId && row.ref === rfq.requestRef);
+    return { tenantId: rfq.tenantId, projectId: rfq.projectId, costCode: request?.costCode, rfq };
+  });
+  const [match] = applyScope(candidates, scope);
+  return match?.rfq ?? null;
+}
+
 /* --- repositories --------------------------------------------------------- */
 
 type ListOpts = { cursor?: string | null; limit?: number };
+function omitScopeKey<T extends object, K extends keyof T>(row: T, key: K): Omit<T, K> {
+  const copy = { ...row };
+  delete copy[key];
+  return copy;
+}
 
 /**
  * A Site's own id is its estate scope key. Keep that adapter-only projection
@@ -261,15 +312,33 @@ export const repos = {
   boardElections: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'announcements', db.boardElections, o ?? { limit: 20 }) },
 
   /* --- Construction (ConstructionOS) — all reports_analytics-gated ---------- */
-  constructionProjects: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionProjects, o ?? { limit: 50 }) },
+  constructionProjects: { list: (a: Actor, o?: ListOpts) => {
+    const page = scopedList(a, 'reports_analytics', db.constructionProjects.map((project) => ({
+      tenantId: project.tenantId,
+      // Native company memberships use the permanent Construction record id;
+      // the legacy investor role still owns its investor-facing project ref.
+      projectId: a.companyAccess ? project.id : project.projectId ?? project.id,
+      project,
+    })), o ?? { limit: 50 });
+    return { ...page, items: page.items.map(({ project }) => project) };
+  } },
   constructionPhases: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionPhases, o ?? { limit: 200 }) },
-  constructionTasks: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionTasks, o ?? { limit: 500 }) },
+  constructionTasks: { list: (a: Actor, o?: ListOpts) => {
+    const page = scopedList(a, 'reports_analytics', db.constructionTasks.map((task) => ({ ...task, constructionTaskId: task.id })), o ?? { limit: 500 });
+    return { ...page, items: page.items.map((task) => omitScopeKey(task, 'constructionTaskId')) };
+  } },
   constructionMilestones: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionMilestones, o ?? { limit: 200 }) },
   constructionIssues: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionIssues, o ?? { limit: 200 }) },
   constructionReports: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionReports, o ?? { limit: 200 }) },
   constructionVendors: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionVendors, o ?? { limit: 100 }) },
   constructionRequests: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionRequests, o ?? { limit: 200 }) },
-  constructionRfqs: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionRfqs, o ?? { limit: 100 }) },
+  constructionRfqs: { list: (a: Actor, o?: ListOpts) => {
+    const page = scopedList(a, 'reports_analytics', db.constructionRfqs.map((rfq) => {
+      const request = db.constructionRequests.find((row) => row.tenantId === rfq.tenantId && row.projectId === rfq.projectId && row.ref === rfq.requestRef);
+      return { ...rfq, costCode: request?.costCode };
+    }), o ?? { limit: 100 });
+    return { ...page, items: page.items.map((rfq) => omitScopeKey(rfq, 'costCode')) };
+  } },
   constructionOrders: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionOrders, o ?? { limit: 200 }) },
   constructionMaterials: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionMaterials, o ?? { limit: 200 }) },
   constructionWarehouses: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionWarehouses, o ?? { limit: 50 }) },
@@ -289,7 +358,10 @@ export const repos = {
   constructionTimesheets: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionTimesheets, o ?? { limit: 200 }) },
   constructionTransmittals: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionTransmittals, o ?? { limit: 200 }) },
   constructionZones: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionZones, o ?? { limit: 200 }) },
-  constructionSubcontractors: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionSubcontractors, o ?? { limit: 100 }) },
+  constructionSubcontractors: { list: (a: Actor, o?: ListOpts) => {
+    const page = scopedList(a, 'reports_analytics', db.constructionSubcontractors.map((subcontractor) => ({ ...subcontractor, subcontractorId: subcontractor.id })), o ?? { limit: 100 });
+    return { ...page, items: page.items.map((subcontractor) => omitScopeKey(subcontractor, 'subcontractorId')) };
+  } },
   constructionSafetyPermits: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionSafetyPermits, o ?? { limit: 200 }) },
   constructionSafetyEvents: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionSafetyEvents, o ?? { limit: 200 }) },
   constructionToolboxTalks: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionToolboxTalks, o ?? { limit: 100 }) },

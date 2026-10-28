@@ -1,6 +1,6 @@
 import { ConstructionOperationsWorkspace } from '@/components/construction/operations-workspace';
 import { forecastFinishISO, projectEVMOf } from '@/domain/construction';
-import { can } from '@/lib/authz';
+import { assertCan, can, matchesScope } from '@/lib/authz';
 import { constructionControl } from '@/server/construction-control';
 import { repos } from '@/server/data';
 import { withDurableRead } from '@/server/data/durable-records';
@@ -13,9 +13,11 @@ export default async function ConstructionOperationsPage() {
     const world = constructionWorld(actor);
     const variations = repos.constructionVariations.list(actor, { limit: 200 }).items;
     const state = constructionControl(actor.tenantId!);
+    const scope = assertCan(actor, 'reports_analytics', 'read');
+    const visible = <T extends { tenantId: string; projectId: string; subcontractorId?: string }>(rows: T[]) => rows.filter((row) => matchesScope(row, scope));
     const projectName = (id: string) => world.projects.find((row) => row.id === id)?.name ?? id;
     const seededSubcontractors = world.subcontractors.map((row) => ({ id: row.id, name: row.name, trade: row.trade, projects: row.projectIds.map(projectName), status: 'approved', complianceReady: true }));
-    const onboardedSubcontractors = state.subcontractors.map((row) => ({ id: row.id, name: row.name, trade: row.trade, projects: row.projectIds.map(projectName), status: row.status, cacNumber: row.cacNumber, contactName: row.contactName, phoneE164: row.phoneE164, complianceReady: row.bankVerified && row.hseInducted && (!row.insuranceExpiryISO || row.insuranceExpiryISO >= new Date().toISOString().slice(0, 10)) }));
+    const onboardedSubcontractors = state.subcontractors.filter((row) => matchesScope({ ...row, subcontractorId: row.id }, scope)).map((row) => ({ id: row.id, name: row.name, trade: row.trade, projects: row.projectIds.map(projectName), status: row.status, cacNumber: row.cacNumber, contactName: row.contactName, phoneE164: row.phoneE164, complianceReady: row.bankVerified && row.hseInducted && (!row.insuranceExpiryISO || row.insuranceExpiryISO >= new Date().toISOString().slice(0, 10)) }));
     const subName = (id: string) => [...onboardedSubcontractors, ...seededSubcontractors].find((row) => row.id === id)?.name ?? id;
     const poById = new Map(world.pos.map((row) => [row.id, row]));
     const projects = world.projects.map((row) => ({ id: row.id, name: row.name, code: row.code }));
@@ -29,12 +31,12 @@ export default async function ConstructionOperationsPage() {
     return <div className="pb-page"><ConstructionOperationsWorkspace
       projects={projects}
       subcontractors={[...onboardedSubcontractors, ...seededSubcontractors]}
-      evidence={state.evidencePacks.map((row) => ({ id: row.id, projectId: row.projectId, project: projectName(row.projectId), subject: row.subject, subjectRef: row.subjectRef, title: row.title, fileCount: row.mediaRefs.length, sha256: row.sha256, status: row.status, capturedAtISO: row.capturedAtISO }))}
-      fieldApprovals={state.fieldApprovals.map((row) => ({ id: row.id, projectId: row.projectId, project: projectName(row.projectId), kind: row.kind, subjectRef: row.subjectRef, title: row.title, summary: row.summary, evidenceCount: row.evidencePackIds.length, status: row.status, requestedAtISO: row.requestedAtISO }))}
+      evidence={visible(state.evidencePacks).map((row) => ({ id: row.id, projectId: row.projectId, project: projectName(row.projectId), subject: row.subject, subjectRef: row.subjectRef, title: row.title, fileCount: row.mediaRefs.length, sha256: row.sha256, status: row.status, capturedAtISO: row.capturedAtISO }))}
+      fieldApprovals={visible(state.fieldApprovals).map((row) => ({ id: row.id, projectId: row.projectId, project: projectName(row.projectId), kind: row.kind, subjectRef: row.subjectRef, title: row.title, summary: row.summary, evidenceCount: row.evidencePackIds.length, status: row.status, requestedAtISO: row.requestedAtISO }))}
       variations={variations.map((row) => ({ id: row.id, projectId: row.projectId, ref: row.ref, title: row.title, status: row.status }))}
-      claims={state.claims.map((row) => ({ id: row.id, ref: row.ref, projectId: row.projectId, project: projectName(row.projectId), subcontractor: subName(row.subcontractorId), description: row.description, claimedMinor: row.claimedMinor, assessedMinor: row.assessedMinor, certifiedMinor: row.certifiedMinor, retentionMinor: row.retentionMinor, whtMinor: row.whtMinor, status: row.status, periodEndISO: row.periodEndISO }))}
+      claims={visible(state.claims).map((row) => ({ id: row.id, ref: row.ref, projectId: row.projectId, project: projectName(row.projectId), subcontractor: subName(row.subcontractorId), description: row.description, claimedMinor: row.claimedMinor, assessedMinor: row.assessedMinor, certifiedMinor: row.certifiedMinor, retentionMinor: row.retentionMinor, whtMinor: row.whtMinor, status: row.status, periodEndISO: row.periodEndISO }))}
       orders={world.pos.map((row) => ({ id: row.id, projectId: row.projectId, ref: row.ref, item: row.item, vendorName: row.vendorName, valueMinor: row.value.minor, qty: row.qty, deliveredQty: row.deliveredQty, status: row.status }))}
-      payments={state.payments.map((row) => { const po = poById.get(row.poId); return { id: row.id, ref: row.ref, poRef: po?.ref ?? row.poId, vendor: po?.vendorName ?? 'Supplier', invoiceRef: row.invoiceRef, invoiceMinor: row.invoiceMinor, retentionMinor: row.retentionMinor, whtMinor: row.whtMinor, payableMinor: row.payableMinor, status: row.status, threeWayMatched: row.threeWayMatched, paymentReference: row.paymentReference }; })}
+      payments={visible(state.payments).map((row) => { const po = poById.get(row.poId); return { id: row.id, ref: row.ref, poRef: po?.ref ?? row.poId, vendor: po?.vendorName ?? 'Supplier', invoiceRef: row.invoiceRef, invoiceMinor: row.invoiceMinor, retentionMinor: row.retentionMinor, whtMinor: row.whtMinor, payableMinor: row.payableMinor, status: row.status, threeWayMatched: row.threeWayMatched, paymentReference: row.paymentReference }; })}
       forecasts={forecasts}
       canCreate={can(actor, 'reports_analytics', 'create').allowed}
       canUpdate={can(actor, 'reports_analytics', 'update').allowed}

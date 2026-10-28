@@ -5,6 +5,7 @@ import { buildConstructionCopilotContext } from '@/server/ai/context/constructio
 import { buildShortletCopilotContext } from '@/server/ai/context/shortlet';
 import { validCopilotSource } from '@/lib/ai/copilot-protocol';
 import { ForbiddenError, type Actor, type Role } from '@/lib/authz';
+import { actorForCompanyMember } from '@/lib/auth/company-policy';
 import { NOW } from '@/domain/ppm';
 
 const store = vi.hoisted(() => {
@@ -92,6 +93,28 @@ describe('Construction AI context commercial and record boundaries', () => {
     expect(JSON.stringify(context)).not.toContain('OTHER_TENANT'); expect(JSON.stringify(context)).not.toContain('UNLINKED_PROJECT_TASK');
     expect(context.facts.tasks).toHaveLength(1);
     for (const name of store.names.filter((name) => name.startsWith('construction'))) for (const [currentActor] of store.reads[name].mock.calls) expect(currentActor).toEqual(actor());
+  });
+
+  it('keeps AI retrieval inside permanent company project membership', async () => {
+    const own = seed.constructionProjects[0];
+    const other = { ...own, id: 'project-private-b', projectId: 'project-private-b', name: 'PRIVATE PROJECT B' };
+    store.rows.constructionProjects = [own, other];
+    store.rows.constructionTasks = [
+      { ...seed.constructionTasks[0], id: 'task-own', projectId: own.id, name: 'OWN PROJECT TASK' },
+      { ...seed.constructionTasks[0], id: 'task-private-b', projectId: other.id, name: 'PRIVATE PROJECT B TASK' },
+    ];
+    const scopedActor = actorForCompanyMember({
+      membershipId: 'membership-ai', userId: 'context-reader', companyId: tenantId,
+      companyRole: 'member', status: 'active', companyStatus: 'active',
+      modules: { construction: 'view' }, operationalProfileId: 'client-investor',
+      estateIds: [], allEstates: false, constructionProjectIds: [own.id], allConstructionProjects: false,
+    }, 'context-reader')!;
+    const context = await buildConstructionCopilotContext(scopedActor);
+    const serialised = JSON.stringify(context.facts);
+    expect(serialised).toContain(own.name);
+    expect(serialised).toContain('OWN PROJECT TASK');
+    expect(serialised).not.toContain('PRIVATE PROJECT B');
+    expect(context.scopeLabel).toContain('assigned Construction projects');
   });
 
   it('does not repair absent investor child ownership by reading tenant-wide project data', async () => {

@@ -21,7 +21,7 @@ import { z } from 'zod';
 import { getActor } from '@/server/session';
 import { ForbiddenError, assertCan, type Actor } from '@/lib/authz';
 import { db } from '@/server/data/store';
-import { repos, scopedMutableGet } from '@/server/data';
+import { repos, scopedConstructionProjectGet, scopedConstructionRfqGet, scopedConstructionTaskGet, scopedMutableGet } from '@/server/data';
 import { money, type Money } from '@/domain/primitives';
 
 import { constructionWorld } from '@/server/reads/construction';
@@ -98,10 +98,10 @@ export async function returnDailyReport(id: string, reason: string): Promise<Res
 export async function updateTaskProgress(id: string, pct: number): Promise<Res> {
   return withDurableMutation(async () => {
   const g = await gate('update'); if (!g.ok) return g;
-  const t = scopedMutableGet(g.actor, 'reports_analytics', db.constructionTasks, id, 'update'); if (!t) return { ok: false, error: 'Task not found.' };
+  const t = scopedConstructionTaskGet(g.actor, id, 'update'); if (!t) return { ok: false, error: 'Task not found.' };
   if (!Number.isFinite(pct) || pct < 0 || pct > 100) return { ok: false, error: 'Enter progress from 0% to 100%.' };
   if (t.status === 'done' && pct < 100) return { ok: false, error: 'Completed work needs a separate approved adjustment before reopening.' };
-  if (pct > 0 && t.dependsOn.some((dependencyId) => scopedMutableGet(g.actor, 'reports_analytics', db.constructionTasks, dependencyId, 'read')?.status !== 'done')) return { ok: false, error: 'Complete the predecessor tasks before recording progress.' };
+  if (pct > 0 && t.dependsOn.some((dependencyId) => db.constructionTasks.find((task) => task.id === dependencyId && task.tenantId === g.actor.tenantId)?.status !== 'done')) return { ok: false, error: 'Complete the predecessor tasks before recording progress.' };
   const p = Math.max(0, Math.min(100, Math.round(pct)));
   t.percentComplete = p; t.status = p === 0 ? 'not_started' : p >= 100 ? 'done' : 'in_progress';
   if (p > 0 && !t.actualStartISO) t.actualStartISO = operatingDateISO();
@@ -122,7 +122,7 @@ export async function advanceMilestone(id: string): Promise<Res> {
 export async function escalateTaskToIssue(taskId: string): Promise<Res> {
   return withDurableMutation(async () => {
   const g = await gate('create'); if (!g.ok) return g;
-  const t = scopedMutableGet(g.actor, 'reports_analytics', db.constructionTasks, taskId, 'create'); if (!t) return { ok: false, error: 'Task not found.' };
+  const t = scopedConstructionTaskGet(g.actor, taskId, 'create'); if (!t) return { ok: false, error: 'Task not found.' };
   const id = `is-esc-${nextRecordSequence('construction:issueSeq', 0, true)}`;
   db.constructionIssues.unshift({ tenantId: g.actor.tenantId, id, projectId: t.projectId, category: 'Schedule', title: `Overdue task escalated: ${t.name}`, severity: 'high', owner: t.owner, raisedISO: operatingDateISO(), dueISO: daysISO(operatingDateISO(), 3), status: 'open', correctiveAction: 'Recovery plan required' } as (typeof db.constructionIssues)[number]);
   revalidate(); return { ok: true, ref: t.name };
@@ -144,7 +144,7 @@ export async function approvePurchaseRequest(id: string): Promise<Res> {
 export async function awardRfq(rfqId: string, vendorId: string): Promise<Res> {
   return withDurableMutation(async () => {
   const g = await gate('create'); if (!g.ok) return g;
-  const rfq = scopedMutableGet(g.actor, 'reports_analytics', db.constructionRfqs, rfqId, 'create'); if (!rfq) return { ok: false, error: 'RFQ not found.' };
+  const rfq = scopedConstructionRfqGet(g.actor, rfqId, 'create'); if (!rfq) return { ok: false, error: 'RFQ not found.' };
   if (rfq.status === 'awarded') return { ok: false, error: 'This RFQ is already awarded. Its order cannot be issued twice.' };
   const q = rfq.quotes.find((x) => x.vendorId === vendorId); if (!q) return { ok: false, error: 'Quote not found.' };
   const req = repos.constructionRequests.list(g.actor, { limit: Number.MAX_SAFE_INTEGER }).items.find((r) => r.ref === rfq.requestRef && r.projectId === rfq.projectId);
@@ -211,7 +211,7 @@ export async function receiveDelivery(poId: string, qty: number): Promise<Res> {
 export async function issueMaterials(materialId: string, qty: number, projectId: string): Promise<Res> {
   return withDurableMutation(async () => {
   const g = await gate('update'); if (!g.ok) return g;
-  if (!scopedMutableGet(g.actor, 'reports_analytics', db.constructionProjects, projectId, 'update')) return { ok: false, error: 'Project not found.' };
+  if (!scopedConstructionProjectGet(g.actor, projectId, 'update')) return { ok: false, error: 'Project not found.' };
   const stock = repos.constructionStock.list(g.actor, { limit: Number.MAX_SAFE_INTEGER }).items.filter((row) => row.materialId === materialId);
   if (!stock.length) return { ok: false, error: 'Stock not found.' };
   if (!finiteQty(qty)) return { ok: false, error: 'Enter a finite quantity greater than zero.' };
@@ -235,7 +235,7 @@ export async function raiseVariation(input: VariationInput): Promise<Res> {
   return withDurableMutation(async () => {
   const g = await gate('create'); if (!g.ok) return g;
   if (!input.title?.trim()) return { ok: false, error: 'Enter a variation title.' };
-  if (!scopedMutableGet(g.actor, 'reports_analytics', db.constructionProjects, input.projectId, 'create')) return { ok: false, error: 'Project not found.' };
+  if (!scopedConstructionProjectGet(g.actor, input.projectId, 'create')) return { ok: false, error: 'Project not found.' };
   if (!Number.isFinite(input.costImpactNaira) || !Number.isSafeInteger(Math.round(input.costImpactNaira * 100)) || !Number.isFinite(input.scheduleImpactDays) || !Number.isSafeInteger(Math.round(input.scheduleImpactDays))) return { ok: false, error: 'Enter finite cost and schedule impacts.' };
   const varSeq = nextRecordSequence('construction:varSeq', 0, true);
   const ref = `VO-${12 + db.constructionVariations.length + (varSeq)}`;
@@ -288,7 +288,7 @@ export async function dismissSignal(signalId: string): Promise<Res> {
 export async function escalateSignalToIssue(signalId: string, projectId: string, title: string): Promise<Res> {
   return withDurableMutation(async () => {
   const g = await gate('create'); if (!g.ok) return g;
-  if (!scopedMutableGet(g.actor, 'reports_analytics', db.constructionProjects, projectId, 'create')) return { ok: false, error: 'Project not found.' };
+  if (!scopedConstructionProjectGet(g.actor, projectId, 'create')) return { ok: false, error: 'Project not found.' };
   const signal = scanRisks(constructionWorld(g.actor), operatingNowMs()).find((row) => row.id === signalId && row.projectId === projectId);
   if (!signal || !title?.trim()) return { ok: false, error: 'Signal not found in this authorised project.' };
   const receipt = db.constructionSignalStates.find((row) => row.tenantId === g.actor.tenantId && row.signalId === signalId);
@@ -326,7 +326,7 @@ export async function updateProjectDetails(id: string, input: { name: string; lo
     const g = await gate('update'); if (!g.ok) return g;
     const parsed = z.object({ name: z.string().trim().min(2).max(120), location: z.string().trim().min(2).max(200), clientName: z.string().trim().min(2).max(120) }).strict().safeParse(input);
     if (!parsed.success) return { ok: false, error: 'Enter a project name, location and client within the stated limits.' };
-    const project = scopedMutableGet(g.actor, 'reports_analytics', db.constructionProjects, id, 'update');
+    const project = scopedConstructionProjectGet(g.actor, id, 'update');
     if (!project) return { ok: false, error: 'Project not found.' };
     if (project.status === 'completed' || project.status === 'closing') return { ok: false, error: 'Closed projects retain their recorded details.' };
     const before = JSON.stringify({ name: project.name, location: project.location, clientName: project.clientName });
@@ -341,7 +341,7 @@ export async function clockWorker(workerId: string, projectId: string, present: 
   return withDurableMutation(async () => {
   const g = await gate('update'); if (!g.ok) return g;
   const worker = scopedMutableGet(g.actor, 'reports_analytics', db.constructionWorkers, workerId, 'update');
-  if (!worker || !scopedMutableGet(g.actor, 'reports_analytics', db.constructionProjects, projectId, 'update') || worker.projectId !== projectId) return { ok: false, error: 'Worker and project assignment not found.' };
+  if (!worker || !scopedConstructionProjectGet(g.actor, projectId, 'update') || worker.projectId !== projectId) return { ok: false, error: 'Worker and project assignment not found.' };
   const today = operatingDateISO();
   const existing = db.constructionAttendance.find((a) => a.tenantId === g.actor.tenantId && a.projectId === projectId && a.workerId === workerId && a.dateISO === today);
   if (existing && ['gps', 'qr'].includes(existing.method)) return { ok: false, error: 'Manual attendance cannot replace recorded GPS or QR evidence. Review the source attendance record.' };
@@ -356,7 +356,7 @@ export async function clockWorker(workerId: string, projectId: string, present: 
 export async function publishDigest(projectId: string): Promise<Res> {
   return withDurableMutation(async () => {
   const g = await gate('update'); if (!g.ok) return g;
-  const p = scopedMutableGet(g.actor, 'reports_analytics', db.constructionProjects, projectId, 'update'); if (!p) return { ok: false, error: 'Project not found.' };
+  const p = scopedConstructionProjectGet(g.actor, projectId, 'update'); if (!p) return { ok: false, error: 'Project not found.' };
   revalidate(); return { ok: true, ref: p.name };
 
   }, 'construction');
@@ -473,7 +473,7 @@ export type BoqImportRow = { code: string; name: string; category: string; budge
 export async function importBoq(projectId: string, rows: BoqImportRow[]): Promise<Res> {
   return withDurableMutation(async () => {
   const g = await gate('create'); if (!g.ok) return g;
-  if (!scopedMutableGet(g.actor, 'reports_analytics', db.constructionProjects, projectId, 'create')) return { ok: false, error: 'Project not found.' };
+  if (!scopedConstructionProjectGet(g.actor, projectId, 'create')) return { ok: false, error: 'Project not found.' };
   if (rows.length === 0) return { ok: false, error: 'Nothing to import.' };
   if (rows.length > 1000 || rows.some((row) => !row.code?.trim() || !row.name?.trim() || !safeMinor(row.budgetMinor)) || new Set(rows.map((row) => row.code)).size !== rows.length) return { ok: false, error: 'Import at most 1,000 unique cost codes with names and non-negative whole-kobo budgets.' };
 
@@ -718,7 +718,7 @@ export async function reconcileStockCount(countId: string, reasonCodeId: string,
 export async function raiseApproval(subject: 'purchase_request' | 'variation' | 'timesheet' | 'stock_adjust' | 'budget_override', subjectRef: string, title: string, projectId: string, amountMinor: number, category?: string): Promise<Res> {
   return withDurableMutation(async () => {
   const g = await gate('create'); if (!g.ok) return g;
-  if (!safeMinor(amountMinor) || !title?.trim() || !subjectRef?.trim() || !scopedMutableGet(g.actor, 'reports_analytics', db.constructionProjects, projectId, 'create')) return { ok: false, error: 'Choose an authorised project and enter a title, reference and valid whole-kobo amount.' };
+  if (!safeMinor(amountMinor) || !title?.trim() || !subjectRef?.trim() || !scopedConstructionProjectGet(g.actor, projectId, 'create')) return { ok: false, error: 'Choose an authorised project and enter a title, reference and valid whole-kobo amount.' };
   const rule = routeFor(repos.constructionApprovalRules.list(g.actor, { limit: Number.MAX_SAFE_INTEGER }).items, subject, amountMinor, category);
   if (!rule) return { ok: false, error: 'No approval route is configured for this.' };
   const aprSeq = nextRecordSequence('construction:aprSeq', 0, true);

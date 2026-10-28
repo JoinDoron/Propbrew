@@ -46,6 +46,11 @@ export type CompanyMembershipRecord = {
   buildingIds?: readonly string[];
   unitIds?: readonly string[];
   allEstates: boolean;
+  constructionProjectIds?: readonly string[];
+  constructionPackageIds?: readonly string[];
+  constructionSubcontractorIds?: readonly string[];
+  constructionTaskIds?: readonly string[];
+  allConstructionProjects?: boolean;
 };
 
 const MODULES: readonly WorkspaceId[] = ['estate', 'facility', 'shortlet', 'construction'];
@@ -109,6 +114,10 @@ function validAccess(actor: Actor): actor is Actor & { companyAccess: CompanyAcc
     && validModules(access.modules) && validCapabilities(access.capabilities)
     && validCapabilityActions(access.capabilityActions) && identifier(actor.tenantId) && typeof actor.allEstates === 'boolean'
     && Array.isArray(actor.estateIds) && actor.estateIds.every(identifier)
+    && (actor.constructionProjectIds === undefined || actor.constructionProjectIds.every(identifier))
+    && (actor.constructionPackageIds === undefined || actor.constructionPackageIds.every(identifier))
+    && (actor.constructionSubcontractorIds === undefined || actor.constructionSubcontractorIds.every(identifier))
+    && (actor.constructionTaskIds === undefined || actor.constructionTaskIds.every(identifier))
     && !actor.roles.includes('platform_admin'));
 }
 
@@ -130,7 +139,10 @@ export function actorForCompanyMember(record: CompanyMembershipRecord, authentic
   const operationalProfile = record.operationalProfileId ? operationalProfileById(record.operationalProfileId) : undefined;
   if (record.operationalProfileId && !operationalProfile) return null;
   if (operationalProfile && grantFor(modules, operationalProfile.workspace) !== operationalProfile.access) return null;
-  if (record.buildingIds?.some((id) => !identifier(id)) || record.unitIds?.some((id) => !identifier(id))) return null;
+  if (record.buildingIds?.some((id) => !identifier(id)) || record.unitIds?.some((id) => !identifier(id))
+    || record.constructionProjectIds?.some((id) => !identifier(id)) || record.constructionPackageIds?.some((id) => !identifier(id))
+    || record.constructionSubcontractorIds?.some((id) => !identifier(id)) || record.constructionTaskIds?.some((id) => !identifier(id))
+    || record.allConstructionProjects !== undefined && typeof record.allConstructionProjects !== 'boolean') return null;
 
   const roles = new Set<Role>();
   if (operationalProfile) {
@@ -165,6 +177,16 @@ export function actorForCompanyMember(record: CompanyMembershipRecord, authentic
     unitIds: Object.freeze([...new Set(record.unitIds ?? [])]),
     vendorOrgId: operationalProfile?.scope === 'vendor' || record.facilityRole === 'vendor' ? record.vendorOrgId! : null,
     investorProjectIds: Object.freeze([]),
+    constructionProjectIds: Object.freeze([...new Set(record.constructionProjectIds ?? [])]),
+    constructionPackageIds: Object.freeze([...new Set(record.constructionPackageIds ?? [])]),
+    constructionSubcontractorIds: Object.freeze([...new Set(record.constructionSubcontractorIds ?? [])]),
+    constructionTaskIds: Object.freeze([...new Set(record.constructionTaskIds ?? [])]),
+    // Never trust the stored portfolio-wide flag to override a scoped job
+    // profile. The profile is the authority; persisted booleans are migration
+    // state, not a permission escalation path.
+    allConstructionProjects: operationalProfile
+      ? operationalProfile.workspace !== 'construction' || operationalProfile.scope === 'company'
+      : record.allConstructionProjects ?? true,
     companyAccess,
   });
 }
