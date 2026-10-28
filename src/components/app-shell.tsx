@@ -23,6 +23,7 @@ import { NotificationsMenu } from '@/components/inbox/notifications-menu';
 import { MessagesMenu } from '@/components/inbox/messages-menu';
 import { SyncIndicator } from '@/components/sync/sync-indicator';
 import { ProfileMenu } from '@/components/inbox/profile-menu';
+import { SidebarMotionRail, SidebarSubmenuStrands } from '@/components/navigation/sidebar-motion-rail';
 import { signOut } from '@/server/actions/auth';
 import type { Notification, Thread } from '@/server/data/inbox';
 import type { Workspace } from '@/config/workspaces';
@@ -115,6 +116,7 @@ export function AppShell({
 
   const activeHref = activeNavHref(groups, pathname, currentQuery);
   const activeGroupLabel = groups.find((group) => group.items.some((item) => item.href === activeHref || item.children?.some((child) => child.href === activeHref)))?.label;
+  const activeGroupOrder = Math.max(0, groups.findIndex((group) => group.label === activeGroupLabel));
   const effectiveOpenNavGroups = activeGroupLabel && !openNavGroups.has(activeGroupLabel)
     ? new Set([...openNavGroups, activeGroupLabel])
     : openNavGroups;
@@ -122,6 +124,7 @@ export function AppShell({
   const effectiveOpenNavItems = activeNavItemId && !openNavItems.has(activeNavItemId)
     ? new Set([...openNavItems, activeNavItemId])
     : openNavItems;
+  const navMotionLayoutKey = `${[...effectiveOpenNavGroups].join('|')}::${[...effectiveOpenNavItems].join('|')}::${collapsed}`;
   const meta = PAGE_META[pathname] ?? PAGE_META[activeHref ?? ''] ?? { title: workspace ? `${workspace.name} portal` : brand.name, subtitle: '' };
   const workspaceStyle = workspace ? {
     '--workspace-accent': workspace.accent,
@@ -315,8 +318,10 @@ export function AppShell({
 
         {/* Nav */}
         <nav aria-label={workspace ? `${workspace.name} navigation` : 'Main navigation'} className={styles.navigation}>
-          {groups.map((group) => (
-            <div key={group.label} className={styles.navGroup}>
+          <div className={styles.navigationInner}>
+            <SidebarMotionRail activeHref={activeHref} activeOrder={activeGroupOrder} layoutKey={navMotionLayoutKey} />
+            {groups.map((group) => (
+              <div key={group.label} className={styles.navGroup}>
               {group.collapsible ? <button type="button" className={styles.groupToggle} aria-expanded={effectiveOpenNavGroups.has(group.label)} onClick={() => setOpenNavGroups((current) => {
                 if (current.has(group.label)) {
                   const next = new Set(current);
@@ -328,13 +333,17 @@ export function AppShell({
                 return new Set([group.label]);
               })}><Building2 size={15} aria-hidden="true" /><span className={styles.collapsible}>{group.label}</span><ChevronRight size={14} aria-hidden="true" className={`${styles.collapsible} ${effectiveOpenNavGroups.has(group.label) ? styles.groupChevronOpen : ''}`} /></button>
                 : <div className={`${styles.groupLabel} ${styles.collapsible}`}>{group.label}</div>}
-              <div className={styles.groupItems} hidden={group.collapsible && !effectiveOpenNavGroups.has(group.label)}>{group.items.map((item) => {
+              <div className={styles.groupItems} data-nav-branch={group.collapsible ? 'true' : undefined} hidden={group.collapsible && !effectiveOpenNavGroups.has(group.label)}>
+                {group.collapsible ? <SidebarSubmenuStrands count={group.items.length} activeIndex={group.items.findIndex((item) => item.href === activeHref)} state={group.items.some((item) => item.href === activeHref) ? 'active' : 'idle'} /> : null}
+                {group.items.map((item) => {
                 const active = activeHref === item.href;
                 const childActive = item.children?.some((child) => child.href === activeHref) ?? false;
                 if (item.children?.length) return <div key={item.id} className={styles.nestedNav}>
                   <button
                     type="button"
                     className={`${styles.navLink} ${styles.nestedToggle} ${active ? styles.navActive : ''} ${childActive ? styles.nestedParentActive : ''}`}
+                    data-nav-entry="true"
+                    data-nav-active={active ? 'true' : undefined}
                     aria-expanded={effectiveOpenNavItems.has(item.id)}
                     onClick={() => setOpenNavItems((current) => {
                       if (current.has(item.id)) return new Set();
@@ -346,13 +355,16 @@ export function AppShell({
                     <span className={`${styles.navLabel} ${styles.collapsible}`}>{item.label}</span>
                     <ChevronRight size={13} aria-hidden="true" className={`${styles.collapsible} ${effectiveOpenNavItems.has(item.id) ? styles.groupChevronOpen : ''}`} />
                   </button>
-                  <div className={styles.nestedItems} hidden={!effectiveOpenNavItems.has(item.id)}>{item.children.map((child) => {
+                  <div className={styles.nestedItems} data-nav-branch="true" hidden={!effectiveOpenNavItems.has(item.id)}>
+                    <SidebarSubmenuStrands count={item.children.length} activeIndex={item.children.findIndex((child) => child.href === activeHref)} depth={2} state={item.children.some((child) => child.href === activeHref) ? 'active' : 'idle'} />
+                    {item.children.map((child) => {
                     const nestedActive = activeHref === child.href;
-                    return <Link key={child.id} href={child.href} title={child.label} aria-current={nestedActive ? 'page' : undefined} onClick={() => closeNavigation(false)} className={`${styles.navLink} ${styles.nestedLink} ${nestedActive ? styles.navActive : ''}`}>
+                    return <Link key={child.id} href={child.href} title={child.label} aria-current={nestedActive ? 'page' : undefined} data-nav-entry="true" data-nav-active={nestedActive ? 'true' : undefined} onClick={() => closeNavigation(false)} className={`${styles.navLink} ${styles.nestedLink} ${nestedActive ? styles.navActive : ''}`}>
                       <Icon name={child.icon} className={styles.navIcon} />
                       <span className={`${styles.navLabel} ${styles.collapsible}`}>{child.label}</span>
                     </Link>;
-                  })}</div>
+                    })}
+                  </div>
                 </div>;
                 return (
                   <Link
@@ -360,17 +372,20 @@ export function AppShell({
                     href={item.href}
                     title={item.label}
                     aria-current={active ? 'page' : undefined}
+                    data-nav-entry="true"
+                    data-nav-active={active ? 'true' : undefined}
                     onClick={() => closeNavigation(false)}
                     className={`${styles.navLink} ${active ? styles.navActive : ''}`}
                   >
                     <Icon name={item.icon} className={styles.navIcon} />
                     <span className={`${styles.navLabel} ${styles.collapsible}`}>{item.label}</span>
-                    {active && <span className={`${styles.activeDot} ${styles.collapsible}`} aria-hidden="true" />}
                   </Link>
                 );
-              })}</div>
-            </div>
-          ))}
+                })}
+              </div>
+              </div>
+            ))}
+          </div>
         </nav>
 
         {/* Identity footer */}

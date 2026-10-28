@@ -1,0 +1,101 @@
+.rail {
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  left: 0;
+  width: 40px;
+  height: var(--nav-map-height, 100%);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--motion-sidebar-hover-duration) linear;
+}
+
+.rail[data-visible='true'] { opacity: 1; }
+
+.map {
+  position: absolute;
+  inset: 0;
+  width: 40px;
+  height: 100%;
+  overflow: visible;
+}
+
+.route {
+  fill: none;
+  stroke: color-mix(in srgb, var(--text) 12%, var(--border));
+  stroke-width: 1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.strands {
+  position: absolute;
+  z-index: 0;
+  inset: 0 auto 0 -10px;
+  width: 40px;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.strands[data-depth='2'] {
+  left: -29px;
+  width: 64px;
+}
+
+.strand {
+  fill: none;
+  stroke: color-mix(in srgb, var(--text) 10%, var(--border));
+  stroke-width: 1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.strand {
+  opacity: .72;
+  transform-box: fill-box;
+  transform-origin: left center;
+}
+
+.strandActive {
+  stroke: var(--workspace-accent);
+  stroke-width: 1.5;
+  opacity: 1;
+  transform-box: fill-box;
+  transform-origin: left center;
+  animation: sidebar-strand-draw var(--motion-sidebar-strand-duration) var(--motion-sidebar-ease) both;
+  animation-delay: calc(var(--strand-index, 0) * var(--motion-sidebar-stagger));
+}
+
+.strands[data-state='hover'] .strandActive { filter: brightness(1.04); transform: translate3d(2px, 0, 0); }
+.strands[data-state='pressed'] .strandActive { transform: translate3d(2px, 0, 0) scale(.985); }
+.strands[data-state='loading'] { opacity: .6; filter: blur(.35px); }
+.strands[data-state='done'] { opacity: 1; filter: blur(0); }
+
+@keyframes sidebar-strand-draw {
+  from { opacity: .35; transform: translate3d(-2px, 0, 0) scaleX(.72); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scaleX(1); }
+}
+
+.dot {
+  position: absolute;
+  top: -10px;
+  left: 2.5px;
+  width: 3px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--workspace-accent);
+  box-shadow: none;
+  transform: translate3d(var(--nav-active-x, 0), var(--nav-active-y, 0), 0);
+  transition: transform var(--motion-sidebar-duration) var(--motion-sidebar-ease);
+}
+
+@media (max-width: 879px) {
+  .rail { left: 2px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rail,
+  .dot { transition: none; }
+  .strandActive { animation: none; }
+}
