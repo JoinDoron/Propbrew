@@ -58,16 +58,6 @@
   --panel-padding: 18px;
   --table-row-height: 52px;
 
-  /* Global navigation motion, measured from the Sidebar by Malay reference.
-     Shared tokens keep every workspace rail on one interaction rhythm. */
-  --motion-sidebar-duration: 320ms;
-  --motion-sidebar-hover-duration: 120ms;
-  --motion-sidebar-submenu-duration: 560ms;
-  --motion-sidebar-strand-duration: 300ms;
-  --motion-sidebar-ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --motion-sidebar-reveal-distance: 6px;
-  --motion-sidebar-stagger: 40ms;
-
   /* Semantic tones (light). Domain status → tone in src/lib/status-tones.ts. */
   --tone-neutral: #475569; /* draft, placed, requested */
   --tone-info: #4242ee; /* issued, assigned, acknowledged */

@@ -1,68 +1,37 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { sidebarRailMetrics } from '@/components/navigation/sidebar-motion-rail';
 
 const read = (file: string) => readFileSync(new URL(`../../${file}`, import.meta.url), 'utf8');
 
-describe('global sidebar motion system', () => {
-  it('maps an active route onto the authorised visible navigation range', () => {
-    expect(sidebarRailMetrics(22, 222, 122)).toEqual({ start: 22, span: 200, offset: 100, progress: 0.5 });
-    expect(sidebarRailMetrics(22, 222, -10).progress).toBe(0);
-    expect(sidebarRailMetrics(22, 222, 500).progress).toBe(1);
-  });
-
-  it('is mounted once in the shared AppShell without owning navigation content', () => {
+describe('original static sidebar rail', () => {
+  it('mounts one quiet guide in the shared AppShell', () => {
     const shell = read('src/components/app-shell.tsx');
-    expect(shell.match(/<SidebarMotionRail\b/g)).toHaveLength(1);
-    expect(shell).not.toContain('SidebarBranch');
-    expect(shell).toContain('data-nav-branch="true"');
-    expect(shell).toContain('<SidebarSubmenuStrands');
-    expect(shell).toContain('data-nav-entry="true"');
-    expect(shell).toContain("data-nav-active={active ? 'true' : undefined}");
-    expect(shell).toContain("data-nav-marker={active || childActive ? 'true' : undefined}");
-    expect(shell).toContain("data-nav-marker={active ? 'true' : undefined}");
-    expect(shell.indexOf('<SidebarMotionRail')).toBeLessThan(shell.indexOf('groups.map'));
+    expect(shell.match(/data-sidebar-guide="true"/g)).toHaveLength(1);
+    expect(shell).toContain('className={styles.railLine}');
+    expect(shell).not.toContain('SidebarMotionRail');
+    expect(shell).not.toContain('SidebarSubmenuStrands');
+    expect(shell).not.toContain('data-sidebar-motion');
+    expect(shell).not.toContain('data-sidebar-strands');
+    expect(shell).not.toContain('data-sidebar-active-dash');
   });
 
-  it('uses shared measured tokens and transform/opacity/filter-only motion', () => {
+  it('uses the original straight neutral line and rounded active-row treatment', () => {
+    const css = read('src/components/app-shell.module.css');
     const globals = read('src/app/globals.css');
-    const railCss = read('src/components/navigation/sidebar-motion-rail.module.css');
-    const shellCss = read('src/components/app-shell.module.css');
-    expect(globals).toContain('--motion-sidebar-duration: 320ms');
-    expect(globals).toContain('--motion-sidebar-ease: cubic-bezier(0.22, 1, 0.36, 1)');
-    for (const css of [railCss, shellCss]) {
-      const transitions = [...css.matchAll(/transition:\s*([^;]+);/g)].map((match) => match[1]);
-      for (const transition of transitions.filter((value) => value.includes('motion-sidebar'))) {
-        expect(transition).not.toMatch(/(?:width|height|top|left|margin|padding|grid)/);
-      }
-    }
-    expect(railCss).toContain('@media (prefers-reduced-motion: reduce)');
-    expect(shellCss).toContain('@keyframes sidebar-items-reveal');
-    expect(railCss).toContain('.route');
-    expect(railCss).toContain('.map');
-    const source = read('src/components/navigation/sidebar-motion-rail.tsx');
-    expect(source.match(/data-sidebar-route="true"/g)).toHaveLength(1);
-    expect(source.match(/data-sidebar-active-dash="true"/g)).toHaveLength(1);
-    expect(source).toContain('data-sidebar-strands="true"');
-    expect(source).not.toContain('strandTrunk');
-    expect(source).toContain(' Q 4 ${centre}, 11 ${centre} H');
-    expect(source).toContain('const width = depth === 2 ? 71 : 40');
-    expect(railCss).toContain(".strands[data-depth='2']");
-    expect(railCss).toContain('left: -36px');
-    expect(railCss).toContain('width: 71px');
-    expect(source).toContain("'idle' | 'hover' | 'pressed' | 'active' | 'loading' | 'done'");
-    expect(source).toContain("rail.dataset.direction = reverse ? 'reverse' : 'forward'");
-    expect(source).toContain("reverse ? '6px' : '-6px'");
-    expect(source).toContain('previousActiveOrderRef.current !== activeOrder');
-    expect(source).toContain('lastMotionKeyRef.current !== motionKey');
-    expect(source).toContain("'[data-nav-marker=\"true\"]'");
-    expect(source).toContain('marker.dataset.navMarkerKey');
-    expect(railCss).toContain('@keyframes sidebar-strand-draw');
-    expect(railCss).toContain('stroke: color-mix(in srgb, var(--text) 12%, var(--border))');
-    expect(railCss).not.toContain('stroke-dashoffset');
-    expect(globals).toContain('--motion-sidebar-submenu-duration: 560ms');
-    expect(globals).toContain('--motion-sidebar-strand-duration: 300ms');
-    expect(globals).toContain('--motion-sidebar-stagger: 40ms');
+    expect(css).toMatch(/\.railLine\s*\{[^}]*width:\s*1px[^}]*background:\s*var\(--border\)/);
+    expect(css).toMatch(/\.navActive,\s*\.navActive:hover\s*\{[^}]*color:\s*var\(--workspace-accent\)[^}]*background:\s*var\(--workspace-accent-weak\)/);
+    expect(css).toMatch(/\.navLink\s*\{[^}]*border-radius:\s*8px/);
+    expect(css).not.toContain('sidebar-strand');
+    expect(css).not.toContain('sidebar-items-reveal');
+    expect(globals).not.toContain('--motion-sidebar');
+  });
+
+  it('retains the current information architecture without drawing extra branch rails', () => {
+    const shell = read('src/components/app-shell.tsx');
+    expect(shell).toContain('groups.map((group)');
+    expect(shell).toContain('group.items.map((item)');
+    expect(shell).toContain('item.children.map((child)');
+    expect(shell.match(/className=\{styles\.railLine\}/g)).toHaveLength(1);
   });
 
   it('keeps navigation and collapse controls at least 44px tall', () => {
