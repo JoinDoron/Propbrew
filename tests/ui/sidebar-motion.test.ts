@@ -46,6 +46,10 @@ describe('global sidebar motion system', () => {
     expect(source).toContain('data-sidebar-strands="true"');
     expect(source).not.toContain('strandTrunk');
     expect(source).toContain(' Q 4 ${centre}, 11 ${centre} H');
+    expect(source).toContain('const width = depth === 2 ? 71 : 40');
+    expect(railCss).toContain(".strands[data-depth='2']");
+    expect(railCss).toContain('left: -36px');
+    expect(railCss).toContain('width: 71px');
     expect(source).toContain("'idle' | 'hover' | 'pressed' | 'active' | 'loading' | 'done'");
     expect(source).toContain("rail.dataset.direction = reverse ? 'reverse' : 'forward'");
     expect(source).toContain("reverse ? '6px' : '-6px'");

@@ -123,16 +123,20 @@ export function SidebarSubmenuStrands({ count, activeIndex, depth = 1, state = '
   const row = 47;
   const firstCentre = 22;
   const height = Math.max(44, firstCentre + (count - 1) * row + 22);
+  // Depth two sits inside a 7px padded nested list. Its wider SVG reaches
+  // back to the same global guide without shortening the branch at the icon.
+  const width = depth === 2 ? 71 : 40;
+  const branchEnd = width - 2;
 
   return (
-    <svg className={styles.strands} viewBox={`0 0 ${depth === 2 ? 64 : 40} ${height}`} preserveAspectRatio="none" data-sidebar-strands="true" data-depth={depth} data-state={state} aria-hidden="true" focusable="false">
+    <svg className={styles.strands} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" data-sidebar-strands="true" data-depth={depth} data-state={state} aria-hidden="true" focusable="false">
       {Array.from({ length: count }, (_, index) => {
         const centre = firstCentre + index * row;
         return (
           <path
             key={index}
             className={`${styles.strand} ${index === activeIndex ? styles.strandActive : ''}`}
-            d={`M 4 ${Math.max(0, centre - 7)} Q 4 ${centre}, 11 ${centre} H ${depth === 2 ? 62 : 38}`}
+            d={`M 4 ${Math.max(0, centre - 7)} Q 4 ${centre}, 11 ${centre} H ${branchEnd}`}
             pathLength="1"
             vectorEffect="non-scaling-stroke"
             style={{ '--strand-index': index } as CSSProperties}

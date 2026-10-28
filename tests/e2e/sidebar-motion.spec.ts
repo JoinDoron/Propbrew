@@ -40,6 +40,14 @@ test.describe('global workspace sidebar motion', () => {
     await expect(sidebar.locator('[data-sidebar-strands="true"]:visible')).toHaveCount(2);
     await expect(sidebar.locator('[data-sidebar-strands="true"]:visible').last().locator('path')).toHaveCount(7);
     await expect.poll(async () => sidebar.locator('[data-sidebar-strands="true"]:visible').last().locator('path').first().getAttribute('d')).toContain(' Q ');
+    await expect.poll(async () => sidebar.evaluate((element) => {
+      const route = element.querySelector<SVGPathElement>('[data-sidebar-route="true"]');
+      const nestedBranch = Array.from(element.querySelectorAll<SVGSVGElement>('[data-sidebar-strands="true"]'))
+        .filter((strand) => strand.getClientRects().length > 0)
+        .at(-1)?.querySelector<SVGPathElement>('path');
+      if (!route || !nestedBranch) return Number.POSITIVE_INFINITY;
+      return Math.abs(route.getBoundingClientRect().x - nestedBranch.getBoundingClientRect().x);
+    })).toBeLessThanOrEqual(1);
     const dash = sidebar.locator('[data-sidebar-active-dash="true"]');
     const setupHeader = sidebar.getByRole('button', { name: 'Project setup & mobilisation' });
     const activeLeaf = sidebar.getByRole('link', { name: 'WBS & programme' });
