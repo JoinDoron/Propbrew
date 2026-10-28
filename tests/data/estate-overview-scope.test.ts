@@ -51,9 +51,9 @@ describe('Estate overview property and unit repositories', () => {
     const person = actor('executive');
     expect(person.allEstates).toBe(true);
     expect(person.estateIds).toEqual([]);
-    expect(repos.sites.list(person).items.map((site) => site.id)).toEqual([SEED.estateGardens, SEED.estateVictoria]);
+    expect(repos.sites.list(person).items.map((site) => site.id)).toEqual([SEED.estateGardens, 's-eko-pearl', 's-abuja-green', SEED.estateVictoria]);
     const units = repos.units.list(person);
-    expect(units.total).toBe(13);
+    expect(units.total).toBe(21);
     expect(units.items.every((unit) => unit.tenantId === SEED.tenantA)).toBe(true);
     expect(units.items.some((unit) => unit.siteId === SEED.estateIkoyi)).toBe(false);
   });

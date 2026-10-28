@@ -25,13 +25,7 @@ function firstReadable(actor: Actor, capabilities: readonly Capability[]): Capab
 /** Property-first Estate rail: property accordion → compact workflow accordions. */
 function propertyNavigation(actor: Actor): NavGroup[] {
   if (!can(actor, 'assets_ppm', 'read').allowed) return [];
-  const sites = [] as { id: string; name: string; kind: string }[];
-  let cursor: string | null | undefined;
-  do {
-    const page = repos.sites.list(actor, { cursor, limit: 200 });
-    sites.push(...page.items.map(({ id, name, kind }) => ({ id: String(id), name, kind })));
-    cursor = page.cursor;
-  } while (cursor !== null);
+  const sites = repos.sites?.all?.(actor)?.map(({ id, name, kind }) => ({ id: String(id), name, kind })) ?? [];
 
   const sectionCapabilities = {
     operations: firstReadable(actor, ['work_orders', 'inspections_compliance', 'bookings_amenities', 'security_sos']),
@@ -87,6 +81,92 @@ function propertyNavigation(actor: Actor): NavGroup[] {
     }));
 }
 
+function scopedWorkspaceHref(href: string, key: string, value: string, returnTo: string) {
+  return `${href}?${new URLSearchParams({ [key]: value, returnTo }).toString()}`;
+}
+
+/** Buildsite-inspired project rail: each project owns its delivery workflows. */
+function constructionProjectNavigation(actor: Actor): NavGroup[] {
+  if (!can(actor, 'reports_analytics', 'read').allowed) return [];
+  const projects = repos.constructionProjects?.list?.(actor, { limit: 100 })?.items ?? [];
+  const sortedProjects = projects
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name, 'en-NG', { numeric: true }));
+
+  return sortedProjects.map((project) => {
+    const projectId = String(project.id);
+    const hub = `/construction/projects/${encodeURIComponent(projectId)}`;
+    const link = (href: string) => scopedWorkspaceHref(href, 'projectId', projectId, hub);
+    const children = (entries: Array<[string, string, string, NavItem['icon']]>) => entries.map(([id, label, href, icon]) => ({
+      id: `construction-${projectId}-${id}`,
+      label,
+      href: link(href),
+      icon,
+      capability: 'reports_analytics' as const,
+    }));
+    return {
+      label: project.name,
+      collapsible: true,
+      items: [
+        { id: `construction-${projectId}-dashboard`, label: 'Project dashboard', href: hub, icon: 'gauge' as const, capability: 'reports_analytics' as const },
+        { id: `construction-${projectId}-planning`, label: 'Planning & controls', href: `${hub}/planning-controls`, icon: 'calendar' as const, capability: 'reports_analytics' as const, children: children([
+          ['evm', 'Earned value', '/construction/evm', 'trending'], ['schedule', 'Programme & critical path', '/construction/schedule', 'calendar'], ['risk', 'Risk & delay forecast', '/construction/risk', 'sparkles'], ['simulator', 'Scenario simulator', '/construction/simulator', 'grid'],
+        ]) },
+        { id: `construction-${projectId}-commercial`, label: 'Commercial & procurement', href: `${hub}/commercial-procurement`, icon: 'banknote' as const, capability: 'reports_analytics' as const, children: children([
+          ['procurement', 'Procurement', '/construction/procurement', 'truck'], ['materials', 'Materials & inventory', '/construction/materials', 'boxes'], ['boq', 'BOQ & cost codes', '/construction/boq', 'file'], ['fx', 'FX exposure', '/construction/fx', 'banknote'], ['approvals', 'Variations & approvals', '/construction/approvals', 'checks'], ['audit', 'Commercial audit', '/construction/audit', 'scroll'],
+        ]) },
+        { id: `construction-${projectId}-delivery`, label: 'Site delivery', href: `${hub}/site-delivery`, icon: 'checks' as const, capability: 'reports_analytics' as const, children: children([
+          ['site', 'Daily site log', '/construction/site', 'clipboard'], ['field', 'Mobile field capture', '/construction/field', 'checks'], ['workforce', 'Workforce', '/construction/workforce', 'users'], ['timesheets', 'Timesheets', '/construction/timesheets', 'clipboard'], ['stock', 'Stock movements', '/construction/stock', 'boxes'], ['safety', 'Safety & permits', '/construction/safety', 'shield'], ['watch', 'Evidence & build watch', '/construction/build-watch', 'grid'],
+        ]) },
+        { id: `construction-${projectId}-intelligence`, label: 'Collaboration & intelligence', href: `${hub}/intelligence`, icon: 'sparkles' as const, capability: 'reports_analytics' as const, children: children([
+          ['documents', 'Documents & RFIs', '/construction/documents', 'file'], ['twin', 'Site twin', '/construction/twin', 'building'], ['league', 'Subcontractor performance', '/construction/league', 'users'], ['copilot', 'Ask construction Copilot', '/construction/copilot', 'sparkles'], ['digest', 'Executive digest', '/construction/digest', 'trending'],
+        ]) },
+      ],
+    };
+  });
+}
+
+/** Facility sites follow the same asset-first operating model as Estate. */
+function facilitySiteNavigation(actor: Actor): NavGroup[] {
+  if (!can(actor, 'assets_ppm', 'read').allowed) return [];
+  const sites = (repos.sites?.all?.(actor) ?? []).filter((site) => site.kind === 'facility')
+    .slice().sort((a, b) => a.name.localeCompare(b.name, 'en-NG', { numeric: true }));
+  return sites.map((site) => {
+    const siteId = String(site.id);
+    const hub = `/facility/sites/${encodeURIComponent(siteId)}`;
+    const link = (href: string) => scopedWorkspaceHref(href, 'siteId', siteId, hub);
+    const entry = (id: string, label: string, href: string, icon: NavItem['icon'], capability: Capability = 'assets_ppm'): NavItem => ({ id: `facility-${siteId}-${id}`, label, href: link(href), icon, capability });
+    return { label: site.name, collapsible: true, items: [
+      { id: `facility-${siteId}-dashboard`, label: 'Site dashboard', href: hub, icon: 'gauge', capability: 'assets_ppm' },
+      { id: `facility-${siteId}-operations`, label: 'Operations', href: `${hub}/operations`, icon: 'wrench', capability: 'work_orders', children: [entry('work-orders', 'Work orders', '/work-orders', 'wrench', 'work_orders'), entry('field', 'Mobile jobs', '/field', 'checks', 'work_orders'), entry('vendors', 'Vendors & contractors', '/vendors', 'truck', 'work_orders')] },
+      { id: `facility-${siteId}-asset-care`, label: 'Asset care', href: `${hub}/asset-care`, icon: 'boxes', capability: 'assets_ppm', children: [entry('assets', 'Asset register', '/assets', 'boxes'), entry('ppm', 'Maintenance plans', '/ppm', 'calendar'), entry('inspections', 'Inspections & compliance', '/inspections', 'clipboard', 'inspections_compliance'), entry('inventory', 'Inventory', '/inventory', 'package')] },
+      { id: `facility-${siteId}-services`, label: 'Building services', href: `${hub}/building-services`, icon: 'building', capability: 'assets_ppm', children: [entry('energy', 'Energy & utilities', '/energy', 'trending'), entry('safety', 'Safety & permits', '/safety', 'shield'), entry('access', 'Access & visitors', '/access', 'users'), entry('spaces', 'Spaces', '/spaces', 'grid'), entry('contracts', 'Contracts & SLAs', '/contracts', 'scroll')] },
+      { id: `facility-${siteId}-intelligence`, label: 'Intelligence', href: `${hub}/intelligence`, icon: 'sparkles', capability: 'assets_ppm', children: [entry('control', 'Control centre', '/control-center', 'gauge'), entry('copilot', 'Ask facility Copilot', '/copilot', 'sparkles')] },
+    ] };
+  });
+}
+
+/** Shortlet properties own their availability, guest, revenue and team workflows. */
+function shortletPropertyNavigation(actor: Actor): NavGroup[] {
+  if (!can(actor, 'bookings_amenities', 'read').allowed) return [];
+  const properties = repos.shortletProperties?.list?.(actor, { limit: 100 })?.items ?? [];
+  const sortedProperties = properties
+    .slice().sort((a, b) => a.name.localeCompare(b.name, 'en-NG', { numeric: true }));
+  return sortedProperties.map((property) => {
+    const propertyId = String(property.id);
+    const hub = `/shortlet/properties/${encodeURIComponent(propertyId)}`;
+    const link = (href: string) => scopedWorkspaceHref(href, 'propertyId', propertyId, hub);
+    const entry = (id: string, label: string, href: string, icon: NavItem['icon']): NavItem => ({ id: `shortlet-${propertyId}-${id}`, label, href: link(href), icon, capability: 'bookings_amenities' });
+    return { label: property.name, collapsible: true, items: [
+      { id: `shortlet-${propertyId}-dashboard`, label: 'Property dashboard', href: hub, icon: 'gauge', capability: 'bookings_amenities' },
+      { id: `shortlet-${propertyId}-reservations`, label: 'Reservations', href: `${hub}/reservations`, icon: 'calendar', capability: 'bookings_amenities', children: [entry('bookings', 'Bookings', '/shortlet/bookings', 'calendar'), entry('calendar', 'Availability calendar', '/shortlet/calendar', 'calendar'), entry('booking-page', 'Direct booking page', '/shortlet/booking-page', 'grid')] },
+      { id: `shortlet-${propertyId}-guest-ops`, label: 'Guest operations', href: `${hub}/guest-operations`, icon: 'users', capability: 'bookings_amenities', children: [entry('guests', 'Guests & verification', '/shortlet/guests', 'users'), entry('operations', 'Check-in & turnover', '/shortlet/operations', 'checks'), entry('inspections', 'Inspections & damages', '/shortlet/inspections', 'clipboard'), entry('maintenance', 'Maintenance handoff', '/shortlet/maintenance', 'wrench'), entry('whatsapp', 'Guest messaging', '/shortlet/whatsapp', 'bell')] },
+      { id: `shortlet-${propertyId}-revenue`, label: 'Revenue & growth', href: `${hub}/revenue-growth`, icon: 'banknote', capability: 'bookings_amenities', children: [entry('pricing', 'Pricing', '/shortlet/pricing', 'banknote'), entry('expenses', 'Expenses & reconciliation', '/shortlet/expenses', 'receipt'), entry('channels', 'Channels', '/shortlet/channels', 'grid'), entry('analytics', 'Analytics & forecasting', '/shortlet/analytics', 'trending'), entry('reviews', 'Reviews', '/shortlet/reviews', 'sparkles')] },
+      { id: `shortlet-${propertyId}-intelligence`, label: 'Team & intelligence', href: `${hub}/intelligence`, icon: 'sparkles', capability: 'bookings_amenities', children: [entry('team', 'Team & approvals', '/shortlet/team', 'users'), entry('agents', 'Agents', '/shortlet/agents', 'users'), entry('copilot', 'Ask shortlet Copilot', '/shortlet/copilot', 'sparkles')] },
+    ] };
+  });
+}
+
 /**
  * Server frame for an authenticated route group. Redirects to /login when there
  * is no session; confirms the actor belongs in THIS shell (bouncing it home
@@ -120,6 +200,24 @@ export async function ShellFrame({ expected, workspace, children }: { expected: 
         ],
       }] : []),
       ...propertyNavigation(actor),
+    ];
+  } else if (workspace === 'construction') {
+    const overview = groups.find((group) => group.label === 'Construction overview');
+    groups = [
+      ...(overview ? [{ label: 'Construction overview', items: overview.items.map((item) => item.id === 'con-projects' ? { ...item, label: 'All projects' } : item) }] : []),
+      ...constructionProjectNavigation(actor),
+    ];
+  } else if (workspace === 'facility') {
+    const overview = groups.find((group) => group.label === 'Overview');
+    groups = [
+      ...(overview ? [{ label: 'Facility overview', items: overview.items }] : []),
+      ...facilitySiteNavigation(actor),
+    ];
+  } else if (workspace === 'shortlet') {
+    const overview = groups.find((group) => group.label === 'Shortlet overview');
+    groups = [
+      ...(overview ? [{ label: 'Shortlet overview', items: overview.items.map((item) => item.id === 'sl-properties' ? { ...item, label: 'All properties' } : item) }] : []),
+      ...shortletPropertyNavigation(actor),
     ];
   }
   const companyPrincipal = currentRecordContext()?.companyPrincipal;

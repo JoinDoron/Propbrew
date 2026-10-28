@@ -13,22 +13,23 @@ const reviewed = {
   estate: groupPages('(ops)/(estate)', [
     'announcements', 'billing', 'board', 'bookings', 'collections', 'community', 'documents',
     'estate', 'events', 'finance', 'governance', 'investors', 'marketplace', 'parcels', 'people',
-    'portfolio', 'properties', 'reports', 'rewards', 'security', 'settings', 'tenancy',
+    'portfolio', 'properties', 'properties/[propertyId]', 'properties/[propertyId]/[section]', 'reports', 'rewards', 'security', 'settings', 'tenancy',
     'estate/work-orders', 'estate/work-orders/[ref]', 'estate/inspections', 'estate/copilot',
   ]),
   facility: groupPages('(ops)/(facility)', [
     'access', 'assets', 'contracts', 'control-center', 'copilot', 'energy', 'facility', 'field',
     'inspections', 'inventory', 'ppm', 'safety', 'spaces', 'sustainability', 'vendors',
+    'facility/sites/[siteId]', 'facility/sites/[siteId]/[section]',
     'work-orders', 'work-orders/[ref]',
   ]),
   construction: groupPages('(ops)/construction', [
     '', 'approvals', 'audit', 'boq', 'build-watch', 'copilot', 'digest', 'documents', 'evm',
-    'field', 'fx', 'league', 'materials', 'operations', 'procurement', 'projects', 'risk', 'safety',
+    'field', 'fx', 'league', 'materials', 'operations', 'procurement', 'projects', 'projects/[projectId]', 'projects/[projectId]/[section]', 'risk', 'safety',
     'schedule', 'simulator', 'site', 'stock', 'timesheets', 'twin', 'workforce',
   ]),
   shortlet: groupPages('(ops)/shortlet', [
     '', 'agents', 'analytics', 'booking-page', 'bookings', 'calendar', 'channels', 'expenses',
-    'guests', 'inspections', 'maintenance', 'operations', 'plan', 'pricing', 'properties', 'reviews', 'team', 'whatsapp', 'copilot',
+    'guests', 'inspections', 'maintenance', 'operations', 'plan', 'pricing', 'properties', 'properties/[propertyId]', 'properties/[propertyId]/[section]', 'reviews', 'team', 'whatsapp', 'copilot',
   ]),
   portal: groupPages('(portal)/portal', [
     '', 'announcements', 'bills', 'bookings', 'community', 'electricity', 'jobs', 'listings',
@@ -41,7 +42,7 @@ const reviewed = {
     'sign-up/[[...sign-up]]/page.tsx',
     'review/login/page.tsx',
     'companies/page.tsx', 'company/team/page.tsx', 'invite/[token]/page.tsx',
-    'account/security/page.tsx', 'login/two-factor/page.tsx',
+    'account/security/page.tsx', 'login/two-factor/page.tsx', 'mobile/page.tsx',
   ],
   // Reviewed public entry: preserve its independent Propbrew marketing identity.
   publicMarketing: ['(marketing)/page.tsx'],
@@ -53,9 +54,13 @@ const headerDelegates = {
   '(ops)/(estate)/documents/page.tsx': { component: 'DocumentsWorkspace', source: 'src/components/documents/documents-workspace.tsx', heading: /<PageHeader\b/ },
   '(ops)/(estate)/estate/page.tsx': { component: 'EstateHome', source: 'src/components/workspaces/estate-home.tsx', heading: /<h2\b[^>]*>Welcome back,/ },
   '(ops)/(estate)/properties/page.tsx': { component: 'EstatePropertiesWorkspace', source: 'src/components/workspaces/estate-properties-workspace.tsx', heading: /<h2\b[^>]*>Properties<\/h2>/ },
+  '(ops)/(estate)/properties/[propertyId]/page.tsx': { component: 'PropertyOperatingHub', source: 'src/components/workspaces/property-operating-hub.tsx', heading: /<h1>\{property\.name\}<\/h1>/ },
+  '(ops)/(estate)/properties/[propertyId]/[section]/page.tsx': { component: 'PropertyOperatingHub', source: 'src/components/workspaces/property-operating-hub.tsx', heading: /<h1>\{property\.name\}<\/h1>/ },
   '(ops)/(estate)/estate/copilot/page.tsx': { component: 'AskData', source: 'src/components/reports/ask-data.tsx', heading: /<CopilotSummary\b[^>]*title="Ask about your estate"/ },
   '(ops)/(estate)/finance/page.tsx': { component: 'FinanceCommandCenter', source: 'src/components/finance/finance-command-center.tsx', heading: /<PageHeader\b[^>]*title="Finance Command Centre"/ },
   '(ops)/(facility)/copilot/page.tsx': { component: 'CopilotWorkspace', source: 'src/components/facility/copilot-workspace.tsx', heading: /<CopilotSummary\b[^>]*title="Ask about your facility"/ },
+  '(ops)/(facility)/facility/sites/[siteId]/page.tsx': { component: 'ScopedOperatingHub', source: 'src/components/workspaces/scoped-operating-hub.tsx', heading: /<h1>\{title\}<\/h1>/ },
+  '(ops)/(facility)/facility/sites/[siteId]/[section]/page.tsx': { component: 'ScopedOperatingHub', source: 'src/components/workspaces/scoped-operating-hub.tsx', heading: /<h1>\{title\}<\/h1>/ },
 } as const;
 
 function discoverPages(directory: string): string[] {
@@ -66,19 +71,19 @@ function discoverPages(directory: string): string[] {
 }
 
 describe('Exhaustive application design review manifest', () => {
-  it('accounts for every one of the 125 page files with no ignored directory or dynamic route', () => {
+  it('accounts for every one of the 134 page files with no ignored directory or dynamic route', () => {
     const files = manifest.map(({ file }) => file);
-    expect(new Set(files).size).toBe(125);
-    expect(files).toHaveLength(125);
+    expect(new Set(files).size).toBe(134);
+    expect(files).toHaveLength(134);
     expect(files.slice().sort()).toEqual(discoverPages(APP).sort());
     expect(files).toContain('(ops)/(facility)/work-orders/[ref]/page.tsx');
     expect(files).toContain('sign-up/[[...sign-up]]/page.tsx');
-    expect(manifest.filter(({ family }) => family !== 'publicMarketing')).toHaveLength(124);
+    expect(manifest.filter(({ family }) => family !== 'publicMarketing')).toHaveLength(133);
   });
 
   it.each([
-    ['estate', 26], ['facility', 17], ['construction', 25], ['shortlet', 19],
-    ['portal', 16], ['admin', 8], ['entryShared', 13], ['publicMarketing', 1],
+    ['estate', 28], ['facility', 19], ['construction', 27], ['shortlet', 21],
+    ['portal', 16], ['admin', 8], ['entryShared', 14], ['publicMarketing', 1],
   ] as const)('explicitly reviews all %s pages (%i)', (family, count) => {
     expect(reviewed[family]).toHaveLength(count);
   });

@@ -1,14 +1,16 @@
-.workspace { min-width: 0; color: var(--text); font-size: 14px; line-height: 1.6; }
+.workspace { min-width: 0; color: var(--text); font-size: 13px; line-height: 1.55; }
 .workspace .workspace > [data-construction-snapshot] { display: none; }
 .section { min-width: 0; }
-.panel { min-width: 0; overflow: hidden; }
+.panel { min-width: 0; overflow: hidden; border-radius: 12px; }
 .panelHeader { background: var(--surface); }
 .panelHeader > div { margin-bottom: 0; }
 .metric { min-width: 0; }
-.metric > div > div:last-child { min-height: 76px; display: flex; flex-direction: column; justify-content: center; }
+.metric > div { border-radius: 11px; }
+.metric > div > div:last-child { min-height: 62px; display: flex; flex-direction: column; justify-content: center; }
 .longMetric > div > div:last-child > span:first-child { font-size: clamp(20px, 1.8vw, 28px); }
 .summary { min-width: 0; }
-.summary h2 { margin-top: 4px; font-size: 20px; line-height: 1.5; font-weight: 500; letter-spacing: -.03em; }
+.summary { border-radius: 12px; }
+.summary h2 { margin-top: 4px; font-size: 20px; line-height: 1.4; font-weight: 600; letter-spacing: -.035em; }
 .summary :global(.construction-summary-icon) { display: inline-grid; place-items: center; flex: none; width: 44px; height: 44px; border-radius: var(--radius-control); background: var(--primary-weak); color: var(--primary); }
 .workspace :global(.pb-section) { min-width: 0; gap: var(--layout-gap); }
 .workspace :global(.pb-form-control) { min-height: 38px; border: 1px solid var(--border); border-radius: var(--radius-control); padding: 7px 11px; font-size: 13px; line-height: 1.5; }
