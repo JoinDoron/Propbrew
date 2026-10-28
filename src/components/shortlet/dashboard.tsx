@@ -1,4 +1,4 @@
-import { Card, CardHeader, EmptyState } from '@/components/ui';
+import { Card, CardHeader, EmptyState, StatusPill } from '@/components/ui';
 import { PageTabs } from '@/components/ui/page-tabs';
 import shortletStyles from './shortlet-reference.module.css';
 import styles from './shortlet-commercial-polish.module.css';
@@ -26,6 +26,13 @@ export function ShortletDashboard({ kpis, monthLabel, arrivals, departures, stay
   calendar: CalRow[]; days: string[]; revExp: MonthBar[]; attention: Attn[];
 }) {
   const maxBar = Math.max(...revExp.map((m) => Math.max(m.revenueMinor, m.expenseMinor)), 1);
+  const latestMonths = revExp.slice(-6);
+  const activityRows = [
+    ...arrivals.map((move) => ({ ...move, activity: 'Arrival', tone: 'info' as const, icon: <PlaneLanding size={16} aria-hidden="true" /> })),
+    ...departures.map((move) => ({ ...move, activity: 'Departure', tone: 'warn' as const, icon: <PlaneTakeoff size={16} aria-hidden="true" /> })),
+    ...staying.map((move) => ({ ...move, activity: 'In house', tone: 'success' as const, icon: <BedDouble size={16} aria-hidden="true" /> })),
+  ];
+  const occupiedDots = Math.round(Math.max(0, Math.min(100, kpis.occupancyPct)) / 100 * 40);
   return (
     <div className={`pb-section ${shortletStyles.workspace}`}>
 
@@ -40,11 +47,32 @@ export function ShortletDashboard({ kpis, monthLabel, arrivals, departures, stay
               <ShortletMetric label="Bookings" value={String(kpis.bookings)} icon={<CalendarCheck size={18} />} />
               <ShortletMetric label="Caution recorded as held" value={naira(kpis.cautionHeldMinor)} icon={<ShieldCheck size={18} />} />
             </div>
-            <div className={shortletStyles.columns}>
-              <MoveCard icon={<PlaneLanding size={16} />} tone="info" title="Arrivals today" moves={arrivals} empty="No check-ins today" />
-              <MoveCard icon={<PlaneTakeoff size={16} />} tone="warn" title="Departures today" moves={departures} empty="No check-outs today" />
-              <MoveCard icon={<BedDouble size={16} />} tone="success" title="In-house now" moves={staying} empty="No guests in-house" />
+            <div className={styles.analyticsGrid}>
+              <Card padded={false} className={styles.card}>
+                <div className={styles.header}><CardHeader title="Commercial performance" subtitle="Recorded revenue and expenses across the latest available months" action={<Link href="/shortlet/analytics" className={styles.link}>Analytics <ArrowUpRight aria-hidden="true" size={16} /></Link>} /></div>
+                <div className={styles.insightBody}>
+                  <div className={styles.insightValue}><strong>{naira(kpis.revenueMinor)}</strong><span>recorded revenue in {monthLabel}</span></div>
+                  {latestMonths.length ? <div className={styles.overviewBars} role="img" aria-label={latestMonths.map((month) => `${month.label}: revenue ${naira(month.revenueMinor)}, expenses ${naira(month.expenseMinor)}`).join('; ')}>{latestMonths.map((month) => <div key={month.label}><span className={styles.barPair}><i style={{ height: `${month.revenueMinor / maxBar * 100}%`, background: toneVar('success') }} /><i style={{ height: `${month.expenseMinor / maxBar * 100}%`, background: toneVar('danger') }} /></span><small>{month.label}</small></div>)}</div> : <p className={styles.metadata}>No monthly finance history is recorded yet.</p>}
+                  <div className={styles.legend}><span><i style={{ background: toneVar('success') }} />Revenue</span><span><i style={{ background: toneVar('danger') }} />Expenses</span></div>
+                </div>
+              </Card>
+              <Card padded={false} className={styles.card}>
+                <div className={styles.header}><CardHeader title="Occupancy pulse" subtitle="A proportional view of the recorded occupancy rate" action={<StatusPill status={`${kpis.occupancyPct}% occupied`} tone={kpis.occupancyPct >= 70 ? 'success' : kpis.occupancyPct >= 45 ? 'warn' : 'info'} />} /></div>
+                <div className={styles.insightBody}>
+                  <div className={styles.insightValue}><strong>{kpis.occupancyPct}%</strong><span>{kpis.bookings} recorded booking{kpis.bookings === 1 ? '' : 's'} in this snapshot</span></div>
+                  <div className={styles.dotMatrix} role="img" aria-label={`${kpis.occupancyPct}% recorded occupancy, represented proportionally across 40 markers`}>{Array.from({ length: 40 }, (_, index) => <span key={index} data-filled={index < occupiedDots ? 'true' : undefined} />)}</div>
+                  <p className={styles.metadata}>Markers summarise the recorded rate; they are not a live channel availability calendar.</p>
+                </div>
+              </Card>
             </div>
+            <Card padded={false} className={styles.card}>
+              <div className={styles.header}><CardHeader title="Live activity" subtitle="Today’s recorded guest movement and in-house register" action={<Link href="/shortlet/calendar" className={styles.link}>Open calendar <ArrowUpRight aria-hidden="true" size={16} /></Link>} /></div>
+              {activityRows.length ? <ul className={styles.activityList}>{activityRows.map((row, index) => <li key={`${row.activity}-${row.ref}-${index}`}>
+                <span className={styles.activityIcon} style={{ color: toneVar(row.tone), background: `color-mix(in srgb, ${toneVar(row.tone)} 12%, var(--surface))` }}>{row.icon}</span>
+                <div className={styles.activityCopy}><strong>{row.guest}</strong><span>{row.apt} · {row.ref} · {row.source || 'Source not recorded'}</span></div>
+                <StatusPill status={row.activity} tone={row.tone} />
+              </li>)}</ul> : <div className={styles.body}><EmptyState title="No guest movement recorded" description="No arrivals, departures or in-house stays are present in this snapshot." /></div>}
+            </Card>
           </div>
         },
         {
@@ -135,21 +163,4 @@ function renderCells(cells: CalRow['cells']) {
     i += c.span - 1;
   }
   return out;
-}
-
-
-
-function MoveCard({ icon, tone, title, moves, empty }: { icon: React.ReactNode; tone: Tone; title: string; moves: Move[]; empty: string }) {
-  return (
-    <Card padded={false} className={styles.card}>
-      <div className={styles.header}><CardHeader title={title} subtitle={`${moves.length} recorded movements · all records shown`} action={<span aria-hidden="true" style={{ color: toneVar(tone) }}>{icon}</span>} /></div><div className={styles.body}>
-      {moves.length === 0 ? <EmptyState title={empty} description="No matching movements in this recorded snapshot." /> : (
-        <ul className={styles.list}>
-          {moves.map((m) => (
-            <li key={m.ref} className={styles.movement}><strong>{m.guest}</strong><dl><div><dt>Apartment</dt><dd>{m.apt}</dd></div><div><dt>Booking</dt><dd>{m.ref}</dd></div><div><dt>Source</dt><dd>{m.source || 'Not recorded'}</dd></div></dl></li>
-          ))}
-        </ul>
-      )}</div>
-    </Card>
-  );
 }

@@ -36,11 +36,11 @@ describe('Shortlet commercial Clinexa inner composition', () => {
   it('shows every movement, including those beyond four, with reference, apartment and source', () => {
     const arrivals = Array.from({ length: 7 }, (_, index) => ({ ref: `SL-FULL-${index}`, guest: `Guest number ${index}`, apt: `Apartment ${index}`, source: `Agent source ${index}` }));
     const html = render(ShortletDashboard, { ...dashboard, arrivals });
-    expect(html).toContain('7 recorded movements · all records shown');
+    expect(html).toContain('Live activity');
+    expect(html).toContain('Today’s recorded guest movement and in-house register');
     for (const arrival of arrivals) for (const fact of Object.values(arrival)) expect(html).toContain(fact);
-    expect(source('dashboard')).not.toContain('moves.slice');
-    expect(html).toContain('<dt>Booking</dt>');
-    expect(html).toContain('<dt>Source</dt>');
+    expect(source('dashboard')).not.toContain('activityRows.slice');
+    expect(html.match(/>Arrival<\/span>/g)).toHaveLength(arrivals.length);
   });
 
   it('retains exact recorded KPI balances and truthful liability and settlement labels', () => {

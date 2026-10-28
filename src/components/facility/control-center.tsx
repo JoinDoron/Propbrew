@@ -30,6 +30,15 @@ export function ControlCenter({ health, systems, sensors, alarms, kpis, nowMs, c
   const [selected, setSelected] = useState<AlarmRow | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const open = alarms.filter((alarm) => !alarm.acknowledged);
+  const systemAvailability = kpis.total ? Math.round((kpis.operational / kpis.total) * 100) : 0;
+  const statusCounts = systems.reduce<Record<string, number>>((counts, system) => {
+    counts[system.status] = (counts[system.status] ?? 0) + 1;
+    return counts;
+  }, {});
+  const systemDots = systems.slice(0, 36);
+  const liveAlarms = [...alarms]
+    .sort((left, right) => Number(left.acknowledged) - Number(right.acknowledged) || right.atISO.localeCompare(left.atISO))
+    .slice(0, 6);
 
   function update(id: string, dispatch: boolean) {
     if (inFlight.current || (dispatch ? !canCreate : !canUpdate)) return;
@@ -61,6 +70,39 @@ export function ControlCenter({ health, systems, sensors, alarms, kpis, nowMs, c
     </Card>
     <div className={styles.threeColumns}><KpiCard label="Recorded power source" value={kpis.powerSource} icon={<Plug size={18} />} /><KpiCard label="Water tank" value={kpis.waterPct + '%'} icon={<Droplet size={18} />} /><KpiCard label="Open alarms" value={String(open.length)} icon={<AlertTriangle size={18} />} iconColor={toneVar(open.length ? 'danger' : 'success')} /></div>
     <PageTabs label="Facility control center sections" items={[
+      { id: 'overview', label: 'Overview', content: <div className={styles.overviewComposition}>
+        <div className={styles.analyticsGrid}>
+          <Card padded={false} className={styles.panel}>
+            <div className={styles.panelHeader}><CardHeader title="Systems availability" subtitle="Recorded equipment state across the current facility scope" action={<StatusPill status={systemAvailability + '% available'} tone={systemAvailability >= 90 ? 'success' : systemAvailability >= 70 ? 'warn' : 'danger'} />} /></div>
+            <div className={styles.insightBody}>
+              <div className={styles.insightValue}><strong>{kpis.operational}</strong><span>of {kpis.total} systems operational or on standby</span></div>
+              <div className={styles.availabilityTrack} role="img" aria-label={`${kpis.operational} of ${kpis.total} recorded systems are operational or on standby`}>
+                {(['operational', 'standby', 'degraded', 'down'] as const).map((status) => {
+                  const value = statusCounts[status] ?? 0;
+                  return value ? <span key={status} style={{ width: `${kpis.total ? value / kpis.total * 100 : 0}%`, background: toneVar(STATUS_TONE[status]) }} /> : null;
+                })}
+              </div>
+              <dl className={styles.statusLegend}>{(['operational', 'standby', 'degraded', 'down'] as const).map((status) => <div key={status}><dt><i style={{ background: toneVar(STATUS_TONE[status]) }} />{status}</dt><dd>{statusCounts[status] ?? 0}</dd></div>)}</dl>
+            </div>
+          </Card>
+          <Card padded={false} className={styles.panel}>
+            <div className={styles.panelHeader}><CardHeader title="Operating health" subtitle="Each marker represents one recorded building system" action={<StatusPill status={health.label} tone={health.band} />} /></div>
+            <div className={styles.insightBody}>
+              <div className={styles.insightValue}><strong>{health.score}</strong><span>rules-based health score out of 100</span></div>
+              {systemDots.length ? <div className={styles.dotMatrix} role="img" aria-label={systemDots.map((system) => `${system.name}: ${system.status}`).join('; ')}>{systemDots.map((system) => <span key={system.id} title={`${system.name}: ${system.status}`} style={{ background: toneVar(STATUS_TONE[system.status] ?? 'neutral') }} />)}</div> : <p className={styles.notice}>No systems are recorded in the current scope.</p>}
+              <p className={styles.metadata}>{sensors.length} sensor reading{sensors.length === 1 ? '' : 's'} recorded · this is not a connected live telemetry feed.</p>
+            </div>
+          </Card>
+        </div>
+        <Card padded={false} className={styles.panel}>
+          <div className={styles.panelHeader}><CardHeader title="Live activity" subtitle="Latest recorded alarms, acknowledgement state and work-order handoff" action={<StatusPill status={open.length + ' open'} tone={open.length ? 'danger' : 'success'} />} /></div>
+          {liveAlarms.length ? <ul className={styles.activityList}>{liveAlarms.map((alarm) => <li key={alarm.id}>
+            <span className={styles.activityMarker} style={{ background: toneVar(SEVERITY_TONE[alarm.severity] ?? 'neutral') }} aria-hidden="true" />
+            <div className={styles.activityCopy}><strong>{alarm.system}</strong><span>{alarm.message}</span></div>
+            <div className={styles.activityMeta}><StatusPill status={alarm.acknowledged ? 'Acknowledged' : alarm.severity} tone={alarm.acknowledged ? 'muted' : SEVERITY_TONE[alarm.severity] ?? 'neutral'} /><time dateTime={alarm.atISO}>{date(alarm.atISO)}</time>{alarm.woRef ? <Link href={'/work-orders/' + encodeURIComponent(alarm.woRef)}>{alarm.woRef}</Link> : null}</div>
+          </li>)}</ul> : <div className={styles.empty}><EmptyState icon={<ShieldCheck size={26} />} title="No alarms recorded" description="This recorded snapshot contains no alarms. It does not replace physical checks or live monitoring." /></div>}
+        </Card>
+      </div> },
       { id: 'sensors', label: 'Sensor readings', content: sensors.length ? <div className={styles.sensorGrid}>{sensors.map((sensor) => {
         const breach = (sensor.low !== undefined && sensor.value < sensor.low) || (sensor.high !== undefined && sensor.value > sensor.high);
         return <Card key={sensor.id} className={styles.panel}><CardHeader title={sensor.name} subtitle={sensor.siteName} action={<Gauge size={18} className="text-primary" />} /><div className={styles.stack}><span className={styles.number}>{sensor.text ?? String(sensor.value) + sensor.unit}</span><StatusPill status={breach ? 'Outside recorded threshold' : 'Recorded reading'} tone={breach ? 'danger' : 'info'} /><p className={styles.metadata}>{sensor.low !== undefined ? 'Low: ' + sensor.low + sensor.unit : 'No low threshold'} · {sensor.high !== undefined ? 'High: ' + sensor.high + sensor.unit : 'No high threshold'}</p>{['water_tank', 'fuel', 'occupancy'].includes(sensor.kind) ? <progress className={styles.progress} max={100} value={Math.max(0, Math.min(100, sensor.value))} aria-label={sensor.name + ' recorded percentage'} /> : null}</div></Card>;

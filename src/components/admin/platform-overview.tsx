@@ -1,6 +1,10 @@
 import Link from 'next/link';
-import { Building2, ShieldAlert, Sparkles, Wallet } from 'lucide-react';
-import { Card, CardHeader, EmptyState, KpiCard, StatusPill } from '@/components/ui';
+import { Card, CardHeader, EmptyState, StatusPill } from '@/components/ui';
+import {
+  MichaelDashboardSystem,
+  type DashboardActivity,
+  type DashboardMetric,
+} from '@/components/dashboard/michael-dashboard-system';
 import type { Tone } from '@/lib/status-tones';
 import { PageTabs } from '@/components/ui/page-tabs';
 import common from '@/components/ui/workspace-layout.module.css';
@@ -16,10 +20,74 @@ const MACHINE_LABEL: Record<string, string> = { 'work-order': 'Work order', 'ser
 export function PlatformOverview({ totals, tenants, events, ai, systems }: {
   totals: { tenants: number; units: number; users: number; mrrMinor: number; incidents: number; aiCostMinor: number }; tenants: TenantRow[]; events: EventRow[]; ai: { calls: number; capPct: number }; systems: SystemRow[];
 }) {
+  const metricPanels: DashboardMetric[] = [
+    {
+      id: 'organisations',
+      label: 'Organisations',
+      value: String(totals.tenants),
+      detail: `${totals.units.toLocaleString('en-NG')} units · ${totals.users.toLocaleString('en-NG')} users represented`,
+      visual: {
+        type: 'matrix',
+        values: tenants.map((tenant) => tenant.score),
+        label: 'Recorded tenant attention indices, with stronger colour representing a higher recorded index.',
+      },
+    },
+    {
+      id: 'mrr',
+      label: 'Estimated platform MRR',
+      value: money(totals.mrrMinor),
+      detail: 'Plan-based estimate, not verified subscription receipts',
+      visual: {
+        type: 'matrix',
+        values: tenants.map((tenant) => tenant.mrrMinor / 100),
+        label: 'Estimated monthly recurring revenue represented by each organisation, with stronger colour representing a larger estimate.',
+      },
+    },
+    {
+      id: 'incidents',
+      label: 'Recorded active incidents',
+      value: String(totals.incidents),
+      detail: `${systems.filter((system) => system.status === 'operational').length} of ${systems.length} platform indicators reported available`,
+      visual: {
+        type: 'matrix',
+        values: systems.map((system) => system.status === 'operational' ? 100 : system.status === 'degraded' ? 60 : system.status === 'down' ? 10 : 20),
+        label: 'Platform configuration indicators, where stronger colour means a more available recorded state.',
+      },
+    },
+    {
+      id: 'ai-spend',
+      label: 'Modelled AI spend',
+      value: money(totals.aiCostMinor),
+      detail: `${ai.calls.toLocaleString('en-NG')} illustrative calls · ${ai.capPct}% of the illustrative monthly cap`,
+    },
+  ];
+  const activityRows: DashboardActivity[] = events.map((event, index) => {
+    const status = event.security ? 'Security' : event.financial ? 'Financial' : 'Operational';
+    const statusTone: Tone = event.security ? 'danger' : event.financial ? 'info' : 'neutral';
+    return {
+      id: `${event.machine}-${event.recordId}-${index}`,
+      primary: event.event,
+      secondary: `${event.actorName} · ${event.recordId}`,
+      category: MACHINE_LABEL[event.machine] ?? event.machine,
+      status,
+      statusTone,
+      timestamp: when(event.at),
+      href: '/admin/audit',
+      actionLabel: `Open audit record for ${event.event}`,
+    };
+  });
+
   return <div className={common.layout}>
     <PageTabs label="Platform overview sections" items={[
       { id: 'overview', label: 'Overview', content: <div className={common.layout}>
-        <div className={common.metrics}><KpiCard label="Organisations" value={String(totals.tenants)} icon={<Building2 size={18} />} /><KpiCard label="Estimated platform MRR" value={money(totals.mrrMinor)} icon={<Wallet size={18} />} /><KpiCard label="Recorded active incidents" value={String(totals.incidents)} icon={<ShieldAlert size={18} />} /><KpiCard label="Modelled AI spend" value={money(totals.aiCostMinor)} icon={<Sparkles size={18} />} /></div>
+        <MichaelDashboardSystem
+          title="Platform operating picture"
+          description="Revenue, tenant health, service configuration and attributable activity across Propbrew."
+          metrics={metricPanels}
+          activities={activityRows}
+          activityTitle="Live platform activity"
+          activityDescription="The latest attributable entries in the platform audit history."
+        />
         <Card className={common.panel}><CardHeader title="Platform snapshot" subtitle="A review of the demonstration dataset, not a live service-health monitor." /><dl className={common.facts}><div><dt>Units represented</dt><dd>{totals.units.toLocaleString('en-NG')}</dd></div><div><dt>Users represented</dt><dd>{totals.users.toLocaleString('en-NG')}</dd></div><div><dt>MRR source</dt><dd>Plan-based estimate, not subscription receipts</dd></div></dl><div className={common.filters}><Link className={styles.link} href="/admin/tenants">Review organisations →</Link><Link className={styles.link} href="/admin/ai">Review AI policies →</Link></div></Card>
       </div> },
       { id: 'health', label: 'Tenant health & systems', content: <div className={common.layout}>

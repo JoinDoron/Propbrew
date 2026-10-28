@@ -24,7 +24,7 @@ vi.mock('@/server/actions/work-orders', () => ({}));
 
 const nowMs = Date.parse('2026-07-26T09:00:00Z');
 const screens: { name: string; tree: ReactElement; tabs: string[]; initial: string }[] = [
-  { name: 'Facility overview and control center', tree: createElement(ControlCenter, { health: { score: 100, band: 'success', label: 'Healthy' }, systems: [], sensors: [], alarms: [], kpis: { operational: 0, total: 0, powerSource: 'Grid', waterPct: 80 }, nowMs }), tabs: ['Sensor readings', 'Building systems', 'Alarms'], initial: 'Sensor readings' },
+  { name: 'Facility overview and control center', tree: createElement(ControlCenter, { health: { score: 100, band: 'success', label: 'Healthy' }, systems: [], sensors: [], alarms: [], kpis: { operational: 0, total: 0, powerSource: 'Grid', waterPct: 80 }, nowMs }), tabs: ['Overview', 'Sensor readings', 'Building systems', 'Alarms'], initial: 'Overview' },
   { name: 'Access', tree: createElement(AccessWorkspace, { points: [], passes: [], events: [], kpis: { onSite: 0, expectedToday: 0, online: 0, totalPoints: 0, threats: 0 }, nowMs }), tabs: ['Access overview', 'Access points', 'Visitor passes', 'Gate activity'], initial: 'Visitor passes' },
   { name: 'Energy', tree: createElement(EnergyWorkspace, { generators: [], meters: [], kpis: { dieselSpendMinor: 0, litresMonth: 0, costPerKwhMinor: 0, co2Kg: 0 }, reliance: { gridPct: 100, gensetPct: 0 }, nowMs }), tabs: ['Energy overview', 'Generators &amp; fuel', 'Meter readings'], initial: 'Energy overview' },
   { name: 'Inventory', tree: createElement(InventoryWorkspace, { parts: [], kpis: { total: 0, belowReorder: 0, stockValueMinor: 0, stockoutsSoon: 0 } }), tabs: ['Stock overview', 'Parts &amp; receiving'], initial: 'Parts &amp; receiving' },

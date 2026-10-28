@@ -52,11 +52,25 @@
   --radius-card: 12px;
   --radius-control: 9px;
   --radius-overlay: 16px;
-  --control-height: 38px;
-  --layout-gap: 18px;
-  --dashboard-grid-gap: 14px;
-  --panel-padding: 18px;
-  --table-row-height: 52px;
+  /* Michael dashboard adaptation: generous, low-elevation operating panels. */
+  --radius-dashboard-panel: 20px;
+  --dashboard-panel-padding: 24px;
+  --dashboard-register-row-height: 64px;
+  --dashboard-content-max: 1600px;
+  --control-height: 44px;
+  --layout-gap: 20px;
+  --dashboard-grid-gap: 20px;
+  --panel-padding: 24px;
+  --table-row-height: 64px;
+
+  /* Shared interaction rhythm. The reference is a still image, so these are
+     Propbrew-native values rather than claimed source timings. */
+  --motion-fast: 160ms;
+  --motion-press: 90ms;
+  --motion-state: 180ms;
+  --motion-enter: 220ms;
+  --motion-stagger: 40ms;
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
 
   /* Semantic tones (light). Domain status → tone in src/lib/status-tones.ts. */
   --tone-neutral: #475569; /* draft, placed, requested */
@@ -145,6 +159,7 @@
 
   --radius-card: 12px;
   --radius-control: 10px;
+  --radius-dashboard: var(--radius-dashboard-panel);
 }
 
 @layer base {
@@ -274,16 +289,16 @@
 }
 
 @utility animate-fade {
-  animation: tms-fade 0.18s ease-out;
+  animation: tms-fade var(--motion-state) var(--ease-standard);
 }
 @utility animate-pop {
-  animation: tms-pop 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: tms-pop var(--motion-state) var(--ease-standard);
 }
 @utility animate-slidein {
-  animation: tms-slidein 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: tms-slidein var(--motion-enter) var(--ease-standard);
 }
 @utility animate-slideup {
-  animation: tms-slideup 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: tms-slideup var(--motion-enter) var(--ease-standard);
 }
 
 /* Respect users who ask for reduced motion. */

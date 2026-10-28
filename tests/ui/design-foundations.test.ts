@@ -21,8 +21,8 @@ function contrast(a: number[], b: number[]) {
   return (pair[0] + .05) / (pair[1] + .05);
 }
 
-describe('Clinexa-derived Propbrew foundations', () => {
-  it('uses the inspected palette and dimensions, not an unrelated dashboard theme', () => {
+describe('Propbrew platform foundations', () => {
+  it('uses the inspected palette and Michael-inspired operating dimensions', () => {
     expect(light['--primary'].toLowerCase()).toBe('#4242ee');
     expect(light['--surface'].toLowerCase()).toBe('#ffffff');
     expect(light['--surface-2'].toLowerCase()).toBe('#f7f9fb');
@@ -30,7 +30,10 @@ describe('Clinexa-derived Propbrew foundations', () => {
     expect(light['--text'].toLowerCase()).toBe('#020817');
     expect(globals).toContain('--radius-card: 12px');
     expect(globals).toContain('--radius-control: 9px');
-    expect(globals).toContain('--layout-gap: 18px');
+    expect(globals).toContain('--radius-dashboard-panel: 20px');
+    expect(globals).toContain('--layout-gap: 20px');
+    expect(globals).toContain('--control-height: 44px');
+    expect(globals).toContain('--dashboard-register-row-height: 64px');
     expect(globals).not.toContain('--radius-card: var(--radius-card)');
   });
 
@@ -65,8 +68,9 @@ describe('Clinexa-derived Propbrew foundations', () => {
 
   it('keeps touch targets, forced-colour selection and reduced motion', () => {
     const css = read('src/components/ui/primitives.module.css');
-    expect(css).toContain('@media (pointer: coarse)');
-    expect(css).toContain('min-height: 44px');
+    expect(css).toContain('min-height: var(--control-height)');
+    expect(css).toMatch(/\.iconButton\s*\{[^}]*width:\s*44px;[^}]*height:\s*44px/);
+    expect(globals).toContain('--control-height: 44px');
     expect(css).toContain('@media (prefers-reduced-motion: reduce)');
     expect(read('src/components/ui/application-foundations.css')).toContain('@media (forced-colors: active)');
     expect(read('src/components/ui/page-tabs.module.css')).toContain('border-bottom: 2px solid transparent');
@@ -75,14 +79,14 @@ describe('Clinexa-derived Propbrew foundations', () => {
   it('shares register dimensions without overriding semantic table-cell inks', () => {
     const css = read('src/components/ui/application-foundations.css');
     expect(css).toContain('.pb-app .pb-page');
-    expect(css).toContain('max-width: none');
+    expect(css).toContain('max-width: var(--dashboard-content-max)');
     expect(css).toContain('.pb-app .pb-filter');
     expect(css).toContain(".pb-filter[aria-pressed='true']");
-    expect(css).toContain('min-height: 38px');
+    expect(css).toContain('min-height: var(--control-height)');
     expect(css).toContain('.pb-app .pb-table-frame');
     const cells = css.match(/\.pb-app \.pb-data-table tbody :where\(td, th\) \{([^}]+)\}/)?.[1] ?? '';
-    expect(cells).toContain('height: var(--table-row-height)');
-    expect(cells).toContain('padding: 10px 13px');
+    expect(cells).toContain('height: var(--dashboard-register-row-height)');
+    expect(cells).toContain('padding: 13px 18px');
     expect(cells).toContain('font-size: 13px');
     expect(cells).not.toMatch(/\bcolor:/);
   });

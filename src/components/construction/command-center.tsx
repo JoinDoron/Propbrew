@@ -41,6 +41,15 @@ export function CommandCenter({ confidence, projects, signals, deliveries, kpis,
     ...deliveries.today.map((delivery) => ({ delivery, tag: 'Due today' as const, tone: 'progress' as const })),
     ...deliveries.upcoming.map((delivery) => ({ delivery, tag: 'Upcoming' as const, tone: 'info' as const })),
   ];
+  const averageProgress = projects.length ? Math.round(projects.reduce((sum, project) => sum + project.percentComplete, 0) / projects.length) : 0;
+  const averagePlan = projects.length ? Math.round(projects.reduce((sum, project) => sum + project.plannedPercent, 0) / projects.length) : 0;
+  const projectsOnPlan = projects.filter((project) => project.percentComplete >= project.plannedPercent).length;
+  const reliabilityPct = projects.length ? Math.round(projectsOnPlan / projects.length * 100) : 0;
+  const reliableDots = Math.round(reliabilityPct / 100 * 40);
+  const liveActivity = [
+    ...activeSignals.map((signal) => ({ id: `signal-${signal.id}`, title: signal.title, detail: `${signal.projectName} · ${signal.evidence}`, status: RISK_LABEL[signal.kind], tone: signal.severity, href: signal.href })),
+    ...deliveryRows.map(({ delivery, tag, tone }) => ({ id: `delivery-${delivery.ref}-${tag}`, title: delivery.item, detail: `${delivery.vendorName} · ${delivery.deliveredQty}/${delivery.qty} ${delivery.unit} · ${dateOnly(delivery.expectedISO)}`, status: tag, tone, href: '/construction/procurement' })),
+  ].slice(0, 8);
   return (
     <ConstructionFrame>
       <ConstructionSummary>
@@ -63,6 +72,32 @@ export function CommandCenter({ confidence, projects, signals, deliveries, kpis,
             <Kpi label="Open PO value" value={naira(kpis.openPoValueMinor)} tone="progress" icon={<Banknote size={16} />} />
             <Kpi label="Critical signals" value={String(kpis.criticalSignals)} tone={kpis.criticalSignals ? 'danger' : 'success'} icon={<TriangleAlert size={16} />} />
           </div>
+          <div className={styles.insightGrid}>
+            <ConstructionPanel className={styles.insightPanel}>
+              <ConstructionPanelHeader title="Delivery trajectory" subtitle="Average recorded progress against the approved programme" />
+              <div className={styles.insightBody}>
+                <div className={styles.insightValue}><strong>{averageProgress}%</strong><span>portfolio progress · {averagePlan}% planned</span></div>
+                {projects.length ? <PortfolioSpark projects={projects} /> : <p className={styles.metadata}>No project progress curve is recorded yet.</p>}
+                <div className={styles.trajectoryLegend}><span><i style={{ background: toneVar('progress') }} />Earned / completed</span><span><i className={styles.plannedLine} />Planned</span></div>
+              </div>
+            </ConstructionPanel>
+            <ConstructionPanel className={styles.insightPanel}>
+              <ConstructionPanelHeader title="Project reliability" subtitle="Projects at or ahead of their recorded plan" />
+              <div className={styles.insightBody}>
+                <div className={styles.insightValue}><strong>{reliabilityPct}%</strong><span>{projectsOnPlan} of {projects.length} projects at or ahead of plan</span></div>
+                <div className={styles.dotMatrix} role="img" aria-label={`${reliabilityPct}% of recorded projects are at or ahead of plan, shown proportionally across 40 markers`}>{Array.from({ length: 40 }, (_, index) => <span key={index} data-filled={index < reliableDots ? 'true' : undefined} />)}</div>
+                <p className={styles.metadata}>Calculated from recorded completion versus planned completion; site evidence remains the source of truth.</p>
+              </div>
+            </ConstructionPanel>
+          </div>
+          <ConstructionPanel>
+            <ConstructionPanelHeader title="Live activity" subtitle="Latest construction risks and procurement movements"><Link href="/construction/risk" className={styles.actionLink}>Open risk radar <ArrowRight size={16} aria-hidden="true" /></Link></ConstructionPanelHeader>
+            {liveActivity.length ? <ul className={styles.activityList}>{liveActivity.map((activity) => <li key={activity.id}>
+              <span className={styles.activityMarker} style={{ background: toneVar(activity.tone) }} aria-hidden="true" />
+              <div className={styles.activityCopy}><strong>{activity.title}</strong><span>{activity.detail}</span></div>
+              <div className={styles.activityAction}><StatusPill status={activity.status} tone={activity.tone} /><Link href={activity.href} aria-label={`Open source for ${activity.title}`}><ArrowRight size={16} aria-hidden="true" /></Link></div>
+            </li>)}</ul> : <ConstructionEmpty title="No live activity recorded" description="No active risk signals or open delivery movements are present in this recorded scope." />}
+          </ConstructionPanel>
           <ConstructionPanel>
             <ConstructionPanelHeader title="Portfolio readiness" subtitle="Start with the source records behind the portfolio totals." />
             <div className={styles.readiness}>
@@ -130,6 +165,22 @@ export function CommandCenter({ confidence, projects, signals, deliveries, kpis,
       {toast && <ConstructionToast>{toast}</ConstructionToast>}
     </ConstructionFrame>
   );
+}
+
+/** Portfolio-level planned and earned curve derived only from recorded project curve points. */
+function PortfolioSpark({ projects }: { projects: ProjectRow[] }) {
+  const w = 560, h = 150, pad = 8;
+  const length = Math.max(1, ...projects.map((project) => project.curve.length));
+  const aggregate = Array.from({ length }, (_, index) => {
+    const points = projects.map((project) => project.curve[Math.min(index, Math.max(0, project.curve.length - 1))]).filter(Boolean);
+    return {
+      pv: points.length ? points.reduce((sum, point) => sum + point.pv, 0) / points.length : 0,
+      ev: points.length ? points.reduce((sum, point) => sum + point.ev, 0) / points.length : 0,
+    };
+  });
+  const max = Math.max(1, ...aggregate.flatMap((point) => [point.pv, point.ev]));
+  const path = (key: 'pv' | 'ev') => aggregate.map((point, index) => `${index === 0 ? 'M' : 'L'}${pad + (index / Math.max(1, aggregate.length - 1)) * (w - pad * 2)},${h - pad - (point[key] / max) * (h - pad * 2)}`).join(' ');
+  return <svg className={styles.portfolioSpark} role="img" aria-label="Portfolio planned and earned value trajectory derived from recorded project curves" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none"><path d={path('pv')} fill="none" stroke="var(--text-3)" strokeWidth="2" strokeDasharray="6 5" /><path d={path('ev')} fill="none" stroke={toneVar('progress')} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 }
 
 /** Illustrative planned-vs-earned curve; both series share the same scale. */

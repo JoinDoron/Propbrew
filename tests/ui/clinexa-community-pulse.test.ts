@@ -172,10 +172,10 @@ describe('Clinexa-aligned Community Pulse', () => {
     expect(css).toContain('overflow-wrap: anywhere');
     expect(css).not.toMatch(/\.record\s*\{[^}]*opacity:/);
     const primitives = read('src/components/ui/primitives.module.css');
-    expect(primitives).toContain('.cardPadded { padding: var(--panel-padding); }');
+    expect(primitives).toContain('.cardPadded { padding: var(--dashboard-panel-padding); }');
     expect(primitives).toContain('.cardPadded { padding: 16px; }');
-    expect(primitives).toContain('.heading { font-size: 15px;');
+    expect(primitives).toContain('.heading { color: var(--text); font-size: 16px;');
     expect(primitives).toContain('min-height: var(--control-height)');
-    expect(primitives).toContain('.button, .iconButton, .filter { min-height: 44px; }');
+    expect(primitives).toMatch(/\.iconButton\s*\{[^}]*width:\s*44px;[^}]*height:\s*44px/);
   });
 });

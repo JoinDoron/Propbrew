@@ -70,8 +70,8 @@ export function CardHeader({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex items-start justify-between gap-3 mb-4">
-      <div className="min-w-0">
+    <div className={styles.cardHeader}>
+      <div className={styles.cardHeaderCopy}>
         <h3 className={styles.heading}>
           {title}
         </h3>
@@ -79,7 +79,7 @@ export function CardHeader({
           <p className={styles.subtitle}>{subtitle}</p>
         )}
       </div>
-      {action}
+      {action && <div className={styles.cardHeaderAction}>{action}</div>}
     </div>
   );
 }
@@ -154,10 +154,10 @@ export function StatusPill({ status, tone }: { status: string; tone: Tone }) {
   const color = toneVar(tone);
   return (
     <span
-      className="inline-flex items-center gap-1.5 min-h-[24px] px-2 rounded-md text-[11.5px] font-medium whitespace-nowrap border border-transparent"
+      className={styles.statusPill}
       style={{ color, background: `color-mix(in srgb, ${color} 8%, var(--surface))`, borderColor: `color-mix(in srgb, ${color} 18%, var(--border))` }}
     >
-      <span className="w-1.5 h-1.5 rounded-full flex-none" style={{ background: color }} />
+      <span className={styles.statusDot} style={{ background: color }} />
       {status}
     </span>
   );
@@ -272,7 +272,7 @@ export function Tabs<T extends string>({
             aria-selected={isActive}
             onClick={() => onChange(t.id)}
             className={cx(
-              'relative h-[42px] px-3.5 text-[13.5px] whitespace-nowrap cursor-pointer border-b-2 -mb-px transition-colors duration-150',
+              'relative min-h-[44px] px-3.5 text-[13.5px] whitespace-nowrap cursor-pointer border-b-2 -mb-px transition-colors duration-150',
               isActive
                 ? 'text-text font-semibold border-primary'
                 : 'text-text-3 font-medium border-transparent hover:text-text-2',
@@ -295,8 +295,8 @@ export function Tabs<T extends string>({
 
 export function Table({ children, label = 'Data register' }: { children: ReactNode; label?: string }) {
   return (
-    <div className="pb-table-frame" role="region" aria-label={label} tabIndex={0}>
-      <table className="pb-data-table">{children}</table>
+    <div className={cx('pb-table-frame', styles.tableFrame)} role="region" aria-label={label} tabIndex={0}>
+      <table className={cx('pb-data-table', styles.dataTable)}>{children}</table>
     </div>
   );
 }
@@ -310,7 +310,7 @@ export function Th({
     <th
       scope="col"
       className={cx(
-        'text-left text-[12px] font-medium tracking-[-0.02em] text-text-3 bg-surface-2 px-4 py-3 border-b border-border whitespace-nowrap',
+        styles.tableHead,
         className,
       )}
       {...rest}
@@ -328,7 +328,7 @@ export function Td({
   className?: string;
 }) {
   return (
-    <td className={cx('px-4 py-3.5 border-b border-border align-middle', className)}>
+    <td className={cx(styles.tableCell, className)}>
       {children}
     </td>
   );
@@ -345,8 +345,8 @@ export function TableRow({
     <tr
       onClick={onClick}
       className={cx(
-        'transition-colors duration-100',
-        onClick && 'cursor-pointer hover:bg-surface-2',
+        styles.tableRow,
+        onClick && styles.tableRowInteractive,
       )}
     >
       {children}
@@ -408,17 +408,17 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center text-center py-14 px-6">
+    <div className={styles.emptyState}>
       {icon && (
-        <span className="w-12 h-12 rounded-2xl bg-surface-2 text-text-3 flex items-center justify-center mb-3.5">
+        <span className={styles.emptyIcon}>
           {icon}
         </span>
       )}
-      <p className="font-medium text-base">{title}</p>
+      <p className={styles.emptyTitle}>{title}</p>
       {description && (
-        <p className="text-sm text-text-3 mt-1 max-w-sm">{description}</p>
+        <p className={styles.emptyDescription}>{description}</p>
       )}
-      {action && <div className="mt-4">{action}</div>}
+      {action && <div className={styles.emptyAction}>{action}</div>}
     </div>
   );
 }

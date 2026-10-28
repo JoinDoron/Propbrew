@@ -42,11 +42,13 @@ describe('Clinexa-derived authenticated page framing', () => {
     expect(detailed).toContain('Add tenant');
   });
 
-  it('keeps Clinexa type, whitespace and theme-aware inks in one shared module', () => {
+  it('keeps the platform heading hierarchy, whitespace and theme-aware inks in one shared module', () => {
     const css = read('src/components/ui/page-header.module.css');
-    expect(css).toContain('font-size: 20px');
-    expect(css).toContain('font-weight: 500');
-    expect(css).toContain('font-size: 14px');
+    expect(css).toContain('--page-heading-size: clamp(22px, 2vw, 28px)');
+    expect(css).toContain('font-size: var(--page-heading-size)');
+    expect(css).toContain('font-weight: 600');
+    expect(css).toContain('--page-supporting-size: 13px');
+    expect(css).toContain('font-size: var(--page-supporting-size)');
     expect(css).toContain('gap: 4px');
     expect(css).toContain('gap: 12px');
     expect(css).toContain('color: var(--text)');
