@@ -6,7 +6,7 @@ import type { NavGroup } from '@/config/nav';
 import { WORKSPACES, type Workspace } from '@/config/workspaces';
 
 const navigation = vi.hoisted(() => ({ pathname: '/estate', push: vi.fn() }));
-vi.mock('next/navigation', () => ({ usePathname: () => navigation.pathname, useRouter: () => ({ push: navigation.push }) }));
+vi.mock('next/navigation', () => ({ usePathname: () => navigation.pathname, useSearchParams: () => new URLSearchParams(), useRouter: () => ({ push: navigation.push }) }));
 vi.mock('@/components/theme-provider', () => ({ useTheme: () => ({ theme: 'light', toggleTheme: vi.fn() }) }));
 vi.mock('@/server/actions/auth', () => ({ signOut: vi.fn() }));
 vi.mock('@/components/inbox/notifications-menu', () => ({ NotificationsMenu: () => createElement('button', { 'aria-label': 'Notifications' }) }));

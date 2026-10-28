@@ -11,7 +11,7 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition, type ReactNode, type CSSProperties } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ChevronLeft, ChevronRight, LogOut, Menu, Moon, Search, Sun, Building2, X } from 'lucide-react';
 import { brand } from '@/config/brand';
 import { activeNavHref, PAGE_META, type NavGroup } from '@/config/nav';
@@ -77,14 +77,20 @@ export function AppShell({
   children: ReactNode;
 }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const currentQuery = searchParams.toString();
+  const hrefIsActive = useCallback((href: string) => {
+    const active = activeNavHref([{ label: 'Current', items: [{ id: 'current', label: 'Current', href, icon: 'gauge', capability: 'reports_analytics' }] }], pathname, currentQuery);
+    return active === href;
+  }, [pathname, currentQuery]);
   const { theme, toggleTheme } = useTheme();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
   const [openNavGroups, setOpenNavGroups] = useState<Set<string>>(() => new Set(
-    groups.filter((group) => group.defaultOpen || group.items.some((item) => pathname === item.href.split('?')[0] || pathname.startsWith(item.href.split('?')[0] + '/') || item.children?.some((child) => pathname === child.href.split('?')[0] || pathname.startsWith(child.href.split('?')[0] + '/')))).map((group) => group.label),
+    groups.filter((group) => group.defaultOpen || group.items.some((item) => hrefIsActive(item.href) || item.children?.some((child) => hrefIsActive(child.href)))).map((group) => group.label),
   ));
   const [openNavItems, setOpenNavItems] = useState<Set<string>>(() => new Set(
-    groups.flatMap((group) => group.items).filter((item) => item.children?.some((child) => pathname === child.href.split('?')[0] || pathname.startsWith(child.href.split('?')[0] + '/'))).map((item) => item.id),
+    groups.flatMap((group) => group.items).filter((item) => item.children?.some((child) => hrefIsActive(child.href))).map((item) => item.id),
   ));
   const [headerTabTarget, setHeaderTabTarget] = useState<HTMLDivElement | null>(null);
   // Page search. The header input used to be a decorative control with no value
@@ -107,8 +113,15 @@ export function AppShell({
   const goTo = (href: string) => { setQuery(''); setSearchOpen(false); router.push(href); };
   const [signingOut, startSignOut] = useTransition();
 
-  const activeHref = activeNavHref(groups, pathname);
+  const activeHref = activeNavHref(groups, pathname, currentQuery);
   const activeGroupLabel = groups.find((group) => group.items.some((item) => item.href === activeHref || item.children?.some((child) => child.href === activeHref)))?.label;
+  const effectiveOpenNavGroups = activeGroupLabel && !openNavGroups.has(activeGroupLabel)
+    ? new Set([...openNavGroups, activeGroupLabel])
+    : openNavGroups;
+  const activeNavItemId = groups.flatMap((group) => group.items).find((item) => item.children?.some((child) => child.href === activeHref))?.id;
+  const effectiveOpenNavItems = activeNavItemId && !openNavItems.has(activeNavItemId)
+    ? new Set([...openNavItems, activeNavItemId])
+    : openNavItems;
   const meta = PAGE_META[pathname] ?? PAGE_META[activeHref ?? ''] ?? { title: workspace ? `${workspace.name} portal` : brand.name, subtitle: '' };
   const workspaceStyle = workspace ? {
     '--workspace-accent': workspace.accent,
@@ -157,11 +170,6 @@ export function AppShell({
   useEffect(() => {
     if (mobileNav) sidebar.current?.querySelector<HTMLButtonElement>('[aria-label="Close navigation menu"]')?.focus();
   }, [mobileNav]);
-
-  useEffect(() => {
-    if (!activeGroupLabel) return;
-    setOpenNavGroups((current) => current.has(activeGroupLabel) ? current : new Set([...current, activeGroupLabel]));
-  }, [activeGroupLabel]);
 
   useEffect(() => {
     const mobileViewport = window.matchMedia('(max-width: 879px)');
@@ -309,7 +317,7 @@ export function AppShell({
         <nav aria-label={workspace ? `${workspace.name} navigation` : 'Main navigation'} className={styles.navigation}>
           {groups.map((group) => (
             <div key={group.label} className={styles.navGroup}>
-              {group.collapsible ? <button type="button" className={styles.groupToggle} aria-expanded={openNavGroups.has(group.label)} onClick={() => setOpenNavGroups((current) => {
+              {group.collapsible ? <button type="button" className={styles.groupToggle} aria-expanded={effectiveOpenNavGroups.has(group.label)} onClick={() => setOpenNavGroups((current) => {
                 if (current.has(group.label)) {
                   const next = new Set(current);
                   next.delete(group.label);
@@ -318,16 +326,16 @@ export function AppShell({
                 // Property groups behave as an accordion: opening the next
                 // property closes the previous one and keeps a large portfolio tidy.
                 return new Set([group.label]);
-              })}><Building2 size={15} aria-hidden="true" /><span className={styles.collapsible}>{group.label}</span><ChevronRight size={14} aria-hidden="true" className={`${styles.collapsible} ${openNavGroups.has(group.label) ? styles.groupChevronOpen : ''}`} /></button>
+              })}><Building2 size={15} aria-hidden="true" /><span className={styles.collapsible}>{group.label}</span><ChevronRight size={14} aria-hidden="true" className={`${styles.collapsible} ${effectiveOpenNavGroups.has(group.label) ? styles.groupChevronOpen : ''}`} /></button>
                 : <div className={`${styles.groupLabel} ${styles.collapsible}`}>{group.label}</div>}
-              <div className={styles.groupItems} hidden={group.collapsible && !openNavGroups.has(group.label)}>{group.items.map((item) => {
+              <div className={styles.groupItems} hidden={group.collapsible && !effectiveOpenNavGroups.has(group.label)}>{group.items.map((item) => {
                 const active = activeHref === item.href;
                 const childActive = item.children?.some((child) => child.href === activeHref) ?? false;
                 if (item.children?.length) return <div key={item.id} className={styles.nestedNav}>
                   <button
                     type="button"
-                    className={`${styles.navLink} ${styles.nestedToggle} ${active || childActive ? styles.navActive : ''}`}
-                    aria-expanded={openNavItems.has(item.id)}
+                    className={`${styles.navLink} ${styles.nestedToggle} ${active ? styles.navActive : ''} ${childActive ? styles.nestedParentActive : ''}`}
+                    aria-expanded={effectiveOpenNavItems.has(item.id)}
                     onClick={() => setOpenNavItems((current) => {
                       if (current.has(item.id)) return new Set();
                       // Keep only one property subsection open so the rail stays compact.
@@ -336,14 +344,13 @@ export function AppShell({
                   >
                     <Icon name={item.icon} className={styles.navIcon} />
                     <span className={`${styles.navLabel} ${styles.collapsible}`}>{item.label}</span>
-                    <ChevronRight size={13} aria-hidden="true" className={`${styles.collapsible} ${openNavItems.has(item.id) ? styles.groupChevronOpen : ''}`} />
+                    <ChevronRight size={13} aria-hidden="true" className={`${styles.collapsible} ${effectiveOpenNavItems.has(item.id) ? styles.groupChevronOpen : ''}`} />
                   </button>
-                  <div className={styles.nestedItems} hidden={!openNavItems.has(item.id)}>{item.children.map((child) => {
+                  <div className={styles.nestedItems} hidden={!effectiveOpenNavItems.has(item.id)}>{item.children.map((child) => {
                     const nestedActive = activeHref === child.href;
                     return <Link key={child.id} href={child.href} title={child.label} aria-current={nestedActive ? 'page' : undefined} onClick={() => closeNavigation(false)} className={`${styles.navLink} ${styles.nestedLink} ${nestedActive ? styles.navActive : ''}`}>
                       <Icon name={child.icon} className={styles.navIcon} />
                       <span className={`${styles.navLabel} ${styles.collapsible}`}>{child.label}</span>
-                      {nestedActive && <span className={`${styles.activeDot} ${styles.collapsible}`} aria-hidden="true" />}
                     </Link>;
                   })}</div>
                 </div>;

@@ -50,14 +50,21 @@ export type NavGroup = {
 
 /** Detail pages inherit their most-specific local navigation item, never an
  * unrelated workspace or the broad Estate overview prefix. */
-export function activeNavHref(groups: readonly NavGroup[], pathname: string): string | undefined {
+export function activeNavHref(groups: readonly NavGroup[], pathname: string, currentQuery = ''): string | undefined {
   const hrefs = (items: readonly NavItem[]): string[] => items.flatMap((item) => [item.href, ...hrefs(item.children ?? [])]);
+  const current = new URLSearchParams(currentQuery);
   return groups.flatMap((group) => hrefs(group.items))
     .filter((href) => {
       const path = href.split('?')[0];
       return pathname === path || pathname.startsWith(path + '/');
     })
-    .sort((a, b) => b.length - a.length)[0];
+    .map((href) => {
+      const query = href.includes('?') ? new URLSearchParams(href.slice(href.indexOf('?') + 1)) : null;
+      const queryMatches = !query || [...query.entries()].every(([key, value]) => current.get(key) === value);
+      return { href, score: queryMatches ? href.split('?')[0].length * 100 + (query?.size ?? 0) * 10_000 : -1 };
+    })
+    .filter(({ score }) => score >= 0)
+    .sort((a, b) => b.score - a.score || b.href.length - a.href.length)[0]?.href;
 }
 
 /* --- OPS console (executive, estate/facility managers, technician, security) */

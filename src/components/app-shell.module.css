@@ -83,10 +83,27 @@
 .nestedNav { min-width: 0; }
 .nestedToggle { width: 100%; cursor: pointer; text-align: left; background: transparent; }
 .nestedToggle > svg:last-child { margin-left: auto; transition: transform 150ms ease; }
-.nestedItems { margin: 1px 0 5px 18px; padding-left: 7px; border-left: 1px solid var(--border); }
+.nestedItems { position: relative; margin: 1px 0 5px 18px; padding-left: 7px; border-left: 1px solid color-mix(in srgb, var(--workspace-accent) 18%, var(--border)); }
 .nestedItems[hidden] { display: none; }
-.nestedLink { min-height: 34px !important; padding: 0 8px; font-size: 11px; gap: 8px; }
+.nestedLink { position: relative; min-height: 34px !important; padding: 0 8px; font-size: 11px; gap: 8px; }
 .nestedLink .navIcon { width: 14px; height: 14px; }
+.nestedParentActive { color: var(--text); font-weight: 600; }
+.nestedLink.navActive, .nestedLink.navActive:hover {
+  color: var(--text);
+  border-color: transparent;
+  background: color-mix(in srgb, var(--workspace-accent) 14%, var(--surface));
+  font-weight: 600;
+}
+.nestedLink.navActive::before {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: -9px;
+  width: 2px;
+  border-radius: 999px;
+  background: var(--workspace-accent);
+  content: '';
+}
 .navLink {
   display: flex;
   align-items: center;
@@ -105,7 +122,7 @@
 .navLink:hover { color: var(--text); background: var(--surface-2); }
 .navIcon { flex: none; width: 18px; height: 18px; opacity: .88; }
 .navLabel { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.navActive, .navActive:hover { color: var(--primary); background: var(--primary-weak); border-color: color-mix(in srgb, var(--primary) 8%, transparent); font-weight: 600; }
+.navActive, .navActive:hover { color: var(--workspace-accent); background: var(--workspace-accent-weak); border-color: color-mix(in srgb, var(--workspace-accent) 8%, transparent); font-weight: 600; }
 .navActive .navIcon { opacity: 1; }
 .activeDot { flex: none; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
 

@@ -6,7 +6,7 @@ import type { NavGroup } from '@/config/nav';
 import { WORKSPACES } from '@/config/workspaces';
 import { PageTabs } from '@/components/ui/page-tabs';
 
-vi.mock('next/navigation', () => ({ usePathname: () => '/estate', useRouter: () => ({ push: vi.fn() }) }));
+vi.mock('next/navigation', () => ({ usePathname: () => '/estate', useSearchParams: () => new URLSearchParams(), useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('@/components/theme-provider', () => ({ useTheme: () => ({ theme: 'light', toggleTheme: vi.fn() }) }));
 vi.mock('@/server/actions/auth', () => ({ signOut: vi.fn() }));
 vi.mock('@/components/inbox/notifications-menu', () => ({ NotificationsMenu: () => createElement('button', { 'aria-label': 'Notifications' }) }));

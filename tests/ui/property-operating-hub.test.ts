@@ -57,7 +57,7 @@ describe('property-first Estate information architecture', () => {
       expect(shell).toContain(`/${section}`);
     }
     const appShell = read('src/components/app-shell.tsx');
-    expect(appShell).toContain('aria-expanded={openNavGroups.has(group.label)}');
-    expect(appShell).toContain('aria-expanded={openNavItems.has(item.id)}');
+    expect(appShell).toContain('aria-expanded={effectiveOpenNavGroups.has(group.label)}');
+    expect(appShell).toContain('aria-expanded={effectiveOpenNavItems.has(item.id)}');
   });
 });
