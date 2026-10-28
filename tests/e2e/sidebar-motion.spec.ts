@@ -40,6 +40,26 @@ test.describe('global workspace sidebar motion', () => {
     await expect(sidebar.locator('[data-sidebar-strands="true"]:visible')).toHaveCount(2);
     await expect(sidebar.locator('[data-sidebar-strands="true"]:visible').last().locator('path')).toHaveCount(7);
     await expect.poll(async () => sidebar.locator('[data-sidebar-strands="true"]:visible').last().locator('path').first().getAttribute('d')).toContain(' Q ');
+    const dash = sidebar.locator('[data-sidebar-active-dash="true"]');
+    const setupHeader = sidebar.getByRole('button', { name: 'Project setup & mobilisation' });
+    const activeLeaf = sidebar.getByRole('link', { name: 'WBS & programme' });
+    await expect.poll(async () => {
+      const [dashBox, headerBox] = await Promise.all([dash.boundingBox(), setupHeader.boundingBox()]);
+      if (!dashBox || !headerBox) return Number.POSITIVE_INFINITY;
+      return Math.abs((dashBox.y + dashBox.height / 2) - (headerBox.y + headerBox.height / 2));
+    }).toBeLessThanOrEqual(5);
+    await expect.poll(async () => {
+      const [dashBox, leafBox] = await Promise.all([dash.boundingBox(), activeLeaf.boundingBox()]);
+      if (!dashBox || !leafBox) return 0;
+      return Math.abs((dashBox.y + dashBox.height / 2) - (leafBox.y + leafBox.height / 2));
+    }).toBeGreaterThan(20);
+    await sidebar.getByRole('link', { name: 'Calendar & baselines' }).click();
+    await expect(page).toHaveURL(/section=baselines/);
+    await expect.poll(async () => {
+      const [dashBox, headerBox] = await Promise.all([dash.boundingBox(), setupHeader.boundingBox()]);
+      if (!dashBox || !headerBox) return Number.POSITIVE_INFINITY;
+      return Math.abs((dashBox.y + dashBox.height / 2) - (headerBox.y + headerBox.height / 2));
+    }).toBeLessThanOrEqual(5);
 
     const marina = sidebar.getByRole('button', { name: 'Marina Heights' });
     await marina.click();

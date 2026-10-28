@@ -39,7 +39,8 @@ export function SidebarMotionRail({ activeHref, activeOrder, layoutKey }: { acti
     const entries = Array.from(container.querySelectorAll<HTMLElement>('[data-nav-entry="true"]'))
       .filter((entry) => entry.getClientRects().length > 0);
     const active = container.querySelector<HTMLElement>('[data-nav-active="true"]');
-    if (!active || active.getClientRects().length === 0 || entries.length === 0) {
+    const marker = container.querySelector<HTMLElement>('[data-nav-marker="true"]') ?? active;
+    if (!active || !marker || active.getClientRects().length === 0 || marker.getClientRects().length === 0 || entries.length === 0) {
       rail.dataset.visible = 'false';
       return;
     }
@@ -49,10 +50,10 @@ export function SidebarMotionRail({ activeHref, activeOrder, layoutKey }: { acti
       const entryRect = entry.getBoundingClientRect();
       return entryRect.top - containerRect.top + entryRect.height / 2;
     };
-    const metrics = sidebarRailMetrics(centre(entries[0]), centre(entries.at(-1) ?? entries[0]), centre(active));
+    const metrics = sidebarRailMetrics(centre(entries[0]), centre(entries.at(-1) ?? entries[0]), centre(marker));
     const height = Math.max(container.scrollHeight, containerRect.height, metrics.start + metrics.span + 1);
     const baseX = 4;
-    const activeY = centre(active);
+    const activeY = centre(marker);
     const path = `M ${baseX} ${metrics.start} L ${baseX} ${metrics.start + metrics.span}`;
 
     const route = routeRef.current;
@@ -61,7 +62,8 @@ export function SidebarMotionRail({ activeHref, activeOrder, layoutKey }: { acti
     rail.style.setProperty('--nav-active-x', '0px');
     rail.style.setProperty('--nav-active-y', `${activeY}px`);
     rail.querySelector('svg')?.setAttribute('viewBox', `0 0 40 ${height}`);
-    const motionKey = `${activeHref ?? ''}::${activeOrder}::${layoutKey}`;
+    const markerKey = marker.dataset.navMarkerKey ?? activeHref ?? '';
+    const motionKey = `${markerKey}::${activeOrder}::${layoutKey}`;
     if (route && lastMotionKeyRef.current !== motionKey && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       const tokens = getComputedStyle(container);
       const duration = Number.parseFloat(tokens.getPropertyValue('--motion-sidebar-duration')) || 320;
@@ -93,8 +95,8 @@ export function SidebarMotionRail({ activeHref, activeOrder, layoutKey }: { acti
     const frame = requestAnimationFrame(measure);
     const observer = new ResizeObserver(measure);
     observer.observe(container);
-    const active = container.querySelector<HTMLElement>('[data-nav-active="true"]');
-    if (active) observer.observe(active);
+    const marker = container.querySelector<HTMLElement>('[data-nav-marker="true"]') ?? container.querySelector<HTMLElement>('[data-nav-active="true"]');
+    if (marker) observer.observe(marker);
     window.addEventListener('resize', measure);
     return () => {
       cancelAnimationFrame(frame);

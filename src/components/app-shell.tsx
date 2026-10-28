@@ -344,6 +344,8 @@ export function AppShell({
                     className={`${styles.navLink} ${styles.nestedToggle} ${active ? styles.navActive : ''} ${childActive ? styles.nestedParentActive : ''}`}
                     data-nav-entry="true"
                     data-nav-active={active ? 'true' : undefined}
+                    data-nav-marker={active || childActive ? 'true' : undefined}
+                    data-nav-marker-key={active || childActive ? item.id : undefined}
                     aria-expanded={effectiveOpenNavItems.has(item.id)}
                     onClick={() => setOpenNavItems((current) => {
                       if (current.has(item.id)) return new Set();
@@ -374,6 +376,8 @@ export function AppShell({
                     aria-current={active ? 'page' : undefined}
                     data-nav-entry="true"
                     data-nav-active={active ? 'true' : undefined}
+                    data-nav-marker={active ? 'true' : undefined}
+                    data-nav-marker-key={active ? item.id : undefined}
                     onClick={() => closeNavigation(false)}
                     className={`${styles.navLink} ${active ? styles.navActive : ''}`}
                   >

@@ -19,6 +19,8 @@ describe('global sidebar motion system', () => {
     expect(shell).toContain('<SidebarSubmenuStrands');
     expect(shell).toContain('data-nav-entry="true"');
     expect(shell).toContain("data-nav-active={active ? 'true' : undefined}");
+    expect(shell).toContain("data-nav-marker={active || childActive ? 'true' : undefined}");
+    expect(shell).toContain("data-nav-marker={active ? 'true' : undefined}");
     expect(shell.indexOf('<SidebarMotionRail')).toBeLessThan(shell.indexOf('groups.map'));
   });
 
@@ -49,6 +51,8 @@ describe('global sidebar motion system', () => {
     expect(source).toContain("reverse ? '6px' : '-6px'");
     expect(source).toContain('previousActiveOrderRef.current !== activeOrder');
     expect(source).toContain('lastMotionKeyRef.current !== motionKey');
+    expect(source).toContain("'[data-nav-marker=\"true\"]'");
+    expect(source).toContain('marker.dataset.navMarkerKey');
     expect(railCss).toContain('@keyframes sidebar-strand-draw');
     expect(railCss).toContain('stroke: color-mix(in srgb, var(--text) 12%, var(--border))');
     expect(railCss).not.toContain('stroke-dashoffset');
