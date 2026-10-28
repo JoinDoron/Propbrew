@@ -81,6 +81,7 @@ test('private construction sandbox mobilises a project through WBS, programme, B
   await expect(page.getByRole('button', { name: `Edit project ${updated}`, exact: true })).toBeVisible();
   await page.getByRole('searchbox', { name: 'Search construction projects' }).fill(updated);
   await page.getByRole('link', { name: 'Set up project', exact: true }).click();
+  await expect(page).toHaveURL(/\/setup\?section=programme$/);
   await expect(page.getByRole('heading', { name: `${updated} · project setup`, exact: true })).toBeVisible();
 
   const phaseName = `Mobilisation ${id}`;
@@ -105,6 +106,7 @@ test('private construction sandbox mobilises a project through WBS, programme, B
   await milestonePanel.getByLabel('Milestone name', { exact: true }).fill(`Site possession ${id}`);
   await milestonePanel.getByRole('button', { name: 'Add milestone', exact: true }).click();
   await page.getByRole('tab', { name: /Calendar & baselines/ }).click();
+  await expect(page).toHaveURL(/section=baselines/);
   const baselinePanel = page.getByRole('heading', { name: 'Baseline revision', exact: true }).locator('xpath=ancestor::section[1]');
   await baselinePanel.getByLabel('Revision name', { exact: true }).fill(`Baseline ${id}`);
   await baselinePanel.getByLabel('Revision reason', { exact: true }).fill('Controlled sandbox mobilisation baseline');
@@ -112,6 +114,7 @@ test('private construction sandbox mobilises a project through WBS, programme, B
   await expect(page.getByText('Pending Approval', { exact: true })).toBeVisible();
 
   await page.getByRole('tab', { name: /Packages & BOQ/ }).click();
+  await expect(page).toHaveURL(/section=packages/);
   const packagePanel = page.getByRole('heading', { name: 'Cost code & BOQ setup wizard', exact: true }).locator('xpath=ancestor::section[1]');
   await packagePanel.getByLabel('Package / cost code', { exact: true }).fill(`MOB-${id}`);
   await packagePanel.getByLabel('Package name', { exact: true }).fill('Site mobilisation');
@@ -120,6 +123,7 @@ test('private construction sandbox mobilises a project through WBS, programme, B
   await expect(page.getByRole('table')).toContainText(`MOB-${id}`);
 
   await page.getByRole('tab', { name: /Team & RACI/ }).click();
+  await expect(page).toHaveURL(/section=team/);
   const teamPanel = page.getByRole('heading', { name: 'Project team & responsibility matrix', exact: true }).locator('xpath=ancestor::section[1]');
   await teamPanel.getByLabel('Name', { exact: true }).fill('Demo project director');
   await teamPanel.getByLabel('Organisation', { exact: true }).fill('Demo Build Limited');
@@ -129,6 +133,7 @@ test('private construction sandbox mobilises a project through WBS, programme, B
   await expect(page.getByText(/Demo project director/)).toBeVisible();
 
   await page.getByRole('tab', { name: /Locations/ }).click();
+  await expect(page).toHaveURL(/section=locations/);
   const locationPanel = page.getByRole('tabpanel', { name: /^Locations/ });
   await locationPanel.getByLabel('Location name', { exact: true }).fill('Main site');
   await locationPanel.getByLabel('Latitude', { exact: true }).fill('6.5244'); await locationPanel.getByLabel('Longitude', { exact: true }).fill('3.3792');
@@ -136,9 +141,12 @@ test('private construction sandbox mobilises a project through WBS, programme, B
   await expect(locationPanel.getByRole('strong').filter({ hasText: /^Main site$/ })).toBeVisible();
 
   await page.getByRole('tab', { name: /Lifecycle controls/ }).click();
+  await expect(page).toHaveURL(/section=lifecycle/);
   await page.getByLabel('Reason for transition', { exact: true }).fill('Mobilisation checks completed in sandbox');
   await page.getByRole('button', { name: 'Activate', exact: true }).click();
   await expect(page.getByText('Active', { exact: true }).first()).toBeVisible();
   await page.reload();
-  await expect(page.getByText(taskName, { exact: true })).toBeVisible();
+  await page.getByRole('navigation', { name: 'Construction navigation', exact: true }).getByRole('link', { name: 'WBS & programme', exact: true }).click();
+  await expect(page).toHaveURL(/section=programme/);
+  await expect(page.getByRole('table')).toContainText(taskName);
 });

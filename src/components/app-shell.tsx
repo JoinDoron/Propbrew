@@ -90,7 +90,7 @@ export function AppShell({
     groups.filter((group) => group.defaultOpen || group.items.some((item) => hrefIsActive(item.href) || item.children?.some((child) => hrefIsActive(child.href)))).map((group) => group.label),
   ));
   const [openNavItems, setOpenNavItems] = useState<Set<string>>(() => new Set(
-    groups.flatMap((group) => group.items).filter((item) => item.children?.some((child) => hrefIsActive(child.href))).map((item) => item.id),
+    groups.flatMap((group) => group.items).filter((item) => item.children?.length && (hrefIsActive(item.href) || item.children.some((child) => hrefIsActive(child.href)))).map((item) => item.id),
   ));
   const [headerTabTarget, setHeaderTabTarget] = useState<HTMLDivElement | null>(null);
   // Page search. The header input used to be a decorative control with no value

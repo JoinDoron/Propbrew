@@ -85,7 +85,7 @@ export function ProjectsWorkspace({ projects, kpis, canMutate }: {
                   )}
                   <div className={`${styles.footer} ${styles.actions}`}>
                     <Link className={styles.link} href={`/construction/projects/${encodeURIComponent(p.id)}`}>Open project <ExternalLink size={15} /></Link>
-                    {canMutate ? <Link className={styles.link} href={`/construction/projects/${encodeURIComponent(p.id)}/setup`}>Set up project <ClipboardList size={15} /></Link> : null}
+                    {canMutate ? <Link className={styles.link} href={`/construction/projects/${encodeURIComponent(p.id)}/setup?section=programme`}>Set up project <ClipboardList size={15} /></Link> : null}
                   </div>
                   </div>
                 </ConstructionPanel>

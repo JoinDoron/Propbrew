@@ -16,6 +16,7 @@ import { currentRecordContext } from '@/server/data/record-context';
 import type { DemoPersonaId } from '@/config/demo-personas';
 import { repos } from '@/server/data';
 import type { Actor, Capability } from '@/lib/authz';
+import { CONSTRUCTION_PROJECT_SETUP_SECTIONS } from '@/config/construction-project-setup';
 
 function firstReadable(actor: Actor, capabilities: readonly Capability[]): Capability | undefined {
   return capabilities.find((capability) => can(actor, capability, 'read').allowed);
@@ -108,7 +109,13 @@ function constructionProjectNavigation(actor: Actor): NavGroup[] {
       collapsible: true,
       items: [
         { id: `construction-${projectId}-dashboard`, label: 'Project dashboard', href: hub, icon: 'gauge' as const, capability: 'reports_analytics' as const },
-        { id: `construction-${projectId}-setup`, label: 'Project setup & mobilisation', href: `${hub}/setup`, icon: 'clipboard' as const, capability: 'reports_analytics' as const },
+        { id: `construction-${projectId}-setup`, label: 'Project setup & mobilisation', href: `${hub}/setup`, icon: 'clipboard' as const, capability: 'reports_analytics' as const, children: CONSTRUCTION_PROJECT_SETUP_SECTIONS.map((section) => ({
+          id: `construction-${projectId}-setup-${section.id}`,
+          label: section.label,
+          href: `${hub}/setup?${new URLSearchParams({ section: section.id }).toString()}`,
+          icon: section.icon,
+          capability: 'reports_analytics' as const,
+        })) },
         { id: `construction-${projectId}-planning`, label: 'Planning & controls', href: `${hub}/planning-controls`, icon: 'calendar' as const, capability: 'reports_analytics' as const, children: children([
           ['evm', 'Earned value', '/construction/evm', 'trending'], ['schedule', 'Programme & critical path', '/construction/schedule', 'calendar'], ['risk', 'Risk & delay forecast', '/construction/risk', 'sparkles'], ['simulator', 'Scenario simulator', '/construction/simulator', 'grid'],
         ]) },

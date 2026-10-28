@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useState, useTransition, type FormEvent, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { CalendarRange, Check, CirclePause, ClipboardList, MapPinned, Plus, ShieldCheck, Users } from 'lucide-react';
 import { Button, CardHeader, StatusPill } from '@/components/ui';
@@ -9,23 +9,26 @@ import { PageTabs } from '@/components/ui/page-tabs';
 import { ConstructionFrame, ConstructionPanel, ConstructionToast, constructionNaira } from './construction-ui';
 import styles from './construction-delivery-polish.module.css';
 import type { CostCode, Milestone, Phase, Project, Task } from '@/domain/construction/types';
+import { CONSTRUCTION_PROJECT_SETUP_SECTIONS, type ConstructionProjectSetupSection } from '@/config/construction-project-setup';
 import {
   addProjectLocation, addProjectParty, addProjectTeamMember, createWorkPackage,
   decideBaselineRevision, saveProgrammeTask, saveProjectCalendar, saveProjectMilestone,
   saveProjectPhase, submitBaselineRevision, transitionProjectLifecycle,
 } from '@/server/actions/construction';
 
-type Props = { project: Project; phases: Phase[]; tasks: Task[]; milestones: Milestone[]; costCodes: CostCode[]; canMutate: boolean };
+type Props = { project: Project; phases: Phase[]; tasks: Task[]; milestones: Milestone[]; costCodes: CostCode[]; canMutate: boolean; initialSection?: ConstructionProjectSetupSection };
 type Result = { ok: true; ref?: string } | { ok: false; error: string };
 const date = (value: string) => new Date(value).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Africa/Lagos' });
 const title = (value: string) => value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 
-export function ProjectSetupWorkspace({ project, phases, tasks, milestones, costCodes, canMutate }: Props) {
+export function ProjectSetupWorkspace({ project, phases, tasks, milestones, costCodes, canMutate, initialSection = 'programme' }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [activeSection, setActiveSection] = useState<ConstructionProjectSetupSection>(initialSection);
+  useEffect(() => setActiveSection(initialSection), [initialSection]);
   const setup = project.mobilisation ?? {
     calendar: { name: 'Nigeria standard working week', workingDays: [1, 2, 3, 4, 5, 6], hoursPerDay: 8, timeZone: 'Africa/Lagos', holidays: [] },
     baselines: [], team: [], workPackages: [], locations: [], parties: [], lifecycle: [],
@@ -41,6 +44,12 @@ export function ProjectSetupWorkspace({ project, phases, tasks, milestones, cost
     });
   }
   const form = (event: FormEvent<HTMLFormElement>) => new FormData(event.currentTarget);
+  function selectSection(section: ConstructionProjectSetupSection) {
+    setActiveSection(section);
+    const query = new URLSearchParams(window.location.search);
+    query.set('section', section);
+    router.replace(`/construction/projects/${encodeURIComponent(project.id)}/setup?${query.toString()}`, { scroll: false });
+  }
 
   const programme = <div className={styles.stack}>
     <div className={styles.twoColumns}>
@@ -84,7 +93,18 @@ export function ProjectSetupWorkspace({ project, phases, tasks, milestones, cost
 
   const lifecycle = <div className={styles.stack}><div className={styles.notice}><ShieldCheck size={18} /><div><strong>Controlled project state</strong><p>Current state: {title(project.status)}. Completion is blocked while any programme task or milestone remains unfinished. Every transition requires a reason and enters the audit trail.</p></div></div><FormPanel title="Suspend, close or reopen project" subtitle="Use the appropriate controlled transition; records are preserved."><LifecycleControls status={project.status} disabled={!canMutate || pending} onRun={(action, reason) => run(() => transitionProjectLifecycle(project.id, action, reason), `Project ${action.replaceAll('_', ' ')}`)} /></FormPanel><Register title="Lifecycle history" subtitle="Permanent reasons and attribution"><ul className={styles.list}>{setup.lifecycle.toReversed().map((row, index) => <li key={`${row.atISO}-${index}`} className={styles.listEntry}><span><strong>{title(row.action)}</strong><span className={styles.metadata}>{row.reason} · {row.by} · {new Date(row.atISO).toLocaleString('en-NG', { timeZone: 'Africa/Lagos' })} WAT</span></span></li>)}</ul></Register></div>;
 
-  return <ConstructionFrame><PageHeader title={`${project.name} · project setup`} subtitle="Mobilisation, WBS, programme, responsibility, commercial structure and controlled lifecycle." scope={<StatusPill status={title(project.status)} tone={project.status === 'active' ? 'success' : project.status === 'on_hold' ? 'warn' : 'info'} />} /><div className={styles.metrics}><Metric icon={<ClipboardList />} label="WBS phases" value={String(phases.length)} /><Metric icon={<CalendarRange />} label="Programme tasks" value={String(tasks.length)} /><Metric icon={<Users />} label="Team members" value={String(setup.team.length)} /><Metric icon={<ShieldCheck />} label="Approved baselines" value={String(setup.baselines.filter((row) => row.status === 'approved').length)} /></div>{error ? <p className={styles.error} role="alert">{error}</p> : null}<PageTabs label="Project setup sections" items={[{ id: 'programme', label: 'WBS & programme', count: tasks.length, content: programme }, { id: 'baselines', label: 'Calendar & baselines', count: setup.baselines.length, content: baseline }, { id: 'packages', label: 'Packages & BOQ', count: setup.workPackages.length, content: packages }, { id: 'team', label: 'Team & RACI', count: setup.team.length, content: team }, { id: 'locations', label: 'Locations', count: setup.locations.length, content: locations }, { id: 'parties', label: 'Parties & permits', count: setup.parties.length, content: parties }, { id: 'lifecycle', label: 'Lifecycle controls', content: lifecycle }]} />{toast ? <ConstructionToast>{toast}</ConstructionToast> : null}</ConstructionFrame>;
+  const content: Record<ConstructionProjectSetupSection, { count?: number; content: ReactNode }> = {
+    programme: { count: tasks.length, content: programme },
+    baselines: { count: setup.baselines.length, content: baseline },
+    packages: { count: setup.workPackages.length, content: packages },
+    team: { count: setup.team.length, content: team },
+    locations: { count: setup.locations.length, content: locations },
+    parties: { count: setup.parties.length, content: parties },
+    lifecycle: { content: lifecycle },
+  };
+  const sections = CONSTRUCTION_PROJECT_SETUP_SECTIONS.map((section) => ({ ...section, ...content[section.id] }));
+
+  return <ConstructionFrame><PageHeader title={`${project.name} · project setup`} subtitle="Mobilisation, WBS, programme, responsibility, commercial structure and controlled lifecycle." scope={<StatusPill status={title(project.status)} tone={project.status === 'active' ? 'success' : project.status === 'on_hold' ? 'warn' : 'info'} />} /><div className={styles.metrics}><Metric icon={<ClipboardList />} label="WBS phases" value={String(phases.length)} /><Metric icon={<CalendarRange />} label="Programme tasks" value={String(tasks.length)} /><Metric icon={<Users />} label="Team members" value={String(setup.team.length)} /><Metric icon={<ShieldCheck />} label="Approved baselines" value={String(setup.baselines.filter((row) => row.status === 'approved').length)} /></div>{error ? <p className={styles.error} role="alert">{error}</p> : null}<PageTabs label="Project setup sections" items={sections} activeTab={activeSection} onTabChange={(section) => selectSection(section as ConstructionProjectSetupSection)} />{toast ? <ConstructionToast>{toast}</ConstructionToast> : null}</ConstructionFrame>;
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) { return <label className={styles.field}><span>{label}</span>{children}</label>; }

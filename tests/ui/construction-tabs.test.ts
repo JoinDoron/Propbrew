@@ -63,6 +63,21 @@ describe('Construction and platform page sections', () => {
     expect(helper).toContain('<PortalDialog');
   });
 
+  it('makes project setup and mobilisation a deep-linked rail hierarchy', () => {
+    const shell = source('src/components/shell-frame.tsx');
+    const setup = source('src/components/construction/project-setup-workspace.tsx');
+    const route = source('src/app/(ops)/construction/projects/[projectId]/setup/page.tsx');
+    for (const label of ['WBS & programme', 'Calendar & baselines', 'Packages & BOQ', 'Team & RACI', 'Locations', 'Parties & permits', 'Lifecycle controls']) {
+      expect(source('src/config/construction-project-setup.ts')).toContain(label);
+    }
+    expect(shell).toContain('CONSTRUCTION_PROJECT_SETUP_SECTIONS.map');
+    expect(shell).toContain("new URLSearchParams({ section: section.id })");
+    expect(setup).toContain('activeTab={activeSection}');
+    expect(setup).toContain("query.set('section', section)");
+    expect(route).toContain('isConstructionProjectSetupSection');
+    expect(route).toContain('initialSection={section}');
+  });
+
   it('separates portfolio totals, operations, attention and exploration into distinct panels', () => {
     const html = renderToStaticMarkup(createElement(CommandCenter, {
       confidence: { score: 100, band: 'success', label: 'On plan', nairaAtRiskMinor: 0 },
