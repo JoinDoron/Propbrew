@@ -99,8 +99,8 @@ describe('Deep Clinexa composition across the complete Construction module', () 
     expect(source).not.toContain('fixed inset-0');
     expect(html.match(/role="tab"/g)).toHaveLength(tabs);
     expect(html.match(/role="tabpanel"/g)).toHaveLength(tabs);
-    expect(html).toContain('Recorded snapshot');
-    expect(html).toContain('WAT');
+    expect(html).not.toContain('Recorded snapshot');
+    expect(html).not.toContain('Company records');
     expect(html).not.toMatch(/NaN|Infinity/);
     if (tabs > 1) expect(html).toContain(' hidden=""');
   });

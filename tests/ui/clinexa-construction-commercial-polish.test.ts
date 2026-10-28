@@ -56,8 +56,8 @@ describe('Construction commercial Clinexa composition', () => {
     expect(html.match(/role="tabpanel"/g)).toHaveLength(count);
     expect(html.match(/hidden=""/g)).toHaveLength(count - 1);
     expect(html).not.toMatch(/NaN|Infinity/);
-    expect(html).toContain('Recorded snapshot');
-    expect(html).toContain('WAT');
+    expect(html).not.toContain('Recorded snapshot');
+    expect(html).not.toContain('Company records');
   });
 
   it('retains validated BOQ parsing, exact budget reconciliation and reviewed import contract', () => {

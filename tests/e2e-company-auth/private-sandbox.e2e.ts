@@ -6,7 +6,7 @@ async function enterEstate(page: Page) {
   await page.goto('/login');
   await page.getByRole('button', { name: 'Explore Estate demo', exact: true }).click();
   await expect(page).toHaveURL(/\/estate$/);
-  await expect(page.getByRole('complementary', { name: 'Demo account notice' })).toContainText('Private demo sandbox');
+  await expect(page.getByRole('complementary', { name: 'Demo account notice' })).toHaveCount(0);
 }
 async function addProperty(page: Page, name: string) {
   await page.goto('/estate');
@@ -24,7 +24,7 @@ async function companyId(page: Page) {
   return data.companies[0].id as string;
 }
 
-test('two visitors using the same demo login keep independent edits and reset cannot affect another demo or a real company', async ({ page, browser }) => {
+test('two visitors using the same demo login keep independent edits isolated from another demo and a real company', async ({ page, browser }) => {
   const secondContext = await browser.newContext({ baseURL: process.env.PW_COMPANY_BASE_URL });
   const customerContext = await browser.newContext({ baseURL: process.env.PW_COMPANY_BASE_URL });
   const second = await secondContext.newPage(), customer = await customerContext.newPage();
@@ -49,12 +49,8 @@ test('two visitors using the same demo login keep independent edits and reset ca
     const firstTable = page.getByRole('table', { name: 'Property list', exact: true });
     await expect(firstTable).toContainText(firstName); await expect(firstTable).not.toContainText(secondName); await expect(firstTable).not.toContainText(customerName);
     await page.reload(); await expect(firstTable).toContainText(firstName);
-    const notice = page.getByRole('complementary', { name: 'Demo account notice' });
-    await notice.getByRole('button', { name: 'Reset sample data', exact: true }).click();
-    await expect(notice).toContainText('Real company records and other visitors’ demos stay unchanged.');
-    await notice.getByRole('button', { name: 'Reset my sandbox', exact: true }).click();
-    await expect(notice.getByRole('status')).toContainText('fresh sample data');
-    await expect(firstTable).not.toContainText(firstName); await expect(firstTable).toContainText('Lekki Gardens Estate');
+    await expect(page.getByRole('complementary', { name: 'Demo account notice' })).toHaveCount(0);
+    await expect(firstTable).toContainText(firstName); await expect(firstTable).toContainText('Lekki Gardens Estate');
     await second.goto('/properties'); await second.reload();
     await expect(second.getByRole('table', { name: 'Property list', exact: true })).toContainText(secondName);
     await expect(second.getByRole('table', { name: 'Property list', exact: true })).not.toContainText(firstName);

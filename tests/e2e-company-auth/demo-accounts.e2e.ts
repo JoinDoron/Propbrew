@@ -75,10 +75,7 @@ for (const workspace of workspaces) {
     await page.getByRole('button', { name: `Explore ${workspace.name} demo`, exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/${workspace.module}$`));
     await expect(page.getByRole('navigation', { name: `${workspace.name} navigation`, exact: true })).toBeVisible();
-    const notice = page.getByRole('complementary', { name: 'Demo account notice', exact: true });
-    await expect(notice).toContainText('Private demo sandbox');
-    await expect(notice).toContainText('Your changes stay here');
-    await expect(notice.getByRole('button', { name: 'Reset sample data', exact: true })).toBeEnabled();
+    await expect(page.getByRole('complementary', { name: 'Demo account notice', exact: true })).toHaveCount(0);
 
     if (workspace.module === 'estate') {
       await page.getByRole('button', { name: 'Notifications', exact: true }).click();
@@ -113,7 +110,11 @@ for (const workspace of workspaces) {
       await expect(page.getByRole('button', { name: 'New project', exact: true })).toBeEnabled();
     }
 
-    await notice.getByRole('button', { name: 'Exit demo', exact: true }).click();
+    const accountMenu = page.getByRole('button', { name: 'Account menu', exact: true });
+    await accountMenu.click();
+    const menuId = await accountMenu.getAttribute('aria-controls');
+    expect(menuId).toBeTruthy();
+    await page.locator(`#${menuId}`).getByRole('button', { name: 'Sign out', exact: true }).click();
     await expect(page).toHaveURL(/\/login$/);
     await assertDemoChoices(page);
     await page.goto(`/${workspace.module}`);

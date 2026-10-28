@@ -5,7 +5,7 @@ async function enterDemo(page: Page, workspace: 'Estate' | 'Facility') {
   await page.goto('/login');
   await page.getByRole('button', { name: `Explore ${workspace} demo`, exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/${workspace.toLowerCase()}$`));
-  await expect(page.getByRole('complementary', { name: 'Demo account notice', exact: true })).toContainText('Private demo sandbox');
+  await expect(page.getByRole('complementary', { name: 'Demo account notice', exact: true })).toHaveCount(0);
 }
 
 test('Estate sandbox creates and edits property and resident records with reload persistence', async ({ page }) => {

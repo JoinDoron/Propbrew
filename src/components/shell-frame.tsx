@@ -12,7 +12,6 @@ import { can } from '@/lib/authz';
 import { withDurableRead } from '@/server/data/durable-records';
 import { canManageCompanyMembers } from '@/lib/auth/company-policy';
 import { isDemoAccount } from '@/server/auth/demo-config';
-import { DemoNotice } from '@/components/auth/demo-notice';
 import { currentRecordContext } from '@/server/data/record-context';
 import type { DemoPersonaId } from '@/config/demo-personas';
 import { repos } from '@/server/data';
@@ -259,7 +258,6 @@ export async function ShellFrame({ expected, workspace, children }: { expected: 
       unreadMessages={unreadMessages}
       devSwitcher={devIdentityEnabled() ? <RoleSwitcher currentKey={session.key} /> : undefined}
     >
-      {isDemoAccount(actor.userId) && <DemoNotice editable={Boolean(companyPrincipal?.sandbox)} outboxOwner={companyPrincipal?.sandbox ? identity.outboxOwner : undefined} />}
       {children}
     </AppShell>
   );
