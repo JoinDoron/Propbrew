@@ -1,7 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import { getSession, devIdentityEnabled } from '@/server/session';
 import { shellFor, homeRouteFor, type Shell } from '@/config/shells';
-import { visibleNav } from '@/config/nav';
+import { visibleNav, type NavGroup, type NavItem } from '@/config/nav';
 import { getNotifications, unreadNotificationCount, getThreads, unreadThreadCount } from '@/server/data/inbox';
 import { AppShell, type ShellIdentity } from '@/components/app-shell';
 import { RoleSwitcher } from '@/components/dev/role-switcher';
@@ -15,6 +15,77 @@ import { isDemoAccount } from '@/server/auth/demo-config';
 import { DemoNotice } from '@/components/auth/demo-notice';
 import { currentRecordContext } from '@/server/data/record-context';
 import type { DemoPersonaId } from '@/config/demo-personas';
+import { repos } from '@/server/data';
+import type { Actor, Capability } from '@/lib/authz';
+
+function firstReadable(actor: Actor, capabilities: readonly Capability[]): Capability | undefined {
+  return capabilities.find((capability) => can(actor, capability, 'read').allowed);
+}
+
+/** Property-first Estate rail: property accordion → compact workflow accordions. */
+function propertyNavigation(actor: Actor): NavGroup[] {
+  if (!can(actor, 'assets_ppm', 'read').allowed) return [];
+  const sites = [] as { id: string; name: string; kind: string }[];
+  let cursor: string | null | undefined;
+  do {
+    const page = repos.sites.list(actor, { cursor, limit: 200 });
+    sites.push(...page.items.map(({ id, name, kind }) => ({ id: String(id), name, kind })));
+    cursor = page.cursor;
+  } while (cursor !== null);
+
+  const sectionCapabilities = {
+    operations: firstReadable(actor, ['work_orders', 'inspections_compliance', 'bookings_amenities', 'security_sos']),
+    community: firstReadable(actor, ['announcements']),
+    finance: firstReadable(actor, ['charges_invoicing', 'marketplace']),
+    intelligence: firstReadable(actor, ['reports_analytics']),
+  };
+
+  const scopedHref = (href: string, siteId: string) => `${href}?${new URLSearchParams({ propertyId: siteId, returnTo: `/properties/${siteId}` }).toString()}`;
+
+  const operationItems = (siteId: string): NavItem[] => [
+    can(actor, 'work_orders', 'read').allowed ? { id: `property-${siteId}-work-orders`, label: 'Work orders', href: scopedHref('/estate/work-orders', siteId), icon: 'wrench' as const, capability: 'work_orders' as const } : null,
+    can(actor, 'inspections_compliance', 'read').allowed ? { id: `property-${siteId}-inspections`, label: 'Inspections & compliance', href: scopedHref('/estate/inspections', siteId), icon: 'checks' as const, capability: 'inspections_compliance' as const } : null,
+    can(actor, 'announcements', 'read').allowed ? { id: `property-${siteId}-community-pulse`, label: 'Community pulse', href: scopedHref('/community', siteId), icon: 'trending' as const, capability: 'announcements' as const } : null,
+    can(actor, 'bookings_amenities', 'read').allowed ? { id: `property-${siteId}-bookings`, label: 'Bookings', href: scopedHref('/bookings', siteId), icon: 'calendar' as const, capability: 'bookings_amenities' as const } : null,
+    can(actor, 'bookings_amenities', 'read').allowed ? { id: `property-${siteId}-events`, label: 'Events & amenities', href: scopedHref('/events', siteId), icon: 'calendar' as const, capability: 'bookings_amenities' as const } : null,
+    can(actor, 'security_sos', 'read').allowed ? { id: `property-${siteId}-security`, label: 'Security & SOS', href: scopedHref('/security', siteId), icon: 'shield' as const, capability: 'security_sos' as const } : null,
+    can(actor, 'security_sos', 'read').allowed ? { id: `property-${siteId}-parcels`, label: 'Parcels & lockers', href: scopedHref('/parcels', siteId), icon: 'package' as const, capability: 'security_sos' as const } : null,
+  ].filter((item): item is NonNullable<typeof item> => item !== null);
+
+  const communityItems = (siteId: string): NavItem[] => [
+    can(actor, 'announcements', 'read').allowed ? { id: `property-${siteId}-announcements`, label: 'Announcements', href: scopedHref('/announcements', siteId), icon: 'bell' as const, capability: 'announcements' as const } : null,
+    can(actor, 'announcements', 'read').allowed ? { id: `property-${siteId}-governance`, label: 'Governance', href: scopedHref('/governance', siteId), icon: 'clipboard' as const, capability: 'announcements' as const } : null,
+    can(actor, 'announcements', 'read').allowed ? { id: `property-${siteId}-board`, label: 'Board & committee', href: scopedHref('/board', siteId), icon: 'users' as const, capability: 'announcements' as const } : null,
+    can(actor, 'announcements', 'read').allowed ? { id: `property-${siteId}-rewards`, label: 'Rewards', href: scopedHref('/rewards', siteId), icon: 'sparkles' as const, capability: 'announcements' as const } : null,
+    can(actor, 'announcements', 'read').allowed ? { id: `property-${siteId}-documents`, label: 'Documents', href: scopedHref('/documents', siteId), icon: 'file' as const, capability: 'announcements' as const } : null,
+  ].filter((item): item is NonNullable<typeof item> => item !== null);
+
+  const financeItems = (siteId: string): NavItem[] => [
+    can(actor, 'charges_invoicing', 'read').allowed ? { id: `property-${siteId}-billing`, label: 'Billing', href: scopedHref('/billing', siteId), icon: 'receipt' as const, capability: 'charges_invoicing' as const } : null,
+    can(actor, 'charges_invoicing', 'read').allowed ? { id: `property-${siteId}-collections`, label: 'Collections', href: scopedHref('/collections', siteId), icon: 'banknote' as const, capability: 'charges_invoicing' as const } : null,
+    can(actor, 'marketplace', 'read').allowed ? { id: `property-${siteId}-marketplace`, label: 'Marketplace', href: scopedHref('/marketplace', siteId), icon: 'shop' as const, capability: 'marketplace' as const } : null,
+  ].filter((item): item is NonNullable<typeof item> => item !== null);
+
+  const intelligenceItems = (siteId: string): NavItem[] => [
+    can(actor, 'charges_invoicing', 'read').allowed ? { id: `property-${siteId}-finance-centre`, label: 'Finance centre', href: scopedHref('/finance', siteId), icon: 'banknote' as const, capability: 'charges_invoicing' as const } : null,
+    can(actor, 'reports_analytics', 'read').allowed ? { id: `property-${siteId}-reports`, label: 'Reports', href: scopedHref('/reports', siteId), icon: 'trending' as const, capability: 'reports_analytics' as const } : null,
+    can(actor, 'reports_analytics', 'read').allowed ? { id: `property-${siteId}-copilot`, label: 'Ask Copilot', href: scopedHref('/estate/copilot', siteId), icon: 'sparkles' as const, capability: 'reports_analytics' as const } : null,
+  ].filter((item): item is NonNullable<typeof item> => item !== null);
+
+  return sites.filter((site) => site.kind === 'estate')
+    .sort((a, b) => a.name.localeCompare(b.name, 'en-NG', { numeric: true }))
+    .map((site) => ({
+      label: site.name,
+      collapsible: true,
+      items: [
+        { id: `property-${site.id}-dashboard`, label: 'Dashboard', href: `/properties/${encodeURIComponent(site.id)}`, icon: 'gauge' as const, capability: 'assets_ppm' as const },
+        sectionCapabilities.operations ? { id: `property-${site.id}-operations`, label: 'Operations', href: `/properties/${encodeURIComponent(site.id)}/operations`, icon: 'wrench' as const, capability: sectionCapabilities.operations, children: operationItems(site.id) } : null,
+        sectionCapabilities.community ? { id: `property-${site.id}-community`, label: 'Community & governance', href: `/properties/${encodeURIComponent(site.id)}/community-governance`, icon: 'users' as const, capability: sectionCapabilities.community, children: communityItems(site.id) } : null,
+        sectionCapabilities.finance ? { id: `property-${site.id}-finance`, label: 'Finance & commerce', href: `/properties/${encodeURIComponent(site.id)}/finance-commerce`, icon: 'banknote' as const, capability: sectionCapabilities.finance, children: financeItems(site.id) } : null,
+        sectionCapabilities.intelligence ? { id: `property-${site.id}-intelligence`, label: 'Intelligence', href: `/properties/${encodeURIComponent(site.id)}/intelligence`, icon: 'sparkles' as const, capability: sectionCapabilities.intelligence, children: intelligenceItems(site.id) } : null,
+      ].filter((item): item is NonNullable<typeof item> => item !== null),
+    }));
+}
 
 /**
  * Server frame for an authenticated route group. Redirects to /login when there
@@ -36,7 +107,21 @@ export async function ShellFrame({ expected, workspace, children }: { expected: 
   if (shell !== expected) redirect(homeRouteFor(actor));
   if (expected === 'ops' && (!workspace || !canEnterWorkspace(actor, workspace))) notFound();
 
-  const groups = visibleNav(shell, actor, workspace);
+  let groups = visibleNav(shell, actor, workspace);
+  if (workspace === 'estate') {
+    const overview = groups.find((group) => group.label === 'Overview');
+    const portfolio = groups.find((group) => group.label === 'Property portfolio');
+    groups = [
+      ...(overview || portfolio ? [{
+        label: 'Estate overview',
+        items: [
+          ...(overview?.items ?? []),
+          ...(portfolio?.items.map((item) => ({ ...item, label: 'All properties' })) ?? []),
+        ],
+      }] : []),
+      ...propertyNavigation(actor),
+    ];
+  }
   const companyPrincipal = currentRecordContext()?.companyPrincipal;
 
   const identity: ShellIdentity = {

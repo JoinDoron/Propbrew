@@ -43,10 +43,10 @@ export function proxy(request: NextRequest, event: Parameters<typeof clerkProxy>
     if(pathname.startsWith('/api/')) {
       // Legacy mobile/provider endpoints stay closed until company-aware.
       const facilityEvidence=pathname==='/api/facility/evidence'||/^\/api\/facility\/evidence\/[0-9a-f-]{36}$/i.test(pathname);
-      if(pathname.startsWith('/api/auth/')||pathname==='/api/companies'||pathname==='/api/companies/select'||pathname==='/api/v1/health'||aiRoutes.has(pathname)||facilityEvidence)return NextResponse.next();
+      if(pathname.startsWith('/api/auth/')||pathname.startsWith('/api/mobile/v1/')||pathname==='/api/companies'||pathname==='/api/companies/select'||pathname==='/api/v1/health'||aiRoutes.has(pathname)||facilityEvidence)return NextResponse.next();
       return new NextResponse('Not found',{status:404,headers:{'Cache-Control':'no-store'}});
     }
-    const publicPage=pathname==='/'||pathname==='/login'||pathname.startsWith('/login/')||pathname==='/sign-up'||pathname.startsWith('/sign-up/')||pathname.startsWith('/invite/')||pathname==='/robots.txt'||pathname==='/sitemap.xml';
+    const publicPage=pathname==='/'||pathname==='/mobile'||pathname==='/login'||pathname.startsWith('/login/')||pathname==='/sign-up'||pathname.startsWith('/sign-up/')||pathname.startsWith('/invite/')||pathname==='/robots.txt'||pathname==='/sitemap.xml';
     if(!publicPage&&!getSessionCookie(request,{cookiePrefix:'propbrew'}))return NextResponse.redirect(new URL('/login',request.url));
     return NextResponse.next();
   }

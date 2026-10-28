@@ -45,6 +45,8 @@ const audit = { createdAt: now, createdBy: 'user-seed' as never, updatedAt: now,
 
 export const sites = [
   { tenantId: A, id: SEED.estateGardens, kind: 'estate', name: 'Lekki Gardens Estate', address: 'Lekki Phase 1, Lagos', buildingCount: 6, unitCount: 240 },
+  { tenantId: A, id: SEED.estateEkoPearl, kind: 'estate', name: 'Eko Pearl Residences', address: 'Eko Atlantic, Lagos', buildingCount: 2, unitCount: 96 },
+  { tenantId: A, id: SEED.estateAbujaGreen, kind: 'estate', name: 'Abuja Green Court', address: 'Jabi, Abuja', buildingCount: 3, unitCount: 72 },
   { tenantId: A, id: SEED.estateVictoria, kind: 'facility', name: 'Victoria Court', address: 'Victoria Island, Lagos', buildingCount: 2, unitCount: 48 },
   { tenantId: B, id: SEED.estateIkoyi, kind: 'estate', name: 'Ikoyi Heights', address: 'Ikoyi, Lagos', buildingCount: 4, unitCount: 120 },
 ] as unknown as Site[];
@@ -52,6 +54,8 @@ export const sites = [
 export const buildings = [
   { tenantId: A, id: 'b-gardens-c', siteId: SEED.estateGardens, name: 'Block C', floors: 8 },
   { tenantId: A, id: 'b-gardens-d', siteId: SEED.estateGardens, name: 'Block D', floors: 8 },
+  { tenantId: A, id: 'b-eko-a', siteId: SEED.estateEkoPearl, name: 'Pearl Tower A', floors: 18 },
+  { tenantId: A, id: 'b-abuja-a', siteId: SEED.estateAbujaGreen, name: 'Jabi Block A', floors: 6 },
   { tenantId: A, id: 'b-victoria-1', siteId: SEED.estateVictoria, name: 'Tower 1', floors: 12 },
 ] as unknown as Building[];
 
@@ -68,6 +72,16 @@ export const units = [
   { tenantId: A, id: 'u-d01a', siteId: SEED.estateGardens, buildingId: 'b-gardens-d', label: 'Block D · 01A', type: '2-bed apartment', occupancy: 'occupied' },
   { tenantId: A, id: 'u-d07b', siteId: SEED.estateGardens, buildingId: 'b-gardens-d', label: 'Block D · 07B', type: '3-bed apartment', occupancy: 'occupied' },
   { tenantId: A, id: 'u-d10c', siteId: SEED.estateGardens, buildingId: 'b-gardens-d', label: 'Block D · 10C', type: 'Penthouse', occupancy: 'reserved' },
+  // Eko Pearl Residences — enough inventory to exercise the property accordion.
+  { tenantId: A, id: 'u-eko-0702', siteId: SEED.estateEkoPearl, buildingId: 'b-eko-a', label: 'Pearl A · 0702', type: '2-bed apartment', occupancy: 'occupied' },
+  { tenantId: A, id: 'u-eko-1101', siteId: SEED.estateEkoPearl, buildingId: 'b-eko-a', label: 'Pearl A · 1101', type: '3-bed apartment', occupancy: 'occupied' },
+  { tenantId: A, id: 'u-eko-1404', siteId: SEED.estateEkoPearl, buildingId: 'b-eko-a', label: 'Pearl A · 1404', type: '3-bed apartment', occupancy: 'vacant' },
+  { tenantId: A, id: 'u-eko-1701', siteId: SEED.estateEkoPearl, buildingId: 'b-eko-a', label: 'Pearl A · 1701', type: 'Penthouse', occupancy: 'reserved' },
+  // Abuja Green Court — a second city proves the portfolio is not Lagos-only.
+  { tenantId: A, id: 'u-abuja-a01', siteId: SEED.estateAbujaGreen, buildingId: 'b-abuja-a', label: 'Jabi A · 01', type: '3-bed apartment', occupancy: 'occupied' },
+  { tenantId: A, id: 'u-abuja-a02', siteId: SEED.estateAbujaGreen, buildingId: 'b-abuja-a', label: 'Jabi A · 02', type: '3-bed apartment', occupancy: 'occupied' },
+  { tenantId: A, id: 'u-abuja-a03', siteId: SEED.estateAbujaGreen, buildingId: 'b-abuja-a', label: 'Jabi A · 03', type: '2-bed apartment', occupancy: 'vacant' },
+  { tenantId: A, id: 'u-abuja-a04', siteId: SEED.estateAbujaGreen, buildingId: 'b-abuja-a', label: 'Jabi A · 04', type: '2-bed apartment', occupancy: 'occupied' },
   // Victoria Court — Tower 1 (office/facility)
   { tenantId: A, id: 'u-v302', siteId: SEED.estateVictoria, buildingId: 'b-victoria-1', label: 'Tower 1 · Suite 302', type: 'Office suite', occupancy: 'occupied' },
   { tenantId: A, id: 'u-v508', siteId: SEED.estateVictoria, buildingId: 'b-victoria-1', label: 'Tower 1 · Suite 508', type: 'Office suite', occupancy: 'vacant' },

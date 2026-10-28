@@ -20,6 +20,8 @@ export const SEED = {
   tenantB: 't-ikoyi',
   // tenant A estates
   estateGardens: 's-gardens', // Lekki Gardens Estate (residential)
+  estateEkoPearl: 's-eko-pearl', // Eko Pearl Residences (residential)
+  estateAbujaGreen: 's-abuja-green', // Abuja Green Court (residential)
   estateVictoria: 's-victoria', // Victoria Court (facility)
   // tenant B estate
   estateIkoyi: 's-ikoyi',

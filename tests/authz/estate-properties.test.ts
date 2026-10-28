@@ -73,7 +73,7 @@ describe('Estate Properties server boundary', () => {
   it('shows estate-only properties to an executive even though Facility sites are also scoped', async () => {
     actAs('executive');
     const result = await view();
-    expect(result.properties.map((property) => property.id)).toEqual(['s-gardens']);
+    expect(result.properties.map((property) => property.id)).toEqual(['s-abuja-green', 's-eko-pearl', 's-gardens']);
     expect(result.actions.props.canAddProperty).toBe(false);
     expect(result.actions.props.canAddTenant).toBe(false);
   });
@@ -180,7 +180,7 @@ describe('Estate Properties server boundary', () => {
     const result = await view();
     expect(sites.mock.calls.length).toBeGreaterThan(1);
     expect(units.mock.calls.length).toBeGreaterThan(1);
-    expect(result.properties).toHaveLength(206);
+    expect(result.properties).toHaveLength(208);
     expect(result.properties.find((property) => property.id === 'new-estate-204')).toMatchObject({ name: 'New Estate 204', unitCount: 1, units: [{ id: 'new-unit-204', label: 'Canonical unit 204' }] });
     for (const [actor] of [...sites.mock.calls, ...units.mock.calls]) expect(actor.tenantId).toBe('t-lekki');
   });

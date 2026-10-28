@@ -24,6 +24,9 @@ export async function ensureDemoSandbox(identity: Identity): Promise<DemoSandbox
   if (!eligible(identity)) throw new Error('A current demo session is required.');
   const existing = await findDemoSandbox(identity);
   if (existing) return existing;
+  // Migration 016 rotates an expired private workspace for a still-valid
+  // login. Keeping this branch source-only prevents application code from
+  // deleting or reassigning tenant data outside the audited database function.
   const id = randomUUID();
   const state = createDemoWorkspaceState(id, identity.user.id);
   return withAuthTransaction(identity.user.id, async (client) => {

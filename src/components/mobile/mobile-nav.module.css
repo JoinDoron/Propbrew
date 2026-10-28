@@ -1,0 +1,11 @@
+.bottomNav {
+  position: sticky;
+  inset: auto auto 14px;
+  transform: none;
+  width: max-content;
+  margin: -76px auto 14px;
+}
+
+.announcementAction {
+  color: #090a0c;
+}

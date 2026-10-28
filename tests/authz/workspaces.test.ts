@@ -155,7 +155,7 @@ describe('workspace-scoped operator navigation', () => {
   it('sections every operator rail by business purpose', () => {
     const person = actor(['executive']);
     const expected: Record<WorkspaceId, string[]> = {
-      estate: ['Overview', 'Estate portfolio', 'Estate operations', 'Community & governance', 'Finance & commerce', 'Estate insights'],
+      estate: ['Overview', 'Property portfolio', 'Estate insights'],
       facility: ['Overview', 'Facility operations', 'Asset care', 'Building services', 'Facility commercial'],
       shortlet: ['Shortlet overview', 'Reservations', 'Guest operations', 'Revenue & growth', 'Workspace'],
       construction: ['Construction overview', 'Planning & controls', 'Commercial & procurement', 'Site delivery', 'Collaboration & intelligence'],
@@ -167,15 +167,15 @@ describe('workspace-scoped operator navigation', () => {
   });
 
   it.each(['executive', 'estate_manager', 'facility_manager'] as const)
-    ('puts estate overview, residents and properties first for %s without duplicates', (role) => {
+    ('puts estate overview, properties and portfolio intelligence first for %s without duplicates', (role) => {
       const items = visibleNav('ops', actor([role]), 'estate').flatMap((group) => group.items);
       expect(items.slice(0, 3).map(({ label, href }) => ({ label, href }))).toEqual([
         { label: 'Estate overview', href: '/estate' },
-        { label: 'Residents', href: '/people' },
         { label: 'Properties', href: '/properties' },
+        { label: 'Portfolio', href: '/portfolio' },
       ]);
-      expect(items.filter((item) => item.id === 'people')).toHaveLength(1);
       expect(items.filter((item) => item.id === 'properties')).toHaveLength(1);
+      expect(items.some((item) => item.href === '/people' || item.href === '/tenancy')).toBe(false);
       expect(new Set(items.map((item) => item.href)).size).toBe(items.length);
       expect(items.find((item) => item.id === 'properties')).toMatchObject({ capability: 'assets_ppm' });
       expect(PAGE_META['/properties']).toMatchObject({ title: 'Properties' });
@@ -183,8 +183,8 @@ describe('workspace-scoped operator navigation', () => {
 
   it('preserves the estate order for a mixed manager/resident without duplicate navigation', () => {
     const items = visibleNav('ops', actor(['estate_manager', 'resident']), 'estate').flatMap((group) => group.items);
-    expect(items.slice(0, 3).map((item) => item.href)).toEqual(['/estate', '/people', '/properties']);
-    expect(items.filter((item) => item.href === '/people')).toHaveLength(1);
+    expect(items.slice(0, 3).map((item) => item.href)).toEqual(['/estate', '/properties', '/portfolio']);
+    expect(items.filter((item) => item.href === '/people')).toHaveLength(0);
     expect(items.filter((item) => item.href === '/properties')).toHaveLength(1);
   });
 

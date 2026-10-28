@@ -1,0 +1,14 @@
+{
+  "expo": {
+    "name": "Propbrew Estate",
+    "slug": "propbrew-resident",
+    "scheme": "propbrew",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "ios": { "supportsTablet": false, "bundleIdentifier": "com.propbrew.resident", "infoPlist": { "NSFaceIDUsageDescription": "Use Face ID to approve sensitive Propbrew actions." } },
+    "android": { "package": "com.propbrew.resident", "minSdkVersion": 26, "permissions": ["CAMERA", "RECORD_AUDIO", "USE_BIOMETRIC"] },
+    "plugins": ["expo-secure-store"],
+    "extra": { "apiUrl": "https://usepropbrew.com" }
+  }
+}

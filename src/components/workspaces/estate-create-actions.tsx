@@ -51,14 +51,14 @@ export function EstateCreateActions({ canAddProperty, canAddTenant, units, demo,
     });
   }
 
-  if (!canAddProperty && !canAddTenant) return null;
   const title = mode === 'property' ? 'Add property' : 'Add tenant';
   return <div className={styles.actions}>
-    {canAddProperty ? <button type="button" className={styles.primary} onClick={() => open('property')}><Plus size={14} aria-hidden="true" />Add property</button> : null}
+    <button type="button" className={canAddProperty ? styles.primary : styles.secondary} onClick={() => open('property')} aria-label="Add property"><Plus size={14} aria-hidden="true" />Add property</button>
     {canAddTenant ? <button type="button" className={styles.secondary} onClick={() => open('tenant')}><UserPlus size={14} aria-hidden="true" />Add tenant</button> : null}
     <dialog ref={dialog} className={styles.dialog} aria-labelledby="estate-create-title" onCancel={(event) => { if (pending) event.preventDefault(); else setMode(null); }} onClose={() => setMode(null)}>
       <div className={styles.dialogHeader}><div><p className={styles.eyebrow}>Estate workspace</p><h2 id="estate-create-title">{title}</h2></div><button className={styles.close} type="button" aria-label="Close form" disabled={pending} onClick={() => setMode(null)}><X size={19} /></button></div>
       {success ? <div className={styles.success} role="status"><CheckCircle2 size={35} aria-hidden="true" /><h3>{mode === 'property' ? 'Property added' : 'Tenant record added'}</h3><p><strong>{success}</strong> is now in your estate register. The overview has been refreshed.</p>{mode === 'tenant' ? <p>No account or invitation has been created or sent.</p> : null}<p className={styles.demo}>{persistent ? 'This record is saved to the database.' : 'Sample changes last until this app restarts.'}</p><button className={styles.primary} type="button" onClick={() => setMode(null)}>Done</button></div>
+        : mode === 'property' && !canAddProperty ? <div className={styles.body}><p className={styles.notice}><strong>Property creation is restricted for this profile.</strong><br />You can view the portfolio, but only an authorised Estate Manager can add a company property and its unit inventory. Switch to an Estate Manager profile, or ask your administrator to update your role in Team &amp; access.</p><div className={styles.footer}><button className={styles.secondary} type="button" onClick={() => setMode(null)}>Close</button></div></div>
         : !demo && !native ? <div className={styles.body}><p className={styles.notice}>Production registration is not activated yet. These forms will not claim to save a property or tenant until durable storage and organisation assignments are connected.</p><button className={styles.secondary} type="button" onClick={() => setMode(null)}>Close</button></div>
           : mode === 'tenant' && !units.length ? <div className={styles.body}><p className={styles.notice}>There are no vacant registered units you can assign. Add a property first, or update a unit’s availability in your register.</p>{canAddProperty ? <button type="button" className={styles.primary} onClick={() => open('property')}><Building2 size={14} aria-hidden="true" />Add property first</button> : null}</div>
             : <form onSubmit={submit} className={styles.body}>

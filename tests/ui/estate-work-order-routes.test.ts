@@ -20,16 +20,17 @@ describe('Independent Estate work-order route ownership', () => {
     expect(read('src/app/(ops)/(facility)/work-orders/[ref]/page.tsx')).toContain('basePath="/work-orders"');
   });
 
-  it('adds a capability-gated Estate nav/search item without moving Residents or Properties', () => {
+  it('keeps Estate work orders property-contextual instead of duplicating them in the portfolio rail', () => {
     const manager = identityByKey('estate_manager').actor;
     const nav = visibleNav('ops', manager, 'estate');
     const items = nav.flatMap((group) => group.items);
-    expect(items.slice(0, 3).map((item) => item.href)).toEqual(['/estate', '/people', '/properties']);
-    expect(items.find((item) => item.href === '/estate/work-orders')).toMatchObject({ capability: 'work_orders', label: 'Work Orders' });
+    expect(items.slice(0, 3).map((item) => item.href)).toEqual(['/estate', '/properties', '/portfolio']);
+    expect(items.find((item) => item.href === '/estate/work-orders')).toBeUndefined();
     expect(items.some((item) => item.href === '/work-orders')).toBe(false);
     expect(PAGE_META['/estate/work-orders']).toBeDefined();
-    expect(activeNavHref(nav, '/estate/work-orders/WO-24817')).toBe('/estate/work-orders');
+    expect(activeNavHref(nav, '/estate/work-orders/WO-24817')).toBe('/estate');
     expect(activeNavHref(nav, '/estate/work-orders-other')).toBe('/estate');
+    expect(read('src/components/workspaces/property-operating-hub.tsx')).toContain("href: '/estate/work-orders'");
     const security = visibleNav('ops', identityByKey('security').actor, 'estate').flatMap((group) => group.items);
     expect(security.some((item) => item.href === '/estate/work-orders')).toBe(false);
   });

@@ -36,15 +36,27 @@ export type NavItem = {
   roles?: readonly Role[];
   /** Capability mapping not supplied by the PRD — confirm at discovery. */
   proposed?: boolean;
+  /** Optional second-level rail entries, used for property-scoped workflow menus. */
+  children?: NavItem[];
 };
 
-export type NavGroup = { label: string; items: NavItem[] };
+export type NavGroup = {
+  label: string;
+  items: NavItem[];
+  /** Property groups use an accordion so a multi-estate rail stays compact. */
+  collapsible?: boolean;
+  defaultOpen?: boolean;
+};
 
 /** Detail pages inherit their most-specific local navigation item, never an
  * unrelated workspace or the broad Estate overview prefix. */
 export function activeNavHref(groups: readonly NavGroup[], pathname: string): string | undefined {
-  return groups.flatMap((group) => group.items.map((item) => item.href))
-    .filter((href) => pathname === href || pathname.startsWith(href + '/'))
+  const hrefs = (items: readonly NavItem[]): string[] => items.flatMap((item) => [item.href, ...hrefs(item.children ?? [])]);
+  return groups.flatMap((group) => hrefs(group.items))
+    .filter((href) => {
+      const path = href.split('?')[0];
+      return pathname === path || pathname.startsWith(path + '/');
+    })
     .sort((a, b) => b.length - a.length)[0];
 }
 
@@ -91,11 +103,9 @@ const OPS_NAV: NavGroup[] = [
     ],
   },
   {
-    label: 'Estate portfolio',
+    label: 'Property portfolio',
     items: [
-      { id: 'people', label: 'Residents', href: '/people', icon: 'users', capability: 'users_roles' },
       { id: 'properties', label: 'Properties', href: '/properties', icon: 'building', capability: 'assets_ppm', proposed: true },
-      { id: 'tenancy', label: 'Tenancy', href: '/tenancy', icon: 'building', capability: 'users_roles', proposed: true },
     ],
   },
   {
@@ -131,7 +141,6 @@ const OPS_NAV: NavGroup[] = [
   {
     label: 'Estate insights',
     items: [
-      { id: 'finance', label: 'Finance Centre', href: '/finance', icon: 'banknote', capability: 'charges_invoicing', proposed: true },
       { id: 'portfolio', label: 'Portfolio', href: '/portfolio', icon: 'grid', capability: 'reports_analytics', proposed: true },
       { id: 'reports', label: 'Reports', href: '/reports', icon: 'trending', capability: 'reports_analytics' },
       { id: 'estate-copilot', label: 'Ask Copilot', href: '/estate/copilot', icon: 'sparkles', capability: 'reports_analytics', proposed: true },
@@ -304,7 +313,10 @@ const NAV_BY_SHELL: Record<Shell, NavGroup[]> = {
 };
 
 const WORKSPACE_GROUPS: Record<WorkspaceId, readonly string[]> = {
-  estate: ['Estate portfolio', 'Estate operations', 'Community & governance', 'Finance & commerce', 'Estate insights', 'Estate workspace'],
+  // Estate is property-first: operational, community, governance and finance
+  // tools are revealed from an authorised property, not duplicated in the
+  // portfolio rail. Portfolio intelligence and workspace settings remain global.
+  estate: ['Property portfolio', 'Estate insights', 'Estate workspace'],
   facility: ['Facility operations', 'Asset care', 'Building services', 'Facility commercial'],
   shortlet: ['Shortlet overview', 'Reservations', 'Guest operations', 'Revenue & growth', 'Workspace'],
   construction: ['Construction overview', 'Planning & controls', 'Commercial & procurement', 'Site delivery', 'Collaboration & intelligence'],

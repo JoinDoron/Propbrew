@@ -64,8 +64,8 @@
 .cardBody { padding: 20px; }
 .cardTitle { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .cardTitle h3 { font-size: 16px; font-weight: 500; line-height: 1.5; letter-spacing: -.3px; min-width: 0; }
-.cardTitle h3 button { text-align: left; border-radius: 4px; cursor: pointer; }
-.cardTitle h3 button:hover { color: var(--primary); text-decoration: underline; text-underline-offset: 3px; }
+.cardTitle h3 a { display: inline-block; text-align: left; border-radius: 4px; cursor: pointer; }
+.cardTitle h3 a:hover { color: var(--primary); text-decoration: underline; text-underline-offset: 3px; }
 .cardTitle > .typeChip { font-size: 12px; max-width: 115px; flex: none; }
 .cardAddress { display: flex; gap: 5px; align-items: flex-start; color: var(--text-2); font-size: 12px; line-height: 1.7; min-height: 42px; margin: 8px 0 20px; overflow-wrap: anywhere; }
 .cardAddress > svg { flex: none; margin-top: 4px; }
