@@ -18,6 +18,37 @@ import type { TenantScoped } from '@/domain/tenancy';
 /* --- projects, phases, tasks --------------------------------------------- */
 
 export type ProjectStatus = 'planning' | 'active' | 'on_hold' | 'closing' | 'completed';
+export type BaselineRevisionStatus = 'draft' | 'pending_approval' | 'approved' | 'rejected' | 'superseded';
+export type ProjectBaselineRevision = {
+  id: string; revision: string; name: string; status: BaselineRevisionStatus;
+  submittedBy: string; submittedISO: string; approvedBy?: string; approvedISO?: string;
+  reason: string; plannedFinishISO: string;
+};
+export type ProjectTeamMember = {
+  id: string; name: string; organisation: string; role: string;
+  responsibility: string; accountable: boolean; email?: string;
+};
+export type ProjectWorkPackage = {
+  id: string; code: string; name: string; phaseId?: string; costCode?: string;
+  contractor?: string; manager?: string; status: 'planned' | 'mobilising' | 'active' | 'complete' | 'suspended';
+};
+export type ProjectLocation = {
+  id: string; name: string; kind: 'site' | 'block' | 'floor' | 'zone';
+  parentId?: string; latitude?: number; longitude?: number;
+};
+export type ProjectParty = {
+  id: string; name: string; kind: 'client' | 'consultant' | 'contractor' | 'authority';
+  discipline: string; contractPackage?: string; permitReference?: string; permitExpiryISO?: string;
+};
+export type ProjectMobilisation = {
+  calendar: { name: string; workingDays: number[]; hoursPerDay: number; timeZone: string; holidays: string[] };
+  baselines: ProjectBaselineRevision[];
+  team: ProjectTeamMember[];
+  workPackages: ProjectWorkPackage[];
+  locations: ProjectLocation[];
+  parties: ProjectParty[];
+  lifecycle: { atISO: string; by: string; action: 'activate' | 'suspend' | 'reopen' | 'start_closeout' | 'complete'; reason: string }[];
+};
 export type Project = TenantScoped & {
   id: string;
   /** scope column for the investor `my_projects` narrowing; = linked off-plan id when set. */
@@ -29,6 +60,9 @@ export type Project = TenantScoped & {
   startISO: string; plannedFinishISO: string; actualStartISO?: string;
   /** planned % is the schedule baseline to date; percentComplete is actual physical progress. */
   plannedPercent: number; percentComplete: number;
+  /** Mobilisation configuration is embedded in the durable project record so
+   * existing company workspaces can adopt it without a destructive schema reset. */
+  mobilisation?: ProjectMobilisation;
 };
 
 export type Phase = TenantScoped & {

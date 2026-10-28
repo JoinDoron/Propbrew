@@ -86,7 +86,7 @@ try {
     await new Promise((resolveWait) => setTimeout(resolveWait, 400));
   }
   if (!ready) throw new Error('The disposable native-account app did not become ready.');
-  await run(process.execPath, ['node_modules/@playwright/test/cli.js', 'test', '--config', 'playwright.company-auth.config.ts'], { cwd: root, visible: true, env: { ...safeEnv, PW_COMPANY_BASE_URL: origin } });
+  await run(process.execPath, ['node_modules/@playwright/test/cli.js', 'test', '--config', 'playwright.company-auth.config.ts', ...process.argv.slice(2)], { cwd: root, visible: true, env: { ...safeEnv, PW_COMPANY_BASE_URL: origin } });
 } catch (error) {
   const log = await readFile(join(directory, 'next.log'), 'utf8').catch(() => '');
   if (log) console.error(log.slice(-6000));

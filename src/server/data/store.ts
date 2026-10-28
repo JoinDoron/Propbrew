@@ -118,7 +118,10 @@ const createWorkingSet = () => ({
   proxyReturnNotices: [] as { id: string; userId: string; motionId: string; motionRef: string; motionTitle: string; reason: string; atISO: string; seen: boolean }[],
 
   /* --- Construction (ConstructionOS delivery module) --------------------- */
-  constructionProjects: clone(seed.constructionProjects),
+  constructionProjects: seed.constructionProjects.map((project) => ({
+    ...project,
+    mobilisation: project.mobilisation ? structuredClone(project.mobilisation) : undefined,
+  })),
   constructionPhases: clone(seed.constructionPhases),
   constructionTasks: seed.constructionTasks.map((t) => ({ ...t, dependsOn: [...t.dependsOn] })),
   constructionMilestones: clone(seed.constructionMilestones),

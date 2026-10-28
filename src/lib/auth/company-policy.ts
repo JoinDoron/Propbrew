@@ -177,10 +177,16 @@ export function actorForCompanyMember(record: CompanyMembershipRecord, authentic
     unitIds: Object.freeze([...new Set(record.unitIds ?? [])]),
     vendorOrgId: operationalProfile?.scope === 'vendor' || record.facilityRole === 'vendor' ? record.vendorOrgId! : null,
     investorProjectIds: Object.freeze([]),
-    constructionProjectIds: Object.freeze([...new Set(record.constructionProjectIds ?? [])]),
-    constructionPackageIds: Object.freeze([...new Set(record.constructionPackageIds ?? [])]),
-    constructionSubcontractorIds: Object.freeze([...new Set(record.constructionSubcontractorIds ?? [])]),
-    constructionTaskIds: Object.freeze([...new Set(record.constructionTaskIds ?? [])]),
+    ...(operationalProfile?.workspace === 'construction' && operationalProfile.scope !== 'company'
+      ? { constructionProjectIds: Object.freeze([...new Set(record.constructionProjectIds ?? [])]) }
+      : record.constructionProjectIds?.length ? { constructionProjectIds: Object.freeze([...new Set(record.constructionProjectIds)]) } : {}),
+    ...(operationalProfile?.scope === 'construction_package'
+      || operationalProfile?.scope === 'construction_subcontractor' && Boolean(record.constructionPackageIds?.length)
+      ? { constructionPackageIds: Object.freeze([...new Set(record.constructionPackageIds ?? [])]) } : {}),
+    ...(operationalProfile?.scope === 'construction_subcontractor'
+      ? { constructionSubcontractorIds: Object.freeze([...new Set(record.constructionSubcontractorIds ?? [])]) } : {}),
+    ...(operationalProfile?.scope === 'construction_task'
+      ? { constructionTaskIds: Object.freeze([...new Set(record.constructionTaskIds ?? [])]) } : {}),
     // Never trust the stored portfolio-wide flag to override a scoped job
     // profile. The profile is the authority; persisted booleans are migration
     // state, not a permission escalation path.

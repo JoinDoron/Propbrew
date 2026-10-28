@@ -1,4 +1,4 @@
-import { createElement } from 'react';
+import { createElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { blankCompanyWorkspaceState } from '@/server/data/store';
@@ -70,7 +70,8 @@ describe('native company module empty states', () => {
     const state = blankCompanyWorkspaceState();
     const html = await runWithRecordContext({ state, domainTenantId: tenant, mode: 'read' }, async () => {
       const page = await load();
-      const content = await page.default();
+      const renderPage = page.default as unknown as (props?: { searchParams: Promise<{ projectId?: string }> }) => Promise<ReactElement>;
+      const content = await renderPage(route === 'construction/schedule' ? { searchParams: Promise.resolve({}) } : undefined);
       return renderToStaticMarkup(createElement(ConstructionSnapshotProvider, { snapshot: operatingClock() }, content));
     });
     expect(html.length).toBeGreaterThan(100);

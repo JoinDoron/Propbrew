@@ -64,7 +64,7 @@ test('two visitors using the same demo login keep independent edits and reset ca
   } finally { await secondContext.close(); await customerContext.close(); }
 });
 
-test('private construction sandbox creates a project and persists safe project edits', async ({ page }) => {
+test('private construction sandbox mobilises a project through WBS, programme, BOQ, team and lifecycle controls', async ({ page }) => {
   const id = randomUUID().slice(0, 8), name = `Sandbox build ${id}`, updated = `${name} edited`;
   await page.goto('/login'); await page.getByRole('button', { name: 'Explore Construction demo', exact: true }).click();
   await expect(page).toHaveURL(/\/construction$/); await page.goto('/construction/projects');
@@ -83,4 +83,66 @@ test('private construction sandbox creates a project and persists safe project e
   await expect(edit).not.toBeVisible(); await page.reload();
   await expect(page.getByRole('heading', { name: updated, exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: `Edit project ${updated}`, exact: true })).toBeVisible();
+  await page.getByRole('searchbox', { name: 'Search construction projects' }).fill(updated);
+  await page.getByRole('link', { name: 'Set up project', exact: true }).click();
+  await expect(page.getByRole('heading', { name: `${updated} · project setup`, exact: true })).toBeVisible();
+
+  const phaseName = `Mobilisation ${id}`;
+  const phasePanel = page.getByRole('heading', { name: 'WBS phase', exact: true }).locator('xpath=ancestor::section[1]');
+  await phasePanel.getByLabel('Phase name', { exact: true }).fill(phaseName);
+  await phasePanel.getByLabel('Delivery weight (%)', { exact: true }).fill('15');
+  await phasePanel.getByRole('button', { name: 'Add phase', exact: true }).click();
+  await expect(page.getByRole('table')).toContainText(phaseName);
+
+  const taskName = `Establish site ${id}`;
+  const taskPanel = page.getByRole('heading', { name: 'Programme task', exact: true }).locator('xpath=ancestor::section[1]');
+  await taskPanel.getByLabel('Task name', { exact: true }).fill(taskName);
+  await taskPanel.getByLabel('Owner', { exact: true }).fill('Demo site manager');
+  await page.getByRole('combobox', { name: 'WBS phase', exact: true }).selectOption({ label: phaseName });
+  await taskPanel.getByLabel('Budget (₦)', { exact: true }).fill('2500000');
+  await taskPanel.getByRole('button', { name: 'Add task', exact: true }).click();
+  const taskError = page.locator('p[role="alert"]');
+  if (await taskError.count()) throw new Error(`Programme task rejected: ${await taskError.textContent()}`);
+  await expect(page.getByRole('table')).toContainText(taskName);
+
+  const milestonePanel = page.getByRole('heading', { name: 'Milestone', exact: true }).locator('xpath=ancestor::section[1]');
+  await milestonePanel.getByLabel('Milestone name', { exact: true }).fill(`Site possession ${id}`);
+  await milestonePanel.getByRole('button', { name: 'Add milestone', exact: true }).click();
+  await page.getByRole('tab', { name: /Calendar & baselines/ }).click();
+  const baselinePanel = page.getByRole('heading', { name: 'Baseline revision', exact: true }).locator('xpath=ancestor::section[1]');
+  await baselinePanel.getByLabel('Revision name', { exact: true }).fill(`Baseline ${id}`);
+  await baselinePanel.getByLabel('Revision reason', { exact: true }).fill('Controlled sandbox mobilisation baseline');
+  await baselinePanel.getByRole('button', { name: 'Submit for approval', exact: true }).click();
+  await expect(page.getByText('Pending Approval', { exact: true })).toBeVisible();
+
+  await page.getByRole('tab', { name: /Packages & BOQ/ }).click();
+  const packagePanel = page.getByRole('heading', { name: 'Cost code & BOQ setup wizard', exact: true }).locator('xpath=ancestor::section[1]');
+  await packagePanel.getByLabel('Package / cost code', { exact: true }).fill(`MOB-${id}`);
+  await packagePanel.getByLabel('Package name', { exact: true }).fill('Site mobilisation');
+  await packagePanel.getByLabel('Approved budget (₦)', { exact: true }).fill('2500000');
+  await packagePanel.getByRole('button', { name: 'Create package and cost code', exact: true }).click();
+  await expect(page.getByRole('table')).toContainText(`MOB-${id}`);
+
+  await page.getByRole('tab', { name: /Team & RACI/ }).click();
+  const teamPanel = page.getByRole('heading', { name: 'Project team & responsibility matrix', exact: true }).locator('xpath=ancestor::section[1]');
+  await teamPanel.getByLabel('Name', { exact: true }).fill('Demo project director');
+  await teamPanel.getByLabel('Organisation', { exact: true }).fill('Demo Build Limited');
+  await teamPanel.getByLabel('Project role', { exact: true }).fill('Project director');
+  await teamPanel.getByLabel('Responsibility', { exact: true }).fill('Accountable for project mobilisation');
+  await teamPanel.getByRole('button', { name: 'Assign team member', exact: true }).click();
+  await expect(page.getByText(/Demo project director/)).toBeVisible();
+
+  await page.getByRole('tab', { name: /Locations/ }).click();
+  const locationPanel = page.getByRole('tabpanel', { name: /^Locations/ });
+  await locationPanel.getByLabel('Location name', { exact: true }).fill('Main site');
+  await locationPanel.getByLabel('Latitude', { exact: true }).fill('6.5244'); await locationPanel.getByLabel('Longitude', { exact: true }).fill('3.3792');
+  await locationPanel.getByRole('button', { name: 'Add location', exact: true }).click();
+  await expect(locationPanel.getByRole('strong').filter({ hasText: /^Main site$/ })).toBeVisible();
+
+  await page.getByRole('tab', { name: /Lifecycle controls/ }).click();
+  await page.getByLabel('Reason for transition', { exact: true }).fill('Mobilisation checks completed in sandbox');
+  await page.getByRole('button', { name: 'Activate', exact: true }).click();
+  await expect(page.getByText('Active', { exact: true }).first()).toBeVisible();
+  await page.reload();
+  await expect(page.getByText(taskName, { exact: true })).toBeVisible();
 });

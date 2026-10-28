@@ -11,18 +11,21 @@ import { withDurableRead } from '@/server/data/durable-records';
 /** Critical Path & Schedule — a real CPM forward/backward pass over the task DAG:
  *  earliest/latest times, total float, the zero-float critical chain, and a
  *  hover cascade showing exactly what slips when a task slips. */
-export default async function ConstructionSchedulePage() {
+export default async function ConstructionSchedulePage({ searchParams }: { searchParams: Promise<{ projectId?: string }> }) {
   return withDurableRead(async () => {
   const { nowMs: NOW_MS } = operatingClock();
   const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const canMutate = can(actor, 'reports_analytics', 'update').allowed;
   const canCreate = can(actor, 'reports_analytics', 'create').allowed;
   const world = constructionWorld(actor);
+  const requestedProjectId = (await searchParams).projectId;
 
   // The flagship build: the project with the most scheduled work.
   const counts = new Map<string, number>();
   for (const t of world.tasks) counts.set(t.projectId, (counts.get(t.projectId) ?? 0) + 1);
-  const projectId = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? world.projects[0]?.id ?? '';
+  const projectId = requestedProjectId && world.projects.some((row) => row.id === requestedProjectId)
+    ? requestedProjectId
+    : [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? world.projects[0]?.id ?? '';
   const project = world.projects.find((p) => p.id === projectId);
   const tasks = world.tasks.filter((t) => t.projectId === projectId);
   const phases = world.phases;

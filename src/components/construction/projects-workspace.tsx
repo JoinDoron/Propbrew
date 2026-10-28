@@ -7,7 +7,7 @@ import styles from './construction-delivery-polish.module.css';
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Building2, Plus, Check, TrendingUp, Flag, ExternalLink, Pencil } from 'lucide-react';
+import { Building2, Plus, Check, TrendingUp, Flag, ExternalLink, Pencil, ClipboardList } from 'lucide-react';
 import { humanizeStatus, toneVar, type Tone } from '@/lib/status-tones';
 
 import { createProject, updateProjectDetails, type ProjectInput } from '@/server/actions/construction';
@@ -83,6 +83,10 @@ export function ProjectsWorkspace({ projects, kpis, canMutate }: {
                       ))}
                     </div>
                   )}
+                  <div className={`${styles.footer} ${styles.actions}`}>
+                    <Link className={styles.link} href={`/construction/projects/${encodeURIComponent(p.id)}`}>Open project <ExternalLink size={15} /></Link>
+                    {canMutate ? <Link className={styles.link} href={`/construction/projects/${encodeURIComponent(p.id)}/setup`}>Set up project <ClipboardList size={15} /></Link> : null}
+                  </div>
                   </div>
                 </ConstructionPanel>
               ))}

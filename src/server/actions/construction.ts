@@ -31,6 +31,7 @@ import {
   canApprove, applyDecision, pendingSteps, fxExposure, fxTable, scanRisks,
 } from '@/domain/construction';
 import type { CurrencyCode } from '@/domain/primitives';
+import type { ProjectMobilisation, ProjectStatus } from '@/domain/construction/types';
 
 export type Res = { ok: true; ref?: string } | { ok: false; error: string };
 
@@ -333,6 +334,165 @@ export async function updateProjectDetails(id: string, input: { name: string; lo
     Object.assign(project, parsed.data);
     audit(g.actor, { action: 'override', entity: 'project_details', entityRef: project.code, projectId: project.id, summary: 'Updated project identity details', before, after: JSON.stringify(parsed.data) });
     revalidate(); return { ok: true, ref: project.name };
+  }, 'construction');
+}
+
+const calendarSchema = z.object({
+  name: z.string().trim().min(2).max(80),
+  workingDays: z.array(z.number().int().min(0).max(6)).min(1),
+  hoursPerDay: z.number().min(1).max(24),
+  timeZone: z.string().trim().min(2).max(80),
+  holidays: z.array(z.string().refine(validDate)).max(100),
+}).strict();
+
+function mobilisationOf(project: (typeof db.constructionProjects)[number]): ProjectMobilisation {
+  if (!project.mobilisation) project.mobilisation = {
+    calendar: { name: 'Nigeria standard working week', workingDays: [1, 2, 3, 4, 5, 6], hoursPerDay: 8, timeZone: 'Africa/Lagos', holidays: [] },
+    baselines: [], team: [], workPackages: [], locations: [], parties: [], lifecycle: [],
+  };
+  return project.mobilisation;
+}
+
+export async function saveProjectCalendar(projectId: string, input: z.input<typeof calendarSchema>): Promise<Res> {
+  return withDurableMutation(async () => {
+    const g = await gate('update'); if (!g.ok) return g;
+    const parsed = calendarSchema.safeParse(input); if (!parsed.success) return { ok: false, error: 'Review the calendar name, working days, hours, time zone and holiday dates.' };
+    const project = scopedConstructionProjectGet(g.actor, projectId, 'update'); if (!project) return { ok: false, error: 'Project not found.' };
+    mobilisationOf(project).calendar = parsed.data;
+    audit(g.actor, { action: 'override', entity: 'project_calendar', entityRef: project.code, projectId, summary: `Updated programme calendar: ${parsed.data.name}` });
+    revalidate(); return { ok: true, ref: parsed.data.name };
+  }, 'construction');
+}
+
+const phaseSchema = z.object({ id: z.string().optional(), projectId: z.string().min(1), name: z.string().trim().min(2).max(120), startISO: z.string().refine(validDate), finishISO: z.string().refine(validDate), weight: z.number().min(0).max(100) }).strict();
+export async function saveProjectPhase(input: z.input<typeof phaseSchema>): Promise<Res> {
+  return withDurableMutation(async () => {
+    const g = await gate(input.id ? 'update' : 'create'); if (!g.ok) return g;
+    const parsed = phaseSchema.safeParse(input); if (!parsed.success || parsed.data.finishISO < parsed.data.startISO) return { ok: false, error: 'Enter a phase name, valid date range and weight from 0% to 100%.' };
+    const project = scopedConstructionProjectGet(g.actor, parsed.data.projectId, input.id ? 'update' : 'create'); if (!project) return { ok: false, error: 'Project not found.' };
+    if (input.id) {
+      const phase = scopedMutableGet(g.actor, 'reports_analytics', db.constructionPhases, input.id, 'update');
+      if (!phase || phase.projectId !== project.id) return { ok: false, error: 'Phase not found.' };
+      Object.assign(phase, { name: parsed.data.name, startISO: parsed.data.startISO, finishISO: parsed.data.finishISO, weight: parsed.data.weight });
+    } else {
+      db.constructionPhases.push({ tenantId: g.actor.tenantId, id: `ph-${randomUUID()}`, projectId: project.id, name: parsed.data.name, order: db.constructionPhases.filter((row) => row.tenantId === g.actor.tenantId && row.projectId === project.id).length + 1, startISO: parsed.data.startISO, finishISO: parsed.data.finishISO, weight: parsed.data.weight, percentComplete: 0 } as (typeof db.constructionPhases)[number]);
+    }
+    audit(g.actor, { action: 'override', entity: 'wbs_phase', entityRef: project.code, projectId: project.id, summary: `${input.id ? 'Updated' : 'Created'} WBS phase ${parsed.data.name}` });
+    revalidate(); return { ok: true, ref: parsed.data.name };
+  }, 'construction');
+}
+
+const taskSchema = z.object({ id: z.string().optional(), projectId: z.string().min(1), phaseId: z.string().min(1), name: z.string().trim().min(2).max(160), owner: z.string().trim().min(2).max(120), plannedStartISO: z.string().refine(validDate), plannedFinishISO: z.string().refine(validDate), priority: z.enum(['low', 'medium', 'high']), dependsOn: z.array(z.string()).max(50), budgetNaira: z.number().min(0) }).strict();
+export async function saveProgrammeTask(input: z.input<typeof taskSchema>): Promise<Res> {
+  return withDurableMutation(async () => {
+    const g = await gate(input.id ? 'update' : 'create'); if (!g.ok) return g;
+    const parsed = taskSchema.safeParse(input); if (!parsed.success || parsed.data.plannedFinishISO < parsed.data.plannedStartISO || !safeMinor(Math.round(parsed.data.budgetNaira * 100))) return { ok: false, error: 'Review the task, owner, dates, priority, dependencies and budget.' };
+    const project = scopedConstructionProjectGet(g.actor, parsed.data.projectId, input.id ? 'update' : 'create'); if (!project) return { ok: false, error: 'Project not found.' };
+    const phase = db.constructionPhases.find((row) => row.tenantId === g.actor.tenantId && row.projectId === project.id && row.id === parsed.data.phaseId); if (!phase) return { ok: false, error: 'Choose a phase in this project.' };
+    const allowedTasks = new Set(db.constructionTasks.filter((row) => row.tenantId === g.actor.tenantId && row.projectId === project.id && row.id !== input.id).map((row) => row.id));
+    if (parsed.data.dependsOn.some((id) => !allowedTasks.has(id))) return { ok: false, error: 'Every predecessor must be another task in this project.' };
+    if (input.id) {
+      const task = scopedConstructionTaskGet(g.actor, input.id, 'update'); if (!task || task.projectId !== project.id) return { ok: false, error: 'Task not found.' };
+      Object.assign(task, { phaseId: phase.id, name: parsed.data.name, owner: parsed.data.owner, plannedStartISO: parsed.data.plannedStartISO, plannedFinishISO: parsed.data.plannedFinishISO, priority: parsed.data.priority, dependsOn: parsed.data.dependsOn, budget: money(Math.round(parsed.data.budgetNaira * 100)) });
+    } else db.constructionTasks.push({ tenantId: g.actor.tenantId, id: `tk-${randomUUID()}`, projectId: project.id, phaseId: phase.id, name: parsed.data.name, owner: parsed.data.owner, plannedStartISO: parsed.data.plannedStartISO, plannedFinishISO: parsed.data.plannedFinishISO, percentComplete: 0, status: 'not_started', priority: parsed.data.priority, dependsOn: parsed.data.dependsOn, budget: money(Math.round(parsed.data.budgetNaira * 100)) } as (typeof db.constructionTasks)[number]);
+    audit(g.actor, { action: 'override', entity: 'programme_task', entityRef: project.code, projectId: project.id, summary: `${input.id ? 'Updated' : 'Created'} programme task ${parsed.data.name}` });
+    revalidate(); return { ok: true, ref: parsed.data.name };
+  }, 'construction');
+}
+
+const milestoneSchema = z.object({ id: z.string().optional(), projectId: z.string().min(1), name: z.string().trim().min(2).max(140), dueISO: z.string().refine(validDate) }).strict();
+export async function saveProjectMilestone(input: z.input<typeof milestoneSchema>): Promise<Res> {
+  return withDurableMutation(async () => {
+    const g = await gate(input.id ? 'update' : 'create'); if (!g.ok) return g;
+    const parsed = milestoneSchema.safeParse(input); if (!parsed.success) return { ok: false, error: 'Enter a milestone name and valid due date.' };
+    const project = scopedConstructionProjectGet(g.actor, parsed.data.projectId, input.id ? 'update' : 'create'); if (!project) return { ok: false, error: 'Project not found.' };
+    if (input.id) { const row = scopedMutableGet(g.actor, 'reports_analytics', db.constructionMilestones, input.id, 'update'); if (!row || row.projectId !== project.id) return { ok: false, error: 'Milestone not found.' }; Object.assign(row, { name: parsed.data.name, dueISO: parsed.data.dueISO }); }
+    else db.constructionMilestones.push({ tenantId: g.actor.tenantId, id: `ms-${randomUUID()}`, projectId: project.id, name: parsed.data.name, dueISO: parsed.data.dueISO, status: 'pending' } as (typeof db.constructionMilestones)[number]);
+    revalidate(); return { ok: true, ref: parsed.data.name };
+  }, 'construction');
+}
+
+export async function submitBaselineRevision(projectId: string, input: { name: string; reason: string; plannedFinishISO: string }): Promise<Res> {
+  return withDurableMutation(async () => {
+    const g = await gate('update'); if (!g.ok) return g;
+    const parsed = z.object({ name: z.string().trim().min(2).max(100), reason: z.string().trim().min(5).max(500), plannedFinishISO: z.string().refine(validDate) }).strict().safeParse(input); if (!parsed.success) return { ok: false, error: 'Enter a revision name, reason and valid forecast finish.' };
+    const project = scopedConstructionProjectGet(g.actor, projectId, 'update'); if (!project) return { ok: false, error: 'Project not found.' };
+    const setup = mobilisationOf(project); const revision = `B${setup.baselines.length + 1}`;
+    setup.baselines.push({ id: `bl-${randomUUID()}`, revision, name: parsed.data.name, reason: parsed.data.reason, plannedFinishISO: parsed.data.plannedFinishISO, status: 'pending_approval', submittedBy: nameOf(g.actor), submittedISO: operatingNowISO() });
+    audit(g.actor, { action: 'override', entity: 'programme_baseline', entityRef: revision, projectId, summary: `Submitted programme baseline ${revision} for independent approval` });
+    revalidate(); return { ok: true, ref: revision };
+  }, 'construction');
+}
+
+export async function decideBaselineRevision(projectId: string, baselineId: string, decision: 'approved' | 'rejected'): Promise<Res> {
+  return withDurableMutation(async () => {
+    const g = await gate('update'); if (!g.ok) return g;
+    const project = scopedConstructionProjectGet(g.actor, projectId, 'update'); if (!project) return { ok: false, error: 'Project not found.' };
+    const setup = mobilisationOf(project); const baseline = setup.baselines.find((row) => row.id === baselineId); if (!baseline || baseline.status !== 'pending_approval') return { ok: false, error: 'Pending baseline revision not found.' };
+    const approver = nameOf(g.actor); if (baseline.submittedBy.toLowerCase() === approver.toLowerCase()) return { ok: false, error: 'A different authorised manager must approve this baseline revision.' };
+    baseline.status = decision; baseline.approvedBy = approver; baseline.approvedISO = operatingNowISO();
+    if (decision === 'approved') { for (const row of setup.baselines) if (row.id !== baseline.id && row.status === 'approved') row.status = 'superseded'; project.plannedFinishISO = baseline.plannedFinishISO; }
+    audit(g.actor, { action: decision === 'approved' ? 'approve' : 'reject', entity: 'programme_baseline', entityRef: baseline.revision, projectId, summary: `${decision === 'approved' ? 'Approved' : 'Rejected'} programme baseline ${baseline.revision}` });
+    revalidate(); return { ok: true, ref: baseline.revision };
+  }, 'construction');
+}
+
+export async function addProjectTeamMember(projectId: string, input: { name: string; organisation: string; role: string; responsibility: string; accountable: boolean; email?: string }): Promise<Res> {
+  return withDurableMutation(async () => {
+    const g = await gate('update'); if (!g.ok) return g;
+    const parsed = z.object({ name: z.string().trim().min(2).max(100), organisation: z.string().trim().min(2).max(120), role: z.string().trim().min(2).max(100), responsibility: z.string().trim().min(2).max(240), accountable: z.boolean(), email: z.string().trim().email().optional().or(z.literal('')) }).strict().safeParse(input); if (!parsed.success) return { ok: false, error: 'Review the team member, organisation, role, responsibility and email.' };
+    const project = scopedConstructionProjectGet(g.actor, projectId, 'update'); if (!project) return { ok: false, error: 'Project not found.' };
+    mobilisationOf(project).team.push({ id: `tm-${randomUUID()}`, ...parsed.data, email: parsed.data.email || undefined }); revalidate(); return { ok: true, ref: parsed.data.name };
+  }, 'construction');
+}
+
+export async function addProjectLocation(projectId: string, input: { name: string; kind: 'site' | 'block' | 'floor' | 'zone'; parentId?: string; latitude?: number; longitude?: number }): Promise<Res> {
+  return withDurableMutation(async () => {
+    const g = await gate('update'); if (!g.ok) return g;
+    const parsed = z.object({ name: z.string().trim().min(2).max(100), kind: z.enum(['site', 'block', 'floor', 'zone']), parentId: z.string().optional(), latitude: z.number().min(-90).max(90).optional(), longitude: z.number().min(-180).max(180).optional() }).strict().safeParse(input); if (!parsed.success) return { ok: false, error: 'Review the location hierarchy and geocoordinates.' };
+    const project = scopedConstructionProjectGet(g.actor, projectId, 'update'); if (!project) return { ok: false, error: 'Project not found.' };
+    const setup = mobilisationOf(project); if (parsed.data.parentId && !setup.locations.some((row) => row.id === parsed.data.parentId)) return { ok: false, error: 'Choose a parent location in this project.' };
+    setup.locations.push({ id: `loc-${randomUUID()}`, ...parsed.data }); revalidate(); return { ok: true, ref: parsed.data.name };
+  }, 'construction');
+}
+
+export async function addProjectParty(projectId: string, input: { name: string; kind: 'client' | 'consultant' | 'contractor' | 'authority'; discipline: string; contractPackage?: string; permitReference?: string; permitExpiryISO?: string }): Promise<Res> {
+  return withDurableMutation(async () => {
+    const g = await gate('update'); if (!g.ok) return g;
+    const parsed = z.object({ name: z.string().trim().min(2).max(120), kind: z.enum(['client', 'consultant', 'contractor', 'authority']), discipline: z.string().trim().min(2).max(100), contractPackage: z.string().trim().max(120).optional(), permitReference: z.string().trim().max(100).optional(), permitExpiryISO: z.string().refine(validDate).optional() }).strict().safeParse(input); if (!parsed.success) return { ok: false, error: 'Review the party, discipline, package and permit details.' };
+    const project = scopedConstructionProjectGet(g.actor, projectId, 'update'); if (!project) return { ok: false, error: 'Project not found.' };
+    mobilisationOf(project).parties.push({ id: `party-${randomUUID()}`, ...parsed.data }); revalidate(); return { ok: true, ref: parsed.data.name };
+  }, 'construction');
+}
+
+export async function createWorkPackage(projectId: string, input: { code: string; name: string; phaseId?: string; contractor?: string; manager?: string; budgetNaira: number }): Promise<Res> {
+  return withDurableMutation(async () => {
+    const g = await gate('create'); if (!g.ok) return g;
+    const parsed = z.object({ code: z.string().trim().min(2).max(30), name: z.string().trim().min(2).max(140), phaseId: z.string().optional(), contractor: z.string().trim().max(120).optional(), manager: z.string().trim().max(120).optional(), budgetNaira: z.number().min(0) }).strict().safeParse(input); if (!parsed.success || !safeMinor(Math.round(input.budgetNaira * 100))) return { ok: false, error: 'Review the package code, name, owner and NGN budget.' };
+    const project = scopedConstructionProjectGet(g.actor, projectId, 'create'); if (!project) return { ok: false, error: 'Project not found.' };
+    if (parsed.data.phaseId && !db.constructionPhases.some((row) => row.tenantId === g.actor.tenantId && row.projectId === projectId && row.id === parsed.data.phaseId)) return { ok: false, error: 'Choose a phase in this project.' };
+    if (db.constructionCostCodes.some((row) => row.tenantId === g.actor.tenantId && row.projectId === projectId && row.code.toLowerCase() === parsed.data.code.toLowerCase())) return { ok: false, error: 'That package / cost code already exists.' };
+    const id = `pkg-${randomUUID()}`; mobilisationOf(project).workPackages.push({ id, code: parsed.data.code, name: parsed.data.name, phaseId: parsed.data.phaseId, costCode: parsed.data.code, contractor: parsed.data.contractor, manager: parsed.data.manager, status: 'planned' });
+    db.constructionCostCodes.push({ tenantId: g.actor.tenantId, id: `cc-${randomUUID()}`, projectId, code: parsed.data.code, name: parsed.data.name, category: 'Work package', budget: money(Math.round(parsed.data.budgetNaira * 100)), committed: money(0), actual: money(0), plannedPercent: 0, earnedPercent: 0 } as (typeof db.constructionCostCodes)[number]);
+    audit(g.actor, { action: 'override', entity: 'work_package', entityRef: parsed.data.code, projectId, summary: `Created work package and BOQ cost code ${parsed.data.code}` }); revalidate(); return { ok: true, ref: parsed.data.code };
+  }, 'construction');
+}
+
+export async function transitionProjectLifecycle(projectId: string, action: 'activate' | 'suspend' | 'reopen' | 'start_closeout' | 'complete', reason: string): Promise<Res> {
+  return withDurableMutation(async () => {
+    const g = await gate('update'); if (!g.ok) return g;
+    const project = scopedConstructionProjectGet(g.actor, projectId, 'update'); if (!project) return { ok: false, error: 'Project not found.' };
+    if (reason.trim().length < 5) return { ok: false, error: 'Record a clear reason for this controlled project transition.' };
+    const allowed: Record<typeof action, ProjectStatus[]> = { activate: ['planning'], suspend: ['planning', 'active'], reopen: ['on_hold', 'closing', 'completed'], start_closeout: ['active'], complete: ['closing'] };
+    if (!allowed[action].includes(project.status)) return { ok: false, error: `This project cannot ${action.replaceAll('_', ' ')} from ${project.status.replaceAll('_', ' ')}.` };
+    if (action === 'complete') {
+      const unfinished = db.constructionTasks.some((row) => row.tenantId === g.actor.tenantId && row.projectId === projectId && row.status !== 'done');
+      const unaccepted = db.constructionMilestones.some((row) => row.tenantId === g.actor.tenantId && row.projectId === projectId && row.status !== 'accepted');
+      if (unfinished || unaccepted) return { ok: false, error: 'Complete every task and accept every milestone before project completion.' };
+    }
+    const next: Record<typeof action, ProjectStatus> = { activate: 'active', suspend: 'on_hold', reopen: 'active', start_closeout: 'closing', complete: 'completed' };
+    const before = project.status; project.status = next[action]; mobilisationOf(project).lifecycle.push({ atISO: operatingNowISO(), by: nameOf(g.actor), action, reason: reason.trim() });
+    audit(g.actor, { action: 'override', entity: 'project_lifecycle', entityRef: project.code, projectId, summary: `${before.replaceAll('_', ' ')} → ${project.status.replaceAll('_', ' ')}: ${reason.trim()}` }); revalidate(); return { ok: true, ref: project.status };
   }, 'construction');
 }
 

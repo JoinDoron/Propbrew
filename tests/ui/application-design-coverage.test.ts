@@ -24,7 +24,7 @@ const reviewed = {
   ]),
   construction: groupPages('(ops)/construction', [
     '', 'approvals', 'audit', 'boq', 'build-watch', 'copilot', 'digest', 'documents', 'evm',
-    'field', 'fx', 'league', 'materials', 'operations', 'portal/[kind]', 'procurement', 'projects', 'projects/[projectId]', 'projects/[projectId]/[section]', 'risk', 'safety',
+    'field', 'fx', 'league', 'materials', 'operations', 'portal/[kind]', 'procurement', 'projects', 'projects/[projectId]', 'projects/[projectId]/[section]', 'projects/[projectId]/setup', 'risk', 'safety',
     'schedule', 'simulator', 'site', 'stock', 'timesheets', 'twin', 'workforce',
   ]),
   shortlet: groupPages('(ops)/shortlet', [
@@ -71,18 +71,18 @@ function discoverPages(directory: string): string[] {
 }
 
 describe('Exhaustive application design review manifest', () => {
-  it('accounts for every one of the 135 page files with no ignored directory or dynamic route', () => {
+  it('accounts for every one of the 136 page files with no ignored directory or dynamic route', () => {
     const files = manifest.map(({ file }) => file);
-    expect(new Set(files).size).toBe(135);
-    expect(files).toHaveLength(135);
+    expect(new Set(files).size).toBe(136);
+    expect(files).toHaveLength(136);
     expect(files.slice().sort()).toEqual(discoverPages(APP).sort());
     expect(files).toContain('(ops)/(facility)/work-orders/[ref]/page.tsx');
     expect(files).toContain('sign-up/[[...sign-up]]/page.tsx');
-    expect(manifest.filter(({ family }) => family !== 'publicMarketing')).toHaveLength(134);
+    expect(manifest.filter(({ family }) => family !== 'publicMarketing')).toHaveLength(135);
   });
 
   it.each([
-    ['estate', 28], ['facility', 19], ['construction', 28], ['shortlet', 21],
+    ['estate', 28], ['facility', 19], ['construction', 29], ['shortlet', 21],
     ['portal', 16], ['admin', 8], ['entryShared', 14], ['publicMarketing', 1],
   ] as const)('explicitly reviews all %s pages (%i)', (family, count) => {
     expect(reviewed[family]).toHaveLength(count);

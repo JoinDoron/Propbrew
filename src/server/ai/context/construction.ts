@@ -49,7 +49,20 @@ export async function buildConstructionCopilotContext(actor: Actor): Promise<Cop
   const coverage = [projects.coverage, ...[phases, tasks, milestones, orders, reports, warehouses, workers, attendance, issues, documents, rfis, zones, permits, safetyEvents, talks].map((value) => dependsOn(value, [projects.coverage]).coverage), dependsOn(stock, [projects.coverage, warehouses.coverage]).coverage, dependsOn(materials, [projects.coverage, warehouses.coverage, stock.coverage]).coverage, dependsOn(movements, [projects.coverage, stock.coverage]).coverage];
   const facts: Record<string, unknown> = {
     commercialAccess: commercial ? 'authorised' : 'limited',
-    projects: projects.items.map((p) => ({ id: p.id, code: p.code, name: p.name, status: p.status, startISO: p.startISO, plannedFinishISO: p.plannedFinishISO, actualStartISO: p.actualStartISO ?? null, plannedPercent: p.plannedPercent, percentComplete: p.percentComplete, physicalVariancePoints: p.percentComplete - p.plannedPercent })),
+    projects: projects.items.map((p) => ({
+      id: p.id, code: p.code, name: p.name, status: p.status, startISO: p.startISO,
+      plannedFinishISO: p.plannedFinishISO, actualStartISO: p.actualStartISO ?? null,
+      plannedPercent: p.plannedPercent, percentComplete: p.percentComplete,
+      physicalVariancePoints: p.percentComplete - p.plannedPercent,
+      mobilisation: p.mobilisation ? {
+        calendar: p.mobilisation.calendar,
+        baselines: p.mobilisation.baselines.map((row) => ({ revision: row.revision, name: row.name, status: row.status, plannedFinishISO: row.plannedFinishISO, submittedISO: row.submittedISO })),
+        team: p.mobilisation.team.map((row) => ({ role: row.role, organisation: row.organisation, responsibility: row.responsibility, accountable: row.accountable })),
+        workPackages: p.mobilisation.workPackages.map((row) => ({ code: row.code, name: row.name, phaseId: row.phaseId ?? null, costCode: row.costCode ?? null, status: row.status })),
+        locations: p.mobilisation.locations.map((row) => ({ name: row.name, kind: row.kind, parentId: row.parentId ?? null })),
+        parties: p.mobilisation.parties.map((row) => ({ name: row.name, kind: row.kind, discipline: row.discipline, contractPackage: row.contractPackage ?? null, permitExpiryISO: row.permitExpiryISO ?? null })),
+      } : null,
+    })),
     phases: phases.items.map((p) => ({ id: p.id, projectId: p.projectId, name: p.name, order: p.order, startISO: p.startISO, finishISO: p.finishISO, percentComplete: p.percentComplete })),
     tasks: tasks.items.map((t) => ({ id: t.id, projectId: t.projectId, phaseId: t.phaseId, name: t.name, status: t.status, priority: t.priority, plannedStartISO: t.plannedStartISO, plannedFinishISO: t.plannedFinishISO, actualStartISO: t.actualStartISO ?? null, actualFinishISO: t.actualFinishISO ?? null, percentComplete: t.percentComplete, dependsOn: t.dependsOn.filter((id) => tasks.items.some((candidate) => candidate.id === id)) })),
     milestones: milestones.items.map((m) => ({ id: m.id, projectId: m.projectId, name: m.name, dueISO: m.dueISO, status: m.status })),

@@ -109,6 +109,7 @@ function constructionProjectNavigation(actor: Actor): NavGroup[] {
       collapsible: true,
       items: [
         { id: `construction-${projectId}-dashboard`, label: 'Project dashboard', href: hub, icon: 'gauge' as const, capability: 'reports_analytics' as const },
+        { id: `construction-${projectId}-setup`, label: 'Project setup & mobilisation', href: `${hub}/setup`, icon: 'clipboard' as const, capability: 'reports_analytics' as const },
         { id: `construction-${projectId}-planning`, label: 'Planning & controls', href: `${hub}/planning-controls`, icon: 'calendar' as const, capability: 'reports_analytics' as const, children: children([
           ['evm', 'Earned value', '/construction/evm', 'trending'], ['schedule', 'Programme & critical path', '/construction/schedule', 'calendar'], ['risk', 'Risk & delay forecast', '/construction/risk', 'sparkles'], ['simulator', 'Scenario simulator', '/construction/simulator', 'grid'],
         ]) },

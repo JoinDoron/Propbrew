@@ -59,9 +59,18 @@ describe('Clinexa coverage of every Construction page', () => {
     const routes = ['', ...readdirSync(root, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name)];
     expect(coverage.map(([route]) => route).sort()).toEqual(routes.sort());
     expect(coverage).toHaveLength(26);
-    expect(coverage.map(([, file]) => file + '.tsx').sort()).toEqual(readdirSync(resolve(process.cwd(), 'src/components/construction')).filter((file) => file.endsWith('.tsx') && file !== 'construction-ui.tsx').sort());
+    expect(coverage.map(([, file]) => file + '.tsx').sort()).toEqual(readdirSync(resolve(process.cwd(), 'src/components/construction')).filter((file) => file.endsWith('.tsx') && file !== 'construction-ui.tsx' && file !== 'project-setup-workspace.tsx').sort());
     const composed = view('construction-ui');
     for (const primitive of ['Card', 'CardHeader', 'KpiCard', 'Button', 'IconButton', 'PortalDialog']) expect(composed).toMatch(new RegExp(`<${primitive}(?:\\s|>)`));
+  });
+
+  it('aligns the nested project setup workspace with the same composition system', () => {
+    const page = read('src/app/(ops)/construction/projects/[projectId]/setup/page.tsx');
+    const workspace = view('project-setup-workspace');
+    expect(page).toContain('className="pb-page"');
+    expect(page).toContain("requireCapability('reports_analytics', 'read', 'construction')");
+    expect(workspace).toContain('<ConstructionFrame>');
+    expect(workspace).toContain('<PageTabs ');
   });
 
   it.each(coverage)('aligns /construction/%s with the page edge and keeps its server guard', (route, component) => {

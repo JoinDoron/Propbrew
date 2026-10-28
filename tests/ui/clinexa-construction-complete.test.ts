@@ -80,6 +80,15 @@ describe('Deep Clinexa composition across the complete Construction module', () 
     expect(constructionFiles.slice().sort()).toEqual(cases.map((item) => item.component).sort());
   });
 
+  it('covers the nested project mobilisation workspace independently', () => {
+    const source = component('project-setup-workspace');
+    const route = read('src/app/(ops)/construction/projects/[projectId]/setup/page.tsx');
+    expect(source).toContain('<ConstructionFrame>');
+    expect(source).toContain('<PageTabs ');
+    expect(route).toContain("requireCapability('reports_analytics', 'read', 'construction')");
+    expect(route).toContain("from '@/components/construction/project-setup-workspace'");
+  });
+
   it.each(cases)('keeps /construction/$route guarded, scoped and independently tabbed', ({ route, component: filename, render, tabs }) => {
     const source = component(filename), html = render();
     expect(page(route)).toContain("'read', 'construction'");

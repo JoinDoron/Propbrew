@@ -68,6 +68,16 @@ describe('permanent Construction record assignments', () => {
     ], scope).map((row) => row.id)).toEqual(['task-a']);
   });
 
+  it('does not apply an empty field-task scope to project-level managers', () => {
+    const { actor, scope } = scopeFor(membership({ constructionTaskIds: [] }));
+    expect(actor.constructionTaskIds).toBeUndefined();
+    expect(applyScope([
+      { id: 'task-a', tenantId: 'company-a', projectId: 'project-a', constructionTaskId: 'task-a' },
+      { id: 'task-b', tenantId: 'company-a', projectId: 'project-a', constructionTaskId: 'task-b' },
+      { id: 'task-c', tenantId: 'company-a', projectId: 'project-b', constructionTaskId: 'task-c' },
+    ], scope).map((row) => row.id)).toEqual(['task-a', 'task-b']);
+  });
+
   it('fails closed when a scoped Construction profile has no assigned projects', () => {
     const { scope } = scopeFor(membership({ constructionProjectIds: [] }));
     expect(applyScope([
