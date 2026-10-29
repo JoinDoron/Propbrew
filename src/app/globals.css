@@ -4,7 +4,7 @@
   font-family: 'Neue Jothama';
   src: url('./fonts/neue-jothama-variable.woff2') format('woff2');
   font-style: normal;
-  font-weight: 100 900;
+  font-weight: 100 700;
   font-display: swap;
 }
 
@@ -171,8 +171,15 @@
     background: var(--app);
     color: var(--text);
     font-family: var(--font-product);
+    font-style: normal;
+    font-variation-settings: 'slnt' 0;
+    font-synthesis-style: none;
     font-size: 14px;
     -webkit-font-smoothing: antialiased;
+  }
+
+  :where(em, cite, dfn, address) {
+    font-style: normal;
   }
 
   /* ------------------------------------------------------------------
