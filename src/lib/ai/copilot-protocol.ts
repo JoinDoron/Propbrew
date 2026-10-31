@@ -40,7 +40,7 @@ export function validCopilotSource(module: CopilotModule, source: unknown): sour
   const url = new URL(value.href, 'https://propbrew.invalid');
   const path = url.pathname;
   if (module === 'construction' && /^\/api\/construction\/drawings\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(path)) {
-    return !url.search && /^#page=[1-9][0-9]{0,2}$/.test(url.hash);
+    return url.search === '?view=1' && /^#page=[1-9][0-9]{0,2}$/.test(url.hash);
   }
   return MODULE_PATHS[module].some((base) => path === base || path.startsWith(base + '/'));
 }

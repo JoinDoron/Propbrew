@@ -90,7 +90,7 @@ export async function buildConstructionCopilotContext(actor: Actor, question = '
   };
   const sources = [source('construction-projects', 'Project register', '/construction/projects'), source('construction-schedule', 'Schedule and milestones', '/construction/schedule'), source('construction-deliveries', 'Procurement delivery register', '/construction/procurement'), source('construction-materials', 'Materials and stock', '/construction/materials'), source('construction-site', 'Site report metadata', '/construction/site'), source('construction-workforce', 'Workforce and attendance', '/construction/workforce'), source('construction-documents', 'Document register metadata', '/construction/documents'), source('construction-coordination', 'Model overlap candidates and design coordination', '/construction/quality'), source('construction-safety', 'Recorded safety activity', '/construction/safety')];
   facts.documentExcerpts = documentExcerpts.map(({ score: _score, ...row }) => row);
-  sources.push(...documentExcerpts.map((row) => source(`construction-document-${row.fileId}-${row.page}`, `${row.number} rev ${row.revision} · PDF page ${row.page}`, `/api/construction/drawings/${row.fileId}#page=${row.page}`)));
+  sources.push(...documentExcerpts.map((row) => source(`construction-document-${row.fileId}-${row.page}`, `${row.number} rev ${row.revision} · PDF page ${row.page}`, `/api/construction/drawings/${row.fileId}?view=1#page=${row.page}`)));
   coverage.push({ collection: 'Matching controlled PDF text pages', loaded: documentExcerpts.length, total: null, complete: false });
   if (commercial) {
     const [codes, requests, rfqs, sheets, subcontractors, approvals, changes] = await Promise.all([

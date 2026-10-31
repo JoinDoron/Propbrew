@@ -56,8 +56,8 @@ describe('native construction BIM exchange and forecast evidence', () => {
     expect(search([doc('doc-1', 'cp-marina')])).toHaveLength(0);
     expect(search([doc('doc-1', 'cp-cedar', 'other-company')])).toHaveLength(0);
     expect(search([{ ...doc('doc-1', 'cp-cedar'), fileSha256: 'b'.repeat(64) }])).toHaveLength(0);
-    expect(validCopilotSource('construction', { id: 'page', label: 'PDF page 2', href: '/api/construction/drawings/11111111-1111-4111-8111-111111111111#page=2' })).toBe(true);
-    expect(validCopilotSource('estate', { id: 'page', label: 'PDF page 2', href: '/api/construction/drawings/11111111-1111-4111-8111-111111111111#page=2' })).toBe(false);
+    expect(validCopilotSource('construction', { id: 'page', label: 'PDF page 2', href: '/api/construction/drawings/11111111-1111-4111-8111-111111111111?view=1#page=2' })).toBe(true);
+    expect(validCopilotSource('estate', { id: 'page', label: 'PDF page 2', href: '/api/construction/drawings/11111111-1111-4111-8111-111111111111?view=1#page=2' })).toBe(false);
   });
 
   it('uses later completed projects to check the empirical error band', () => {

@@ -53,6 +53,9 @@ describe('Construction drawing routes', () => {
     expect(response.headers.get('content-disposition')).toContain('attachment');
     expect(response.headers.get('cache-control')).toContain('no-store');
     expect(response.headers.get('content-security-policy')).toContain("default-src 'none'");
+    boundary.read.mockResolvedValueOnce({ name: 'Foundation.pdf', bytes, size: bytes.length });
+    const page = await download(new Request(`${origin}/api/construction/drawings/${id}?view=1#page=2`), { params: Promise.resolve({ id }) });
+    expect(page.headers.get('content-disposition')).toContain('inline');
     boundary.read.mockRejectedValueOnce(new ConstructionDrawingError('private project name', 404));
     const missing = await download(new Request(`${origin}/api/construction/drawings/${id}`), { params: Promise.resolve({ id }) });
     expect(missing.status).toBe(404); expect(await missing.text()).not.toContain('private project name');
