@@ -124,6 +124,8 @@ export type Issue = TenantScoped & {
   photoIds?: string[];
   remediation?: { description: string; photoIds: string[]; submittedBy: string; submittedAtISO: string };
   inspection?: QualityInspection;
+  clashDetection?: { runId: string; modelAId: string; modelBId: string; componentAId: string; componentBId: string;
+    point: [number, number, number]; overlapMm: number; method: 'component_envelope_v1' };
 };
 
 /* --- site operations ------------------------------------------------------ */

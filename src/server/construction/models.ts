@@ -1,0 +1,166 @@
+import 'server-only';
+import { createHash, randomUUID } from 'node:crypto';
+import type { PoolClient } from 'pg';
+import { revalidatePath } from 'next/cache';
+import { assertCan, type Actor } from '@/lib/authz';
+import { canUseCompanyModule } from '@/lib/auth/company-policy';
+import { getCompanyPrincipal, recheckCompanyMembership, type CompanyPrincipal } from '@/server/auth/company';
+import { nativeAuthEnabled } from '@/server/auth/mode';
+import { currentRecordContext, runWithRecordContext } from '@/server/data/record-context';
+import { scopedConstructionProjectGet } from '@/server/data';
+import { db, validateWorkspaceRecordState } from '@/server/data/store';
+import { withWorkspaceState } from '@/server/data/workspace-postgres';
+import { operatingDateISO, operatingNowISO } from '@/server/operating-clock';
+import { rfiPackageAllowed } from './rfi-access';
+import { compareModels, detectModelFormat, parseModelComponents, type ModelFormat, type Point3 } from '@/domain/construction/model-clashes';
+import type { Issue, Project } from '@/domain/construction/types';
+
+export type StoredModel = { id: string; tenantId: string; projectId: string; workPackageId?: string; discipline: string;
+  name: string; format: ModelFormat; size: number; sha256: string; componentCount: number; uploadedBy: string; uploadedAtISO: string };
+export type ClashRun = { id: string; projectId: string; modelAId: string; modelBId: string; toleranceMm: number;
+  compared: number; candidates: number; created: number; runBy: string; runAtISO: string; method: 'component_envelope_v1' };
+type Registry = { models: StoredModel[]; runs: ClashRun[]; receipts: { actorId: string; key: string; hash: string; modelId: string }[] };
+export class ConstructionModelError extends Error { constructor(message: string, readonly status = 400) { super(message); } }
+const uuid = (value: string): boolean => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+const packageScopeIds = (project: Project, id?: string): string[] => { const pack = project.mobilisation?.workPackages.find((row) => row.id === id); return id ? pack?.costCode ? [id, `${project.id}:${pack.costCode}`] : [id] : []; };
+
+function registry(write = false): Registry {
+  const context = currentRecordContext(); if (!context) return { models: [], runs: [], receipts: [] };
+  if (write && context.mode !== 'write') throw new Error('A write transaction is required.');
+  const value = context.state.auxiliary.constructionModels as Registry | undefined;
+  if (!value) { if (write) return context.state.auxiliary.constructionModels = { models: [], runs: [], receipts: [] }; return { models: [], runs: [], receipts: [] }; }
+  if (!Array.isArray(value.models) || !Array.isArray(value.runs) || !Array.isArray(value.receipts)) throw new Error('Construction model register unavailable.');
+  return value;
+}
+function visible(actor: Actor, model: StoredModel, action: 'read' | 'create' = 'read'): boolean {
+  if (model.tenantId !== actor.tenantId) return false;
+  try { const project = scopedConstructionProjectGet(actor, model.projectId, action); return !!project && rfiPackageAllowed(actor, project, model.workPackageId); }
+  catch { return false; }
+}
+export function constructionModelsFor(actor: Actor, projectId: string): { models: StoredModel[]; runs: ClashRun[] } {
+  if (currentRecordContext()?.domainTenantId !== actor.tenantId) return { models: [], runs: [] };
+  const models = registry().models.filter((row) => row.projectId === projectId && visible(actor, row));
+  const ids = new Set(models.map((row) => row.id));
+  return { models: structuredClone(models), runs: structuredClone(registry().runs.filter((row) => row.projectId === projectId && ids.has(row.modelAId) && ids.has(row.modelBId))) };
+}
+async function principal(write: boolean): Promise<CompanyPrincipal> {
+  if (!nativeAuthEnabled() || process.env.DATA_SOURCE !== 'postgres') throw new ConstructionModelError('Model storage requires a signed-in company workspace with database storage.', 503);
+  const identity = await getCompanyPrincipal(); if (!identity) throw new ConstructionModelError('Sign in and choose your company.', 401);
+  if (!canUseCompanyModule(identity.actor, 'construction', write ? 'create' : 'read')) throw new ConstructionModelError('Your company role cannot access Construction models.', 403);
+  try { assertCan(identity.actor, 'reports_analytics', write ? 'create' : 'read'); }
+  catch { throw new ConstructionModelError('Your Construction profile cannot access models.', 403); }
+  return identity;
+}
+async function inWorkspace<T>(identity: CompanyPrincipal, fn: (client: PoolClient) => Promise<{ value: T; commit?: boolean }>): Promise<T> {
+  let connection: PoolClient | undefined;
+  return withWorkspaceState(identity.company.id, identity.company.id, 'write', () => { throw new Error('Company records are unavailable.'); }, async (payload) => {
+    if (!connection) throw new Error('Model transaction unavailable.');
+    const state = validateWorkspaceRecordState(payload, identity.company.id);
+    return runWithRecordContext({ state, domainTenantId: identity.company.id, mode: 'write', companyPrincipal: identity }, async () => ({ ...await fn(connection!), payload: state }));
+  }, async (client) => { connection = client; await recheckCompanyMembership(client, identity); });
+}
+async function audit(identity: CompanyPrincipal, client: PoolClient, action: string, projectId: string, entityId: string, details: Record<string, unknown>) {
+  db.constructionAudit.push({ tenantId: identity.company.id, id: `au-model-${randomUUID()}`, seq: db.constructionAudit.length + 1,
+    atISO: operatingNowISO(), actorId: identity.user.id, actorName: identity.user.name, actorRole: identity.actor.roles[0] ?? 'unknown',
+    action: 'record', entity: 'construction_model', entityRef: entityId, projectId, summary: action } as (typeof db.constructionAudit)[number]);
+  await client.query('insert into audit_events(tenant_id,actor_subject,action,entity,entity_id,payload) values($1::uuid,$2,$3,$4,$5,$6::jsonb)',
+    [identity.company.id, identity.user.id, action, 'construction_model', entityId, JSON.stringify(details)]);
+}
+function modelName(value: string, format: ModelFormat): string {
+  const base = value.split(/[\\/]/).at(-1)?.replace(/[^a-zA-Z0-9 _.-]/g, '_').replace(/\.{2,}/g, '.').trim().slice(0, 115) || 'Coordination model';
+  return base.toLowerCase().endsWith(`.${format}`) ? base : `${base}.${format}`;
+}
+export async function storeConstructionModel(input: { expectedCompanyId: string; projectId: string; workPackageId?: string; discipline: string;
+  key: string; name: string; bytes: Uint8Array }): Promise<StoredModel> {
+  const identity = await principal(true);
+  if (identity.company.id !== input.expectedCompanyId) throw new ConstructionModelError('Your company changed. Reopen the model upload.', 409);
+  if (!/^[A-Za-z0-9_-]{16,100}$/.test(input.key)) throw new ConstructionModelError('A valid upload request identifier is required.');
+  if (!input.projectId || input.projectId.length > 200 || !input.discipline.trim() || input.discipline.length > 80) throw new ConstructionModelError('Choose a project and discipline.');
+  const format = detectModelFormat(input.bytes, input.name);
+  if (!format) throw new ConstructionModelError('Choose a valid OBJ or embedded GLB model of at most 12 MB.');
+  let components: ReturnType<typeof parseModelComponents>;
+  try { components = parseModelComponents(input.bytes, input.name); } catch (error) { throw new ConstructionModelError(error instanceof Error ? error.message : 'Model geometry is invalid.'); }
+  const sha256 = createHash('sha256').update(input.bytes).digest('hex'), name = modelName(input.name, format);
+  const requestHash = createHash('sha256').update(JSON.stringify([input.projectId, input.workPackageId ?? '', input.discipline.trim(), name, sha256])).digest('hex');
+  const saved = await inWorkspace(identity, async (client) => {
+    const project = scopedConstructionProjectGet(identity.actor, input.projectId, 'create');
+    if (!project || !rfiPackageAllowed(identity.actor, project, input.workPackageId)) throw new ConstructionModelError('Project or work package unavailable.', 404);
+    const ledger = registry(true);
+    const replay = ledger.receipts.find((row) => row.actorId === identity.user.id && row.key === input.key);
+    if (replay) {
+      const found = ledger.models.find((row) => row.id === replay.modelId);
+      if (!found || replay.hash !== requestHash || !visible(identity.actor, found)) throw new ConstructionModelError('This upload request changed. Reopen the form.', 409);
+      return { value: structuredClone(found), commit: false };
+    }
+    const model: StoredModel = { id: randomUUID(), tenantId: identity.company.id, projectId: project.id,
+      workPackageId: input.workPackageId, discipline: input.discipline.trim(), name, format, size: input.bytes.length,
+      sha256, componentCount: components.length, uploadedBy: identity.user.id, uploadedAtISO: operatingNowISO() };
+    await client.query('insert into construction_model_files(id,tenant_id,project_id,package_scope_ids,request_key,request_hash,name,format,discipline,size_bytes,sha256,bytes,created_by) values($1::uuid,$2::uuid,$3,$4::jsonb,$5,$6,$7,$8,$9,$10,$11,$12,$13::uuid)',
+      [model.id, identity.company.id, project.id, JSON.stringify(packageScopeIds(project, input.workPackageId)), input.key, requestHash, name, format, model.discipline, model.size, sha256, Buffer.from(input.bytes), identity.user.id]);
+    ledger.models.unshift(model); ledger.receipts.push({ actorId: identity.user.id, key: input.key, hash: requestHash, modelId: model.id });
+    await audit(identity, client, 'construction.model.uploaded', project.id, model.id, { name, sha256, size: model.size, componentCount: model.componentCount, workPackageId: model.workPackageId });
+    return { value: structuredClone(model) };
+  }).catch((error: unknown) => {
+    if (error instanceof Error && 'code' in error && error.code === 'P0001' && error.message === 'Company model storage limit reached') throw new ConstructionModelError('This company has reached its model storage limit.', 413);
+    throw error;
+  });
+  revalidatePath('/construction/quality'); return saved;
+}
+async function bytesFor(client: PoolClient, identity: CompanyPrincipal, model: StoredModel): Promise<Uint8Array> {
+  const result = await client.query<{ bytes: Buffer; sha256: string; size_bytes: number }>('select bytes,sha256,size_bytes from construction_model_files where id=$1::uuid and tenant_id=$2::uuid and project_id=$3', [model.id, identity.company.id, model.projectId]);
+  const row = result.rows[0];
+  if (!row || row.size_bytes !== model.size || row.sha256 !== model.sha256 || createHash('sha256').update(row.bytes).digest('hex') !== model.sha256) throw new ConstructionModelError('Stored model failed its integrity check.', 503);
+  return new Uint8Array(row.bytes);
+}
+export async function readConstructionModel(id: string): Promise<{ model: StoredModel; bytes: Uint8Array }> {
+  if (!uuid(id)) throw new ConstructionModelError('Model unavailable.', 404);
+  const identity = await principal(false);
+  return inWorkspace(identity, async (client) => {
+    const model = registry().models.find((row) => row.id === id && visible(identity.actor, row));
+    if (!model) throw new ConstructionModelError('Model unavailable.', 404);
+    return { value: { model: structuredClone(model), bytes: await bytesFor(client, identity, model) }, commit: false };
+  });
+}
+export async function detectConstructionClashes(input: { expectedCompanyId: string; projectId: string; modelAId: string; modelBId: string; toleranceMm: number }): Promise<ClashRun> {
+  const identity = await principal(true);
+  if (identity.company.id !== input.expectedCompanyId) throw new ConstructionModelError('Your company changed. Reopen coordination.', 409);
+  if (!input.projectId || !uuid(input.modelAId) || !uuid(input.modelBId) || input.modelAId === input.modelBId) throw new ConstructionModelError('Choose two different models from the same project.');
+  if (!Number.isInteger(input.toleranceMm) || input.toleranceMm < 0 || input.toleranceMm > 1000) throw new ConstructionModelError('Choose a tolerance from 0 to 1,000 mm.');
+  const run = await inWorkspace(identity, async (client) => {
+    const project = scopedConstructionProjectGet(identity.actor, input.projectId, 'create');
+    if (!project) throw new ConstructionModelError('Project unavailable.', 404);
+    const ledger = registry(true);
+    const a = ledger.models.find((row) => row.id === input.modelAId && row.projectId === project.id && visible(identity.actor, row, 'create'));
+    const b = ledger.models.find((row) => row.id === input.modelBId && row.projectId === project.id && visible(identity.actor, row, 'create'));
+    if (!a || !b) throw new ConstructionModelError('Both models must be in your assigned project and package.', 404);
+    if (a.workPackageId && b.workPackageId && a.workPackageId !== b.workPackageId && identity.actor.constructionPackageIds !== undefined) throw new ConstructionModelError('This comparison spans packages outside a single assignment.', 403);
+    let candidates: ReturnType<typeof compareModels>;
+    try { candidates = compareModels(parseModelComponents(await bytesFor(client, identity, a), a.name), parseModelComponents(await bytesFor(client, identity, b), b.name), input.toleranceMm); }
+    catch (error) { throw new ConstructionModelError(error instanceof Error ? error.message : 'Could not compare model geometry.'); }
+    const runId = randomUUID(), at = operatingNowISO();
+    // A cross-package issue must not reveal another package's component name
+    // to a package-scoped member through the ordinary quality register.
+    const scope = a.workPackageId && a.workPackageId === b.workPackageId ? a.workPackageId : undefined;
+    let created = 0;
+    for (const candidate of candidates) {
+      const duplicate = db.constructionIssues.some((row) => row.projectId === project.id && row.tenantId === identity.company.id
+        && row.clashDetection && ((row.clashDetection.modelAId === a.id && row.clashDetection.modelBId === b.id && row.clashDetection.componentAId === candidate.a.id && row.clashDetection.componentBId === candidate.b.id)
+          || (row.clashDetection.modelAId === b.id && row.clashDetection.modelBId === a.id && row.clashDetection.componentAId === candidate.b.id && row.clashDetection.componentBId === candidate.a.id)));
+      if (duplicate) continue;
+      const issue: Issue = { tenantId: identity.company.id as Issue['tenantId'], id: `is-clash-${randomUUID()}`, projectId: project.id,
+        category: 'Design clash', title: `${candidate.a.name} × ${candidate.b.name}`.slice(0, 180), severity: 'medium', owner: 'Design coordination',
+        raisedISO: operatingDateISO(), dueISO: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10), status: 'open',
+        location: `${candidate.point.map((value) => value.toFixed(2)).join(', ')} m`, sourceReference: `${a.name} · ${candidate.a.id}`.slice(0, 160),
+        relatedReference: `${b.name} · ${candidate.b.id}`.slice(0, 160), workPackageId: scope,
+        clashDetection: { runId, modelAId: a.id, modelBId: b.id, componentAId: candidate.a.id, componentBId: candidate.b.id,
+          point: candidate.point as Point3, overlapMm: candidate.overlapMm, method: 'component_envelope_v1' } };
+      db.constructionIssues.unshift(issue); created++;
+    }
+    const result: ClashRun = { id: runId, projectId: project.id, modelAId: a.id, modelBId: b.id, toleranceMm: input.toleranceMm,
+      compared: a.componentCount * b.componentCount, candidates: candidates.length, created, runBy: identity.user.id, runAtISO: at, method: 'component_envelope_v1' };
+    ledger.runs.unshift(result); if (ledger.runs.length > 100) ledger.runs.length = 100;
+    await audit(identity, client, 'construction.model.clash_scan', project.id, runId, { modelAId: a.id, modelBId: b.id, toleranceMm: input.toleranceMm, candidates: candidates.length, created });
+    return { value: structuredClone(result) };
+  });
+  revalidatePath('/construction/quality'); return run;
+}
