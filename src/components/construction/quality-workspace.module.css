@@ -2,10 +2,10 @@
 .heading h1 { font-size: 1.75rem; font-weight: 650; color: var(--text); letter-spacing: -.025em; }
 .heading p { color: var(--text-2); }
 .eyebrow { color: var(--brand-solid) !important; font-size: .72rem; font-weight: 700; letter-spacing: .08em; }
-.projectSelect, .form label, .editor label { display: grid; gap: .4rem; color: var(--text-2); font-size: .8rem; font-weight: 600; }
-.projectSelect select, .form input, .form select, .editor input, .editor textarea { min-height: 44px; width: 100%; border: 1px solid var(--border); border-radius: .7rem; background: var(--surface); color: var(--text); padding: .65rem .8rem; font: inherit; }
+.projectSelect, .form label, .editor label, .inlineForm label, .visitForm label { display: grid; gap: .4rem; color: var(--text-2); font-size: .8rem; font-weight: 600; }
+.projectSelect select, .form input, .form select, .editor input, .editor textarea, .inlineForm input, .inlineForm textarea, .visitForm select, .visitForm textarea, .checklistRow input { min-height: 44px; width: 100%; border: 1px solid var(--border); border-radius: .7rem; background: var(--surface); color: var(--text); padding: .65rem .8rem; font: inherit; }
 .editor textarea { min-height: 90px; resize: vertical; }
-.projectSelect select:focus-visible, .form input:focus-visible, .form select:focus-visible, .editor input:focus-visible, .editor textarea:focus-visible { outline: 2px solid var(--brand-solid); outline-offset: 2px; }
+.projectSelect select:focus-visible, .form input:focus-visible, .form select:focus-visible, .editor input:focus-visible, .editor textarea:focus-visible, .inlineForm input:focus-visible, .inlineForm textarea:focus-visible, .visitForm select:focus-visible, .visitForm textarea:focus-visible, .checklistRow input:focus-visible { outline: 2px solid var(--brand-solid); outline-offset: 2px; }
 .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; }
 .boundary { background: var(--surface-2); }
 .boundary strong { color: var(--text); }
@@ -24,5 +24,34 @@
 .editor { display: grid; gap: .7rem; border-top: 1px solid var(--border); padding-top: .8rem; }
 .feedback { color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: .7rem; padding: .7rem .9rem; }
 .empty { color: var(--text-3); font-size: .86rem; }
+.flow { display: grid; gap: .9rem; padding-top: 1rem; }
+.sectionHeading { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .8rem; }
+.sectionHeading h2 { color: var(--text); font-size: 1.05rem; font-weight: 650; }
+.sectionHeading p { color: var(--text-2); font-size: .83rem; }
+.wideField { grid-column: 1 / -1; border: 1px solid var(--border); border-radius: .8rem; padding: .8rem; }
+.wideField legend, .resultRow legend, .photoPicker legend { color: var(--text); font-weight: 650; padding: 0 .35rem; }
+.checklistEditor, .visitForm, .inlineForm, .resultRow, .photoPicker { display: grid; gap: .75rem; }
+.checklistRow, .photoUpload { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+.checklistRow input { flex: 1 1 220px; }
+.timeline, .checklistResults { list-style: none; display: grid; gap: .65rem; padding: 0; margin: 0; }
+.timeline li, .checklistResults li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem; padding: .6rem .75rem; border: 1px solid var(--border); border-radius: .7rem; color: var(--text-2); font-size: .82rem; }
+.timeline strong, .checklistResults strong { color: var(--text); }
+.timeline span, .checklistResults small { display: block; color: var(--text-3); }
+.visitForm, .inlineForm { border-top: 1px solid var(--border); padding-top: .9rem; }
+.visitForm h4, .inlineForm h4 { color: var(--text); font-weight: 650; }
+.resultRow { border: 1px solid var(--border); border-radius: .8rem; padding: .75rem; }
+.photoPicker { border: 1px dashed var(--border); border-radius: .8rem; padding: .75rem; min-width: 0; }
+.photoGrid { display: flex; gap: .5rem; flex-wrap: wrap; }
+.photoOption { display: flex; align-items: center; gap: .4rem; max-width: 100%; border: 1px solid var(--border); border-radius: .7rem; padding: .3rem; font-size: .75rem; overflow-wrap: anywhere; }
+.photoOption img { width: 52px; height: 52px; object-fit: cover; border-radius: .4rem; }
+.photoOption span { max-width: 140px; }
+.photoUpload label { display: grid; color: var(--text); font-size: .8rem; font-weight: 600; }
+.photoUpload label span { color: var(--text-3); font-weight: 400; }
+.photoUpload input { flex: 1 1 200px; max-width: 100%; }
+.photoLink, .checklistResults a, .signoff a { color: var(--brand-solid); font-size: .8rem; text-decoration: underline; }
+.signoff { border: 1px solid var(--border); border-radius: .8rem; padding: .8rem; background: var(--surface-2); color: var(--text-2); font-size: .82rem; }
+.signoff strong { color: var(--text); }
+.signoff p + p { margin-top: .35rem; }
+.signoff small { display: block; margin-top: .5rem; color: var(--text-3); }
 @media (max-width: 850px) { .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .form { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 560px) { .metrics, .form { grid-template-columns: 1fr; } .projectSelect { width: 100%; } }

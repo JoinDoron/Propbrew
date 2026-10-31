@@ -97,12 +97,29 @@ export type Milestone = TenantScoped & {
 
 export type IssueSeverity = 'low' | 'medium' | 'high' | 'critical';
 export type IssueStatus = 'open' | 'in_progress' | 'resolved';
+export type QualityChecklistResult = {
+  itemId: string; result: 'pass' | 'fail' | 'not_applicable'; finding?: string; photoIds: string[];
+};
+export type QualityInspectionVisit = {
+  id: string; kind: 'initial' | 'reinspection'; dateISO: string; timeWAT: string;
+  inspector: string; scheduledBy: string; scheduledAtISO: string;
+  recordedBy?: string; recordedAtISO?: string; notes?: string; results?: QualityChecklistResult[];
+};
+export type QualityInspection = {
+  checklist: { id: string; label: string; punchIssueId?: string }[];
+  visits: QualityInspectionVisit[];
+  signOff?: { signer: string; role: string; reference: string; decision: string; recordedBy: string; recordedAtISO: string };
+};
 export type Issue = TenantScoped & {
   id: string; projectId: string; category: string; title: string; severity: IssueSeverity;
   owner: string; raisedISO: string; dueISO: string; status: IssueStatus; correctiveAction?: string;
   /** Construction quality and design-coordination metadata. Older issues omit these fields. */
   location?: string; sourceReference?: string; relatedReference?: string; authority?: string;
   evidenceReference?: string; closedISO?: string;
+  workPackageId?: string; inspectionId?: string; checklistItemId?: string;
+  photoIds?: string[];
+  remediation?: { description: string; photoIds: string[]; submittedBy: string; submittedAtISO: string };
+  inspection?: QualityInspection;
 };
 
 /* --- site operations ------------------------------------------------------ */

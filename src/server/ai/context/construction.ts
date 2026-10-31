@@ -9,6 +9,7 @@ import { collectCopilotRecords } from './records';
 import { constructionControl } from '@/server/construction-control';
 import { constructionDrawingVisible } from '@/server/construction/drawings';
 import { rfiInScope } from '@/server/construction/rfi-access';
+import { qualityIssueVisible } from '@/server/construction/quality-access';
 
 const money = (value: Money) => ({ currency: value.currency, minor: value.minor });
 const dependsOn = (value: { coverage: CopilotCoverage }, parents: CopilotCoverage[]) => ({ coverage: parents.every((parent) => parent.complete) ? value.coverage : { ...value.coverage, total: null, complete: false } });
@@ -33,7 +34,7 @@ export async function buildConstructionCopilotContext(actor: Actor): Promise<Cop
     collectCopilotRecords('Construction warehouses', (options) => repos.constructionWarehouses.list(actor, options), { accept: inProject }),
     collectCopilotRecords('Construction workers', (options) => repos.constructionWorkers.list(actor, options), { accept: inProject }),
     collectCopilotRecords('Construction attendance', (options) => repos.constructionAttendance.list(actor, options), { accept: inProject }),
-    collectCopilotRecords('Construction issues', (options) => repos.constructionIssues.list(actor, options), { accept: inProject }),
+    collectCopilotRecords('Construction issues', (options) => repos.constructionIssues.list(actor, options), { accept: (row) => inProject(row) && qualityIssueVisible(actor, row) }),
     collectCopilotRecords('Construction document register', (options) => repos.constructionDocs.list(actor, options), { accept: (row) => inProject(row) && constructionDrawingVisible(actor, row) }),
     collectCopilotRecords('Construction RFIs', (options) => repos.constructionRfis.list(actor, options), { accept: (row) => inProject(row) && rfiInScope(actor, row) }),
     collectCopilotRecords('Construction building levels', (options) => repos.constructionZones.list(actor, options), { accept: inProject }),

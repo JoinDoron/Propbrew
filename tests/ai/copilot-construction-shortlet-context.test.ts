@@ -143,6 +143,10 @@ describe('Construction AI context commercial and record boundaries', () => {
       { ...seed.constructionDocs[0], id: 'doc-own', number: 'DRAWING-OWN', workPackageIds: ['package-own'] },
       { ...seed.constructionDocs[0], id: 'doc-private', number: 'DRAWING-PRIVATE', workPackageIds: ['package-private'] },
     ];
+    store.rows.constructionIssues = [
+      { ...seed.constructionIssues[0], id: 'quality-own', category: 'Punch list', workPackageId: 'package-own' },
+      { ...seed.constructionIssues[0], id: 'quality-private', category: 'Authority inspection', workPackageId: 'package-private' },
+    ];
     const scopedActor = actorForCompanyMember({
       membershipId: 'membership-package-ai', userId: 'context-reader', companyId: tenantId,
       companyRole: 'member', status: 'active', companyStatus: 'active',
@@ -157,6 +161,7 @@ describe('Construction AI context commercial and record boundaries', () => {
       const context = await buildConstructionCopilotContext(scopedActor);
       expect(context.facts.rfis).toEqual([expect.objectContaining({ ref: 'RFI-OWN' })]);
       expect(context.facts.documents).toEqual([expect.objectContaining({ number: 'DRAWING-OWN' })]);
+      expect(context.facts.issues).toEqual([expect.objectContaining({ id: 'quality-own' })]);
     } finally {
       project.mobilisation = previous;
     }

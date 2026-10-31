@@ -328,6 +328,7 @@ const qualityInput = z.object({
   relatedReference: z.string().trim().max(160).optional(),
   authority: z.string().trim().max(160).optional(),
   evidenceReference: z.string().trim().max(500).optional(),
+  workPackageId: z.string().trim().min(1).max(200).optional(),
 });
 export type QualityIssueInput = z.infer<typeof qualityInput>;
 
@@ -337,7 +338,8 @@ export async function recordConstructionQualityIssue(input: QualityIssueInput): 
     const parsed = qualityInput.safeParse(input);
     if (!parsed.success) return { ok: false, error: 'Check the project, title, owner, location and due date.' };
     const data = parsed.data;
-    if (!scopedConstructionProjectGet(g.actor, data.projectId, 'create')) return { ok: false, error: 'Project not found.' };
+    const project = scopedConstructionProjectGet(g.actor, data.projectId, 'create');
+    if (!project || !rfiPackageAllowed(g.actor, project, data.workPackageId)) return { ok: false, error: 'Project or work package not found.' };
     if (data.category === 'Authority inspection' && !data.authority) return { ok: false, error: 'Record the inspecting authority.' };
     if (data.category === 'Design clash' && (!data.sourceReference || !data.relatedReference)) return { ok: false, error: 'Record both conflicting drawing or model references.' };
     const id = `is-quality-${randomUUID()}`;
@@ -353,7 +355,9 @@ export async function advanceConstructionQualityIssue(id: string, status: 'in_pr
     const g = await gate('update'); if (!g.ok) return g;
     const issue = scopedMutableGet(g.actor, 'reports_analytics', db.constructionIssues, id, 'update');
     if (!issue || !scopedConstructionProjectGet(g.actor, issue.projectId, 'update')) return { ok: false, error: 'Issue not found.' };
+    if (!rfiPackageAllowed(g.actor, scopedConstructionProjectGet(g.actor, issue.projectId, 'update')!, issue.workPackageId)) return { ok: false, error: 'Issue not found.' };
     if (!qualityCategories.some((category) => category === issue.category)) return { ok: false, error: 'Use the source workflow for this issue.' };
+    if (status === 'resolved' && issue.category !== 'Design clash') return { ok: false, error: 'Record corrective work and sign-off in Quality & coordination before closing this item.' };
     if (issue.status === 'resolved') return { ok: false, error: 'Resolved issues require a separate adjustment to reopen.' };
     const note = correctiveAction?.trim();
     if (!note || note.length < 8 || note.length > 1000) return { ok: false, error: 'Describe the action in at least 8 characters.' };

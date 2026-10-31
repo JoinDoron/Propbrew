@@ -3,68 +3,81 @@
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { Button, Card, StatusPill } from '@/components/ui';
-import { ConstructionFrame, ConstructionKpi, ConstructionPanel, ConstructionPanelHeader } from './construction-ui';
-import { advanceConstructionQualityIssue, recordConstructionQualityIssue, type QualityIssueInput } from '@/server/actions/construction';
-import type { Issue } from '@/domain/construction/types';
 import { PageTabs } from '@/components/ui/page-tabs';
+import type { Issue } from '@/domain/construction/types';
+import { advanceConstructionQualityIssue, recordConstructionQualityIssue, type QualityIssueInput } from '@/server/actions/construction';
+import { recordConstructionCorrectiveWork, signOffConstructionQuality } from '@/server/actions/construction-quality';
+import { ConstructionFrame, ConstructionKpi, ConstructionPanel, ConstructionPanelHeader } from './construction-ui';
+import { InspectionFlow, SignOffForm } from './quality/inspection-flow';
+import { QualityPhotoPicker } from './quality/quality-photo-picker';
 import styles from './quality-workspace.module.css';
 
-type Category = QualityIssueInput['category'];
-const categories: Category[] = ['Punch list', 'Authority inspection', 'Design clash'];
-const labels: Record<Category, string> = { 'Punch list': 'Punch list', 'Authority inspection': 'Authority inspections', 'Design clash': 'Design coordination' };
-
-export function QualityWorkspace({ projects, projectId, issues, taskNames, today, canCreate, canUpdate }: {
-  projects: { id: string; name: string; code: string }[]; projectId: string; issues: Issue[]; taskNames: string[]; today: string; canCreate: boolean; canUpdate: boolean;
+type Category = 'Punch list' | 'Design clash';
+export function QualityWorkspace({ projects, projectId, issues, taskNames, today, canCreate, canUpdate, canSignOff = canUpdate, companyId = '', packages = [] }: {
+  projects: { id: string; name: string; code: string }[]; projectId: string; issues: Issue[]; taskNames: string[];
+  today: string; canCreate: boolean; canUpdate: boolean; canSignOff?: boolean; companyId?: string; packages?: { id: string; name: string }[];
 }) {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
+  const router = useRouter(); const [pending, start] = useTransition();
   const [category, setCategory] = useState<Category>('Punch list');
-  const [message, setMessage] = useState('');
-  const [editing, setEditing] = useState<string | null>(null);
-  const [actionNote, setActionNote] = useState('');
-  const [actionEvidence, setActionEvidence] = useState('');
-  const open = issues.filter((issue) => issue.status !== 'resolved');
-  const changeProject = (id: string) => router.push(`/construction/quality?projectId=${encodeURIComponent(id)}`);
-  const submit = (form: FormData) => {
+  const [showForm, setShowForm] = useState(false); const [message, setMessage] = useState('');
+  const punch = issues.filter((issue) => issue.category === 'Punch list');
+  const inspections = issues.filter((issue) => issue.category === 'Authority inspection');
+  const clashes = issues.filter((issue) => issue.category === 'Design clash');
+  function submit(form: FormData) {
     const input: QualityIssueInput = {
       projectId, category, title: String(form.get('title') ?? ''), severity: String(form.get('severity') ?? 'medium') as QualityIssueInput['severity'],
       owner: String(form.get('owner') ?? ''), dueISO: String(form.get('dueISO') ?? ''), location: String(form.get('location') ?? ''),
       sourceReference: String(form.get('sourceReference') ?? ''), relatedReference: String(form.get('relatedReference') ?? ''),
-      authority: String(form.get('authority') ?? ''), evidenceReference: String(form.get('evidenceReference') ?? ''),
+      workPackageId: String(form.get('workPackageId') ?? '') || undefined,
     };
-    startTransition(async () => {
-      const result = await recordConstructionQualityIssue(input);
-      setMessage(result.ok ? `${category} recorded for this project.` : result.error);
-      if (result.ok) { (document.getElementById('construction-quality-form') as HTMLFormElement | null)?.reset(); router.refresh(); }
-    });
-  };
-  const advance = (id: string, status: 'in_progress' | 'resolved') => {
-    startTransition(async () => {
-      const result = await advanceConstructionQualityIssue(id, status, actionNote, actionEvidence);
-      setMessage(result.ok ? `Issue ${status === 'resolved' ? 'resolved' : 'in progress'}.` : result.error);
-      if (result.ok) { setEditing(null); setActionNote(''); setActionEvidence(''); router.refresh(); }
-    });
-  };
-  const rows = (kind: Category) => <div className={styles.stack}>
-    {issues.filter((issue) => issue.category === kind).map((issue) => <Card key={issue.id} className={styles.issue}>
-      <div className={styles.issueHead}><div><p className={styles.meta}>{issue.location || 'Location not recorded'} · due {issue.dueISO}</p><h3>{issue.title}</h3></div><div className={styles.pills}><StatusPill status={issue.severity} tone={issue.severity === 'critical' || issue.severity === 'high' ? 'danger' : 'warn'} /><StatusPill status={issue.status.replaceAll('_', ' ')} tone={issue.status === 'resolved' ? 'success' : 'info'} /></div></div>
-      <div className={styles.details}><span>Owner: {issue.owner}</span>{issue.authority && <span>Authority: {issue.authority}</span>}{issue.sourceReference && <span>Source: {issue.sourceReference}</span>}{issue.relatedReference && <span>Conflicts with: {issue.relatedReference}</span>}</div>
-      {issue.correctiveAction && <p className={styles.note}>Action: {issue.correctiveAction}</p>}
-      {issue.evidenceReference && <p className={styles.note}>Evidence: {issue.evidenceReference}</p>}
-      {canUpdate && issue.status !== 'resolved' && <div className={styles.actions}><Button type="button" onClick={() => { setEditing(editing === issue.id ? null : issue.id); setMessage(''); }}>Update issue</Button></div>}
-      {editing === issue.id && <div className={styles.editor}><label>Action taken<textarea value={actionNote} onChange={(event) => setActionNote(event.target.value)} minLength={8} maxLength={1000} required /></label><label>Evidence reference for resolution<input value={actionEvidence} onChange={(event) => setActionEvidence(event.target.value)} placeholder="Document, photo or inspection record ID" /></label><div className={styles.actions}><Button type="button" disabled={pending} onClick={() => advance(issue.id, 'in_progress')}>Mark in progress</Button><Button type="button" variant="primary" disabled={pending} onClick={() => advance(issue.id, 'resolved')}>Resolve with evidence</Button></div></div>}
-    </Card>)}
-    {!issues.some((issue) => issue.category === kind) && <Card><p className={styles.empty}>No {labels[kind].toLowerCase()} recorded for this project.</p></Card>}
+    start(async () => { const result = await recordConstructionQualityIssue(input); setMessage(result.ok ? `${category} recorded.` : result.error); if (result.ok) { setShowForm(false); router.refresh(); } });
+  }
+  const createPanel = <div className={styles.flow}>
+    <div className={styles.sectionHeading}><div><h2>Punch list & design coordination</h2><p>Assign each item, attach field photos and record a reviewed closeout.</p></div>{canCreate && <Button type="button" variant="primary" onClick={() => setShowForm((value) => !value)}>{showForm ? 'Close form' : 'Add quality item'}</Button>}</div>
+    {message && <p className={styles.feedback} role="status">{message}</p>}
+    {showForm && <ConstructionPanel><ConstructionPanelHeader title="Record a quality item" subtitle="Choose a punch item or a reported drawing clash." /><form className={styles.form} action={submit}>
+      <label>Record type<select value={category} onChange={(event) => setCategory(event.target.value as Category)}><option value="Punch list">Punch list</option><option value="Design clash">Design clash</option></select></label>
+      <label>Title<input name="title" required minLength={4} maxLength={180} placeholder="Describe the finding" /></label>
+      <label>Location / zone<input name="location" required minLength={2} maxLength={160} /></label>
+      <label>Corrective-work owner<input name="owner" required minLength={2} maxLength={100} /></label>
+      <label>Due date<input name="dueISO" type="date" min={today} defaultValue={today} required /></label>
+      <label>Severity<select name="severity" defaultValue="medium"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="critical">Critical</option></select></label>
+      {packages.length > 0 && <label>Work package<select name="workPackageId"><option value="">Whole project</option>{packages.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}</select></label>}
+      {category === 'Design clash' ? <><label>Drawing / model reference<input name="sourceReference" required maxLength={160} /></label><label>Conflicting reference<input name="relatedReference" required maxLength={160} /></label></> : <label>Drawing / task reference<input name="sourceReference" list="construction-quality-tasks" maxLength={160} /><datalist id="construction-quality-tasks">{taskNames.map((name) => <option key={name} value={name} />)}</datalist></label>}
+      <div className={styles.formAction}><Button type="submit" variant="primary" disabled={pending}>{pending ? 'Saving…' : 'Record item'}</Button></div>
+    </form></ConstructionPanel>}
   </div>;
-
   return <ConstructionFrame>
-    <div className={styles.heading}><div><p className={styles.eyebrow}>CONSTRUCTION · PROJECT QUALITY</p><h1>Quality & coordination</h1><p>Punch items, authority visits and drawing or model conflicts in one project record.</p></div><label className={styles.projectSelect}>Project<select aria-label="Construction project" value={projectId} onChange={(event) => changeProject(event.target.value)}>{projects.map((project) => <option key={project.id} value={project.id}>{project.code} · {project.name}</option>)}</select></label></div>
+    <div className={styles.heading}><div><p className={styles.eyebrow}>CONSTRUCTION · PROJECT QUALITY</p><h1>Quality & coordination</h1><p>Inspection appointments, corrective work, reinspection and recorded closeout by project.</p></div><label className={styles.projectSelect}>Project<select aria-label="Construction project" value={projectId} onChange={(event) => router.push(`/construction/quality?projectId=${encodeURIComponent(event.target.value)}`)}>{projects.map((project) => <option key={project.id} value={project.id}>{project.code} · {project.name}</option>)}</select></label></div>
     {!projectId ? <Card><p className={styles.empty}>No construction project is available to this account.</p></Card> : <>
-      <div className={styles.metrics}><ConstructionKpi label="Open quality items" value={String(open.length)} tone={open.length ? 'warn' : 'success'} /><ConstructionKpi label="Punch list" value={String(open.filter((issue) => issue.category === 'Punch list').length)} tone="info" /><ConstructionKpi label="Authority inspections" value={String(open.filter((issue) => issue.category === 'Authority inspection').length)} tone="info" /><ConstructionKpi label="Recorded design clashes" value={String(open.filter((issue) => issue.category === 'Design clash').length)} tone="warn" /></div>
-      <Card className={styles.boundary}><strong>Design coordination register</strong><p>These are reported conflicts between drawings or models. Propbrew does not yet compare BIM geometry automatically or certify clash-free construction. Check current approved revisions and resolve each issue with evidence.</p></Card>
-      {canCreate && <ConstructionPanel><ConstructionPanelHeader title="Record a quality item" subtitle="Assign an owner, location and due date. Evidence is required before resolution." /><form id="construction-quality-form" className={styles.form} action={submit}><label>Record type<select value={category} onChange={(event) => setCategory(event.target.value as Category)}>{categories.map((kind) => <option key={kind} value={kind}>{labels[kind]}</option>)}</select></label><label>Title<input name="title" required minLength={4} maxLength={180} placeholder="Describe the issue" /></label><label>Location / zone<input name="location" required minLength={2} maxLength={160} placeholder="Block, floor or grid" /></label><label>Owner<input name="owner" required minLength={2} maxLength={100} placeholder="Responsible person or firm" /></label><label>Due date<input name="dueISO" type="date" defaultValue={today} required /></label><label>Severity<select name="severity" defaultValue="medium"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="critical">Critical</option></select></label>{category === 'Authority inspection' && <label>Inspecting authority<input name="authority" required placeholder="e.g. state building control agency" /></label>}{category === 'Design clash' && <><label>Drawing / model reference<input name="sourceReference" required placeholder="Current revision or model element" /></label><label>Conflicting reference<input name="relatedReference" required placeholder="Other revision or model element" /></label></>}{category === 'Punch list' && <label>Drawing / task reference<input name="sourceReference" list="construction-quality-tasks" placeholder="Optional task or drawing" /><datalist id="construction-quality-tasks">{taskNames.map((name) => <option key={name} value={name} />)}</datalist></label>}<label>Evidence reference<input name="evidenceReference" maxLength={500} placeholder="Optional photo, document or inspection ID" /></label><div className={styles.formAction}><Button type="submit" variant="primary" disabled={pending}>{pending ? 'Saving…' : 'Record item'}</Button></div></form></ConstructionPanel>}
-      {message && <p role="status" className={styles.feedback}>{message}</p>}
-      <PageTabs label="Construction quality registers" items={categories.map((kind) => ({ id: kind, label: labels[kind], count: issues.filter((issue) => issue.category === kind).length, content: rows(kind) }))} />
+      <div className={styles.metrics}><ConstructionKpi label="Open punch items" value={String(punch.filter((row) => row.status !== 'resolved').length)} tone="warn" /><ConstructionKpi label="Inspection appointments" value={String(inspections.filter((row) => !row.inspection?.visits.at(-1)?.recordedAtISO).length)} tone="info" /><ConstructionKpi label="Awaiting sign-off" value={String(inspections.filter((row) => row.status !== 'resolved' && row.inspection?.visits.at(-1)?.results?.every((result) => result.result !== 'fail')).length)} tone="info" /><ConstructionKpi label="Recorded design clashes" value={String(clashes.filter((row) => row.status !== 'resolved').length)} tone="warn" /></div>
+      <PageTabs label="Construction quality workflows" items={[
+        { id: 'inspections', label: 'Authority inspections', count: inspections.length, content: <InspectionFlow inspections={inspections} projectId={projectId} companyId={companyId} today={today} canCreate={canCreate} canUpdate={canUpdate} canSignOff={canSignOff} packages={packages} /> },
+        { id: 'punch', label: 'Punch list', count: punch.length, content: <div className={styles.flow}>{createPanel}{punch.length ? punch.map((issue) => <PunchCard key={issue.id} issue={issue} companyId={companyId} today={today} canUpdate={canUpdate} canSignOff={canSignOff} />) : <Card><p className={styles.empty}>No punch items recorded for this project.</p></Card>}</div> },
+        { id: 'clashes', label: 'Design coordination', count: clashes.length, content: <div className={styles.flow}><Card className={styles.boundary}><strong>Recorded design conflicts</strong><p>These are reports between drawings or models. Propbrew does not compare BIM geometry or certify clash-free construction. Review the approved revisions before resolving.</p></Card>{createPanel}{clashes.length ? clashes.map((issue) => <ClashCard key={issue.id} issue={issue} canUpdate={canUpdate} />) : <Card><p className={styles.empty}>No design conflicts recorded for this project.</p></Card>}</div> },
+      ]} />
     </>}
   </ConstructionFrame>;
+}
+
+function PunchCard({ issue, companyId, today, canUpdate, canSignOff }: { issue: Issue; companyId: string; today: string; canUpdate: boolean; canSignOff: boolean }) {
+  const router = useRouter(); const [pending, start] = useTransition(); const [message, setMessage] = useState('');
+  const [photoIds, setPhotoIds] = useState<string[]>([]), [expanded, setExpanded] = useState(false);
+  function run(work: () => Promise<{ ok: boolean; error?: string }>, success: string) { start(async () => { const result = await work(); setMessage(result.ok ? success : result.error ?? 'Could not save.'); if (result.ok) router.refresh(); }); }
+  return <Card className={styles.issue}><div className={styles.issueHead}><div><p className={styles.meta}>{issue.location} · due {issue.dueISO}</p><h3>{issue.title}</h3></div><div className={styles.pills}><StatusPill status={issue.severity} tone={issue.severity === 'critical' || issue.severity === 'high' ? 'danger' : 'warn'} /><StatusPill status={issue.status.replaceAll('_', ' ')} tone={issue.status === 'resolved' ? 'success' : 'info'} /></div></div>
+    <div className={styles.details}><span>Owner: {issue.owner}</span>{issue.inspectionId && <span>Linked to authority inspection</span>}{issue.workPackageId && <span>Package: {issue.workPackageId}</span>}</div>
+    {issue.correctiveAction && <p className={styles.note}>Finding / corrective work: {issue.correctiveAction}</p>}
+    {issue.photoIds?.map((id) => <a key={id} className={styles.photoLink} href={`/api/construction/quality/photos/${id}`} target="_blank" rel="noopener noreferrer">View finding photo</a>)}
+    {issue.remediation && <div className={styles.signoff}><strong>Corrective work submitted</strong><p>{issue.remediation.description}</p>{issue.remediation.photoIds.map((id) => <a key={id} href={`/api/construction/quality/photos/${id}`} target="_blank" rel="noopener noreferrer">View correction photo</a>)}</div>}
+    {issue.inspection?.signOff && <p className={styles.note}>Sign-off: {issue.inspection.signOff.signer} · {issue.inspection.signOff.reference}</p>}
+    {(canUpdate || canSignOff) && issue.status !== 'resolved' && <Button type="button" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded} aria-controls={`punch-${issue.id}`}>{expanded ? 'Hide details' : canUpdate ? 'Record corrective work' : 'Review for sign-off'}</Button>}
+    {expanded && <div id={`punch-${issue.id}`} className={styles.editor}>{canUpdate && <><QualityPhotoPicker companyId={companyId} issueId={issue.id} selectedIds={photoIds} onChange={setPhotoIds} disabled={pending} /><form className={styles.inlineForm} onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); run(() => recordConstructionCorrectiveWork(issue.id, { description: String(form.get('description')), owner: String(form.get('owner')), dueISO: String(form.get('dueISO')), photoIds }), 'Corrective work and photos recorded.'); }}><label>Corrective work<textarea name="description" required minLength={8} maxLength={1000} defaultValue={issue.remediation?.description} /></label><label>Responsible person or firm<input name="owner" required minLength={2} maxLength={100} defaultValue={issue.owner} /></label><label>Deadline<input name="dueISO" type="date" min={today} required defaultValue={issue.dueISO < today ? today : issue.dueISO} /></label><Button type="submit" disabled={pending || !photoIds.length}>{pending ? 'Saving…' : 'Submit corrective work'}</Button></form></>}{!issue.inspectionId && issue.remediation && canSignOff && <SignOffForm pending={pending} onSubmit={(input) => run(() => signOffConstructionQuality(issue.id, input), 'Punch item signed off and closed.')} />}{issue.inspectionId && <p className={styles.meta}>This finding closes when the parent inspection passes reinspection and its sign-off is recorded.</p>}</div>}
+    {message && <p className={styles.feedback} role="status">{message}</p>}
+  </Card>;
+}
+
+function ClashCard({ issue, canUpdate }: { issue: Issue; canUpdate: boolean }) {
+  const router = useRouter(); const [pending, start] = useTransition(); const [message, setMessage] = useState(''); const [expanded, setExpanded] = useState(false);
+  function advance(form: FormData, status: 'in_progress' | 'resolved') { start(async () => { const result = await advanceConstructionQualityIssue(issue.id, status, String(form.get('action')), String(form.get('evidence'))); setMessage(result.ok ? 'Design conflict updated.' : result.error); if (result.ok) router.refresh(); }); }
+  return <Card className={styles.issue}><div className={styles.issueHead}><div><p className={styles.meta}>{issue.location} · due {issue.dueISO}</p><h3>{issue.title}</h3></div><StatusPill status={issue.status.replaceAll('_', ' ')} tone={issue.status === 'resolved' ? 'success' : 'warn'} /></div><div className={styles.details}><span>Owner: {issue.owner}</span><span>Source: {issue.sourceReference}</span><span>Conflicts with: {issue.relatedReference}</span></div>{issue.correctiveAction && <p className={styles.note}>Action: {issue.correctiveAction}</p>}{issue.evidenceReference && <p className={styles.note}>Evidence: {issue.evidenceReference}</p>}{canUpdate && issue.status !== 'resolved' && <Button type="button" onClick={() => setExpanded((value) => !value)}>Update design conflict</Button>}{expanded && <form className={styles.editor} onSubmit={(event) => { event.preventDefault(); advance(new FormData(event.currentTarget), 'in_progress'); }}><label>Action taken<textarea name="action" minLength={8} maxLength={1000} required /></label><label>Evidence reference<input name="evidence" maxLength={500} placeholder="Drawing revision, model or photo reference" /></label><div className={styles.actions}><Button type="submit" disabled={pending}>Mark in progress</Button><Button type="button" variant="primary" disabled={pending} onClick={(event) => { const form = event.currentTarget.closest('form'); if (form?.reportValidity()) advance(new FormData(form), 'resolved'); }}>Resolve with evidence</Button></div></form>}{message && <p className={styles.feedback} role="status">{message}</p>}</Card>;
 }

@@ -42,7 +42,7 @@ const coverage = [
   ['materials', 'materials-workspace', ['stock', 'overview', 'movements']],
   ['procurement', 'procurement-workspace', ['orders', 'rfqs', 'deliveries', 'overview']],
   ['projects', 'projects-workspace', ['register', 'overview']],
-  ['quality', 'quality-workspace', []],
+  ['quality', 'quality-workspace', ['inspections', 'punch', 'clashes']],
   ['risk', 'risk-radar', ['signals', 'overview', 'methodology']],
   ['safety', 'safety-workspace', ['permits', 'events', 'overview']],
   ['schedule', 'schedule-workspace', ['network', 'milestones', 'overview']],
