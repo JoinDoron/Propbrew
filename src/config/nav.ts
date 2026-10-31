@@ -222,6 +222,7 @@ const OPS_NAV: NavGroup[] = [
   {
     label: 'Commercial & procurement',
     items: [
+      { id: 'con-changes', label: 'Change orders', href: '/construction/changes', icon: 'checks', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
       { id: 'con-procurement', label: 'Procurement', href: '/construction/procurement', icon: 'truck', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
       { id: 'con-materials', label: 'Materials', href: '/construction/materials', icon: 'package', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
       { id: 'con-boq', label: 'BOQ Import', href: '/construction/boq', icon: 'file', capability: 'reports_analytics', roles: ['executive', 'estate_manager', 'facility_manager', 'platform_admin'], proposed: true },
@@ -421,6 +422,7 @@ export const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   '/construction': { title: 'Command Center', subtitle: 'Every project, cost and crew — live' },
   '/construction/projects': { title: 'Projects', subtitle: 'The delivery side of the off-plan portfolio' },
   '/construction/operations': { title: 'Construction Operations', subtitle: 'Subcontractors, field approvals, claims, evidence and payments' },
+  '/construction/changes': { title: 'Change orders', subtitle: 'RFI and site issues to authorized budget and commitments' },
   '/construction/evm': { title: 'Earned Value', subtitle: 'CPI, SPI, EAC and the S-curve' },
   '/construction/schedule': { title: 'Critical Path', subtitle: 'Float, slip cascade and forecast finish' },
   '/construction/procurement': { title: 'Procurement', subtitle: 'Request → RFQ → scored award → PO' },

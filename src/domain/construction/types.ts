@@ -60,6 +60,8 @@ export type Project = TenantScoped & {
   startISO: string; plannedFinishISO: string; actualStartISO?: string;
   /** planned % is the schedule baseline to date; percentComplete is actual physical progress. */
   plannedPercent: number; percentComplete: number;
+  /** Approved change-order days affect the outlook, never the programme baseline. */
+  approvedChangeDays?: number;
   /** Mobilisation configuration is embedded in the durable project record so
    * existing company workspaces can adopt it without a destructive schema reset. */
   mobilisation?: ProjectMobilisation;
@@ -200,10 +202,23 @@ export type CostCode = TenantScoped & {
   plannedPercent: number; earnedPercent: number;
 };
 
-export type VariationStatus = 'draft' | 'submitted' | 'client_review' | 'approved' | 'rejected';
+export type VariationStatus = 'draft' | 'submitted' | 'pricing_requested' | 'priced' | 'client_review' | 'ready_to_post' | 'approved' | 'rejected';
+export type ChangeOrderControl = {
+  sourceKind: 'rfi' | 'site_issue'; sourceId: string; sourceRef: string; workPackageId?: string;
+  costCode: string; subcontractorId: string; subcontractorName: string;
+  proposedBy: string; proposedAtISO: string;
+  pricingRequestedBy?: string; pricingRequestedAtISO?: string;
+  quote?: { amountMinor: number; reference: string; scope: string; submittedBy: string; submittedAtISO: string; recordedOnBehalf: boolean };
+  assessment?: { budgetDeltaMinor: number; scheduleDays: number; note: string; assessedBy: string; assessedAtISO: string };
+  clientDecision?: { reference: string; note: string; decidedBy: string; decidedAtISO: string; decision: 'approved' | 'rejected' };
+  posting?: { authorizationReference: string; budgetBeforeMinor: number; budgetAfterMinor: number; commitmentBeforeMinor: number; commitmentAfterMinor: number;
+    costForecastBeforeMinor: number; costForecastAfterMinor: number; forecastBeforeISO: string; forecastAfterISO: string; postedBy: string; postedAtISO: string };
+};
 export type Variation = TenantScoped & {
   id: string; ref: string; projectId: string; title: string; reason: string;
   costImpact: Money; scheduleImpactDays: number; status: VariationStatus; raisedISO: string;
+  workPackageId?: string; subcontractorId?: string;
+  changeOrder?: ChangeOrderControl;
 };
 
 /* --- workforce ------------------------------------------------------------ */

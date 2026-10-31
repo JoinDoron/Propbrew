@@ -257,6 +257,7 @@ export async function approveVariation(id: string): Promise<Res> {
   return withDurableMutation(async () => {
   const g = await gate('update'); if (!g.ok) return g;
   const v = scopedMutableGet(g.actor, 'reports_analytics', db.constructionVariations, id, 'update'); if (!v) return { ok: false, error: 'Variation not found.' };
+  if (v.changeOrder) return { ok: false, error: 'Use the staged change-order approvals and finance posting workflow.' };
   if (v.status !== 'submitted') return { ok: false, error: 'Only a submitted variation can be approved.' };
   v.status = 'approved'; revalidate(); return { ok: true, ref: v.ref };
 

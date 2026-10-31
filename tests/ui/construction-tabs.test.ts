@@ -27,7 +27,7 @@ const tabCount = (html: string) => [...html.matchAll(/role="tab"/g)].length;
 
 describe('Construction and platform page sections', () => {
   const constructionRoutes = [
-    '', 'approvals', 'audit', 'boq', 'build-watch', 'copilot', 'digest', 'documents',
+    '', 'approvals', 'audit', 'boq', 'build-watch', 'changes', 'copilot', 'digest', 'documents',
     'evm', 'field', 'fx', 'league', 'materials', 'operations', 'procurement', 'projects', 'risk',
     'safety', 'schedule', 'simulator', 'site', 'stock', 'timesheets', 'twin', 'workforce',
   ];
@@ -52,7 +52,7 @@ describe('Construction and platform page sections', () => {
 
   it('does not leave a Construction workspace outside the shared tab pattern', () => {
     const files = readdirSync(resolve(process.cwd(), 'src/components/construction')).filter((file) => file.endsWith('.tsx') && !['construction-ui.tsx', 'drawing-controls.tsx', 'rfi-workspace.tsx'].includes(file));
-    expect(files).toHaveLength(28);
+    expect(files).toHaveLength(29);
     for (const file of files) {
       const workspace = source(`src/components/construction/${file}`);
       expect(workspace).toContain('<PageTabs ');

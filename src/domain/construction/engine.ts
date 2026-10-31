@@ -94,12 +94,13 @@ export function scheduleVariancePct(p: Pick<Project, 'plannedPercent' | 'percent
 }
 
 /** Forecast finish from SPI: the slower you earn, the later you finish. */
-export function forecastFinishISO(p: Pick<Project, 'startISO' | 'plannedFinishISO'>, spi: number): { iso: string; slipDays: number } {
+export function forecastFinishISO(p: Pick<Project, 'startISO' | 'plannedFinishISO'> & { approvedChangeDays?: number }, spi: number): { iso: string; slipDays: number } {
   const start = Date.parse(p.startISO), planned = Date.parse(p.plannedFinishISO);
   const dur = Math.max(1, planned - start);
   const forecastDur = spi > 0 ? dur / spi : dur * 2;
-  const iso = new Date(start + forecastDur).toISOString().slice(0, 10);
-  return { iso, slipDays: Math.round((start + forecastDur - planned) / DAY) };
+  const approvedDays = Math.max(0, p.approvedChangeDays ?? 0);
+  const iso = new Date(start + forecastDur + approvedDays * DAY).toISOString().slice(0, 10);
+  return { iso, slipDays: Math.round((start + forecastDur - planned) / DAY) + approvedDays };
 }
 
 export function projectHealth(spi: number, cpi: number, openCritical: number): { score: number; band: Tone; label: string } {

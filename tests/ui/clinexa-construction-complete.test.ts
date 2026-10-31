@@ -30,17 +30,19 @@ import { LeagueWorkspace } from '@/components/construction/league-workspace';
 import { ConstructionOperationsWorkspace } from '@/components/construction/operations-workspace';
 import { ConstructionRolePortal } from '@/components/construction/role-portal';
 import { QualityWorkspace } from '@/components/construction/quality-workspace';
+import { ChangeOrdersWorkspace } from '@/components/construction/change-orders-workspace';
 import { constructionNaira } from '@/components/construction/construction-ui';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock('@/server/actions/construction', () => ({}));
 vi.mock('@/server/actions/construction-control', () => ({}));
+vi.mock('@/server/actions/construction-change-orders', () => ({}));
 vi.mock('@/lib/offline/outbox', () => ({ useOutbox: () => [], useOnline: () => true, isForcedOffline: () => false, capture: vi.fn(), removeOp: vi.fn(), clearSynced: vi.fn(), abandon: vi.fn(), requeue: vi.fn(), setForcedOffline: vi.fn() }));
 const read = (file: string) => readFileSync(resolve(process.cwd(), file), 'utf8');
 const component = (name: string) => read(`src/components/construction/${name}.tsx`);
 const page = (route: string) => read(`src/app/(ops)/construction/${route === 'portal' ? 'portal/[kind]/' : route ? `${route}/` : ''}page.tsx`);
 const view = <T extends object,>(element: React.FunctionComponent<T>, props: T) => renderToStaticMarkup(createElement(element, props));
-const constructionFiles = ['command-center', 'projects-workspace', 'site-workspace', 'workforce-workspace', 'timesheets-workspace', 'field-capture', 'boq-workspace', 'procurement-workspace', 'materials-workspace', 'stock-workspace', 'approvals-workspace', 'documents-workspace', 'schedule-workspace', 'evm-cockpit', 'fx-workspace', 'risk-radar', 'safety-workspace', 'audit-workspace', 'build-watch', 'twin-workspace', 'simulator-workspace', 'copilot-workspace', 'digest-workspace', 'league-workspace', 'operations-workspace', 'role-portal', 'quality-workspace'];
+const constructionFiles = ['command-center', 'projects-workspace', 'site-workspace', 'workforce-workspace', 'timesheets-workspace', 'field-capture', 'boq-workspace', 'procurement-workspace', 'materials-workspace', 'stock-workspace', 'approvals-workspace', 'documents-workspace', 'schedule-workspace', 'evm-cockpit', 'fx-workspace', 'risk-radar', 'safety-workspace', 'audit-workspace', 'build-watch', 'twin-workspace', 'simulator-workspace', 'copilot-workspace', 'digest-workspace', 'league-workspace', 'operations-workspace', 'role-portal', 'quality-workspace', 'change-orders-workspace'];
 const evm = { bac: 10000025, pv: 5000012, ev: 4000010, ac: 4500015, cv: -500005, sv: -1000002, cpi: .89, spi: .8, eac: 11235983, etc: 6735968, vac: -1235958, tcpi: 1.1, costBand: 'warn' as const, scheduleBand: 'danger' as const };
 const cases = [
   { route: '', component: 'command-center', tabs: 4, render: () => view(CommandCenter, { confidence: { score: 0, band: 'muted', label: 'No records', nairaAtRiskMinor: 0 }, projects: [], signals: [], deliveries: { late: [], today: [], upcoming: [] }, kpis: { activeProjects: 0, onSite: 0, plannedCrew: 0, openPoValueMinor: 0, criticalSignals: 0 }, canMutate: false }) },
@@ -52,6 +54,7 @@ const cases = [
   { route: 'operations', component: 'operations-workspace', tabs: 5, render: () => view(ConstructionOperationsWorkspace, { projects: [], subcontractors: [], evidence: [], fieldApprovals: [], variations: [], claims: [], orders: [], payments: [], forecasts: [], canCreate: false, canUpdate: false }) },
   { route: 'portal', component: 'role-portal', tabs: 2, render: () => view(ConstructionRolePortal, { kind: 'client', projectCount: 0 }) },
   { route: 'quality', component: 'quality-workspace', tabs: 3, render: () => view(QualityWorkspace, { projects: [{ id: 'p-1', code: 'LAG-1', name: 'Lagos site' }], projectId: 'p-1', issues: [], taskNames: [], today: '2026-07-26', canCreate: false, canUpdate: false }) },
+  { route: 'changes', component: 'change-orders-workspace', tabs: 3, render: () => view(ChangeOrdersWorkspace, { projects: [{ id: 'p-1', code: 'LAG-1', name: 'Lagos site' }], project: { id: 'p-1', code: 'LAG-1', name: 'Lagos site', approvedBudgetMinor: 0, contractMinor: 0, approvedChangeDays: 0 }, costCodes: [], rfis: [], issues: [], contractors: [], orders: [], canPropose: false, canRequest: false, canQuote: false, canAssess: false, canDecide: false, canPost: false, actorId: 'reviewer' }) },
   { route: 'boq', component: 'boq-workspace', tabs: 2, render: () => view(BoqWorkspace, { projects: [], canMutate: false }) },
   { route: 'procurement', component: 'procurement-workspace', tabs: 4, render: () => view(ProcurementWorkspace, { requests: [], rfqs: [], orders: [], kpis: { pending: 0, openPoMinor: 0, lateDeliveries: 0, exceptions: 0 }, canMutate: false }) },
   { route: 'materials', component: 'materials-workspace', tabs: 3, render: () => view(MaterialsWorkspace, { materials: [], trail: [], movements: [], projectName: 'Lagos site', projectId: 'project-1', kpis: { stockValueMinor: 0, belowReorder: 0, leakageValueMinor: 0, anomalies: 0 }, canMutate: false }) },
@@ -75,10 +78,10 @@ const cases = [
 beforeEach(() => vi.clearAllMocks());
 
 describe('Deep Clinexa composition across the complete Construction module', () => {
-  it('explicitly covers all 27 construction routes and all workspace files, excluding only the composed helper', () => {
+  it('explicitly covers all 28 construction routes and all workspace files, excluding only the composed helper', () => {
     const routes = ['', ...readdirSync(resolve(process.cwd(), 'src/app/(ops)/construction'), { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name)];
     expect(cases.map((item) => item.route).sort()).toEqual(routes.sort());
-    expect(cases).toHaveLength(27);
+    expect(cases).toHaveLength(28);
     expect(constructionFiles.slice().sort()).toEqual(cases.map((item) => item.component).sort());
   });
 

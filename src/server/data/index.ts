@@ -345,7 +345,15 @@ export const repos = {
   constructionStock: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionStock, o ?? { limit: 500 }) },
   constructionMovements: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionMovements, o ?? { limit: 500 }) },
   constructionCostCodes: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionCostCodes, o ?? { limit: 200 }) },
-  constructionVariations: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionVariations, o ?? { limit: 100 }) },
+  constructionVariations: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionVariations.filter((row) => {
+    if (a.constructionSubcontractorIds && (!row.subcontractorId || !a.constructionSubcontractorIds.includes(row.subcontractorId))) return false;
+    if (a.constructionPackageIds === undefined) return true;
+    if (!row.workPackageId) return false;
+    const project = db.constructionProjects.find((item) => item.tenantId === row.tenantId && item.id === row.projectId);
+    const pack = project?.mobilisation?.workPackages.find((item) => item.id === row.workPackageId);
+    return a.constructionPackageIds.includes(row.workPackageId)
+      || Boolean(pack?.costCode && a.constructionPackageIds.includes(`${row.projectId}:${pack.costCode}`));
+  }), o ?? { limit: 100 }) },
   constructionWorkers: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionWorkers, o ?? { limit: 300 }) },
   constructionAttendance: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionAttendance, o ?? { limit: 500 }) },
   constructionDocs: { list: (a: Actor, o?: ListOpts) => scopedList(a, 'reports_analytics', db.constructionDocs, o ?? { limit: 200 }) },
