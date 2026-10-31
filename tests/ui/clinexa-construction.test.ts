@@ -61,7 +61,7 @@ describe('Clinexa coverage of every Construction page', () => {
     const routes = ['', ...readdirSync(root, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name)];
     expect(coverage.map(([route]) => route).sort()).toEqual(routes.sort());
     expect(coverage).toHaveLength(28);
-    expect(coverage.map(([, file]) => file + '.tsx').sort()).toEqual(readdirSync(resolve(process.cwd(), 'src/components/construction')).filter((file) => file.endsWith('.tsx') && !['construction-ui.tsx', 'project-setup-workspace.tsx', 'drawing-controls.tsx', 'rfi-workspace.tsx'].includes(file)).sort());
+    expect(coverage.map(([, file]) => file + '.tsx').sort()).toEqual(readdirSync(resolve(process.cwd(), 'src/components/construction')).filter((file) => file.endsWith('.tsx') && !['construction-ui.tsx', 'project-setup-workspace.tsx', 'drawing-controls.tsx', 'rfi-workspace.tsx', 'safety-operations.tsx'].includes(file)).sort());
     const composed = view('construction-ui');
     for (const primitive of ['Card', 'CardHeader', 'KpiCard', 'Button', 'IconButton', 'PortalDialog']) expect(composed).toMatch(new RegExp(`<${primitive}(?:\\s|>)`));
   });

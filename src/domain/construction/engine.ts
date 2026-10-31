@@ -1031,7 +1031,7 @@ export function scoreSubcontractors(subs: readonly Subcontractor[]): SubScore[] 
 
 /* --- safety --------------------------------------------------------------- */
 
-export type SafetyStats = { daysSinceLTI: number | null; lostTimeEvents: number; nearMisses: number; observations: number; activePermits: number; expiredPermits: number; talksThisMonth: number; score: number; band: Tone };
+export type SafetyStats = { daysSinceLTI: number | null; lostTimeEvents: number; nearMisses: number; observations: number; activePermits: number; expiredPermits: number; talksThisMonth: number; openCorrectiveActions: number; overdueCorrectiveActions: number; score: number; band: Tone };
 
 /** Site-safety posture: days since the last lost-time injury, permit hygiene and
  *  reporting culture (near-misses reported is a POSITIVE signal). */
@@ -1039,29 +1039,32 @@ export function safetyStats(events: readonly SafetyEvent[], permits: readonly Sa
   const lti = events.filter((e) => e.kind === 'lost_time').map((e) => Date.parse(e.atISO)).sort((a, b) => b - a)[0];
   const daysSinceLTI = lti ? Math.floor((nowMs - lti) / DAY) : null;
   const openLti = events.filter((e) => e.kind === 'lost_time' && !e.closed).length;
-  const expired = permits.filter((p) => p.status === 'active' && isOverdue(p.validToISO, nowMs)).length;
+  const todayISO = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Lagos', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(nowMs));
+  const expired = permits.filter((p) => ['approved', 'active'].includes(p.status) && p.validToISO < todayISO).length;
+  const openCorrectiveActions = events.filter((e) => e.corrective && e.corrective.status !== 'verified').length;
+  const overdueCorrectiveActions = events.filter((e) => e.corrective && e.corrective.status !== 'verified' && e.corrective.dueISO < todayISO).length;
   const talksThisMonth = talks.filter((t) => nowMs - Date.parse(t.atISO) <= 30 * DAY).length;
   const nearMisses = events.filter((e) => e.kind === 'near_miss').length;
   // Reporting culture earns credit; lapsed permits and open LTIs cost.
-  const score = Math.max(0, Math.min(100, 70 + Math.min(15, nearMisses * 3) + Math.min(15, talksThisMonth * 5) - expired * 10 - openLti * 20));
+  const score = Math.max(0, Math.min(100, 70 + Math.min(15, nearMisses * 3) + Math.min(15, talksThisMonth * 5) - expired * 10 - openLti * 20 - overdueCorrectiveActions * 10));
   return {
     daysSinceLTI, lostTimeEvents: events.filter((e) => e.kind === 'lost_time').length, nearMisses,
     observations: events.filter((e) => e.kind === 'observation').length,
-    activePermits: permits.filter((p) => p.status === 'active').length, expiredPermits: expired, talksThisMonth,
+    activePermits: permits.filter((p) => p.status === 'active' && p.validToISO >= todayISO).length, expiredPermits: expired, talksThisMonth, openCorrectiveActions, overdueCorrectiveActions,
     score, band: score >= 85 ? 'success' : score >= 65 ? 'warn' : 'danger',
   };
 }
 
 /** Two live permits overlapping in time AND place — the classic hot-work clash. */
 export function permitClashes(permits: readonly SafetyPermit[]): { a: SafetyPermit; b: SafetyPermit }[] {
-  const live = permits.filter((p) => p.status === 'active' || p.status === 'requested');
+  const live = permits.filter((p) => ['requested', 'approved', 'active'].includes(p.status));
   const out: { a: SafetyPermit; b: SafetyPermit }[] = [];
   for (let i = 0; i < live.length; i++) for (let j = i + 1; j < live.length; j++) {
     const a = live[i], b = live[j];
-    if (a.location !== b.location) continue;
+    if (a.projectId !== b.projectId || a.location.trim().toLowerCase() !== b.location.trim().toLowerCase()) continue;
     const start = Math.max(Date.parse(a.validFromISO), Date.parse(b.validFromISO));
     const end = Math.min(Date.parse(a.validToISO), Date.parse(b.validToISO));
-    if (end > start) out.push({ a, b });
+    if (end >= start) out.push({ a, b });
   }
   return out;
 }

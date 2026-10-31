@@ -325,21 +325,35 @@ export type Subcontractor = TenantScoped & {
 /* --- safety (site HSE) ---------------------------------------------------- */
 
 export type SafetyPermitType = 'hot_work' | 'height' | 'excavation' | 'confined_space' | 'lifting' | 'electrical';
-export type SafetyPermitStatus = 'requested' | 'active' | 'closed' | 'expired';
+export type SafetyPermitStatus = 'requested' | 'approved' | 'active' | 'closed' | 'rejected' | 'expired';
 export type SafetyPermit = TenantScoped & {
   id: string; ref: string; projectId: string; type: SafetyPermitType; zoneId?: string; location: string;
   requestedBy: string; supervisor: string; status: SafetyPermitStatus;
   validFromISO: string; validToISO: string; controls: string[];
+  requestedById?: string; requestedAtISO?: string;
+  reviewedById?: string; reviewedAtISO?: string; reviewNote?: string;
+  activatedById?: string; activatedAtISO?: string; activationNote?: string;
+  closedById?: string; closedAtISO?: string; closureNote?: string;
 };
 
 export type SafetyEventKind = 'near_miss' | 'first_aid' | 'lost_time' | 'observation';
+export type SafetyCorrectiveAction = {
+  ownerUserId: string; ownerName: string; dueISO: string; description: string;
+  status: 'assigned' | 'in_progress' | 'awaiting_review' | 'returned' | 'verified';
+  assignedById: string; assignedAtISO: string; startedAtISO?: string;
+  evidenceReference?: string; completionNote?: string; submittedById?: string; submittedAtISO?: string;
+  reviewedById?: string; reviewedAtISO?: string; reviewNote?: string;
+  escalatedById?: string; escalatedAtISO?: string; escalationNote?: string;
+};
 export type SafetyEvent = TenantScoped & {
   id: string; projectId: string; kind: SafetyEventKind; title: string; zoneId?: string;
   atISO: string; reportedBy: string; lostDays: number; closed: boolean; action?: string;
+  corrective?: SafetyCorrectiveAction;
 };
 
 export type ToolboxTalk = TenantScoped & {
   id: string; projectId: string; topic: string; atISO: string; attendees: number; deliveredBy: string;
+  location?: string; recordedById?: string; recordedAtISO?: string;
 };
 
 /* --- structured reason codes ---------------------------------------------- */
