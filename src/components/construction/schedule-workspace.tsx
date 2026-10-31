@@ -8,7 +8,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { CalendarClock, Zap, Flag, TriangleAlert, ChevronRight, Check } from 'lucide-react';
 import { humanizeStatus, toneVar, type Tone } from '@/lib/status-tones';
-import { updateTaskProgress, advanceMilestone, escalateTaskToIssue } from '@/server/actions/construction';
+import { updateTaskProgress, advanceMilestone, escalateTaskToIssue, recordProgrammeDelay } from '@/server/actions/construction';
 import { PageTabs } from '@/components/ui/page-tabs';
 
 export type GanttTask = {
@@ -16,16 +16,20 @@ export type GanttTask = {
   plannedStartISO: string; plannedFinishISO: string; actualStartISO?: string;
   percentComplete: number; status: string; critical: boolean; slackDays: number;
   offsetDays: number; durationDays: number; downstream: string[];
+  forecastStartISO?: string; forecastFinishISO?: string; delayDays?: number; delayReasonCodeId?: string;
 };
 export type MilestoneRow = { id: string; name: string; dueISO: string; status: string; band: Tone };
+export type LookAheadGroup = { weeks: 2 | 4 | 6; rows: { id: string; name: string; owner: string; startISO: string; finishISO: string; state: 'overdue' | 'blocked' | 'ready' | 'upcoming'; daysUntilStart: number }[] };
+export type DelayReason = { id: string; label: string; requiresNote: boolean };
 
 const STATUS_TONE: Record<string, Tone> = { not_started: 'muted', in_progress: 'progress', blocked: 'danger', done: 'success' };
 const displayDate = (value: string) => Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Africa/Lagos' }) : 'Not recorded';
 
-export function ScheduleWorkspace({ projectName, tasks, milestones, kpis, canMutate, canCreate = false }: {
+export function ScheduleWorkspace({ projectName, tasks, milestones, lookAhead = [], delayReasons = [], kpis, canMutate, canCreate = false }: {
   projectName: string;
   tasks: GanttTask[]; milestones: MilestoneRow[];
-  kpis: { durationDays: number; criticalCount: number; blocked: number; forecastFinishISO: string; slipDays: number; plannedFinishISO: string; approvedChangeDays?: number; changeDaysInBaseline?: number };
+  lookAhead?: LookAheadGroup[]; delayReasons?: DelayReason[];
+  kpis: { durationDays: number; criticalCount: number; blocked: number; forecastFinishISO: string; networkFinishISO?: string; slipDays: number; plannedFinishISO: string; approvedChangeDays?: number; changeDaysInBaseline?: number };
   canMutate: boolean;
   canCreate?: boolean;
 }) {
@@ -33,6 +37,7 @@ export function ScheduleWorkspace({ projectName, tasks, milestones, kpis, canMut
 
   const [hover, setHover] = useState<string | null>(null);
   const [editing, setEditing] = useState<GanttTask | null>(null);
+  const [horizon, setHorizon] = useState<2 | 4 | 6>(2);
   const [toast, setToast] = useState<string | null>(null);
   const flash = (m: string) => { setToast(m); setTimeout(() => setToast(null), 2600); };
   const { act, confirmation, pending } = useConstructionReview(() => router.refresh(), flash);
@@ -51,8 +56,9 @@ export function ScheduleWorkspace({ projectName, tasks, milestones, kpis, canMut
             <div className="text-[14px] text-text-3">CRITICAL PATH · {projectName.toUpperCase()}</div>
             <h2 className="text-[21px] font-medium tracking-[-0.02em] leading-tight mt-0.5">{kpis.criticalCount} tasks on the critical chain</h2>
             <div className="text-[14px] text-text-3 mt-0.5">
-              {hasForecast ? <>{kpis.durationDays}-day network · estimated finish <span className="font-medium" style={{ color: toneVar(kpis.slipDays > 0 ? 'danger' : 'success') }}>{displayDate(kpis.forecastFinishISO)}</span>{kpis.slipDays > 0 ? ` · ${kpis.slipDays}d later than plan` : ' · on plan'}</> : 'Add a project and schedule to calculate a finish forecast.'}
+              {hasForecast ? <>{kpis.durationDays}-working-day network · estimated finish <span className="font-medium" style={{ color: toneVar(kpis.slipDays > 0 ? 'danger' : 'success') }}>{displayDate(kpis.forecastFinishISO)}</span>{kpis.slipDays > 0 ? ` · ${kpis.slipDays} calendar days later than plan` : ' · on plan'}</> : 'Add a project and schedule to calculate a finish forecast.'}
             </div>
+            {kpis.networkFinishISO && <p className="text-[13px] text-text-3 mt-1">Task-network finish {displayDate(kpis.networkFinishISO)} · combined forecast also considers earned-value performance.</p>}
             {hasForecast && (kpis.approvedChangeDays ?? 0) > 0 ? <p className="text-[13px] text-text-3 mt-1">Approved baseline {displayDate(kpis.plannedFinishISO)} · {kpis.changeDaysInBaseline ?? 0} approved working days included · {Math.max(0, (kpis.approvedChangeDays ?? 0) - (kpis.changeDaysInBaseline ?? 0))} approved working days in the current forecast</p> : null}
           </div>
         </div>
@@ -78,7 +84,7 @@ export function ScheduleWorkspace({ projectName, tasks, milestones, kpis, canMut
                           {isCascade && <StatusPill status="Downstream dependency" tone="warn" />}
                         </div>
                         <p className={styles.text}>{t.owner} · {t.phase}</p>
-                        <p className={styles.metadata}>{displayDate(t.plannedStartISO)} → {displayDate(t.plannedFinishISO)} · {t.durationDays} days · {t.critical ? 'zero float' : `${t.slackDays} days float`}</p>
+                        <p className={styles.metadata}>Plan {displayDate(t.plannedStartISO)} → {displayDate(t.plannedFinishISO)} · forecast {displayDate(t.forecastStartISO ?? t.plannedStartISO)} → {displayDate(t.forecastFinishISO ?? t.plannedFinishISO)} · {t.durationDays} working days · {t.critical ? 'zero float' : `${t.slackDays} working days float`}{t.delayDays ? ` · ${t.delayDays} coded delay days` : ''}</p>
                         {t.actualStartISO && <p className={styles.metadata}>Recorded start: {displayDate(t.actualStartISO)}</p>}
                       </div>
                       <div className={styles.ganttControls}>
@@ -97,6 +103,13 @@ export function ScheduleWorkspace({ projectName, tasks, milestones, kpis, canMut
               </div></div>
             </ConstructionPanel>
           </div>
+        },
+        {
+          id: 'lookahead', label: 'Look-ahead', content: <div className={styles.stack}><ConstructionPanel>
+            <div className={styles.header}><CardHeader title="Rolling look-ahead" subtitle="Upcoming and overdue work from the live working-day network. Refreshes as progress and delay reasons change." action={<div className={styles.inline}>{([2, 4, 6] as const).map((weeks) => <Button key={weeks} type="button" variant={horizon === weeks ? 'primary' : undefined} onClick={() => setHorizon(weeks)} aria-pressed={horizon === weeks}>{weeks} weeks</Button>)}</div>} /></div>
+            {(lookAhead.find((group) => group.weeks === horizon)?.rows ?? []).map((row) => <div key={row.id} className={`${styles.row} ${styles.toolbar}`}><div><h3 className={styles.title}>{row.name}</h3><p className={styles.metadata}>{row.owner} · {displayDate(row.startISO)} → {displayDate(row.finishISO)} · {row.daysUntilStart <= 0 ? 'Due now or earlier' : `Starts in ${row.daysUntilStart} calendar days`}</p></div><StatusPill status={humanizeStatus(row.state)} tone={row.state === 'overdue' ? 'danger' : row.state === 'blocked' ? 'warn' : row.state === 'ready' ? 'success' : 'info'} /></div>)}
+            {!lookAhead.find((group) => group.weeks === horizon)?.rows.length && <ConstructionEmpty title="No tasks in this window" />}
+          </ConstructionPanel></div>
         },
         {
           id: 'milestones', label: 'Milestones', content: <div className={styles.stack}>
@@ -131,27 +144,32 @@ export function ScheduleWorkspace({ projectName, tasks, milestones, kpis, canMut
 
       {/* Milestones */}
 
-      {editing && <ProgressDialog task={editing} canCreate={canCreate} onClose={() => setEditing(null)} onDone={(m) => { setEditing(null); flash(m); }} />}
+      {editing && <ProgressDialog task={editing} delayReasons={delayReasons} canCreate={canCreate} onClose={() => setEditing(null)} onDone={(m) => { setEditing(null); flash(m); }} />}
       {confirmation}
       {toast && <ConstructionToast>{toast}</ConstructionToast>}
     </ConstructionFrame>
   );
 }
 
-function ProgressDialog({ task, canCreate, onClose, onDone }: { task: GanttTask; canCreate: boolean; onClose: () => void; onDone: (m: string) => void }) {
+function ProgressDialog({ task, delayReasons, canCreate, onClose, onDone }: { task: GanttTask; delayReasons: DelayReason[]; canCreate: boolean; onClose: () => void; onDone: (m: string) => void }) {
   const router = useRouter();
   const [pct, setPct] = useState(String(task.percentComplete));
+  const [delayDays, setDelayDays] = useState(String(task.delayDays ?? 0));
+  const [reasonCodeId, setReasonCodeId] = useState(task.delayReasonCodeId ?? delayReasons[0]?.id ?? '');
+  const [delayNote, setDelayNote] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useConstructionSave(setError);
   const [reviewEscalation, setReviewEscalation] = useState(false);
   function save() { setError(null); start(async () => { const r = await updateTaskProgress(task.id, Number(pct)); if (!r.ok) { setError(r.error); return; } router.refresh(); onDone(`${task.name} → ${pct}%`); }); }
   function escalate() { start(async () => { const r = await escalateTaskToIssue(task.id); if (r.ok) { router.refresh(); onDone('Escalated to a site issue'); } else setError(r.error); }); }
+  function saveDelay() { start(async () => { const r = await recordProgrammeDelay(task.id, { workingDays: Number(delayDays), reasonCodeId, note: delayNote }); if (r.ok) { router.refresh(); onDone('Forecast delay recorded'); } else setError(r.error); }); }
   return (
     <ConstructionDialog title={"Update progress"} onClose={onClose} pending={pending}>
       <div className={styles.stack}>
       <Card><CardHeader title={task.name} subtitle={`${task.owner} · ${task.critical ? 'on the critical path' : `${task.slackDays} days float`}`} /></Card>
       <label className={styles.field}>Percent complete<input aria-label="Percent complete" type="range" min="0" max="100" step="5" value={pct} onChange={(e) => setPct(e.target.value)} className={styles.range} aria-valuetext={`${pct}% complete`} /></label>
       <output className={styles.value}>{pct}%</output>
+      {delayReasons.length > 0 && <Card className={styles.section}><CardHeader title="Forecast delay" subtitle="Record a reason and working-day impact. The approved baseline stays unchanged; enter zero when recovered." /><div className={styles.stack}><label className={styles.field}>Working days<input type="number" min="0" max="120" value={delayDays} onChange={(event) => setDelayDays(event.target.value)} /></label><label className={styles.field}>Reason<select value={reasonCodeId} onChange={(event) => setReasonCodeId(event.target.value)}>{delayReasons.map((reason) => <option key={reason.id} value={reason.id}>{reason.label}</option>)}</select></label><label className={styles.field}>Site note<textarea value={delayNote} onChange={(event) => setDelayNote(event.target.value)} required={delayReasons.find((reason) => reason.id === reasonCodeId)?.requiresNote} /></label><Button type="button" disabled={pending || !reasonCodeId} onClick={saveDelay}>Save forecast impact</Button></div></Card>}
       {task.critical && <p className={styles.notice}>This task has zero float — every day it slips moves the calculated project finish. Confirm the recorded progress against site evidence.</p>}
       {error && <div role="alert" className={styles.error}>{error}</div>}
       <div className={styles.toolbar}>

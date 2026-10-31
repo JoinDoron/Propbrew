@@ -40,11 +40,11 @@ const entries = readdirSync(directory).filter((file) => file.endsWith('.ts')).fl
 const operational = entries.filter(({ key }) => !nonOperational.has(key));
 
 describe('operational action durability coverage', () => {
-  it('accounts for all 257 operational actions and the explicit separate account/onboarding actions', () => {
-    expect(operational).toHaveLength(257);
+  it('accounts for all 258 operational actions and the explicit separate account/onboarding actions', () => {
+    expect(operational).toHaveLength(258);
     expect(entries.filter(({ key }) => nonOperational.has(key)).map(({ key }) => key).sort()).toEqual([...nonOperational].sort());
     expect(operational.filter(({ key }) => readOnly.has(key))).toHaveLength(2);
-    expect(operational.filter(({ key }) => !readOnly.has(key))).toHaveLength(255);
+    expect(operational.filter(({ key }) => !readOnly.has(key))).toHaveLength(256);
   });
 
   it.each(operational)('protects the entire authenticated $key body', ({ ast, fn, key, file }) => {

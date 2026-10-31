@@ -85,6 +85,11 @@ export type Task = TenantScoped & {
   percentComplete: number; status: TaskStatus; priority: 'low' | 'medium' | 'high';
   /** dependency task ids (finish-to-start) — drives the critical path. */
   dependsOn: string[];
+  /** Explicit finish-to-start lag in project working days, keyed by predecessor id.
+   * Legacy tasks without this map infer the gap from their approved dates. */
+  dependencyLags?: Record<string, number>;
+  /** Current, reversible live forecast impact. Approved baseline dates stay intact. */
+  programmeDelay?: { workingDays: number; reasonCodeId: string; note?: string; recordedBy: string; recordedAtISO: string };
   budget: Money;
   /** optional crash economics (present on tasks that can be accelerated). */
   crash?: TaskCrash;

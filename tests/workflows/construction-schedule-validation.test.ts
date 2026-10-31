@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { actorForCompanyMember } from '@/lib/auth/company-policy';
 import type { Project, Task, Variation } from '@/domain/construction/types';
-import { criticalPath, forecastFinishISO, taskDurationDays } from '@/domain/construction';
+import { forecastFinishISO, programmeNetwork } from '@/domain/construction';
 import { createDemoWorkspaceState } from '@/server/data/demo-state';
 import { runWithRecordContext, type WorkspaceRecordState } from '@/server/data/record-context';
-import { saveProjectCalendar, saveProjectPhase, saveProgrammeTask, submitBaselineRevision, decideBaselineRevision } from '@/server/actions/construction';
+import { saveProjectCalendar, saveProjectPhase, saveProgrammeTask, submitBaselineRevision, decideBaselineRevision, recordProgrammeDelay } from '@/server/actions/construction';
 import { proposeConstructionChange, requestConstructionChangePricing, submitConstructionChangeQuote, assessConstructionChange, decideConstructionChange, postConstructionChange } from '@/server/actions/construction-change-orders';
 
 const boundary = vi.hoisted(() => ({ actor: vi.fn() }));
@@ -25,6 +25,21 @@ const tasks = () => (state.collections.constructionTasks as Task[]).filter((row)
 beforeEach(() => { state = createDemoWorkspaceState(tenant); as('programme-manager', 'project-manager'); });
 
 describe('Construction programme validation', () => {
+  it('persists a coded delay in the live forecast, audits it and leaves approved dates untouched', async () => {
+    const row = tasks().find((task) => task.status !== 'done')!;
+    const originalFinish = row.plannedFinishISO;
+    const originalBaseline = project().plannedFinishISO;
+    const before = programmeNetwork(tasks(), project().mobilisation?.calendar ?? { workingDays: [1, 2, 3, 4, 5, 6], holidays: [] }, '2026-07-01').finishISO.get(row.id);
+    expect((await run(() => recordProgrammeDelay(row.id, { workingDays: 3, reasonCodeId: 'rc-d2', note: 'Rain stopped slab pour.' }))).ok).toBe(true);
+    expect(row.programmeDelay?.workingDays).toBe(3);
+    expect(row.plannedFinishISO).toBe(originalFinish);
+    expect(project().plannedFinishISO).toBe(originalBaseline);
+    expect(programmeNetwork(tasks(), project().mobilisation?.calendar ?? { workingDays: [1, 2, 3, 4, 5, 6], holidays: [] }, '2026-07-01').finishISO.get(row.id)).not.toBe(before);
+    expect((state.collections.constructionReasonEvents as { subjectRef: string; impactDays: number }[]).at(-1)).toMatchObject({ subjectRef: row.id, impactDays: 3 });
+    expect(await run(() => recordProgrammeDelay(row.id, { workingDays: 2, reasonCodeId: 'rc-v1' }))).toMatchObject({ ok: false });
+    expect((await run(() => recordProgrammeDelay(row.id, { workingDays: 0, reasonCodeId: 'rc-d2' }))).ok).toBe(true);
+    expect((state.collections.constructionReasonEvents as { impactDays: number }[]).at(-1)?.impactDays).toBe(-3);
+  });
   it('carries a real task network through baseline approval, priced change, finance posting and revised baseline without double counting dates', async () => {
     const p = project();
     expect((await run(() => saveProjectCalendar(p.id, { name: 'Lagos site calendar', workingDays: [1, 2, 3, 4, 5, 6], hoursPerDay: 8, timeZone: 'Africa/Lagos', holidays: ['2027-07-01'] }))).ok).toBe(true);
@@ -33,11 +48,12 @@ describe('Construction programme validation', () => {
     const first = { projectId: p.id, phaseId: phase.id, name: 'Roof reinforcement', owner: 'Site engineer', plannedStartISO: '2027-01-04', plannedFinishISO: '2027-01-09', priority: 'high' as const, dependsOn: [], budgetNaira: 1_000_000 };
     expect((await run(() => saveProgrammeTask(first))).ok).toBe(true);
     const reinforcement = tasks().find((row) => row.name === first.name)!;
-    const pour = { ...first, name: 'Roof concrete pour', plannedStartISO: '2027-01-11', plannedFinishISO: '2027-01-16', dependsOn: [reinforcement.id] };
+    const pour = { ...first, name: 'Roof concrete pour', plannedStartISO: '2027-01-11', plannedFinishISO: '2027-01-16', dependsOn: [reinforcement.id], dependencyLags: { [reinforcement.id]: 3 } };
     expect((await run(() => saveProgrammeTask(pour))).ok).toBe(true);
     expect(await run(() => saveProgrammeTask({ ...pour, name: 'Invalid same-day start', plannedStartISO: '2027-01-09' }))).toMatchObject({ ok: false });
-    const network = criticalPath(tasks().map((row) => ({ id: row.id, durationDays: taskDurationDays(row), dependsOn: row.dependsOn })));
-    expect(network.es.get(tasks().find((row) => row.name === pour.name)!.id)).toBe(network.ef.get(reinforcement.id));
+    const network = programmeNetwork(tasks(), p.mobilisation!.calendar);
+    expect(network.startISO.get(tasks().find((row) => row.name === pour.name)!.id)).toBe('2027-01-14');
+    expect(await run(() => submitBaselineRevision(p.id, { name: 'Too early', reason: 'Does not include the dependency gap', plannedFinishISO: '2027-01-16' }))).toMatchObject({ ok: false });
 
     expect((await run(() => submitBaselineRevision(p.id, { name: 'Contract programme', reason: 'Client delivery programme', plannedFinishISO: '2027-06-30' }))).ok).toBe(true);
     const b1 = p.mobilisation!.baselines[0];

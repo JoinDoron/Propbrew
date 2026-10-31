@@ -66,8 +66,8 @@ describe('Construction delivery Clinexa composition', () => {
     for (const id of ids) { const position = code.indexOf(`id: '${id}'`); expect(position).toBeGreaterThan(previous); previous = position; }
   });
 
-  it('keeps all 23 delivery panels mounted without a global demo or snapshot banner', () => {
-    const screens = [[renderToStaticMarkup(createElement(ScheduleWorkspace, schedule)), 3], [renderToStaticMarkup(createElement(SiteWorkspace, site)), 4], [renderToStaticMarkup(createElement(TwinWorkspace, twin)), 2], [renderToStaticMarkup(createElement(ProjectsWorkspace, projects)), 2], [renderToStaticMarkup(createElement(FieldCapture, field)), 6], [renderToStaticMarkup(createElement(SafetyWorkspace, safety)), 3], [renderToStaticMarkup(createElement(WorkforceWorkspace, workforce)), 2], [renderToStaticMarkup(createElement(TimesheetsWorkspace, timesheets)), 3]] as const;
+  it('keeps all 24 delivery panels mounted without a global demo or snapshot banner', () => {
+    const screens = [[renderToStaticMarkup(createElement(ScheduleWorkspace, schedule)), 4], [renderToStaticMarkup(createElement(SiteWorkspace, site)), 4], [renderToStaticMarkup(createElement(TwinWorkspace, twin)), 2], [renderToStaticMarkup(createElement(ProjectsWorkspace, projects)), 2], [renderToStaticMarkup(createElement(FieldCapture, field)), 6], [renderToStaticMarkup(createElement(SafetyWorkspace, safety)), 3], [renderToStaticMarkup(createElement(WorkforceWorkspace, workforce)), 2], [renderToStaticMarkup(createElement(TimesheetsWorkspace, timesheets)), 3]] as const;
     for (const [html, count] of screens) { expect(html.match(/role="tabpanel"/g)).toHaveLength(count); expect(html.match(/hidden=""/g)).toHaveLength(count - 1); expect(html).not.toContain('Recorded snapshot'); expect(html).not.toContain('Company records'); expect(html).not.toMatch(/NaN|Infinity|undefined/); }
   });
 

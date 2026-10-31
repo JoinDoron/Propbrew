@@ -120,7 +120,7 @@ export function projectHealth(spi: number, cpi: number, openCritical: number): {
 
 /* --- critical path (CPM) -------------------------------------------------- */
 
-export type CpmTask = { id: string; durationDays: number; dependsOn: readonly string[] };
+export type CpmTask = { id: string; durationDays: number; dependsOn: readonly string[]; startOffsetDays?: number; dependencyLagDays?: Readonly<Record<string, number>> };
 export type CpmResult = { es: Map<string, number>; ef: Map<string, number>; ls: Map<string, number>; lf: Map<string, number>; slack: Map<string, number>; critical: Set<string>; durationDays: number };
 
 /** Forward+backward pass over a finish-to-start DAG → earliest/latest times and
@@ -128,21 +128,26 @@ export type CpmResult = { es: Map<string, number>; ef: Map<string, number>; ls: 
 export function criticalPath(tasks: readonly CpmTask[]): CpmResult {
   const byId = new Map(tasks.map((t) => [t.id, t]));
   const es = new Map<string, number>(), ef = new Map<string, number>();
+  const visiting = new Set<string>();
   const efOf = (id: string): number => {
     if (ef.has(id)) return ef.get(id)!;
+    if (visiting.has(id)) throw new Error('Task dependencies contain a cycle.');
+    visiting.add(id);
     const t = byId.get(id)!;
-    const start = t.dependsOn.length ? Math.max(...t.dependsOn.filter((d) => byId.has(d)).map((d) => efOf(d))) : 0;
-    es.set(id, start); const finish = start + t.durationDays; ef.set(id, finish); return finish;
+    if (!Number.isSafeInteger(t.durationDays) || t.durationDays < 1) throw new Error('Task duration must be a positive whole working day.');
+    for (const lag of Object.values(t.dependencyLagDays ?? {})) if (!Number.isSafeInteger(lag) || lag < 0) throw new Error('Dependency lag must be a non-negative whole working day.');
+    const start = Math.max(t.startOffsetDays ?? 0, ...t.dependsOn.filter((d) => byId.has(d)).map((d) => efOf(d) + (t.dependencyLagDays?.[d] ?? 0)));
+    es.set(id, start); const finish = start + t.durationDays; ef.set(id, finish); visiting.delete(id); return finish;
   };
   for (const t of tasks) efOf(t.id);
   const projectEnd = Math.max(0, ...[...ef.values()]);
-  const dependents = new Map<string, string[]>();
-  for (const t of tasks) for (const d of t.dependsOn) if (byId.has(d)) dependents.set(d, [...(dependents.get(d) ?? []), t.id]);
+  const dependents = new Map<string, { id: string; lag: number }[]>();
+  for (const t of tasks) for (const d of t.dependsOn) if (byId.has(d)) dependents.set(d, [...(dependents.get(d) ?? []), { id: t.id, lag: t.dependencyLagDays?.[d] ?? 0 }]);
   const lf = new Map<string, number>(), ls = new Map<string, number>();
   const lfOf = (id: string): number => {
     if (lf.has(id)) return lf.get(id)!;
     const deps = dependents.get(id) ?? [];
-    const finish = deps.length ? Math.min(...deps.map((d) => lsOf(d))) : projectEnd;
+    const finish = deps.length ? Math.min(...deps.map((d) => lsOf(d.id) - d.lag)) : projectEnd;
     lf.set(id, finish); ls.set(id, finish - byId.get(id)!.durationDays); return finish;
   };
   const lsOf = (id: string): number => { lfOf(id); return ls.get(id)!; };
@@ -150,6 +155,75 @@ export function criticalPath(tasks: readonly CpmTask[]): CpmResult {
   const slack = new Map<string, number>(), critical = new Set<string>();
   for (const t of tasks) { const s = (ls.get(t.id) ?? 0) - (es.get(t.id) ?? 0); slack.set(t.id, s); if (s <= 0) critical.add(t.id); }
   return { es, ef, ls, lf, slack, critical, durationDays: projectEnd };
+}
+
+export type ProgrammeCalendar = { workingDays: readonly number[]; holidays: readonly string[] };
+export type ProgrammeNetwork = CpmResult & {
+  startISO: Map<string, string>; finishISO: Map<string, string>;
+  projectFinishISO: string | null; workingDayISO: readonly string[];
+};
+
+/** Date-aware finish-to-start network. All offsets, gaps and float use the
+ * project's own working days; an explicit lag supersedes the legacy date gap. */
+export function programmeNetwork(tasks: readonly Task[], calendar: ProgrammeCalendar, asOfISO?: string): ProgrammeNetwork {
+  const empty = criticalPath([]);
+  if (!tasks.length) return { ...empty, startISO: new Map(), finishISO: new Map(), projectFinishISO: null, workingDayISO: [] };
+  if (!calendar.workingDays.length) throw new Error('Programme calendar needs a working day.');
+  const earliest = tasks.reduce((date, task) => task.plannedStartISO < date ? task.plannedStartISO : date, tasks[0].plannedStartISO);
+  const latest = tasks.reduce((date, task) => task.plannedFinishISO > date ? task.plannedFinishISO : date, asOfISO && asOfISO > tasks[0].plannedFinishISO ? asOfISO : tasks[0].plannedFinishISO);
+  const holidays = new Set(calendar.holidays);
+  const workingDayISO: string[] = [];
+  const startMs = Date.parse(`${earliest}T00:00:00Z`);
+  const endMs = Date.parse(`${latest}T00:00:00Z`) + 3650 * DAY;
+  for (let dateMs = startMs; dateMs <= endMs; dateMs += DAY) {
+    const iso = new Date(dateMs).toISOString().slice(0, 10);
+    if (calendar.workingDays.includes(new Date(dateMs).getUTCDay()) && !holidays.has(iso)) workingDayISO.push(iso);
+  }
+  const onOrAfter = (iso: string) => {
+    let lo = 0, hi = workingDayISO.length;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (workingDayISO[mid] < iso) lo = mid + 1; else hi = mid; }
+    return Math.min(lo, workingDayISO.length - 1);
+  };
+  const onOrBefore = (iso: string) => {
+    let lo = 0, hi = workingDayISO.length;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (workingDayISO[mid] <= iso) lo = mid + 1; else hi = mid; }
+    return Math.max(0, lo - 1);
+  };
+  const planned = new Map(tasks.map((task) => [task.id, {
+    start: onOrAfter(task.plannedStartISO), finish: onOrBefore(task.plannedFinishISO),
+  }]));
+  const networkTasks: CpmTask[] = tasks.map((task) => {
+    const dates = planned.get(task.id)!;
+    const duration = Math.max(1, dates.finish - dates.start + 1);
+    const completed = task.status === 'done' || task.percentComplete >= 100;
+    const remaining = completed ? duration : asOfISO ? Math.max(1, Math.ceil(duration * (1 - task.percentComplete / 100))) : duration;
+    const actualFinish = completed && task.actualFinishISO ? onOrBefore(task.actualFinishISO) : null;
+    const offset = completed ? dates.start : Math.max(dates.start, asOfISO ? onOrAfter(asOfISO) : 0);
+    const lag = Object.fromEntries(task.dependsOn.map((id) => {
+      const predecessor = planned.get(id);
+      const inferred = predecessor ? Math.max(0, dates.start - predecessor.finish - 1) : 0;
+      return [id, task.dependencyLags?.[id] ?? inferred];
+    }));
+    return { id: task.id, dependsOn: task.dependsOn, startOffsetDays: actualFinish === null ? offset : Math.max(0, actualFinish - duration + 1), durationDays: actualFinish === null ? remaining + (asOfISO && !completed ? task.programmeDelay?.workingDays ?? 0 : 0) : duration, dependencyLagDays: lag };
+  });
+  const result = criticalPath(networkTasks);
+  const startISO = new Map(tasks.map((task) => [task.id, workingDayISO[result.es.get(task.id) ?? 0]]));
+  const finishISO = new Map(tasks.map((task) => [task.id, workingDayISO[Math.max(0, (result.ef.get(task.id) ?? 1) - 1)]]));
+  return { ...result, startISO, finishISO, projectFinishISO: workingDayISO[Math.max(0, result.durationDays - 1)] ?? null, workingDayISO };
+}
+
+export type LookAheadRow = { id: string; startISO: string; finishISO: string; state: 'overdue' | 'blocked' | 'ready' | 'upcoming'; daysUntilStart: number };
+/** Rolling 2/4/6 week window, including overdue unfinished work. */
+export function programmeLookAhead(tasks: readonly Task[], network: ProgrammeNetwork, todayISO: string, weeks: 2 | 4 | 6): LookAheadRow[] {
+  const horizonMs = Date.parse(`${todayISO}T00:00:00Z`) + weeks * 7 * DAY;
+  const byId = new Map(tasks.map((task) => [task.id, task]));
+  return tasks.filter((task) => task.status !== 'done' && task.percentComplete < 100).flatMap((task) => {
+    const startISO = network.startISO.get(task.id), finishISO = network.finishISO.get(task.id);
+    if (!startISO || !finishISO || Date.parse(startISO) > horizonMs) return [];
+    const predecessorOpen = task.dependsOn.some((id) => byId.has(id) && byId.get(id)!.status !== 'done' && byId.get(id)!.percentComplete < 100);
+    const state: LookAheadRow['state'] = task.plannedFinishISO < todayISO ? 'overdue' : task.status === 'blocked' || predecessorOpen ? 'blocked' : startISO <= todayISO ? 'ready' : 'upcoming';
+    return [{ id: task.id, startISO, finishISO, state, daysUntilStart: Math.round((Date.parse(startISO) - Date.parse(todayISO)) / DAY) }];
+  }).sort((a, b) => a.startISO.localeCompare(b.startISO) || a.id.localeCompare(b.id));
 }
 
 export function taskDurationDays(t: Pick<Task, 'plannedStartISO' | 'plannedFinishISO'>): number {

@@ -1,6 +1,7 @@
 import { requireCapability } from '@/server/guard';
 import { constructionWorld } from '@/server/reads/construction';
-import { criticalPath, taskDurationDays, projectEVMOf, forecastFinishISO } from '@/domain/construction';
+import { programmeNetwork, projectEVMOf, forecastFinishISO } from '@/domain/construction';
+import { operatingDateISO } from '@/server/operating-clock';
 import { SimulatorWorkspace } from '@/components/construction/simulator-workspace';
 import { PageTabs } from '@/components/ui/page-tabs';
 import { PageHeader } from '@/components/ui/page-header';
@@ -23,9 +24,11 @@ export default async function ConstructionSimulatorPage() {
   if (!project) return <div className="pb-page"><PageHeader title="Scenario simulator" subtitle="Explore assumptions before making a deliberate re-plan." /><PageTabs label="Construction scenario sections" items={[{ id: 'assumptions', label: 'Assumptions', content: <p className="text-[13px] text-text-3">No project to simulate.</p> }]} /></div>;
 
   const tasks = world.tasks.filter((t) => t.projectId === projectId);
-  const cpm = criticalPath(tasks.map((t) => ({ id: t.id, durationDays: taskDurationDays(t), dependsOn: t.dependsOn })));
+  const cpm = programmeNetwork(tasks, project.mobilisation?.calendar ?? { workingDays: [1, 2, 3, 4, 5, 6], holidays: [] }, operatingDateISO());
   const evm = projectEVMOf(project, world.costCodes);
-  const ff = forecastFinishISO(project, evm.spi);
+  const evmForecast = forecastFinishISO(project, evm.spi);
+  const finishISO = [cpm.projectFinishISO, evmForecast.iso].filter((iso): iso is string => !!iso).sort().at(-1) ?? project.plannedFinishISO;
+  const ff = { iso: finishISO, slipDays: Math.round((Date.parse(finishISO) - Date.parse(project.plannedFinishISO)) / 86400000) };
 
   // Fuel-exposed spend: what a diesel price shock would actually hit.
   const diesel = world.materials.find((m) => m.category === 'Fuel');

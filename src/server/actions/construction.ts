@@ -28,7 +28,7 @@ import { constructionWorld } from '@/server/reads/construction';
 import { canEnterWorkspace } from '@/config/workspaces';
 import {
   nextRevision, timesheetCostMinor, movementAllowed, routeFor, stepsFromRule,
-  canApprove, applyDecision, pendingSteps, fxExposure, fxTable, scanRisks,
+  canApprove, applyDecision, pendingSteps, fxExposure, fxTable, scanRisks, programmeNetwork,
 } from '@/domain/construction';
 import type { CurrencyCode } from '@/domain/primitives';
 import type { AuditAction, ProjectMobilisation, ProjectStatus } from '@/domain/construction/types';
@@ -451,7 +451,7 @@ export async function saveProjectPhase(input: z.input<typeof phaseSchema>): Prom
   }, 'construction');
 }
 
-const taskSchema = z.object({ id: z.string().optional(), projectId: z.string().min(1), phaseId: z.string().min(1), name: z.string().trim().min(2).max(160), owner: z.string().trim().min(2).max(120), plannedStartISO: z.string().refine(validDate), plannedFinishISO: z.string().refine(validDate), priority: z.enum(['low', 'medium', 'high']), dependsOn: z.array(z.string()).max(50), budgetNaira: z.number().min(0) }).strict();
+const taskSchema = z.object({ id: z.string().optional(), projectId: z.string().min(1), phaseId: z.string().min(1), name: z.string().trim().min(2).max(160), owner: z.string().trim().min(2).max(120), plannedStartISO: z.string().refine(validDate), plannedFinishISO: z.string().refine(validDate), priority: z.enum(['low', 'medium', 'high']), dependsOn: z.array(z.string()).max(50), dependencyLags: z.record(z.string(), z.number().int().min(0).max(120)).optional(), budgetNaira: z.number().min(0) }).strict();
 export async function saveProgrammeTask(input: z.input<typeof taskSchema>): Promise<Res> {
   return withDurableMutation(async () => {
     const g = await gate(input.id ? 'update' : 'create'); if (!g.ok) return g;
@@ -460,6 +460,7 @@ export async function saveProgrammeTask(input: z.input<typeof taskSchema>): Prom
     const phase = db.constructionPhases.find((row) => row.tenantId === g.actor.tenantId && row.projectId === project.id && row.id === parsed.data.phaseId); if (!phase) return { ok: false, error: 'Choose a phase in this project.' };
     const allowedTasks = new Set(db.constructionTasks.filter((row) => row.tenantId === g.actor.tenantId && row.projectId === project.id && row.id !== input.id).map((row) => row.id));
     if (parsed.data.dependsOn.some((id) => !allowedTasks.has(id))) return { ok: false, error: 'Every predecessor must be another task in this project.' };
+    if (Object.keys(parsed.data.dependencyLags ?? {}).some((id) => !parsed.data.dependsOn.includes(id))) return { ok: false, error: 'Dependency gaps must belong to selected predecessors.' };
     const projectTasks = db.constructionTasks.filter((row) => row.tenantId === g.actor.tenantId && row.projectId === project.id);
     if (parsed.data.dependsOn.some((id) => projectTasks.find((row) => row.id === id)!.plannedFinishISO >= parsed.data.plannedStartISO))
       return { ok: false, error: 'A task must start after each predecessor finishes.' };
@@ -479,10 +480,29 @@ export async function saveProgrammeTask(input: z.input<typeof taskSchema>): Prom
     }
     if (input.id) {
       const task = scopedConstructionTaskGet(g.actor, input.id, 'update'); if (!task || task.projectId !== project.id) return { ok: false, error: 'Task not found.' };
-      Object.assign(task, { phaseId: phase.id, name: parsed.data.name, owner: parsed.data.owner, plannedStartISO: parsed.data.plannedStartISO, plannedFinishISO: parsed.data.plannedFinishISO, priority: parsed.data.priority, dependsOn: parsed.data.dependsOn, budget: money(Math.round(parsed.data.budgetNaira * 100)) });
-    } else db.constructionTasks.push({ tenantId: g.actor.tenantId, id: `tk-${randomUUID()}`, projectId: project.id, phaseId: phase.id, name: parsed.data.name, owner: parsed.data.owner, plannedStartISO: parsed.data.plannedStartISO, plannedFinishISO: parsed.data.plannedFinishISO, percentComplete: 0, status: 'not_started', priority: parsed.data.priority, dependsOn: parsed.data.dependsOn, budget: money(Math.round(parsed.data.budgetNaira * 100)) } as (typeof db.constructionTasks)[number]);
+      Object.assign(task, { phaseId: phase.id, name: parsed.data.name, owner: parsed.data.owner, plannedStartISO: parsed.data.plannedStartISO, plannedFinishISO: parsed.data.plannedFinishISO, priority: parsed.data.priority, dependsOn: parsed.data.dependsOn, dependencyLags: parsed.data.dependencyLags, budget: money(Math.round(parsed.data.budgetNaira * 100)) });
+    } else db.constructionTasks.push({ tenantId: g.actor.tenantId, id: `tk-${randomUUID()}`, projectId: project.id, phaseId: phase.id, name: parsed.data.name, owner: parsed.data.owner, plannedStartISO: parsed.data.plannedStartISO, plannedFinishISO: parsed.data.plannedFinishISO, percentComplete: 0, status: 'not_started', priority: parsed.data.priority, dependsOn: parsed.data.dependsOn, dependencyLags: parsed.data.dependencyLags, budget: money(Math.round(parsed.data.budgetNaira * 100)) } as (typeof db.constructionTasks)[number]);
     audit(g.actor, { action: 'override', entity: 'programme_task', entityRef: project.code, projectId: project.id, summary: `${input.id ? 'Updated' : 'Created'} programme task ${parsed.data.name}` });
     revalidate(); return { ok: true, ref: parsed.data.name };
+  }, 'construction');
+}
+
+/** Record a coded working-day delay in the live forecast, leaving the approved baseline untouched. */
+export async function recordProgrammeDelay(taskId: string, input: { workingDays: number; reasonCodeId: string; note?: string }): Promise<Res> {
+  return withDurableMutation(async () => {
+    const g = await gate('update'); if (!g.ok) return g;
+    const parsed = z.object({ workingDays: z.number().int().min(0).max(120), reasonCodeId: z.string().min(1), note: z.string().trim().max(500).optional() }).strict().safeParse(input);
+    if (!parsed.success) return { ok: false, error: 'Enter a delay of 0–120 working days and a valid reason.' };
+    const task = scopedConstructionTaskGet(g.actor, taskId, 'update'); if (!task) return { ok: false, error: 'Task not found.' };
+    if ((task.status === 'done' || task.percentComplete >= 100) && parsed.data.workingDays > 0) return { ok: false, error: 'Completed tasks cannot receive a new forecast delay.' };
+    const code = db.constructionReasonCodes.find((row) => row.tenantId === g.actor.tenantId && row.id === parsed.data.reasonCodeId && row.domain === 'delay' && row.active);
+    if (!code) return { ok: false, error: 'Select an active delay reason for this company.' };
+    if (code.requiresNote && !parsed.data.note) return { ok: false, error: 'This delay reason requires a note.' };
+    const before = task.programmeDelay;
+    task.programmeDelay = { ...parsed.data, recordedBy: nameOf(g.actor), recordedAtISO: operatingNowISO() };
+    recordReason(g.actor, { domain: 'delay', codeId: code.id, subjectKind: 'programme_task', subjectRef: task.id, projectId: task.projectId, note: parsed.data.note, impactDays: parsed.data.workingDays - (before?.workingDays ?? 0) });
+    audit(g.actor, { action: 'override', entity: 'programme_delay', entityRef: task.id, projectId: task.projectId, summary: `Recorded ${parsed.data.workingDays} working-day forecast impact for ${task.name}`, before: JSON.stringify(before ?? null), after: JSON.stringify(task.programmeDelay), reasonCodeId: code.id, note: parsed.data.note });
+    revalidate(); return { ok: true, ref: task.name };
   }, 'construction');
 }
 
@@ -504,8 +524,9 @@ export async function submitBaselineRevision(projectId: string, input: { name: s
     const parsed = z.object({ name: z.string().trim().min(2).max(100), reason: z.string().trim().min(5).max(500), plannedFinishISO: z.string().refine(validDate) }).strict().safeParse(input); if (!parsed.success) return { ok: false, error: 'Enter a revision name, reason and valid forecast finish.' };
     const project = scopedConstructionProjectGet(g.actor, projectId, 'update'); if (!project) return { ok: false, error: 'Project not found.' };
     if (parsed.data.plannedFinishISO <= project.startISO) return { ok: false, error: 'The baseline finish must be after the project starts.' };
-    const latestTaskFinish = db.constructionTasks.filter((row) => row.tenantId === g.actor.tenantId && row.projectId === projectId).reduce((latest, row) => row.plannedFinishISO > latest ? row.plannedFinishISO : latest, '');
-    if (latestTaskFinish && parsed.data.plannedFinishISO < latestTaskFinish) return { ok: false, error: 'The baseline must include the latest scheduled task.' };
+    const scheduled = db.constructionTasks.filter((row) => row.tenantId === g.actor.tenantId && row.projectId === projectId);
+    const networkFinish = programmeNetwork(scheduled, mobilisationOf(project).calendar).projectFinishISO;
+    if (networkFinish && parsed.data.plannedFinishISO < networkFinish) return { ok: false, error: `The baseline must include the full working-day task network through ${networkFinish}.` };
     const setup = mobilisationOf(project); if (setup.baselines.some((row) => row.status === 'pending_approval')) return { ok: false, error: 'Decide the pending baseline before submitting another.' };
     const revision = `B${setup.baselines.length + 1}`;
     setup.baselines.push({ id: `bl-${randomUUID()}`, revision, name: parsed.data.name, reason: parsed.data.reason, plannedFinishISO: parsed.data.plannedFinishISO, includedApprovedChangeDays: project.approvedChangeDays ?? 0, status: 'pending_approval', submittedBy: nameOf(g.actor), submittedById: g.actor.userId, submittedISO: operatingNowISO() });
