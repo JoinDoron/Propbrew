@@ -21,8 +21,8 @@ export type ProjectStatus = 'planning' | 'active' | 'on_hold' | 'closing' | 'com
 export type BaselineRevisionStatus = 'draft' | 'pending_approval' | 'approved' | 'rejected' | 'superseded';
 export type ProjectBaselineRevision = {
   id: string; revision: string; name: string; status: BaselineRevisionStatus;
-  submittedBy: string; submittedISO: string; approvedBy?: string; approvedISO?: string;
-  reason: string; plannedFinishISO: string;
+  submittedBy: string; submittedById?: string; submittedISO: string; approvedBy?: string; approvedById?: string; approvedISO?: string;
+  reason: string; plannedFinishISO: string; includedApprovedChangeDays?: number;
 };
 export type ProjectTeamMember = {
   id: string; name: string; organisation: string; role: string;
@@ -62,6 +62,8 @@ export type Project = TenantScoped & {
   plannedPercent: number; percentComplete: number;
   /** Approved change-order days affect the outlook, never the programme baseline. */
   approvedChangeDays?: number;
+  /** Change days already absorbed by the current approved programme baseline. */
+  approvedChangeDaysInBaseline?: number;
   /** Minimum cost outlook supported by authorized change-order commitments. */
   approvedChangeForecastMinor?: number;
   /** Mobilisation configuration is embedded in the durable project record so

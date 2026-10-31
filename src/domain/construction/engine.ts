@@ -94,13 +94,20 @@ export function scheduleVariancePct(p: Pick<Project, 'plannedPercent' | 'percent
 }
 
 /** Forecast finish from SPI: the slower you earn, the later you finish. */
-export function forecastFinishISO(p: Pick<Project, 'startISO' | 'plannedFinishISO'> & { approvedChangeDays?: number }, spi: number): { iso: string; slipDays: number } {
+export function forecastFinishISO(p: Pick<Project, 'startISO' | 'plannedFinishISO'> & Partial<Pick<Project, 'approvedChangeDays' | 'approvedChangeDaysInBaseline' | 'mobilisation'>>, spi: number): { iso: string; slipDays: number } {
   const start = Date.parse(p.startISO), planned = Date.parse(p.plannedFinishISO);
   const dur = Math.max(1, planned - start);
   const forecastDur = spi > 0 ? dur / spi : dur * 2;
-  const approvedDays = Math.max(0, p.approvedChangeDays ?? 0);
-  const iso = new Date(start + forecastDur + approvedDays * DAY).toISOString().slice(0, 10);
-  return { iso, slipDays: Math.round((start + forecastDur - planned) / DAY) + approvedDays };
+  const approvedDays = Math.max(0, (p.approvedChangeDays ?? 0) - (p.approvedChangeDaysInBaseline ?? 0));
+  const forecast = new Date(start + forecastDur);
+  const workingDays = p.mobilisation?.calendar?.workingDays ?? [1, 2, 3, 4, 5, 6];
+  const holidays = new Set(p.mobilisation?.calendar?.holidays ?? []);
+  for (let day = 0; day < approvedDays; day++) {
+    do { forecast.setUTCDate(forecast.getUTCDate() + 1); }
+    while (!workingDays.includes(forecast.getUTCDay()) || holidays.has(forecast.toISOString().slice(0, 10)));
+  }
+  const iso = forecast.toISOString().slice(0, 10);
+  return { iso, slipDays: Math.round((Date.parse(iso) - planned) / DAY) };
 }
 
 export function projectHealth(spi: number, cpi: number, openCritical: number): { score: number; band: Tone; label: string } {

@@ -65,6 +65,8 @@ export default async function ConstructionSchedulePage({ searchParams }: { searc
           forecastFinishISO: ff.iso,
           slipDays: ff.slipDays,
           plannedFinishISO: project?.plannedFinishISO ?? '—',
+          approvedChangeDays: project?.approvedChangeDays ?? 0,
+          changeDaysInBaseline: project?.approvedChangeDaysInBaseline ?? 0,
         }}
         canMutate={canMutate}
         canCreate={canCreate}

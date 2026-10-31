@@ -460,6 +460,23 @@ export async function saveProgrammeTask(input: z.input<typeof taskSchema>): Prom
     const phase = db.constructionPhases.find((row) => row.tenantId === g.actor.tenantId && row.projectId === project.id && row.id === parsed.data.phaseId); if (!phase) return { ok: false, error: 'Choose a phase in this project.' };
     const allowedTasks = new Set(db.constructionTasks.filter((row) => row.tenantId === g.actor.tenantId && row.projectId === project.id && row.id !== input.id).map((row) => row.id));
     if (parsed.data.dependsOn.some((id) => !allowedTasks.has(id))) return { ok: false, error: 'Every predecessor must be another task in this project.' };
+    const projectTasks = db.constructionTasks.filter((row) => row.tenantId === g.actor.tenantId && row.projectId === project.id);
+    if (parsed.data.dependsOn.some((id) => projectTasks.find((row) => row.id === id)!.plannedFinishISO >= parsed.data.plannedStartISO))
+      return { ok: false, error: 'A task must start after each predecessor finishes.' };
+    if (input.id && projectTasks.some((row) => row.id !== input.id && row.dependsOn.includes(input.id!) && row.plannedStartISO <= parsed.data.plannedFinishISO))
+      return { ok: false, error: 'A successor must start after this task finishes.' };
+    if (input.id) {
+      const dependencies = new Map(projectTasks.map((row) => [row.id, row.id === input.id ? parsed.data.dependsOn : row.dependsOn]));
+      const visiting = new Set<string>(); const visited = new Set<string>();
+      const cyclic = (id: string): boolean => {
+        if (visiting.has(id)) return true;
+        if (visited.has(id)) return false;
+        visiting.add(id);
+        if ((dependencies.get(id) ?? []).some(cyclic)) return true;
+        visiting.delete(id); visited.add(id); return false;
+      };
+      if ([...dependencies.keys()].some(cyclic)) return { ok: false, error: 'Task dependencies cannot form a loop.' };
+    }
     if (input.id) {
       const task = scopedConstructionTaskGet(g.actor, input.id, 'update'); if (!task || task.projectId !== project.id) return { ok: false, error: 'Task not found.' };
       Object.assign(task, { phaseId: phase.id, name: parsed.data.name, owner: parsed.data.owner, plannedStartISO: parsed.data.plannedStartISO, plannedFinishISO: parsed.data.plannedFinishISO, priority: parsed.data.priority, dependsOn: parsed.data.dependsOn, budget: money(Math.round(parsed.data.budgetNaira * 100)) });
@@ -486,8 +503,12 @@ export async function submitBaselineRevision(projectId: string, input: { name: s
     const g = await gate('update'); if (!g.ok) return g;
     const parsed = z.object({ name: z.string().trim().min(2).max(100), reason: z.string().trim().min(5).max(500), plannedFinishISO: z.string().refine(validDate) }).strict().safeParse(input); if (!parsed.success) return { ok: false, error: 'Enter a revision name, reason and valid forecast finish.' };
     const project = scopedConstructionProjectGet(g.actor, projectId, 'update'); if (!project) return { ok: false, error: 'Project not found.' };
-    const setup = mobilisationOf(project); const revision = `B${setup.baselines.length + 1}`;
-    setup.baselines.push({ id: `bl-${randomUUID()}`, revision, name: parsed.data.name, reason: parsed.data.reason, plannedFinishISO: parsed.data.plannedFinishISO, status: 'pending_approval', submittedBy: nameOf(g.actor), submittedISO: operatingNowISO() });
+    if (parsed.data.plannedFinishISO <= project.startISO) return { ok: false, error: 'The baseline finish must be after the project starts.' };
+    const latestTaskFinish = db.constructionTasks.filter((row) => row.tenantId === g.actor.tenantId && row.projectId === projectId).reduce((latest, row) => row.plannedFinishISO > latest ? row.plannedFinishISO : latest, '');
+    if (latestTaskFinish && parsed.data.plannedFinishISO < latestTaskFinish) return { ok: false, error: 'The baseline must include the latest scheduled task.' };
+    const setup = mobilisationOf(project); if (setup.baselines.some((row) => row.status === 'pending_approval')) return { ok: false, error: 'Decide the pending baseline before submitting another.' };
+    const revision = `B${setup.baselines.length + 1}`;
+    setup.baselines.push({ id: `bl-${randomUUID()}`, revision, name: parsed.data.name, reason: parsed.data.reason, plannedFinishISO: parsed.data.plannedFinishISO, includedApprovedChangeDays: project.approvedChangeDays ?? 0, status: 'pending_approval', submittedBy: nameOf(g.actor), submittedById: g.actor.userId, submittedISO: operatingNowISO() });
     audit(g.actor, { action: 'override', entity: 'programme_baseline', entityRef: revision, projectId, summary: `Submitted programme baseline ${revision} for independent approval` });
     revalidate(); return { ok: true, ref: revision };
   }, 'construction');
@@ -498,9 +519,9 @@ export async function decideBaselineRevision(projectId: string, baselineId: stri
     const g = await gate('update'); if (!g.ok) return g;
     const project = scopedConstructionProjectGet(g.actor, projectId, 'update'); if (!project) return { ok: false, error: 'Project not found.' };
     const setup = mobilisationOf(project); const baseline = setup.baselines.find((row) => row.id === baselineId); if (!baseline || baseline.status !== 'pending_approval') return { ok: false, error: 'Pending baseline revision not found.' };
-    const approver = nameOf(g.actor); if (baseline.submittedBy.toLowerCase() === approver.toLowerCase()) return { ok: false, error: 'A different authorised manager must approve this baseline revision.' };
-    baseline.status = decision; baseline.approvedBy = approver; baseline.approvedISO = operatingNowISO();
-    if (decision === 'approved') { for (const row of setup.baselines) if (row.id !== baseline.id && row.status === 'approved') row.status = 'superseded'; project.plannedFinishISO = baseline.plannedFinishISO; }
+    const approver = nameOf(g.actor); if (baseline.submittedById ? baseline.submittedById === g.actor.userId : baseline.submittedBy.toLowerCase() === approver.toLowerCase()) return { ok: false, error: 'A different authorised manager must approve this baseline revision.' };
+    baseline.status = decision; baseline.approvedBy = approver; baseline.approvedById = g.actor.userId; baseline.approvedISO = operatingNowISO();
+    if (decision === 'approved') { for (const row of setup.baselines) if (row.id !== baseline.id && row.status === 'approved') row.status = 'superseded'; project.plannedFinishISO = baseline.plannedFinishISO; project.approvedChangeDaysInBaseline = baseline.includedApprovedChangeDays ?? 0; }
     audit(g.actor, { action: decision === 'approved' ? 'approve' : 'reject', entity: 'programme_baseline', entityRef: baseline.revision, projectId, summary: `${decision === 'approved' ? 'Approved' : 'Rejected'} programme baseline ${baseline.revision}` });
     revalidate(); return { ok: true, ref: baseline.revision };
   }, 'construction');

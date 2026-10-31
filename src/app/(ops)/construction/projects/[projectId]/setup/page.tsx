@@ -22,6 +22,6 @@ export default async function ConstructionProjectSetupPage({ params, searchParam
       repos.constructionMilestones.list(actor, { limit: 500 }).items.filter((row) => row.projectId === projectId),
       repos.constructionCostCodes.list(actor, { limit: 500 }).items.filter((row) => row.projectId === projectId),
     ];
-    return <div className="pb-page"><ProjectSetupWorkspace project={project} phases={phases} tasks={tasks} milestones={milestones} costCodes={costCodes} canMutate={can(actor, 'reports_analytics', 'update').allowed} initialSection={section} /></div>;
+    return <div className="pb-page"><ProjectSetupWorkspace key={`${project.id}:${section}`} project={project} phases={phases} tasks={tasks} milestones={milestones} costCodes={costCodes} canMutate={can(actor, 'reports_analytics', 'update').allowed} initialSection={section} /></div>;
   });
 }

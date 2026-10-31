@@ -27,7 +27,7 @@ const quoteSchema = z.object({ amountNaira: naira, reference: z.string().trim().
 const assessmentSchema = z.object({ budgetDeltaNaira: naira, scheduleDays: z.number().int().min(0).max(365), note }).strict();
 const decisionSchema = z.object({ decision: z.enum(['approved', 'rejected']), reference: z.string().trim().min(3).max(160), note }).strict();
 const postingSchema = z.object({ reference: z.string().trim().min(3).max(160) }).strict();
-const refresh = () => ['/construction/changes', '/construction/operations', '/construction/projects', '/construction/evm', '/construction/boq', '/construction/copilot', '/construction/audit'].forEach((path) => revalidatePath(path));
+const refresh = () => ['/construction', '/construction/changes', '/construction/operations', '/construction/projects', '/construction/schedule', '/construction/simulator', '/construction/build-watch', '/construction/evm', '/construction/boq', '/construction/copilot', '/construction/audit'].forEach((path) => revalidatePath(path));
 
 async function gate(action: 'create' | 'update' | 'approve'): Promise<{ actor: Actor } | { error: string }> {
   const actor = await getActor();

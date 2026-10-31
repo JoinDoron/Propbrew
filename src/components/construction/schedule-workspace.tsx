@@ -25,7 +25,7 @@ const displayDate = (value: string) => Number.isFinite(Date.parse(value)) ? new 
 export function ScheduleWorkspace({ projectName, tasks, milestones, kpis, canMutate, canCreate = false }: {
   projectName: string;
   tasks: GanttTask[]; milestones: MilestoneRow[];
-  kpis: { durationDays: number; criticalCount: number; blocked: number; forecastFinishISO: string; slipDays: number; plannedFinishISO: string };
+  kpis: { durationDays: number; criticalCount: number; blocked: number; forecastFinishISO: string; slipDays: number; plannedFinishISO: string; approvedChangeDays?: number; changeDaysInBaseline?: number };
   canMutate: boolean;
   canCreate?: boolean;
 }) {
@@ -53,6 +53,7 @@ export function ScheduleWorkspace({ projectName, tasks, milestones, kpis, canMut
             <div className="text-[14px] text-text-3 mt-0.5">
               {hasForecast ? <>{kpis.durationDays}-day network · estimated finish <span className="font-medium" style={{ color: toneVar(kpis.slipDays > 0 ? 'danger' : 'success') }}>{displayDate(kpis.forecastFinishISO)}</span>{kpis.slipDays > 0 ? ` · ${kpis.slipDays}d later than plan` : ' · on plan'}</> : 'Add a project and schedule to calculate a finish forecast.'}
             </div>
+            {hasForecast && (kpis.approvedChangeDays ?? 0) > 0 ? <p className="text-[13px] text-text-3 mt-1">Approved baseline {displayDate(kpis.plannedFinishISO)} · {kpis.changeDaysInBaseline ?? 0} approved working days included · {Math.max(0, (kpis.approvedChangeDays ?? 0) - (kpis.changeDaysInBaseline ?? 0))} approved working days in the current forecast</p> : null}
           </div>
         </div>
       </ConstructionSummary>
