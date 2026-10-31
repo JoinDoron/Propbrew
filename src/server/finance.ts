@@ -59,10 +59,17 @@ export function financeSnapshot(actor: Actor): FinanceSnapshot {
     paidMinor: row.status === 'paid' ? row.certifiedMinor! : 0, outstandingMinor: row.status === 'paid' ? 0 : row.certifiedMinor!,
     status: row.status, kind: 'payable', whtMinor: row.whtMinor, source: 'Construction certified claim',
   }));
+  const retentionPayables: FinanceLedgerRow[] = (moduleRead.construction ? construction.retentionReleases : []).filter((row) => ['approved', 'paid'].includes(row.status)).map((row) => ({
+    id: row.id, ref: row.ref, module: 'construction', counterparty: row.claimId, description: `Approved retention release · ${row.reason}`,
+    dateISO: dateOnly(row.requestedAtISO), dueDateISO: addDays(row.requestedAtISO, 30), grossMinor: row.amountMinor,
+    paidMinor: row.status === 'paid' ? row.amountMinor : 0, outstandingMinor: row.status === 'paid' ? 0 : row.amountMinor,
+    status: row.status, kind: 'payable', source: 'Construction retention control',
+  }));
   const approvedShortletInflows = (moduleRead.shortlet ? shortletState.transactions : []).filter((row) => ['approved', 'completed'].includes(row.status) && ['accommodation_payment', 'caution_deposit'].includes(row.kind)).reduce((sum, row) => sum + row.amountMinor, 0);
   const shortletRefunds = (moduleRead.shortlet ? shortletState.transactions : []).filter((row) => ['approved', 'completed'].includes(row.status) && row.kind === 'refund').reduce((sum, row) => sum + row.amountMinor, 0);
   const paidConstruction = (moduleRead.construction ? construction.payments : []).filter((row) => row.status === 'paid').reduce((sum, row) => sum + row.payableMinor, 0)
-    + (moduleRead.construction ? construction.claims : []).filter((row) => row.status === 'paid').reduce((sum, row) => sum + (row.certifiedMinor ?? 0), 0);
+    + (moduleRead.construction ? construction.claims : []).filter((row) => row.status === 'paid').reduce((sum, row) => sum + (row.certifiedMinor ?? 0), 0)
+    + (moduleRead.construction ? construction.retentionReleases : []).filter((row) => row.status === 'paid').reduce((sum, row) => sum + row.amountMinor, 0);
   const facilityActual = workOrders.filter((row) => row.status === 'closed').reduce((sum, row) => sum + ngn(row.cost), 0);
   const estateInflows = invoices.reduce((sum, row) => sum + ngn(row.paid), 0);
   const shortletInflow = Math.max(shortletBookings.reduce((sum, row) => sum + ngn(row.paid), 0), approvedShortletInflows);
@@ -71,7 +78,7 @@ export function financeSnapshot(actor: Actor): FinanceSnapshot {
   const snapshot = buildFinanceSnapshot({
     todayISO,
     receivables: [...estateReceivables, ...shortletReceivables],
-    payables: [...manualPayables, ...constructionPayables, ...claimPayables],
+    payables: [...manualPayables, ...constructionPayables, ...claimPayables, ...retentionPayables],
     recordedInflows: { estate: estateInflows, facility: 0, shortlet: shortletInflow, construction: 0 },
     recordedOutflows: { estate: manualByModule('estate'), facility: facilityActual + manualByModule('facility'), shortlet: shortletOutflow + manualByModule('shortlet'), construction: paidConstruction + manualByModule('construction') },
   });

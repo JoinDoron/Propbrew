@@ -40,6 +40,8 @@ export type WhtCertificate = {
   status: 'issued';
   issuedBy: string;
   issuedAtISO: string;
+  externalCertificateRef?: string;
+  remittanceRef?: string;
 };
 
 export type FinanceControlState = { payables: FinancePayable[]; whtCertificates: WhtCertificate[] };

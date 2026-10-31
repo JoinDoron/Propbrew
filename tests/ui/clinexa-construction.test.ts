@@ -36,7 +36,7 @@ const coverage = [
   ['documents', 'documents-workspace', ['register', 'rfis', 'overview']],
   ['evm', 'evm-cockpit', ['overview', 'overview', 'curve', 'costs']],
   ['field', 'field-capture', ['report', 'issue', 'progress', 'evidence', 'attendance', 'queue']],
-  ['operations', 'operations-workspace', ['subcontractors', 'field', 'claims', 'payments', 'forecast']],
+  ['operations', 'operations-workspace', ['subcontractors', 'field', 'handover', 'claims', 'closeout', 'payments', 'forecast']],
   ['portal', 'role-portal', ['overview', 'tools']],
   ['fx', 'fx-workspace', ['overview', 'rates', 'commitments']],
   ['league', 'league-workspace', ['scorecards', 'overview', 'methodology']],
@@ -61,7 +61,7 @@ describe('Clinexa coverage of every Construction page', () => {
     const routes = ['', ...readdirSync(root, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name)];
     expect(coverage.map(([route]) => route).sort()).toEqual(routes.sort());
     expect(coverage).toHaveLength(28);
-    expect(coverage.map(([, file]) => file + '.tsx').sort()).toEqual(readdirSync(resolve(process.cwd(), 'src/components/construction')).filter((file) => file.endsWith('.tsx') && !['construction-ui.tsx', 'project-setup-workspace.tsx', 'drawing-controls.tsx', 'rfi-workspace.tsx', 'safety-operations.tsx'].includes(file)).sort());
+    expect(coverage.map(([, file]) => file + '.tsx').sort()).toEqual(readdirSync(resolve(process.cwd(), 'src/components/construction')).filter((file) => file.endsWith('.tsx') && !['construction-ui.tsx', 'project-setup-workspace.tsx', 'drawing-controls.tsx', 'rfi-workspace.tsx', 'safety-operations.tsx', 'handover-claims-closeout.tsx'].includes(file)).sort());
     const composed = view('construction-ui');
     for (const primitive of ['Card', 'CardHeader', 'KpiCard', 'Button', 'IconButton', 'PortalDialog']) expect(composed).toMatch(new RegExp(`<${primitive}(?:\\s|>)`));
   });

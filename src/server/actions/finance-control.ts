@@ -80,9 +80,9 @@ export async function markFinancePayablePaid(id: string, bankReference: string):
   }, ['estate', 'facility', 'shortlet', 'construction']);
 }
 
-export async function issueWhtCertificate(sourceType: 'finance_payable' | 'construction_payment', sourceId: string, periodISO: string): Promise<Result> {
+export async function issueWhtCertificate(sourceType: 'finance_payable' | 'construction_payment' | 'construction_claim', sourceId: string, periodISO: string, evidence?: { externalCertificateRef: string; remittanceRef: string }): Promise<Result> {
   return withDurableMutation(async () => {
-    const access = await gate('approve'); if (!access.actor) return { ok: false, error: access.error };
+    const access = sourceType === 'construction_claim' ? await constructionCertificateGate() : await gate('approve'); if (!access.actor) return { ok: false, error: access.error };
     if (!identifier.safeParse(sourceId).success || !isoDate.safeParse(periodISO).success) return { ok: false, error: 'Choose an eligible paid item and certificate period.' };
     const state = financeControl(access.actor.tenantId!);
     if (state.whtCertificates.some((row) => row.sourceId === sourceId)) return { ok: false, error: 'A WHT certificate has already been issued for this source.' };
@@ -90,18 +90,35 @@ export async function issueWhtCertificate(sourceType: 'finance_payable' | 'const
     if (sourceType === 'finance_payable') {
       const row = state.payables.find((item) => item.id === sourceId && item.status === 'paid' && item.whtMinor > 0);
       if (row && moduleAllowed(access.actor, row.module, 'approve')) source = { module: row.module, sourceRef: row.ref, beneficiary: row.counterparty, grossMinor: row.grossMinor, ratePct: row.whtPct, amountMinor: row.whtMinor };
-    } else {
+    } else if (sourceType === 'construction_payment') {
       if (!moduleAllowed(access.actor, 'construction', 'approve')) return { ok: false, error: 'Your current role cannot issue Construction certificates.' };
       const row = constructionControl(access.actor.tenantId!).payments.find((item) => item.id === sourceId && item.status === 'paid' && item.whtMinor > 0);
       if (row) { const order = repos.constructionOrders.list(access.actor, { limit: 5000 }).items.find((item) => item.id === row.poId); source = { module: 'construction', sourceRef: row.ref, beneficiary: order?.vendorName ?? row.invoiceRef, grossMinor: row.invoiceMinor, ratePct: row.invoiceMinor ? row.whtMinor / row.invoiceMinor * 100 : 0, amountMinor: row.whtMinor }; }
+    } else if (sourceType === 'construction_claim') {
+      if (!moduleAllowed(access.actor, 'construction', 'approve')) return { ok: false, error: 'Your current role cannot record Construction claim certificates.' };
+      const claim = constructionControl(access.actor.tenantId!).claims.find((row) => row.id === sourceId && row.status === 'paid' && row.whtMinor > 0);
+      if (claim && repos.constructionProjects.list(access.actor, { limit: 5000 }).items.some((row) => row.id === claim.projectId)) {
+        const subcontractor = repos.constructionSubcontractors.list(access.actor, { limit: 5000 }).items.find((row) => row.id === claim.subcontractorId)
+          ?? constructionControl(access.actor.tenantId!).subcontractors.find((row) => row.id === claim.subcontractorId);
+        source = { module: 'construction', sourceRef: claim.ref, beneficiary: subcontractor?.name ?? claim.subcontractorId, grossMinor: (claim.assessedMinor ?? claim.claimedMinor) - claim.retentionMinor, ratePct: claim.whtPct, amountMinor: claim.whtMinor };
+      }
     }
     if (!source) return { ok: false, error: 'Only paid items with recorded WHT can receive a certificate.' };
+    if (sourceType === 'construction_claim' && (!evidence || !/^[A-Za-z0-9 /._:-]{5,120}$/.test(evidence.externalCertificateRef.trim()) || !/^[A-Za-z0-9 /._:-]{5,120}$/.test(evidence.remittanceRef.trim()))) return { ok: false, error: 'Enter the tax authority certificate and remittance references for this paid claim.' };
+    if (evidence?.externalCertificateRef && state.whtCertificates.some((row) => row.externalCertificateRef === evidence.externalCertificateRef.trim())) return { ok: false, error: 'This external certificate reference is already recorded.' };
     const sequence = nextRecordSequence('finance:whtSeq', 0, true); const ref = `WHT-${periodISO.slice(0, 4)}-${String(sequence).padStart(5, '0')}`;
-    const certificate = { tenantId: access.actor.tenantId!, id: `wht-${randomUUID()}`, ref, ...source, sourceId, periodISO, status: 'issued' as const, issuedBy: access.actor.userId, issuedAtISO: nowISO() };
+    const certificate = { tenantId: access.actor.tenantId!, id: `wht-${randomUUID()}`, ref, ...source, sourceId, periodISO, status: 'issued' as const, issuedBy: access.actor.userId, issuedAtISO: nowISO(), externalCertificateRef: evidence?.externalCertificateRef.trim(), remittanceRef: evidence?.remittanceRef.trim() };
     state.whtCertificates.unshift(certificate);
     await audit(access.actor.tenantId!, access.actor.userId, 'finance.wht_certificate.issued', 'wht_certificate', certificate.id, { ref, sourceRef: source.sourceRef, module: source.module, amountMinor: source.amountMinor });
     refresh(); return { ok: true, id: certificate.id, message: `${ref} issued and added to the company register.` };
   }, ['estate', 'facility', 'shortlet', 'construction']);
+}
+
+async function constructionCertificateGate() {
+  const actor = await getActor();
+  if (!actor.tenantId || !canEnterWorkspace(actor, 'construction') || actor.companyAccess && !['owner', 'admin'].includes(actor.companyAccess.companyRole) && actor.companyAccess.operationalProfileId !== 'construction-finance') return { ok: false as const, error: 'Only Construction finance can record claim WHT certificates.' };
+  try { assertCan(actor, 'reports_analytics', 'transition'); return { actor }; }
+  catch (error) { if (error instanceof ForbiddenError) return { ok: false as const, error: 'Your role cannot record claim WHT certificates.' }; throw error; }
 }
 
 export async function decideBankSettlement(settlementId: string, approve: boolean): Promise<Result> {

@@ -14,13 +14,14 @@ import {
   submitFieldApproval, submitSubcontractorOnboarding,
 } from '@/server/actions/construction-control';
 import styles from './construction-delivery-polish.module.css';
+import { ConstructionHandoverAndCloseout, type HandoverDoc, type HandoverPackView, type BankDebitView, type RetentionView } from './handover-claims-closeout';
 
 type Project = { id: string; name: string; code: string };
 type Subcontractor = { id: string; name: string; trade: string; projects: string[]; status: string; cacNumber?: string; contactName?: string; phoneE164?: string; complianceReady: boolean };
 type Evidence = { id: string; projectId: string; project: string; subject: string; subjectRef: string; title: string; fileCount: number; sha256: string; status: string; capturedAtISO: string };
 type FieldApproval = { id: string; projectId: string; project: string; kind: string; subjectRef: string; title: string; summary: string; evidenceCount: number; status: string; requestedAtISO: string };
 type Variation = { id: string; projectId: string; ref: string; title: string; status: string; posted: boolean };
-type Claim = { id: string; ref: string; projectId: string; project: string; subcontractor: string; description: string; claimedMinor: number; assessedMinor?: number; certifiedMinor?: number; retentionMinor: number; whtMinor: number; status: string; periodEndISO: string };
+type Claim = { id: string; ref: string; projectId: string; project: string; subcontractor: string; description: string; claimedMinor: number; assessedMinor?: number; certifiedMinor?: number; retentionMinor: number; whtMinor: number; status: string; periodEndISO: string; paymentReference?: string; whtRecorded: boolean };
 type Order = { id: string; projectId: string; ref: string; item: string; vendorName: string; valueMinor: number; qty: number; deliveredQty: number; status: string };
 type Payment = { id: string; ref: string; poRef: string; vendor: string; invoiceRef: string; invoiceMinor: number; retentionMinor: number; whtMinor: number; payableMinor: number; status: string; threeWayMatched: boolean; paymentReference?: string };
 type Forecast = { projectId: string; project: string; cpi: number; spi: number; eacMinor: number; vacMinor: number; slipDays: number; finishISO: string; confidence: number };
@@ -30,8 +31,8 @@ const titleCase = (value: string) => value.replaceAll('_', ' ').replace(/\b\w/g,
 const tone = (status: string) => ['approved', 'paid'].includes(status) ? 'success' : ['rejected', 'suspended'].includes(status) ? 'danger' : ['pending', 'pending_review', 'pending_match', 'pending_approval', 'submitted', 'assessed'].includes(status) ? 'warn' : 'neutral';
 const date = (value: string) => new Date(value).toLocaleDateString('en-NG', { timeZone: 'Africa/Lagos', day: 'numeric', month: 'short', year: 'numeric' });
 
-export function ConstructionOperationsWorkspace({ projects, subcontractors, evidence, fieldApprovals, variations, claims, orders, payments, forecasts, canCreate, canUpdate }: {
-  projects: Project[]; subcontractors: Subcontractor[]; evidence: Evidence[]; fieldApprovals: FieldApproval[]; variations: Variation[]; claims: Claim[]; orders: Order[]; payments: Payment[]; forecasts: Forecast[]; canCreate: boolean; canUpdate: boolean;
+export function ConstructionOperationsWorkspace({ projects, subcontractors, evidence, fieldApprovals, handoverDocs, handoverPacks, variations, claims, bankDebits, retentionReleases, orders, payments, forecasts, canCreate, canUpdate }: {
+  projects: Project[]; subcontractors: Subcontractor[]; evidence: Evidence[]; fieldApprovals: FieldApproval[]; handoverDocs: HandoverDoc[]; handoverPacks: HandoverPackView[]; variations: Variation[]; claims: Claim[]; bankDebits: BankDebitView[]; retentionReleases: RetentionView[]; orders: Order[]; payments: Payment[]; forecasts: Forecast[]; canCreate: boolean; canUpdate: boolean;
 }) {
   const [message, setMessage] = useState<string | null>(null);
   const done = (value: string) => setMessage(value);
@@ -46,7 +47,9 @@ export function ConstructionOperationsWorkspace({ projects, subcontractors, evid
     <PageTabs label="Construction operational controls" items={[
       { id: 'subcontractors', label: 'Subcontractors', content: <Subcontractors projects={projects} rows={subcontractors} canCreate={canCreate} canUpdate={canUpdate} onDone={done} /> },
       { id: 'field', label: 'Field approvals', content: <FieldControls projects={projects} evidence={evidence} approvals={fieldApprovals} canCreate={canCreate} canUpdate={canUpdate} onDone={done} /> },
+      { id: 'handover', label: 'Handover packs', content: <ConstructionHandoverAndCloseout view="handover" projects={projects} docs={handoverDocs} approvals={fieldApprovals} packs={handoverPacks} claims={claims} bankDebits={bankDebits} releases={retentionReleases} canCreate={canCreate} canUpdate={canUpdate} onDone={done} /> },
       { id: 'claims', label: 'Changes & claims', content: <div className={styles.stack}><Card><CardHeader title="Controlled change orders" subtitle="Link RFIs or site issues, obtain contractor pricing and post only after approvals" /><Link className={styles.link} href="/construction/changes">Open change orders <ArrowRight size={16} /></Link></Card><ClaimAssessment claims={claims} allowed={canUpdate} onDone={done} /><Claims projects={projects} subcontractors={subcontractors} variations={variations} claims={claims} canCreate={canCreate} canUpdate={canUpdate} onDone={done} /></div> },
+      { id: 'closeout', label: 'Claim closeout', content: <ConstructionHandoverAndCloseout view="closeout" projects={projects} docs={handoverDocs} approvals={fieldApprovals} packs={handoverPacks} claims={claims} bankDebits={bankDebits} releases={retentionReleases} canCreate={canCreate} canUpdate={canUpdate} onDone={done} /> },
       { id: 'payments', label: 'Procurement to payment', content: <Payments orders={orders} payments={payments} canCreate={canCreate} canUpdate={canUpdate} onDone={done} /> },
       { id: 'forecast', label: 'AI forecast', content: <Forecasts rows={forecasts} /> },
     ]} />

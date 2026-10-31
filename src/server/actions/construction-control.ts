@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { canEnterWorkspace } from '@/config/workspaces';
-import { claimPayableMinor, type EvidenceSubject, type FieldApprovalKind } from '@/domain/construction/control';
+import { claimPayableMinor, handoverOmissions, HANDOVER_REQUIREMENTS, type EvidenceSubject, type FieldApprovalKind } from '@/domain/construction/control';
 import { ForbiddenError, assertCan, matchesScope, type Actor, type ScopableRow } from '@/lib/authz';
 import { repos, scopedConstructionProjectGet, scopedMutableGet } from '@/server/data';
 import { withDurableMutation } from '@/server/data/durable-records';
@@ -13,9 +13,11 @@ import { db } from '@/server/data/store';
 import { getActor } from '@/server/session';
 import { nowISO } from '@/server/clock';
 import { constructionControl } from '@/server/construction-control';
+import { parseBankCsv } from '@/server/payments';
+import { constructionDrawingVisible } from '@/server/construction/drawings';
 
 export type ConstructionControlResult = { ok: true; id?: string; message?: string } | { ok: false; error: string };
-const PATHS = ['/construction', '/construction/operations', '/construction/field', '/construction/procurement', '/construction/approvals', '/construction/league', '/construction/evm', '/construction/copilot'];
+const PATHS = ['/construction', '/construction/operations', '/construction/field', '/construction/procurement', '/construction/approvals', '/construction/league', '/construction/evm', '/construction/copilot', '/finance'];
 const refresh = () => PATHS.forEach((path) => revalidatePath(path));
 const id = z.string().min(1).max(200).regex(/^[A-Za-z0-9_:-]+$/);
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => Number.isFinite(Date.parse(value)));
@@ -196,6 +198,159 @@ export async function markProcurementPaymentPaid(paymentId: string, paymentRefer
     const reference = paymentReference.trim(); const row = scopedSidecar(access.actor, constructionControl(access.actor.tenantId!).payments, (item) => item.id === paymentId && item.status === 'approved');
     if (!row || reference.length < 3 || reference.length > 160) return { ok: false, error: 'Approved payment and bank reference are required.' };
     row.status = 'paid'; row.paymentReference = reference; row.paidAtISO = nowISO(); audit(access.actor, 'post_cost', 'procurement_payment', row.ref, row.projectId, `${row.ref} marked paid · ${reference}`, row.payableMinor); refresh(); return { ok: true, id: row.id, message: `${row.ref} marked paid from the recorded bank reference.` };
+  }, 'construction');
+}
+
+const handoverSchema = z.object({
+  packId: id.optional(), projectId: id, title: z.string().trim().min(3).max(160), approvalId: id.optional(),
+  items: z.array(z.object({ requirement: z.enum(HANDOVER_REQUIREMENTS.map((row) => row.key)), docId: id }).strict()).max(HANDOVER_REQUIREMENTS.length),
+}).strict();
+export async function saveConstructionHandoverPack(input: z.input<typeof handoverSchema>): Promise<ConstructionControlResult> {
+  return withDurableMutation(async () => {
+    const access = await gate('create'); if (!access.actor) return { ok: false, error: access.error ?? 'Access denied.' };
+    const parsed = handoverSchema.safeParse(input); if (!parsed.success) return { ok: false, error: 'Choose a project, title and valid handover document slots.' };
+    const { projectId, title, approvalId, packId, items } = parsed.data;
+    if (!scopedConstructionProjectGet(access.actor, projectId, 'read')) return { ok: false, error: 'Project unavailable.' };
+    if (new Set(items.map((row) => row.requirement)).size !== items.length || new Set(items.map((row) => row.docId)).size !== items.length) return { ok: false, error: 'Each handover requirement needs a different controlled document revision.' };
+    const docs = repos.constructionDocs.list(access.actor, { limit: 5000 }).items;
+    const selected = items.map((item) => ({ ...item, doc: docs.find((row) => row.id === item.docId && row.projectId === projectId && constructionDrawingVisible(access.actor, row)) }));
+    if (selected.some((row) => !row.doc)) return { ok: false, error: 'A selected document is unavailable in this project.' };
+    const state = constructionControl(access.actor.tenantId!);
+    if (approvalId && !scopedSidecar(access.actor, state.fieldApprovals, (row) => row.id === approvalId && row.projectId === projectId && row.kind === 'handover')) return { ok: false, error: 'Choose a handover approval from this project.' };
+    const snapshot = selected.map((row) => ({ requirement: row.requirement, docId: row.doc!.id, number: row.doc!.number, revision: row.doc!.revision, fileSha256: row.doc!.fileSha256 ?? '' }));
+    const current = packId ? scopedSidecar(access.actor, state.handoverPacks, (row) => row.id === packId && row.projectId === projectId && row.status === 'draft') : undefined;
+    if (packId && !current) return { ok: false, error: 'Editable draft pack not found.' };
+    if (current) { current.title = title; current.items = snapshot; current.approvalId = approvalId ?? ''; }
+    else {
+      const seq = nextRecordSequence('construction:handoverSeq', 0, true);
+      state.handoverPacks.unshift({ tenantId: access.actor.tenantId!, id: `chp-${randomUUID()}`, ref: `HDP-${String(seq).padStart(4, '0')}`, projectId, title, items: snapshot, approvalId: approvalId ?? '', status: 'draft', createdBy: access.actor.userId, createdAtISO: nowISO() });
+    }
+    const pack = current ?? state.handoverPacks[0];
+    audit(access.actor, 'issue', 'handover_pack', pack.ref, projectId, `Saved handover pack with ${pack.items.length} document slots`);
+    refresh(); return { ok: true, id: pack.id, message: `${pack.ref} saved. ${handoverOmissions(pack, docs).length} omissions remain.` };
+  }, 'construction');
+}
+
+export async function submitConstructionHandoverPack(packId: string): Promise<ConstructionControlResult> {
+  return withDurableMutation(async () => {
+    const access = await gate('transition'); if (!access.actor) return { ok: false, error: access.error ?? 'Access denied.' };
+    const state = constructionControl(access.actor.tenantId!);
+    const pack = scopedSidecar(access.actor, state.handoverPacks, (row) => row.id === packId && row.status === 'draft');
+    if (!pack) return { ok: false, error: 'Draft handover pack unavailable.' };
+    const omissions = handoverOmissions(pack, repos.constructionDocs.list(access.actor, { limit: 5000 }).items);
+    if (omissions.length) return { ok: false, error: `Complete the handover pack: ${omissions.join('; ')}.` };
+    const approval = scopedSidecar(access.actor, state.fieldApprovals, (row) => row.id === pack.approvalId && row.projectId === pack.projectId && row.kind === 'handover' && row.status === 'approved');
+    if (!approval) return { ok: false, error: 'An approved evidence-backed handover decision for this project is required.' };
+    pack.status = 'submitted'; pack.submittedBy = access.actor.userId; pack.submittedAtISO = nowISO();
+    audit(access.actor, 'issue', 'handover_pack', pack.ref, pack.projectId, 'Handover pack submitted for final review'); refresh();
+    return { ok: true, id: pack.id, message: `${pack.ref} submitted for final handover review.` };
+  }, 'construction');
+}
+
+export async function approveConstructionHandoverPack(packId: string): Promise<ConstructionControlResult> {
+  return withDurableMutation(async () => {
+    const access = await gate('transition'); if (!access.actor) return { ok: false, error: access.error ?? 'Access denied.' };
+    if (!profileAllowed(access.actor, ['project-director', 'consultant-approver'])) return { ok: false, error: 'Only a project director or consultant approver can sign off handover.' };
+    const state = constructionControl(access.actor.tenantId!);
+    const pack = scopedSidecar(access.actor, state.handoverPacks, (row) => row.id === packId && row.status === 'submitted');
+    if (!pack || pack.submittedBy === access.actor.userId) return { ok: false, error: 'A separate approver is required for a submitted pack.' };
+    const omissions = handoverOmissions(pack, repos.constructionDocs.list(access.actor, { limit: 5000 }).items);
+    if (omissions.length || !state.fieldApprovals.some((row) => row.id === pack.approvalId && row.projectId === pack.projectId && row.status === 'approved')) return { ok: false, error: 'Handover documents or the linked evidence approval are no longer valid.' };
+    pack.status = 'approved'; pack.approvedBy = access.actor.userId; pack.approvedAtISO = nowISO();
+    audit(access.actor, 'approve', 'handover_pack', pack.ref, pack.projectId, 'Complete handover pack signed off'); refresh();
+    return { ok: true, id: pack.id, message: `${pack.ref} signed off with current approved files.` };
+  }, 'construction');
+}
+
+function financeOnly(actor: Actor) {
+  const access = actor.companyAccess;
+  return !access || access.companyRole === 'owner' || access.companyRole === 'admin' || access.operationalProfileId === 'construction-finance';
+}
+function unusedDebit(state: ReturnType<typeof constructionControl>, bankLineId: string, amountMinor: number) {
+  const line = state.bankDebits.find((row) => row.id === bankLineId && row.status === 'approved' && row.amountMinor === amountMinor);
+  if (!line || state.claims.some((row) => row.bankLineId === bankLineId) || state.retentionReleases.some((row) => row.bankLineId === bankLineId)) return undefined;
+  return line;
+}
+export async function importConstructionBankDebits(csv: string): Promise<ConstructionControlResult> {
+  return withDurableMutation(async () => {
+    const access = await gate('create'); if (!access.actor) return { ok: false, error: access.error ?? 'Access denied.' };
+    if (!financeOnly(access.actor)) return { ok: false, error: 'Only Construction finance can import payment statement lines.' };
+    if (csv.length > 1_000_000) return { ok: false, error: 'Statement is too large.' };
+    let lines: ReturnType<typeof parseBankCsv>;
+    try { lines = parseBankCsv(csv).filter((row) => row.direction === 'debit' && row.amountMinor > 0); }
+    catch (error) { return { ok: false, error: error instanceof Error ? error.message : 'Invalid bank CSV.' }; }
+    if (!lines.length) return { ok: false, error: 'No positive debit lines found.' };
+    const state = constructionControl(access.actor.tenantId!);
+    if (new Set(lines.map((row) => row.reference)).size !== lines.length || lines.some((row) => state.bankDebits.some((saved) => saved.reference === row.reference))) return { ok: false, error: 'Statement contains a duplicate bank reference.' };
+    for (const row of lines) state.bankDebits.unshift({ tenantId: access.actor.tenantId!, id: `cbd-${randomUUID()}`, date: row.date, reference: row.reference, amountMinor: row.amountMinor, narration: row.narration, importedBy: access.actor.userId, importedAtISO: nowISO(), status: 'pending_review' });
+    audit(access.actor, 'issue', 'construction_bank_statement', lines[0].reference, undefined, `Imported ${lines.length} debit statement lines for independent review`); refresh();
+    return { ok: true, message: `${lines.length} debit lines imported for independent review.` };
+  }, 'construction');
+}
+export async function reviewConstructionBankDebit(bankLineId: string, decision: 'approved' | 'rejected'): Promise<ConstructionControlResult> {
+  return withDurableMutation(async () => {
+    const access = await gate('transition'); if (!access.actor) return { ok: false, error: access.error ?? 'Access denied.' };
+    if (!financeOnly(access.actor)) return { ok: false, error: 'Only Construction finance can review a bank line.' };
+    const row = constructionControl(access.actor.tenantId!).bankDebits.find((item) => item.id === bankLineId && item.status === 'pending_review');
+    if (!row || row.importedBy === access.actor.userId) return { ok: false, error: 'A different finance member must review this imported bank line.' };
+    row.status = decision; row.reviewedBy = access.actor.userId; row.reviewedAtISO = nowISO();
+    audit(access.actor, decision === 'approved' ? 'approve' : 'reject', 'construction_bank_line', row.reference, undefined, `Bank debit ${decision}`, row.amountMinor); refresh();
+    return { ok: true, id: row.id, message: `Bank debit ${decision}.` };
+  }, 'construction');
+}
+export async function confirmConstructionClaimPayment(claimId: string, bankLineId: string): Promise<ConstructionControlResult> {
+  return withDurableMutation(async () => {
+    const access = await gate('transition'); if (!access.actor) return { ok: false, error: access.error ?? 'Access denied.' };
+    if (!financeOnly(access.actor)) return { ok: false, error: 'Only Construction finance can reconcile a claim payment.' };
+    const state = constructionControl(access.actor.tenantId!);
+    const row = scopedSidecar(access.actor, state.claims, (item) => item.id === claimId && item.status === 'approved' && item.certifiedMinor !== undefined);
+    if (!row || !row.certifiedMinor || row.certifiedMinor <= 0) return { ok: false, error: 'An approved positive claim is required.' };
+    const line = unusedDebit(state, bankLineId, row.certifiedMinor);
+    if (!line) return { ok: false, error: 'Choose an unused, independently approved bank debit for the exact net certified amount.' };
+    row.status = 'paid'; row.bankLineId = line.id; row.paymentReference = line.reference; row.paidAtISO = nowISO(); row.paidBy = access.actor.userId;
+    audit(access.actor, 'post_cost', 'construction_claim', row.ref, row.projectId, `Bank-confirmed claim payment ${line.reference}`, row.certifiedMinor); refresh();
+    return { ok: true, id: row.id, message: `${row.ref} reconciled to bank debit ${line.reference}.` };
+  }, 'construction');
+}
+export async function requestConstructionRetentionRelease(claimId: string, amountNaira: number, reason: string): Promise<ConstructionControlResult> {
+  return withDurableMutation(async () => {
+    const access = await gate('create'); if (!access.actor) return { ok: false, error: access.error ?? 'Access denied.' };
+    const state = constructionControl(access.actor.tenantId!);
+    const claim = scopedSidecar(access.actor, state.claims, (row) => row.id === claimId && row.status === 'paid');
+    const amountMinor = Math.round(amountNaira * 100);
+    if (!claim || !Number.isSafeInteger(amountMinor) || amountMinor <= 0 || reason.trim().length < 5 || reason.length > 500) return { ok: false, error: 'Choose a paid claim, positive release amount and reason.' };
+    const committed = state.retentionReleases.filter((row) => row.claimId === claimId && row.status !== 'rejected').reduce((sum, row) => sum + row.amountMinor, 0);
+    if (amountMinor > claim.retentionMinor - committed) return { ok: false, error: 'Release exceeds the remaining retained balance.' };
+    const seq = nextRecordSequence('construction:retentionSeq', 0, true);
+    const row = { tenantId: access.actor.tenantId!, id: `crr-${randomUUID()}`, claimId, projectId: claim.projectId, ref: `RET-${String(seq).padStart(4, '0')}`, amountMinor, reason: reason.trim(), status: 'requested' as const, requestedBy: access.actor.userId, requestedAtISO: nowISO() };
+    state.retentionReleases.unshift(row); audit(access.actor, 'issue', 'retention_release', row.ref, row.projectId, reason.trim(), amountMinor); refresh();
+    return { ok: true, id: row.id, message: `${row.ref} requested for approval.` };
+  }, 'construction');
+}
+export async function decideConstructionRetentionRelease(releaseId: string, decision: 'approved' | 'rejected'): Promise<ConstructionControlResult> {
+  return withDurableMutation(async () => {
+    const access = await gate('transition'); if (!access.actor) return { ok: false, error: access.error ?? 'Access denied.' };
+    if (!profileAllowed(access.actor, ['project-director', 'construction-finance'])) return { ok: false, error: 'Only the director or Construction finance can decide retention release.' };
+    const state = constructionControl(access.actor.tenantId!);
+    const row = scopedSidecar(access.actor, state.retentionReleases, (item) => item.id === releaseId && item.status === 'requested');
+    if (!row || row.requestedBy === access.actor.userId || !state.claims.some((claim) => claim.id === row.claimId && claim.status === 'paid')) return { ok: false, error: 'A separate approver and paid parent claim are required.' };
+    row.status = decision; row.reviewedBy = access.actor.userId; row.reviewedAtISO = nowISO();
+    audit(access.actor, decision === 'approved' ? 'approve' : 'reject', 'retention_release', row.ref, row.projectId, `Retention release ${decision}`, row.amountMinor); refresh();
+    return { ok: true, id: row.id, message: `${row.ref} ${decision}.` };
+  }, 'construction');
+}
+export async function confirmConstructionRetentionPayment(releaseId: string, bankLineId: string): Promise<ConstructionControlResult> {
+  return withDurableMutation(async () => {
+    const access = await gate('transition'); if (!access.actor) return { ok: false, error: access.error ?? 'Access denied.' };
+    if (!financeOnly(access.actor)) return { ok: false, error: 'Only Construction finance can reconcile retention payment.' };
+    const state = constructionControl(access.actor.tenantId!);
+    const row = scopedSidecar(access.actor, state.retentionReleases, (item) => item.id === releaseId && item.status === 'approved');
+    if (!row) return { ok: false, error: 'Approved release unavailable.' };
+    const line = unusedDebit(state, bankLineId, row.amountMinor);
+    if (!line) return { ok: false, error: 'Choose an unused approved bank debit for the exact release amount.' };
+    row.status = 'paid'; row.bankLineId = line.id; row.paymentReference = line.reference; row.paidAtISO = nowISO();
+    audit(access.actor, 'post_cost', 'retention_release', row.ref, row.projectId, `Bank-confirmed retention release ${line.reference}`, row.amountMinor); refresh();
+    return { ok: true, id: row.id, message: `${row.ref} paid and reconciled to ${line.reference}.` };
   }, 'construction');
 }
 

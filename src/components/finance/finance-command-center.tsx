@@ -15,7 +15,7 @@ import styles from './finance-command-center.module.css';
 
 type Result = { ok: boolean; error?: string; message?: string };
 type Settlement = { id: string; statement_ref: string; statement_date: string; amount_minor: number; direction: 'credit' | 'debit'; narration: string; provider?: string | null; event_id?: string | null; payment_status?: string | null; match_status: 'matched' | 'unmatched'; status?: string };
-type Eligible = { id: string; type: 'finance_payable' | 'construction_payment'; ref: string; module: FinanceModule; beneficiary: string; whtMinor: number };
+type Eligible = { id: string; type: 'finance_payable' | 'construction_payment' | 'construction_claim'; ref: string; module: FinanceModule; beneficiary: string; whtMinor: number };
 const money = (minor: number) => `₦${(minor / 100).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const label = (value: string) => value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 const tone = (status: string) => ['paid', 'approved', 'issued', 'matched'].includes(status) ? 'success' : ['rejected', 'unmatched', 'overdue'].includes(status) ? 'danger' : 'warn';
@@ -79,8 +79,23 @@ function CashFlow({ snapshot }: { snapshot: FinanceSnapshot }) {
 const Scenario = ({ label: title, value }: { label: string; value: number }) => <div><span>{title}</span><strong className={value < 0 ? styles.negative : ''}>{money(value)}</strong></div>;
 
 function WhtRegister({ rows, eligible, canIssue, onDone }: { rows: WhtCertificate[]; eligible: Eligible[]; canIssue: boolean; onDone: (value: string) => void }) {
-  const [source, setSource] = useState(eligible[0] ? `${eligible[0].type}:${eligible[0].id}` : ''); const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7) + '-01'); const selected = eligible.find((row) => `${row.type}:${row.id}` === source);
-  return <div className={styles.stack}><Card><CardHeader title="Issue WHT certificate" subtitle="Only paid liabilities with recorded withholding tax are eligible" /><div className={styles.formGrid}><Field label="Paid source"><select value={source} onChange={(event) => setSource(event.target.value)}><option value="">Choose eligible payment</option>{eligible.map((row) => <option key={`${row.type}-${row.id}`} value={`${row.type}:${row.id}`}>{row.ref} · {row.beneficiary} · {money(row.whtMinor)}</option>)}</select></Field><Field label="Tax period"><input type="date" value={period} onChange={(event) => setPeriod(event.target.value)} /></Field></div><div className={styles.actions}><Action label="Issue certificate" disabled={!canIssue || !selected || !period} run={() => issueWhtCertificate(selected!.type, selected!.id, period)} onDone={onDone} /></div></Card><Card padded={false}><div className={styles.cardHeader}><CardHeader title="WHT certificate register" subtitle="Durable issuance references by module and beneficiary" /></div>{rows.length ? <div className={styles.scroll} role="region" tabIndex={0} aria-label="WHT certificate register"><table className={`pb-data-table ${styles.table}`}><thead><tr><th>Certificate</th><th>Module</th><th>Beneficiary</th><th>Gross</th><th>Rate</th><th>WHT</th><th>Period</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><th>{row.ref}<p>{row.sourceRef}</p></th><td>{label(row.module)}</td><td>{row.beneficiary}</td><td>{money(row.grossMinor)}</td><td>{row.ratePct.toFixed(2)}%</td><td>{money(row.amountMinor)}</td><td>{row.periodISO}</td></tr>)}</tbody></table></div> : <EmptyState title="No WHT certificates issued" description="Paid liabilities with withholding tax will become eligible above." />}</Card></div>;
+  const [source, setSource] = useState(eligible[0] ? `${eligible[0].type}:${eligible[0].id}` : '');
+  const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7) + '-01');
+  const [certificateRef, setCertificateRef] = useState('');
+  const [remittanceRef, setRemittanceRef] = useState('');
+  const selected = eligible.find((row) => `${row.type}:${row.id}` === source);
+  const claim = selected?.type === 'construction_claim';
+  return <div className={styles.stack}>
+    <Card><CardHeader title="Record WHT certificate" subtitle="For Construction claims, enter the issued tax certificate and remittance evidence; Propbrew does not issue tax authority certificates." />
+      <div className={styles.formGrid}>
+        <Field label="Paid source"><select value={source} onChange={(event) => setSource(event.target.value)}><option value="">Choose eligible payment</option>{eligible.map((row) => <option key={`${row.type}-${row.id}`} value={`${row.type}:${row.id}`}>{row.ref} · {row.beneficiary} · {money(row.whtMinor)}</option>)}</select></Field>
+        <Field label="Tax period"><input type="date" value={period} onChange={(event) => setPeriod(event.target.value)} /></Field>
+        {claim ? <><Field label="Issued certificate reference"><input value={certificateRef} onChange={(event) => setCertificateRef(event.target.value)} /></Field><Field label="Tax remittance reference"><input value={remittanceRef} onChange={(event) => setRemittanceRef(event.target.value)} /></Field></> : null}
+      </div>
+      <div className={styles.actions}><Action label="Record certificate" disabled={!canIssue || !selected || !period || Boolean(claim && (certificateRef.trim().length < 5 || remittanceRef.trim().length < 5))} run={() => issueWhtCertificate(selected!.type, selected!.id, period, claim ? { externalCertificateRef: certificateRef, remittanceRef } : undefined)} onDone={onDone} /></div>
+    </Card>
+    <Card padded={false}><div className={styles.cardHeader}><CardHeader title="WHT certificate register" subtitle="Durable references by module and beneficiary" /></div>{rows.length ? <div className={styles.scroll} role="region" tabIndex={0} aria-label="WHT certificate register"><table className={`pb-data-table ${styles.table}`}><thead><tr><th>Certificate</th><th>Module</th><th>Beneficiary</th><th>Gross</th><th>Rate</th><th>WHT</th><th>Period</th><th>Remittance</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><th>{row.ref}<p>{row.sourceRef}</p><p>{row.externalCertificateRef}</p></th><td>{label(row.module)}</td><td>{row.beneficiary}</td><td>{money(row.grossMinor)}</td><td>{row.ratePct.toFixed(2)}%</td><td>{money(row.amountMinor)}</td><td>{row.periodISO}</td><td>{row.remittanceRef ?? '—'}</td></tr>)}</tbody></table></div> : <EmptyState title="No WHT certificates recorded" description="Paid liabilities with withholding tax will become eligible above." />}</Card>
+  </div>;
 }
 
 function Reconciliation({ initialRows, canApprove, onDone }: { initialRows: Settlement[]; canApprove: boolean; onDone: (value: string) => void }) {

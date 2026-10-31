@@ -25,6 +25,7 @@ export default async function FinancePage() {
     const whtEligible = [
       ...payables.filter((row) => row.status === 'paid' && row.whtMinor > 0 && !certified.has(row.id)).map((row) => ({ id: row.id, type: 'finance_payable' as const, ref: row.ref, module: row.module, beneficiary: row.counterparty, whtMinor: row.whtMinor })),
       ...(allowedModules.has('construction') ? construction.payments : []).filter((row) => row.status === 'paid' && row.whtMinor > 0 && !certified.has(row.id)).map((row) => ({ id: row.id, type: 'construction_payment' as const, ref: row.ref, module: 'construction' as const, beneficiary: row.invoiceRef, whtMinor: row.whtMinor })),
+      ...(allowedModules.has('construction') ? construction.claims : []).filter((row) => row.status === 'paid' && row.whtMinor > 0 && !certified.has(row.id)).map((row) => ({ id: row.id, type: 'construction_claim' as const, ref: row.ref, module: 'construction' as const, beneficiary: row.subcontractorId, whtMinor: row.whtMinor })),
     ];
     return <div className="pb-page"><FinanceCommandCenter
       snapshot={snapshot}

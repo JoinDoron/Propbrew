@@ -25,6 +25,32 @@ export type ConstructionClaim = {
   periodEndISO: string; description: string; claimedMinor: number; assessedMinor?: number; retentionMinor: number;
   retentionPct: number; whtMinor: number; whtPct: number; certifiedMinor?: number; status: 'submitted' | 'assessed' | 'approved' | 'rejected' | 'paid';
   submittedBy: string; submittedAtISO: string; reviewedBy?: string; reviewedAtISO?: string; reviewNote?: string;
+  bankLineId?: string; paymentReference?: string; paidAtISO?: string; paidBy?: string;
+};
+
+export const HANDOVER_REQUIREMENTS = [
+  { key: 'as_built', label: 'Approved as-built drawings' },
+  { key: 'testing', label: 'Testing and commissioning records' },
+  { key: 'authorities', label: 'Authority permits and sign-offs' },
+  { key: 'manuals', label: 'Operation manuals and warranties' },
+  { key: 'defects', label: 'Defects and punch-list closeout' },
+] as const;
+export type HandoverRequirement = typeof HANDOVER_REQUIREMENTS[number]['key'];
+export type ConstructionHandoverPack = {
+  tenantId: string; id: string; projectId: string; ref: string; title: string;
+  items: { requirement: HandoverRequirement; docId: string; number: string; revision: string; fileSha256: string }[];
+  approvalId: string; status: 'draft' | 'submitted' | 'approved'; createdBy: string; createdAtISO: string;
+  submittedBy?: string; submittedAtISO?: string; approvedBy?: string; approvedAtISO?: string;
+};
+export type ConstructionBankDebit = {
+  tenantId: string; id: string; date: string; reference: string; amountMinor: number; narration: string;
+  importedBy: string; importedAtISO: string; status: 'pending_review' | 'approved' | 'rejected';
+  reviewedBy?: string; reviewedAtISO?: string;
+};
+export type ConstructionRetentionRelease = {
+  tenantId: string; id: string; claimId: string; projectId: string; ref: string; amountMinor: number;
+  reason: string; status: 'requested' | 'approved' | 'rejected' | 'paid'; requestedBy: string; requestedAtISO: string;
+  reviewedBy?: string; reviewedAtISO?: string; bankLineId?: string; paymentReference?: string; paidAtISO?: string;
 };
 
 export type ProcurementPayment = {
@@ -41,10 +67,23 @@ export type ConstructionControlState = {
   fieldApprovals: ConstructionFieldApproval[];
   claims: ConstructionClaim[];
   payments: ProcurementPayment[];
+  handoverPacks: ConstructionHandoverPack[];
+  bankDebits: ConstructionBankDebit[];
+  retentionReleases: ConstructionRetentionRelease[];
 };
 
 export function emptyConstructionControlState(): ConstructionControlState {
-  return { subcontractors: [], evidencePacks: [], fieldApprovals: [], claims: [], payments: [] };
+  return { subcontractors: [], evidencePacks: [], fieldApprovals: [], claims: [], payments: [], handoverPacks: [], bankDebits: [], retentionReleases: [] };
+}
+
+export function handoverOmissions(pack: ConstructionHandoverPack, docs: readonly { id: string; projectId: string; number: string; revision: string; status: string; fileId?: string; fileSha256?: string }[]) {
+  return HANDOVER_REQUIREMENTS.flatMap(({ key, label }) => {
+    const item = pack.items.find((row) => row.requirement === key);
+    if (!item) return [`${label}: document missing`];
+    const doc = docs.find((row) => row.id === item.docId && row.projectId === pack.projectId);
+    if (!doc || doc.status !== 'approved' || !doc.fileId || !doc.fileSha256 || doc.number !== item.number || doc.revision !== item.revision || doc.fileSha256 !== item.fileSha256) return [`${label}: approved file revision unavailable or superseded`];
+    return [];
+  });
 }
 
 export function claimPayableMinor(claimedMinor: number, retentionPct: number, whtPct: number) {
