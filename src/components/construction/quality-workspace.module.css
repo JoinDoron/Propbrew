@@ -1,0 +1,28 @@
+.heading { display: flex; align-items: end; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.heading h1 { font-size: 1.75rem; font-weight: 650; color: var(--text); letter-spacing: -.025em; }
+.heading p { color: var(--text-2); }
+.eyebrow { color: var(--brand-solid) !important; font-size: .72rem; font-weight: 700; letter-spacing: .08em; }
+.projectSelect, .form label, .editor label { display: grid; gap: .4rem; color: var(--text-2); font-size: .8rem; font-weight: 600; }
+.projectSelect select, .form input, .form select, .editor input, .editor textarea { min-height: 44px; width: 100%; border: 1px solid var(--border); border-radius: .7rem; background: var(--surface); color: var(--text); padding: .65rem .8rem; font: inherit; }
+.editor textarea { min-height: 90px; resize: vertical; }
+.projectSelect select:focus-visible, .form input:focus-visible, .form select:focus-visible, .editor input:focus-visible, .editor textarea:focus-visible { outline: 2px solid var(--brand-solid); outline-offset: 2px; }
+.metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; }
+.boundary { background: var(--surface-2); }
+.boundary strong { color: var(--text); }
+.boundary p { margin-top: .35rem; color: var(--text-2); font-size: .85rem; }
+.form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .8rem; padding: 1rem; }
+.formAction { display: flex; align-items: end; }
+.stack { display: grid; gap: .75rem; padding-top: 1rem; }
+.issue { display: grid; gap: .7rem; }
+.issueHead { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.issueHead h3 { font-size: 1rem; font-weight: 650; color: var(--text); }
+.meta { font-size: .76rem; color: var(--text-3); }
+.pills, .actions, .details { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
+.details { color: var(--text-2); font-size: .8rem; }
+.details span + span::before { content: '·'; margin-right: .5rem; color: var(--text-3); }
+.note { color: var(--text-2); font-size: .82rem; overflow-wrap: anywhere; }
+.editor { display: grid; gap: .7rem; border-top: 1px solid var(--border); padding-top: .8rem; }
+.feedback { color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: .7rem; padding: .7rem .9rem; }
+.empty { color: var(--text-3); font-size: .86rem; }
+@media (max-width: 850px) { .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .form { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .metrics, .form { grid-template-columns: 1fr; } .projectSelect { width: 100%; } }

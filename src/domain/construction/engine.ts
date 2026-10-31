@@ -660,13 +660,13 @@ export const AUDIT_ACTION_LABEL: Record<AuditAction, string> = {
   approve: 'Approved', reject: 'Rejected', issue: 'Issued', supersede: 'Superseded',
   post_cost: 'Posted cost', import: 'Imported', stock_move: 'Stock movement',
   stock_count: 'Stock count', override: 'Override', delegate: 'Delegated', cancel: 'Cancelled',
-  fx_revalue: 'FX revalue',
+  fx_revalue: 'FX revalue', record: 'Recorded', resolve: 'Resolved',
 };
 export const AUDIT_TONE: Record<AuditAction, Tone> = {
   approve: 'success', reject: 'danger', issue: 'info', supersede: 'warn',
   post_cost: 'progress', import: 'info', stock_move: 'progress',
   stock_count: 'warn', override: 'danger', delegate: 'info', cancel: 'muted',
-  fx_revalue: 'warn',
+  fx_revalue: 'warn', record: 'info', resolve: 'success',
 };
 
 /** Money-moving actions an auditor looks at first. */

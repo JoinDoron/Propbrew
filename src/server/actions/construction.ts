@@ -31,11 +31,11 @@ import {
   canApprove, applyDecision, pendingSteps, fxExposure, fxTable, scanRisks,
 } from '@/domain/construction';
 import type { CurrencyCode } from '@/domain/primitives';
-import type { ProjectMobilisation, ProjectStatus } from '@/domain/construction/types';
+import type { AuditAction, ProjectMobilisation, ProjectStatus } from '@/domain/construction/types';
 
 export type Res = { ok: true; ref?: string } | { ok: false; error: string };
 
-const PATHS = ['/construction', '/construction/evm', '/construction/schedule', '/construction/materials', '/construction/risk', '/construction/procurement', '/construction/site', '/construction/projects', '/construction/workforce', '/construction/digest', '/construction/documents', '/construction/boq', '/construction/timesheets', '/construction/stock', '/construction/approvals', '/construction/audit', '/construction/fx', '/construction/field', '/construction/simulator', '/construction/twin', '/construction/league', '/construction/safety', '/construction/build-watch', '/construction/copilot'];
+const PATHS = ['/construction', '/construction/evm', '/construction/schedule', '/construction/materials', '/construction/risk', '/construction/procurement', '/construction/site', '/construction/projects', '/construction/workforce', '/construction/digest', '/construction/documents', '/construction/boq', '/construction/timesheets', '/construction/stock', '/construction/approvals', '/construction/audit', '/construction/fx', '/construction/field', '/construction/simulator', '/construction/twin', '/construction/league', '/construction/safety', '/construction/quality', '/construction/build-watch', '/construction/copilot'];
 const revalidate = () => PATHS.forEach((p) => revalidatePath(p));
 
 async function gate(action: 'update' | 'create'): Promise<{ ok: true; actor: Actor } | { ok: false; error: string }> {
@@ -303,6 +303,62 @@ export async function escalateSignalToIssue(signalId: string, projectId: string,
   db.constructionIssues.unshift({ tenantId: g.actor.tenantId, id, projectId, category: 'Risk', title: `Escalated: ${signal.title}`, severity: 'high', owner: nameOf(g.actor), raisedISO: operatingDateISO(), dueISO: daysISO(operatingDateISO(), 5), status: 'open', correctiveAction: 'From risk radar' } as (typeof db.constructionIssues)[number]);
   setSignalState(g.actor, signalId, 'escalated').escalatedIssueId = id; revalidate(); return { ok: true, ref: id };
 
+  }, 'construction');
+}
+
+/* --- project quality and design coordination ----------------------------- */
+const qualityCategories = ['Punch list', 'Authority inspection', 'Design clash'] as const;
+const qualityInput = z.object({
+  projectId: z.string().min(1),
+  category: z.enum(qualityCategories),
+  title: z.string().trim().min(4).max(180),
+  severity: z.enum(['low', 'medium', 'high', 'critical']),
+  owner: z.string().trim().min(2).max(100),
+  dueISO: z.iso.date(),
+  location: z.string().trim().min(2).max(160),
+  sourceReference: z.string().trim().max(160).optional(),
+  relatedReference: z.string().trim().max(160).optional(),
+  authority: z.string().trim().max(160).optional(),
+  evidenceReference: z.string().trim().max(500).optional(),
+});
+export type QualityIssueInput = z.infer<typeof qualityInput>;
+
+export async function recordConstructionQualityIssue(input: QualityIssueInput): Promise<Res> {
+  return withDurableMutation(async () => {
+    const g = await gate('create'); if (!g.ok) return g;
+    const parsed = qualityInput.safeParse(input);
+    if (!parsed.success) return { ok: false, error: 'Check the project, title, owner, location and due date.' };
+    const data = parsed.data;
+    if (!scopedConstructionProjectGet(g.actor, data.projectId, 'create')) return { ok: false, error: 'Project not found.' };
+    if (data.category === 'Authority inspection' && !data.authority) return { ok: false, error: 'Record the inspecting authority.' };
+    if (data.category === 'Design clash' && (!data.sourceReference || !data.relatedReference)) return { ok: false, error: 'Record both conflicting drawing or model references.' };
+    const id = `is-quality-${randomUUID()}`;
+    db.constructionIssues.unshift({ tenantId: g.actor.tenantId, id, ...data, raisedISO: operatingDateISO(), status: 'open' } as (typeof db.constructionIssues)[number]);
+    audit(g.actor, { action: 'record', entity: 'construction_issue', entityRef: id, projectId: data.projectId, summary: `${data.category}: ${data.title}` });
+    revalidate();
+    return { ok: true, ref: id };
+  }, 'construction');
+}
+
+export async function advanceConstructionQualityIssue(id: string, status: 'in_progress' | 'resolved', correctiveAction: string, evidenceReference?: string): Promise<Res> {
+  return withDurableMutation(async () => {
+    const g = await gate('update'); if (!g.ok) return g;
+    const issue = scopedMutableGet(g.actor, 'reports_analytics', db.constructionIssues, id, 'update');
+    if (!issue || !scopedConstructionProjectGet(g.actor, issue.projectId, 'update')) return { ok: false, error: 'Issue not found.' };
+    if (!qualityCategories.some((category) => category === issue.category)) return { ok: false, error: 'Use the source workflow for this issue.' };
+    if (issue.status === 'resolved') return { ok: false, error: 'Resolved issues require a separate adjustment to reopen.' };
+    const note = correctiveAction?.trim();
+    if (!note || note.length < 8 || note.length > 1000) return { ok: false, error: 'Describe the action in at least 8 characters.' };
+    const evidence = evidenceReference?.trim();
+    if (status === 'resolved' && !evidence && !issue.evidenceReference) return { ok: false, error: 'Add an evidence reference before resolution.' };
+    const before = issue.status;
+    issue.status = status;
+    issue.correctiveAction = note;
+    if (evidence) issue.evidenceReference = evidence.slice(0, 500);
+    if (status === 'resolved') issue.closedISO = operatingDateISO();
+    audit(g.actor, { action: status === 'resolved' ? 'resolve' : 'record', entity: 'construction_issue', entityRef: id, projectId: issue.projectId, summary: `${issue.category}: ${issue.title}`, before, after: status, note });
+    revalidate();
+    return { ok: true, ref: id };
   }, 'construction');
 }
 
@@ -726,7 +782,7 @@ export async function rejectTimesheet(id: string, reason: string): Promise<Res> 
 /** Append an immutable audit entry. Called by every sensitive action; nothing in
  *  the app ever updates or deletes one (PRD §18.3 / SC-10). */
 function audit(actor: Actor, entry: {
-  action: 'approve' | 'reject' | 'issue' | 'supersede' | 'post_cost' | 'import' | 'stock_move' | 'stock_count' | 'override' | 'delegate' | 'cancel' | 'fx_revalue';
+  action: AuditAction;
   entity: string; entityRef: string; summary: string;
   projectId?: string; amountMinor?: number; before?: string; after?: string; reasonCodeId?: string; note?: string;
 }): void {

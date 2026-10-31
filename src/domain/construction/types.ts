@@ -100,6 +100,9 @@ export type IssueStatus = 'open' | 'in_progress' | 'resolved';
 export type Issue = TenantScoped & {
   id: string; projectId: string; category: string; title: string; severity: IssueSeverity;
   owner: string; raisedISO: string; dueISO: string; status: IssueStatus; correctiveAction?: string;
+  /** Construction quality and design-coordination metadata. Older issues omit these fields. */
+  location?: string; sourceReference?: string; relatedReference?: string; authority?: string;
+  evidenceReference?: string; closedISO?: string;
 };
 
 /* --- site operations ------------------------------------------------------ */
@@ -361,7 +364,8 @@ export type ApprovalRequest = TenantScoped & {
  *  for sensitive actions", SC-10). Written by the actions, never edited. */
 export type AuditAction =
   | 'approve' | 'reject' | 'issue' | 'supersede' | 'post_cost' | 'import'
-  | 'stock_move' | 'stock_count' | 'override' | 'delegate' | 'cancel' | 'fx_revalue';
+  | 'stock_move' | 'stock_count' | 'override' | 'delegate' | 'cancel' | 'fx_revalue'
+  | 'record' | 'resolve';
 export type AuditEntry = TenantScoped & {
   id: string; seq: number; atISO: string;
   actorId: string; actorName: string; actorRole: string;
