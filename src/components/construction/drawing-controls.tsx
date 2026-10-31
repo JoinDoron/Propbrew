@@ -18,7 +18,7 @@ export function DrawingControls({ register, companyId, projectId, projects, loca
 }) {
   const router = useRouter();
   const [selection, setSelection] = useState<Selection | null>(null);
-  const chooseProject = (id: string) => router.push(`/construction/documents?projectId=${encodeURIComponent(id)}`);
+  const chooseProject = (id: string) => { const tab = new URLSearchParams(window.location.search).get('tab'); router.push(`/construction/documents?projectId=${encodeURIComponent(id)}${tab ? `&tab=${encodeURIComponent(tab)}` : ''}`); };
   const fileCount = register.reduce((count, row) => count + row.revisions.filter((revision) => revision.fileUrl).length, 0);
 
   return <>

@@ -10,6 +10,7 @@ import 'server-only';
 
 import type { Role } from '@/domain/enums';
 import { currentRecordContext, getRecordAuxiliary, nextRecordSequence } from '@/server/data/record-context';
+import { operatingNowISO } from '@/server/operating-clock';
 
 export type NotifKind = 'info' | 'success' | 'warn' | 'danger';
 export type Notification = {
@@ -172,7 +173,7 @@ export function markAllNotificationsRead(userId: string, roles: readonly Role[])
 export function pushNotification(userId: string, roles: readonly Role[], n: { title: string; body: string; kind: NotifKind; href?: string }): void {
   ensureSeeded(userId, primaryRole(roles));
   const list = inboxRecords().notifications[userKey(userId)];
-  list.unshift({ id: `n-${userId}-push-${nextRecordSequence('inbox:pushSeq', 0, true)}`, title: n.title, body: n.body, kind: n.kind, href: n.href, at: new Date(BASE).toISOString(), read: false });
+  list.unshift({ id: `n-${userId}-push-${nextRecordSequence('inbox:pushSeq', 0, true)}`, title: n.title, body: n.body, kind: n.kind, href: n.href, at: operatingNowISO(), read: false });
 }
 
 export function getThreads(userId: string, roles: readonly Role[]): Thread[] {

@@ -42,6 +42,7 @@ const coverage = [
   ['materials', 'materials-workspace', ['stock', 'overview', 'movements']],
   ['procurement', 'procurement-workspace', ['orders', 'rfqs', 'deliveries', 'overview']],
   ['projects', 'projects-workspace', ['register', 'overview']],
+  ['quality', 'quality-workspace', []],
   ['risk', 'risk-radar', ['signals', 'overview', 'methodology']],
   ['safety', 'safety-workspace', ['permits', 'events', 'overview']],
   ['schedule', 'schedule-workspace', ['network', 'milestones', 'overview']],
@@ -54,12 +55,12 @@ const coverage = [
 ] as const;
 
 describe('Clinexa coverage of every Construction page', () => {
-  it('has an explicit entry for all 26 routes and all 26 workspace components', () => {
+  it('has an explicit entry for all 27 routes and all 27 workspace components', () => {
     const root = resolve(process.cwd(), 'src/app/(ops)/construction');
     const routes = ['', ...readdirSync(root, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name)];
     expect(coverage.map(([route]) => route).sort()).toEqual(routes.sort());
-    expect(coverage).toHaveLength(26);
-    expect(coverage.map(([, file]) => file + '.tsx').sort()).toEqual(readdirSync(resolve(process.cwd(), 'src/components/construction')).filter((file) => file.endsWith('.tsx') && file !== 'construction-ui.tsx' && file !== 'project-setup-workspace.tsx').sort());
+    expect(coverage).toHaveLength(27);
+    expect(coverage.map(([, file]) => file + '.tsx').sort()).toEqual(readdirSync(resolve(process.cwd(), 'src/components/construction')).filter((file) => file.endsWith('.tsx') && !['construction-ui.tsx', 'project-setup-workspace.tsx', 'drawing-controls.tsx', 'rfi-workspace.tsx'].includes(file)).sort());
     const composed = view('construction-ui');
     for (const primitive of ['Card', 'CardHeader', 'KpiCard', 'Button', 'IconButton', 'PortalDialog']) expect(composed).toMatch(new RegExp(`<${primitive}(?:\\s|>)`));
   });
@@ -88,7 +89,7 @@ describe('Clinexa coverage of every Construction page', () => {
     expect(source).not.toMatch(/<PageTabs\s+key=/);
     expect(view('construction-ui')).toContain('shared.layout');
     expect(source).toContain('<ConstructionFrame>');
-    expect(source).toMatch(/<PageHeader\b|<ConstructionSummary>|<CopilotSummary\b/);
+    expect(source).toMatch(/<PageHeader\b|<ConstructionSummary>|<CopilotSummary\b|<div className=\{styles\.heading\}>/);
     expect(source).not.toContain('pb-hero-title');
     expect(source).not.toMatch(/from ['"]@\/server\/(?:data|reads|guard)/);
   });

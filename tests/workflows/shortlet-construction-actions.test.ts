@@ -12,6 +12,7 @@ import { shortletControl } from '@/server/shortlet-control';
 import * as shortlet from '@/server/actions/shortlet';
 import * as shortletControlActions from '@/server/actions/shortlet-control';
 import * as construction from '@/server/actions/construction';
+import { actorForCompanyMember } from '@/lib/auth/company-policy';
 
 const session = vi.hoisted(() => ({ actor: vi.fn() }));
 vi.mock('@/server/session', () => ({ getActor: session.actor }));
@@ -180,6 +181,47 @@ describe('Shortlet booking and money workflows', () => {
 });
 
 describe('Construction delivery, state and stock workflows', () => {
+  it('moves a new RFI from draft through assigned answer, review, distribution and closeout', async () => {
+    const actor = manager();
+    const input = { projectId: 'cp-marina', title: 'Confirm slab reinforcement', question: 'Please confirm the slab reinforcement detail before the next pour.', discipline: 'Structural', dueISO: '2026-08-05', responderUserId: actor.userId };
+    const created = await construction.createRfi(input);
+    expect(created.ok).toBe(true);
+    const rfi = db.constructionRfis.find((row) => row.ref === (created.ok ? created.ref : ''))!;
+    expect(rfi.status).toBe('draft');
+    expect((await construction.submitRfi(rfi.id)).ok).toBe(true);
+    expect(rfi.status).toBe('submitted');
+    expect((await construction.closeRfi(rfi.id)).ok).toBe(false);
+    expect((await construction.answerRfi(rfi.id, 'Use the approved structural detail for the L4 slab.')).ok).toBe(true);
+    expect(rfi.status).toBe('answered');
+    expect((await construction.reviewRfiAnswer(rfi.id, 'return', 'Cite the specific bar schedule.')).ok).toBe(true);
+    expect(rfi.status).toBe('submitted');
+    expect((await construction.answerRfi(rfi.id, 'Use the L4 slab bar schedule and the approved structural detail.')).ok).toBe(true);
+    expect((await construction.reviewRfiAnswer(rfi.id, 'accept')).ok).toBe(true);
+    expect(rfi.status).toBe('reviewed');
+    expect((await construction.distributeRfi(rfi.id, [actor.userId])).ok).toBe(true);
+    expect(rfi.distributionUserIds).toEqual([actor.userId]);
+    expect((await construction.closeRfi(rfi.id)).ok).toBe(true);
+    expect(rfi.status).toBe('closed');
+    expect((await construction.answerRfi(rfi.id, 'Another answer')).ok).toBe(false);
+    expect(rfi.activity?.map((event) => event.action)).toEqual(['created', 'submitted', 'answered', 'returned', 'answered', 'reviewed', 'distributed', 'closed']);
+  });
+
+  it('rejects an invalid responder or drawing and isolates RFI changes from other companies', async () => {
+    const input = { projectId: 'cp-marina', title: 'Confirm slab reinforcement', question: 'Please confirm the slab reinforcement detail before the next pour.', discipline: 'Structural', dueISO: '2026-08-05', responderUserId: 'unassigned-person' };
+    const count = db.constructionRfis.length;
+    expect((await construction.createRfi(input, true)).ok).toBe(false);
+    expect((await construction.createRfi({ ...input, responderUserId: manager().userId, drawingDocId: 'missing-drawing' }, true)).ok).toBe(false);
+    expect(db.constructionRfis).toHaveLength(count);
+    const made = await construction.createRfi({ ...input, responderUserId: manager().userId }, true);
+    expect(made.ok).toBe(true);
+    const rfi = db.constructionRfis.find((row) => row.ref === (made.ok ? made.ref : ''))!;
+    session.actor.mockResolvedValueOnce(actorForCompanyMember({ membershipId: 'rfi-site', userId: manager().userId, companyId: SEED.tenantA, companyRole: 'member', status: 'active', companyStatus: 'active', modules: { construction: 'manage' }, operationalProfileId: 'site-manager', estateIds: [], allEstates: false, constructionProjectIds: ['cp-cedar'], allConstructionProjects: false }, manager().userId));
+    expect((await construction.answerRfi(rfi.id, 'Cross-project answer')).ok).toBe(false);
+    session.actor.mockResolvedValueOnce({ ...manager(), tenantId: foreignTenant });
+    expect((await construction.answerRfi(rfi.id, 'Cross-company answer')).ok).toBe(false);
+    expect(rfi.answer).toBeUndefined();
+  });
+
   it('awards one RFQ exactly once, with a unique reference and the request project cost code', async () => {
     const rfq = db.constructionRfqs[0], quote = rfq.quotes[0];
     const refs = new Set(db.constructionOrders.map((order) => order.ref));

@@ -817,8 +817,9 @@ export function docRegister(docs: readonly ConstructionDoc[]): DocRegisterRow[] 
 /** RFI ageing — an unanswered RFI past its due date is blocking someone. */
 export function rfiAgeing(r: Pick<RFI, 'status' | 'dueISO' | 'raisedISO'>, nowMs: number): { daysOpen: number; overdueDays: number; band: Tone } {
   const daysOpen = Math.max(0, Math.round((nowMs - Date.parse(r.raisedISO)) / DAY));
-  const overdueDays = r.status === 'closed' || r.status === 'answered' ? 0 : Math.max(0, Math.round((nowMs - Date.parse(r.dueISO)) / DAY));
-  const band: Tone = overdueDays > 7 ? 'danger' : overdueDays > 0 ? 'warn' : r.status === 'open' ? 'progress' : 'success';
+  const awaitingResponse = r.status === 'open' || r.status === 'submitted';
+  const overdueDays = awaitingResponse ? Math.max(0, Math.round((nowMs - Date.parse(r.dueISO)) / DAY)) : 0;
+  const band: Tone = overdueDays > 7 ? 'danger' : overdueDays > 0 ? 'warn' : awaitingResponse ? 'progress' : 'success';
   return { daysOpen, overdueDays, band };
 }
 

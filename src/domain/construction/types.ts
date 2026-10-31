@@ -245,11 +245,20 @@ export type Transmittal = TenantScoped & {
   acknowledgedISO?: string;
 };
 
-export type RFIStatus = 'open' | 'answered' | 'closed';
+export type RFIStatus = 'draft' | 'submitted' | 'open' | 'answered' | 'reviewed' | 'distributed' | 'closed';
+export type RFIActivity = { atISO: string; byUserId: string; by: string; action: 'created' | 'updated' | 'submitted' | 'assigned' | 'answered' | 'returned' | 'reviewed' | 'distributed' | 'closed'; note?: string };
 export type RFI = TenantScoped & {
   id: string; ref: string; projectId: string; question: string; discipline: string; drawingRef?: string;
   raisedBy: string; assignedTo: string; raisedISO: string; dueISO: string; status: RFIStatus;
   answer?: string; answeredISO?: string;
+  /** New RFIs bind responsibility and drawings to immutable identities. Legacy
+   * sample rows may contain only names and drawingRef. */
+  title?: string; creatorUserId?: string; responderUserId?: string; answerByUserId?: string;
+  drawingDocId?: string; drawingFileId?: string; responseDrawingDocId?: string; responseDrawingFileId?: string;
+  workPackageId?: string; submittedISO?: string; reviewedISO?: string; reviewedByUserId?: string; reviewNote?: string;
+  distributedISO?: string; distributionUserIds?: string[]; distributionNote?: string; closedISO?: string;
+  responses?: { atISO: string; byUserId: string; text: string; drawingDocId?: string; drawingFileId?: string }[];
+  activity?: RFIActivity[];
 };
 
 /* --- site twin (digital-twin-lite: the building, floor by floor) ---------- */

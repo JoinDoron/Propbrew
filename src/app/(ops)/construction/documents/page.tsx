@@ -7,12 +7,15 @@ import { withDurableRead } from '@/server/data/durable-records';
 import { nativeAuthEnabled } from '@/server/auth/mode';
 import { constructionDrawingVisible } from '@/server/construction/drawings';
 import { repos } from '@/server/data';
+import { getCompanyPrincipal } from '@/server/auth/company';
+import { rfiProjectMembers } from '@/server/construction/rfi-members';
+import { rfiInScope, rfiManager } from '@/server/construction/rfi-access';
 
 /** Documents & RFIs — a controlled register with real revision control (PRD §12):
  *  revisions chain per document number, exactly one approved "current issue",
  *  approved revisions are superseded rather than overwritten, and every formal
  *  distribution is recorded as a transmittal. RFIs age against their due date. */
-export default async function ConstructionDocumentsPage({ searchParams }: { searchParams: Promise<{ projectId?: string }> }) {
+export default async function ConstructionDocumentsPage({ searchParams }: { searchParams: Promise<{ projectId?: string; tab?: string }> }) {
   return withDurableRead(async () => {
   const { nowMs: NOW_MS } = operatingClock();
   const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
@@ -22,7 +25,8 @@ export default async function ConstructionDocumentsPage({ searchParams }: { sear
   const docs = repos.constructionDocs.list(actor, { limit: 2000 }).items;
   const rfisForScope = repos.constructionRfis.list(actor, { limit: 2000 }).items;
   const transmittals = repos.constructionTransmittals.list(actor, { limit: 5000 }).items;
-  const requestedProjectId = (await searchParams).projectId;
+  const params = await searchParams;
+  const requestedProjectId = params.projectId;
   const project = projects.find((item) => item.id === requestedProjectId) ?? projects[0];
   const projectId = project?.id ?? '';
 
@@ -38,9 +42,22 @@ export default async function ConstructionDocumentsPage({ searchParams }: { sear
     })),
   }));
 
-  const rfis: RfiRow[] = rfisForScope.filter((r) => r.projectId === projectId)
-    .map((r) => { const a = rfiAgeing(r, NOW_MS); return { id: r.id, ref: r.ref, question: r.question, discipline: r.discipline, drawingRef: r.drawingRef, raisedBy: r.raisedBy, assignedTo: r.assignedTo, raisedISO: r.raisedISO, dueISO: r.dueISO, status: r.status, answer: r.answer, ...a }; })
+  const rfis: RfiRow[] = rfisForScope.filter((r) => r.projectId === projectId && rfiInScope(actor, r))
+    .map((r) => {
+      const { tenantId: _tenantId, ...visible } = r; void _tenantId;
+      const drawingVisible = !r.drawingDocId || docs.some((doc) => doc.id === r.drawingDocId && constructionDrawingVisible(actor, doc));
+      const responseVisible = !r.responseDrawingDocId || docs.some((doc) => doc.id === r.responseDrawingDocId && constructionDrawingVisible(actor, doc));
+      return { ...visible, drawingRef: drawingVisible ? r.drawingRef : undefined, drawingFileId: drawingVisible ? r.drawingFileId : undefined,
+        responseDrawingFileId: responseVisible ? r.responseDrawingFileId : undefined, ...rfiAgeing(r, NOW_MS) };
+    })
     .sort((a, b) => b.overdueDays - a.overdueDays || Date.parse(a.dueISO) - Date.parse(b.dueISO));
+
+  const principal = projectId && nativeAuthEnabled() ? await getCompanyPrincipal() : null;
+  const members = projectId && principal?.company.id === actor.tenantId
+    ? await rfiProjectMembers(principal, projectId)
+    : [{ userId: actor.userId, name: principal?.user.name ?? 'Current user', canRespond: canMutate, packageIds: [], profileId: null }];
+  const drawings = docs.filter((doc) => doc.projectId === projectId && doc.status === 'approved' && doc.fileId && constructionDrawingVisible(actor, doc))
+    .map((doc) => ({ id: doc.id, label: `${doc.number} rev ${doc.revision} · ${doc.title}`, fileUrl: `/api/construction/drawings/${doc.fileId}` }));
 
   const allRevs = register.flatMap((r) => r.revisions);
 
@@ -53,17 +70,23 @@ export default async function ConstructionDocumentsPage({ searchParams }: { sear
           documents: register.length,
           approved: register.filter((r) => r.currentRevision).length,
           inReview: allRevs.filter((d) => d.status === 'review' || d.status === 'draft').length,
-          openRfis: rfis.filter((r) => r.status === 'open').length,
+          openRfis: rfis.filter((r) => r.status === 'open' || r.status === 'submitted').length,
           overdueRfis: rfis.filter((r) => r.overdueDays > 0).length,
         }}
         canMutate={canMutate}
         canCreate={canCreate}
+        canApprove={can(actor, 'reports_analytics', 'approve').allowed}
+        isManager={rfiManager(actor)}
+        actorId={actor.userId}
+        members={members}
+        drawings={drawings}
+        initialTab={params.tab}
         companyId={actor.tenantId ?? ''}
         canUpload={nativeAuthEnabled() && process.env.DATA_SOURCE === 'postgres' && canCreate}
         projectId={projectId}
         projects={projects.map((item) => ({ id: item.id, code: item.code, name: item.name }))}
         locations={(project?.mobilisation?.locations ?? []).map((item) => ({ id: item.id, name: item.name, kind: item.kind }))}
-        workPackages={(project?.mobilisation?.workPackages ?? []).filter((item) => actor.constructionPackageIds === undefined || actor.constructionPackageIds.includes(item.id) || Boolean(item.costCode && actor.constructionPackageIds.includes(`${projectId}:${item.costCode}`))).map((item) => ({ id: item.id, code: item.code, name: item.name }))}
+        workPackages={(project?.mobilisation?.workPackages ?? []).filter((item) => actor.constructionPackageIds === undefined || actor.constructionPackageIds.includes(item.id) || Boolean(item.costCode && actor.constructionPackageIds.includes(`${projectId}:${item.costCode}`))).map((item) => ({ id: item.id, code: item.code, name: item.name, costCode: item.costCode }))}
       />
     </div>
   );

@@ -71,7 +71,7 @@ describe('native company module empty states', () => {
     const html = await runWithRecordContext({ state, domainTenantId: tenant, mode: 'read' }, async () => {
       const page = await load();
       const renderPage = page.default as unknown as (props?: { searchParams: Promise<{ projectId?: string }> }) => Promise<ReactElement>;
-      const content = await renderPage(route === 'construction/schedule' ? { searchParams: Promise.resolve({}) } : undefined);
+      const content = await renderPage(route === 'construction/schedule' || route === 'construction/documents' ? { searchParams: Promise.resolve({}) } : undefined);
       return renderToStaticMarkup(createElement(ConstructionSnapshotProvider, { snapshot: operatingClock() }, content));
     });
     expect(html.length).toBeGreaterThan(100);

@@ -16,6 +16,7 @@ const nonOperational = new Set([
 ]);
 const readOnly = new Set(['ask-data.ts:askData', 'documents.ts:searchDocuments']);
 const ownReadState = new Set(['inbox.ts:markNotificationsRead', 'inbox.ts:readThread']);
+const explicitAction = new Map([['construction.ts:createRfi', 'create'], ['construction.ts:reviewRfiAnswer', 'approve']]);
 const expectedModules: Record<string, readonly string[]> = {
   'admin-users.ts': ['estate', 'facility', 'shortlet', 'construction'],
   'announcements.ts': ['estate'], 'billing.ts': ['estate'], 'construction.ts': ['construction'], 'construction-control.ts': ['construction'],
@@ -39,11 +40,11 @@ const entries = readdirSync(directory).filter((file) => file.endsWith('.ts')).fl
 const operational = entries.filter(({ key }) => !nonOperational.has(key));
 
 describe('operational action durability coverage', () => {
-  it('accounts for all 219 operational actions and the explicit separate account/onboarding actions', () => {
-    expect(operational).toHaveLength(219);
+  it('accounts for all 227 operational actions and the explicit separate account/onboarding actions', () => {
+    expect(operational).toHaveLength(227);
     expect(entries.filter(({ key }) => nonOperational.has(key)).map(({ key }) => key).sort()).toEqual([...nonOperational].sort());
     expect(operational.filter(({ key }) => readOnly.has(key))).toHaveLength(2);
-    expect(operational.filter(({ key }) => !readOnly.has(key))).toHaveLength(217);
+    expect(operational.filter(({ key }) => !readOnly.has(key))).toHaveLength(225);
   });
 
   it.each(operational)('protects the entire authenticated $key body', ({ ast, fn, key, file }) => {
@@ -54,7 +55,7 @@ describe('operational action durability coverage', () => {
     const returned = body[0];
     if (!ts.isReturnStatement(returned) || !returned.expression || !ts.isCallExpression(returned.expression)) throw new Error(key + ' has no returned durability boundary.');
     expect(returned.expression.expression.getText(ast)).toBe(expected);
-    expect(returned.expression.arguments).toHaveLength(readOnly.has(key) ? 1 : ownReadState.has(key) ? 3 : 2);
+    expect(returned.expression.arguments).toHaveLength(readOnly.has(key) ? 1 : ownReadState.has(key) || explicitAction.has(key) ? 3 : 2);
     if (!readOnly.has(key)) {
       const modules = returned.expression.arguments[1];
       const literals = ts.isStringLiteral(modules) ? [modules]
@@ -63,6 +64,7 @@ describe('operational action durability coverage', () => {
       expect(literals.every(ts.isStringLiteral), key + ' must use static module literals').toBe(true);
       expect(literals.map((node) => (node as ts.StringLiteral).text)).toEqual(expectedModules[file]);
       if (ownReadState.has(key)) expect(returned.expression.arguments[2].getText(ast)).toBe("'read'");
+      if (explicitAction.has(key)) expect(returned.expression.arguments[2].getText(ast)).toBe(`'${explicitAction.get(key)}'`);
     }
     const callback = returned.expression.arguments[0];
     expect(ts.isArrowFunction(callback) && ts.isBlock(callback.body)

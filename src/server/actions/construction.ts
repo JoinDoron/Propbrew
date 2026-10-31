@@ -33,13 +33,20 @@ import {
 import type { CurrencyCode } from '@/domain/primitives';
 import type { AuditAction, ProjectMobilisation, ProjectStatus } from '@/domain/construction/types';
 import { constructionDrawingEditable } from '@/server/construction/drawings';
+import { constructionDrawingVisible } from '@/server/construction/drawings';
+import { rfiInScope, rfiManager, rfiPackageAllowed } from '@/server/construction/rfi-access';
+import { rfiProjectMembers } from '@/server/construction/rfi-members';
+import { getCompanyPrincipal } from '@/server/auth/company';
+import { nativeAuthEnabled } from '@/server/auth/mode';
+import { pushNotification } from '@/server/data/inbox';
+import type { RFI, RFIActivity } from '@/domain/construction/types';
 
 export type Res = { ok: true; ref?: string } | { ok: false; error: string };
 
 const PATHS = ['/construction', '/construction/evm', '/construction/schedule', '/construction/materials', '/construction/risk', '/construction/procurement', '/construction/site', '/construction/projects', '/construction/workforce', '/construction/digest', '/construction/documents', '/construction/boq', '/construction/timesheets', '/construction/stock', '/construction/approvals', '/construction/audit', '/construction/fx', '/construction/field', '/construction/simulator', '/construction/twin', '/construction/league', '/construction/safety', '/construction/quality', '/construction/build-watch', '/construction/copilot'];
 const revalidate = () => PATHS.forEach((p) => revalidatePath(p));
 
-async function gate(action: 'update' | 'create'): Promise<{ ok: true; actor: Actor } | { ok: false; error: string }> {
+async function gate(action: 'update' | 'create' | 'approve'): Promise<{ ok: true; actor: Actor } | { ok: false; error: string }> {
   const actor = await getActor();
   if (!canEnterWorkspace(actor, 'construction')) return { ok: false, error: 'You cannot enter the construction workspace with this account.' };
   try { assertCan(actor, 'reports_analytics', action); return { ok: true, actor }; }
@@ -658,30 +665,192 @@ export async function sendTransmittal(docId: string, toParty: string, purpose: '
   }, 'construction');
 }
 
-export async function answerRfi(rfiId: string, answer: string): Promise<Res> {
-  return withDurableMutation(async () => {
-  const g = await gate('update'); if (!g.ok) return g;
-  const r = scopedMutableGet(g.actor, 'reports_analytics', db.constructionRfis, rfiId, 'update');
-  if (!r) return { ok: false, error: 'RFI not found.' };
-  if (!answer.trim()) return { ok: false, error: 'An answer is required.' };
-  if (r.status === 'closed') return { ok: false, error: 'A closed RFI cannot be changed.' };
-  r.answer = answer.trim(); r.answeredISO = operatingDateISO(); r.status = 'answered';
-  revalidate();
-  return { ok: true, ref: r.ref };
+const rfiInput = z.object({
+  projectId: z.string().trim().min(1).max(200),
+  title: z.string().trim().min(3).max(150),
+  question: z.string().trim().min(10).max(3000),
+  discipline: z.string().trim().min(2).max(80),
+  dueISO: z.string().refine(validDate),
+  responderUserId: z.string().trim().max(100).optional(),
+  drawingDocId: z.string().trim().max(200).optional(),
+  workPackageId: z.string().trim().max(200).optional(),
+}).strict();
+export type RfiInput = z.infer<typeof rfiInput>;
 
+async function rfiMembers(actor: Actor, projectId: string) {
+  if (!nativeAuthEnabled()) return [{ userId: actor.userId, name: nameOf(actor), canRespond: true, packageIds: [], profileId: null }];
+  const principal = await getCompanyPrincipal();
+  return principal?.company.id === actor.tenantId ? rfiProjectMembers(principal, projectId) : [];
+}
+function rfiMemberForPackage(member: { packageIds: string[]; profileId: string | null }, projectId: string, packageId?: string): boolean {
+  if ((member.profileId === 'site-engineer' || member.profileId === 'subcontractor') && !member.packageIds.length) return false;
+  if (!member.packageIds.length) return true;
+  if (!packageId) return false;
+  const project = db.constructionProjects.find((item) => item.id === projectId);
+  const pack = project?.mobilisation?.workPackages.find((item) => item.id === packageId);
+  return member.packageIds.includes(packageId) || Boolean(pack?.costCode && member.packageIds.includes(`${projectId}:${pack.costCode}`));
+}
+function rfiDrawing(actor: Actor, projectId: string, docId?: string) {
+  if (!docId) return null;
+  const doc = db.constructionDocs.find((item) => item.id === docId && item.tenantId === actor.tenantId && item.projectId === projectId);
+  return doc?.status === 'approved' && doc.fileId && constructionDrawingVisible(actor, doc) ? doc : null;
+}
+function rfiRecord(actor: Actor, id: string, action: 'read' | 'update' | 'approve' = 'update') {
+  const row = db.constructionRfis.find((item) => item.id === id && item.tenantId === actor.tenantId);
+  return row && rfiInScope(actor, row, action) ? row : null;
+}
+function rfiEvent(actor: Actor, row: RFI, action: RFIActivity['action'], note?: string) {
+  row.activity ??= [];
+  row.activity.push({ atISO: operatingNowISO(), byUserId: actor.userId, by: nameOf(actor), action, ...(note ? { note } : {}) });
+  audit(actor, { action: action === 'reviewed' ? 'approve' : action === 'closed' ? 'resolve' : 'record', entity: 'construction_rfi', entityRef: row.id, projectId: row.projectId, summary: `${row.ref} ${action}`, note });
+}
+function notifyRfi(userId: string, row: RFI, body: string) {
+  pushNotification(userId, ['estate_manager'], { title: `${row.ref} · ${row.title ?? 'RFI'}`, body, kind: 'info', href: `/construction/documents?projectId=${encodeURIComponent(row.projectId)}&tab=rfis` });
+}
+function nextRfiRef(actor: Actor): string {
+  const number = Math.max(0, ...db.constructionRfis.filter((row) => row.tenantId === actor.tenantId).map((row) => Number(/^RFI-(\d+)$/i.exec(row.ref)?.[1] ?? 0))) + 1;
+  return `RFI-${String(number).padStart(4, '0')}`;
+}
+
+export async function createRfi(input: RfiInput, submit = false): Promise<Res> {
+  return withDurableMutation(async () => {
+    const g = await gate('create'); if (!g.ok) return g;
+    const parsed = rfiInput.safeParse(input);
+    if (!parsed.success || parsed.data.dueISO < operatingDateISO()) return { ok: false, error: 'Enter a title, clear question, discipline and a valid future due date.' };
+    const data = parsed.data;
+    const project = scopedConstructionProjectGet(g.actor, data.projectId, 'create');
+    if (!project || !rfiPackageAllowed(g.actor, project, data.workPackageId)) return { ok: false, error: 'Project or work package unavailable.' };
+    const drawing = rfiDrawing(g.actor, project.id, data.drawingDocId);
+    if (data.drawingDocId && !drawing) return { ok: false, error: 'Choose an approved PDF revision from this project.' };
+    const members = await rfiMembers(g.actor, project.id);
+    const responder = members.find((member) => member.userId === data.responderUserId && member.canRespond && rfiMemberForPackage(member, project.id, data.workPackageId));
+    if (data.responderUserId && !responder || submit && !responder) return { ok: false, error: 'Choose an active Construction member assigned to this project as responder.' };
+    const row: RFI = {
+      tenantId: g.actor.tenantId! as RFI['tenantId'], id: `rfi-${randomUUID()}`, ref: nextRfiRef(g.actor), projectId: project.id,
+      title: data.title, question: data.question, discipline: data.discipline, dueISO: data.dueISO,
+      raisedBy: nameOf(g.actor), creatorUserId: g.actor.userId, raisedISO: operatingDateISO(),
+      assignedTo: responder?.name ?? '', responderUserId: responder?.userId,
+      drawingRef: drawing ? `${drawing.number} rev ${drawing.revision}` : undefined,
+      drawingDocId: drawing?.id, drawingFileId: drawing?.fileId, workPackageId: data.workPackageId || undefined,
+      status: submit ? 'submitted' : 'draft', submittedISO: submit ? operatingNowISO() : undefined,
+    };
+    db.constructionRfis.unshift(row);
+    rfiEvent(g.actor, row, 'created');
+    if (submit) { rfiEvent(g.actor, row, 'submitted'); if (responder?.userId !== g.actor.userId) notifyRfi(responder!.userId, row, 'You have been assigned to answer this RFI.'); }
+    revalidate(); return { ok: true, ref: row.ref };
+  }, 'construction', 'create');
+}
+
+export async function saveRfiDraft(id: string, input: RfiInput): Promise<Res> {
+  return withDurableMutation(async () => {
+    const g = await gate('update'); if (!g.ok) return g;
+    const row = rfiRecord(g.actor, id); if (!row || row.status !== 'draft') return { ok: false, error: 'Draft RFI unavailable.' };
+    if (row.creatorUserId && row.creatorUserId !== g.actor.userId && !rfiManager(g.actor)) return { ok: false, error: 'Only the creator or project manager can edit this draft.' };
+    const parsed = rfiInput.safeParse(input);
+    if (!parsed.success || parsed.data.dueISO < operatingDateISO() || parsed.data.projectId !== row.projectId) return { ok: false, error: 'Review the draft details and due date.' };
+    const data = parsed.data;
+    const project = scopedConstructionProjectGet(g.actor, row.projectId, 'update');
+    if (!project || !rfiPackageAllowed(g.actor, project, data.workPackageId)) return { ok: false, error: 'Work package unavailable.' };
+    const drawing = rfiDrawing(g.actor, project.id, data.drawingDocId);
+    if (data.drawingDocId && !drawing) return { ok: false, error: 'Choose an approved PDF revision from this project.' };
+    const responder = (await rfiMembers(g.actor, project.id)).find((member) => member.userId === data.responderUserId && member.canRespond && rfiMemberForPackage(member, project.id, data.workPackageId));
+    if (data.responderUserId && !responder) return { ok: false, error: 'Choose an active project responder.' };
+    Object.assign(row, { title: data.title, question: data.question, discipline: data.discipline, dueISO: data.dueISO,
+      assignedTo: responder?.name ?? '', responderUserId: responder?.userId,
+      drawingRef: drawing ? `${drawing.number} rev ${drawing.revision}` : undefined, drawingDocId: drawing?.id, drawingFileId: drawing?.fileId,
+      workPackageId: data.workPackageId || undefined });
+    rfiEvent(g.actor, row, 'updated', 'Draft updated'); revalidate(); return { ok: true, ref: row.ref };
+  }, 'construction');
+}
+
+export async function submitRfi(id: string): Promise<Res> {
+  return withDurableMutation(async () => {
+    const g = await gate('update'); if (!g.ok) return g;
+    const row = rfiRecord(g.actor, id); if (!row || row.status !== 'draft') return { ok: false, error: 'Only a draft RFI can be submitted.' };
+    if (row.creatorUserId && row.creatorUserId !== g.actor.userId && !rfiManager(g.actor)) return { ok: false, error: 'Only the creator or project manager can submit this draft.' };
+    const responder = (await rfiMembers(g.actor, row.projectId)).find((member) => member.userId === row.responderUserId && member.canRespond && rfiMemberForPackage(member, row.projectId, row.workPackageId));
+    if (!responder || !row.title || !row.question || !validDate(row.dueISO) || row.dueISO < operatingDateISO()) return { ok: false, error: 'Complete the question, due date and active project responder before submitting.' };
+    row.status = 'submitted'; row.submittedISO = operatingNowISO(); row.assignedTo = responder.name;
+    rfiEvent(g.actor, row, 'submitted'); if (responder.userId !== g.actor.userId) notifyRfi(responder.userId, row, 'You have been assigned to answer this RFI.');
+    revalidate(); return { ok: true, ref: row.ref };
+  }, 'construction');
+}
+
+export async function assignRfiResponder(id: string, responderUserId: string): Promise<Res> {
+  return withDurableMutation(async () => {
+    const g = await gate('update'); if (!g.ok) return g;
+    if (!z.string().trim().min(1).max(100).safeParse(responderUserId).success) return { ok: false, error: 'Choose a valid project responder.' };
+    const row = rfiRecord(g.actor, id); if (!row || !rfiManager(g.actor) || !['submitted', 'open'].includes(row.status)) return { ok: false, error: 'Only a project manager can reassign an awaiting RFI.' };
+    const responder = (await rfiMembers(g.actor, row.projectId)).find((member) => member.userId === responderUserId && member.canRespond && rfiMemberForPackage(member, row.projectId, row.workPackageId));
+    if (!responder) return { ok: false, error: 'Choose an active Construction member assigned to this project.' };
+    row.responderUserId = responder.userId; row.assignedTo = responder.name;
+    rfiEvent(g.actor, row, 'assigned', `Responder: ${responder.name}`); if (responder.userId !== g.actor.userId) notifyRfi(responder.userId, row, 'This RFI has been assigned to you.');
+    revalidate(); return { ok: true, ref: row.ref };
+  }, 'construction');
+}
+
+export async function answerRfi(rfiId: string, answer: string, responseDrawingDocId?: string): Promise<Res> {
+  return withDurableMutation(async () => {
+    const parsed = z.object({ answer: z.string().trim().min(1).max(5000), responseDrawingDocId: z.string().trim().max(200).optional() }).strict().safeParse({ answer, responseDrawingDocId });
+    if (!parsed.success) return { ok: false, error: 'Enter a technical answer of at most 5,000 characters.' };
+    let g = await gate('update'); if (!g.ok) g = await gate('approve'); if (!g.ok) return g;
+    const action = g.actor.companyAccess?.operationalProfileId === 'consultant-approver' ? 'approve' : 'update';
+    const row = rfiRecord(g.actor, rfiId, action); if (!row) return { ok: false, error: 'RFI not found.' };
+    if (!['submitted', 'open'].includes(row.status)) return { ok: false, error: 'Only an awaiting RFI can be answered.' };
+    if (row.responderUserId ? row.responderUserId !== g.actor.userId : !rfiManager(g.actor)) return { ok: false, error: 'Only the assigned responder can answer this RFI.' };
+    const drawing = rfiDrawing(g.actor, row.projectId, parsed.data.responseDrawingDocId);
+    if (parsed.data.responseDrawingDocId && !drawing) return { ok: false, error: 'Choose an approved response drawing from this project.' };
+    row.answer = parsed.data.answer; row.answeredISO = operatingNowISO(); row.answerByUserId = g.actor.userId;
+    row.responseDrawingDocId = drawing?.id; row.responseDrawingFileId = drawing?.fileId;
+    row.responses ??= []; row.responses.push({ atISO: row.answeredISO, byUserId: g.actor.userId, text: row.answer, drawingDocId: drawing?.id, drawingFileId: drawing?.fileId });
+    row.status = 'answered'; rfiEvent(g.actor, row, 'answered');
+    if (row.creatorUserId && row.creatorUserId !== g.actor.userId) notifyRfi(row.creatorUserId, row, 'A technical answer is ready for review.');
+    revalidate(); return { ok: true, ref: row.ref };
+  }, 'construction');
+}
+
+export async function reviewRfiAnswer(id: string, decision: 'accept' | 'return', note = ''): Promise<Res> {
+  return withDurableMutation(async () => {
+    const parsed = z.object({ decision: z.enum(['accept', 'return']), note: z.string().trim().max(2000) }).strict().safeParse({ decision, note });
+    if (!parsed.success || parsed.data.decision === 'return' && !parsed.data.note) return { ok: false, error: 'Give a return reason of at most 2,000 characters.' };
+    const g = await gate('approve'); if (!g.ok) return g;
+    const row = rfiRecord(g.actor, id, 'approve'); if (!row || row.status !== 'answered') return { ok: false, error: 'Only an answered RFI can be reviewed.' };
+    if (!rfiManager(g.actor) && g.actor.companyAccess?.operationalProfileId !== 'consultant-approver') return { ok: false, error: 'Project review authority is required.' };
+    if (nativeAuthEnabled() && row.answerByUserId === g.actor.userId) return { ok: false, error: 'The responder cannot approve their own answer. Assign a separate reviewer.' };
+    if (parsed.data.decision === 'return') {
+      row.status = 'submitted'; row.answer = undefined; row.answeredISO = undefined; row.answerByUserId = undefined;
+      row.responseDrawingDocId = undefined; row.responseDrawingFileId = undefined;
+      rfiEvent(g.actor, row, 'returned', parsed.data.note);
+      if (row.responderUserId && row.responderUserId !== g.actor.userId) notifyRfi(row.responderUserId, row, 'The answer needs revision. Review the manager note.');
+    } else {
+      row.status = 'reviewed'; row.reviewedISO = operatingNowISO(); row.reviewedByUserId = g.actor.userId; row.reviewNote = parsed.data.note || undefined;
+      rfiEvent(g.actor, row, 'reviewed', row.reviewNote);
+    }
+    revalidate(); return { ok: true, ref: row.ref };
+  }, 'construction', 'approve');
+}
+
+export async function distributeRfi(id: string, recipientUserIds: string[], note = ''): Promise<Res> {
+  return withDurableMutation(async () => {
+    const parsed = z.object({ recipientUserIds: z.array(z.string().trim().min(1).max(100)).min(1).max(50).refine((ids) => new Set(ids).size === ids.length), note: z.string().trim().max(2000) }).strict().safeParse({ recipientUserIds, note });
+    if (!parsed.success) return { ok: false, error: 'Choose up to 50 unique recipients and a brief distribution note.' };
+    const g = await gate('update'); if (!g.ok) return g;
+    const row = rfiRecord(g.actor, id); if (!row || !rfiManager(g.actor) || row.status !== 'reviewed') return { ok: false, error: 'Only a reviewed RFI can be distributed by a project manager.' };
+    const eligible = new Set((await rfiMembers(g.actor, row.projectId)).filter((member) => rfiMemberForPackage(member, row.projectId, row.workPackageId)).map((member) => member.userId));
+    if (parsed.data.recipientUserIds.some((userId) => !eligible.has(userId))) return { ok: false, error: 'Recipients must be active members assigned to this project.' };
+    row.status = 'distributed'; row.distributedISO = operatingNowISO(); row.distributionUserIds = [...parsed.data.recipientUserIds]; row.distributionNote = parsed.data.note || undefined;
+    for (const userId of parsed.data.recipientUserIds) notifyRfi(userId, row, 'The reviewed official answer has been distributed to you in Propbrew.');
+    rfiEvent(g.actor, row, 'distributed', `${parsed.data.recipientUserIds.length} project member(s)`);
+    revalidate(); return { ok: true, ref: row.ref };
   }, 'construction');
 }
 
 export async function closeRfi(rfiId: string): Promise<Res> {
   return withDurableMutation(async () => {
-  const g = await gate('update'); if (!g.ok) return g;
-  const r = scopedMutableGet(g.actor, 'reports_analytics', db.constructionRfis, rfiId, 'update');
-  if (!r) return { ok: false, error: 'RFI not found.' };
-  if (r.status !== 'answered') return { ok: false, error: 'Only an answered RFI can be closed.' };
-  r.status = 'closed';
-  revalidate();
-  return { ok: true, ref: r.ref };
-
+    const g = await gate('update'); if (!g.ok) return g;
+    const row = rfiRecord(g.actor, rfiId); if (!row || !rfiManager(g.actor) || row.status !== 'distributed') return { ok: false, error: 'Distribute the reviewed answer before closing this RFI.' };
+    row.status = 'closed'; row.closedISO = operatingNowISO(); rfiEvent(g.actor, row, 'closed');
+    revalidate(); return { ok: true, ref: row.ref };
   }, 'construction');
 }
 

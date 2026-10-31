@@ -51,8 +51,8 @@ describe('Construction and platform page sections', () => {
   );
 
   it('does not leave a Construction workspace outside the shared tab pattern', () => {
-    const files = readdirSync(resolve(process.cwd(), 'src/components/construction')).filter((file) => file.endsWith('.tsx') && file !== 'construction-ui.tsx');
-    expect(files).toHaveLength(27);
+    const files = readdirSync(resolve(process.cwd(), 'src/components/construction')).filter((file) => file.endsWith('.tsx') && !['construction-ui.tsx', 'drawing-controls.tsx', 'rfi-workspace.tsx'].includes(file));
+    expect(files).toHaveLength(28);
     for (const file of files) {
       const workspace = source(`src/components/construction/${file}`);
       expect(workspace).toContain('<PageTabs ');

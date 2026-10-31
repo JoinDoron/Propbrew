@@ -171,9 +171,11 @@ describe('Construction insight and assurance Clinexa polish', () => {
     const editor = renderToStaticMarkup(createElement(DocumentsWorkspace, { ...documents, canCreate: true, canMutate: true }));
     expect(editor).toContain('>New revision</button>');
     const text = component('documents-workspace');
-    for (const value of ['canCreate && canMutate', 'required={overApproved}', 'useConstructionSave(setError)', 'role="alert"', 'disabled={pending}', 'sendTransmittal(doc.rev.id, party, purpose)', 'issueRevision(head.id, note)', 'answerRfi(rfi.id, answer)', 'closeRfi(rfi.id)', 'does not email a file or confirm external delivery']) expect(text).toContain(value);
-    expect(text.match(/<ConstructionDialog /g)).toHaveLength(3);
-    expect(text.match(/<form /g)).toHaveLength(3);
+    for (const value of ['canCreate && canMutate', 'required={overApproved}', 'useConstructionSave(setError)', 'role="alert"', 'disabled={pending}', 'sendTransmittal(doc.rev.id, party, purpose)', 'issueRevision(head.id, note)', 'does not email a file or confirm external delivery']) expect(text).toContain(value);
+    const rfiText = component('rfi-workspace');
+    for (const value of ['createRfi(input', 'answerRfi(row.id, answer', 'reviewRfiAnswer(row.id', 'distributeRfi(row.id', 'closeRfi(rfi.id)']) expect(rfiText).toContain(value);
+    expect(text.match(/<ConstructionDialog /g)).toHaveLength(2);
+    expect(text.match(/<form /g)).toHaveLength(2);
   });
 
   it('shows audit zero amounts, complete before/after/reasons and full-year WAT without claiming immutable storage', () => {
