@@ -16,6 +16,11 @@ export function nativeApiRouteAllowed(pathname: string): boolean {
     || pathname === '/api/facility/evidence'
     || facilityEvidence.test(pathname)
     || pathname === '/api/construction/drawings'
+    || pathname === '/api/construction/drawings/reindex'
+    || pathname === '/api/construction/models'
+    || pathname === '/api/construction/models/detect'
+    || pathname === '/api/construction/models/bcf'
+    || new RegExp(`^/api/construction/models/${fileId}$`, 'i').test(pathname)
     || pathname === '/api/construction/transmittals'
     || pathname === '/api/construction/transmittals/acknowledge'
     || /^\/api\/construction\/transmittals\/tr-new-[1-9][0-9]{0,12}\/retry$/.test(pathname)

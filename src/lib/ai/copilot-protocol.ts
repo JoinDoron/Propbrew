@@ -37,6 +37,10 @@ export function validCopilotSource(module: CopilotModule, source: unknown): sour
   if (!source || typeof source !== 'object') return false;
   const value = source as Partial<CopilotSource>;
   if (typeof value.id !== 'string' || !value.id || typeof value.label !== 'string' || !value.label.trim() || typeof value.href !== 'string' || /[\\\s%]/.test(value.href) || !value.href.startsWith('/') || value.href.startsWith('//')) return false;
-  const path = new URL(value.href, 'https://propbrew.invalid').pathname;
+  const url = new URL(value.href, 'https://propbrew.invalid');
+  const path = url.pathname;
+  if (module === 'construction' && /^\/api\/construction\/drawings\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(path)) {
+    return !url.search && /^#page=[1-9][0-9]{0,2}$/.test(url.hash);
+  }
   return MODULE_PATHS[module].some((base) => path === base || path.startsWith(base + '/'));
 }

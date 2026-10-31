@@ -9,6 +9,7 @@ import { repos } from '@/server/data';
 import { withDurableRead } from '@/server/data/durable-records';
 import { requireCapability } from '@/server/guard';
 import { constructionWorld } from '@/server/reads/construction';
+import { constructionForecastEvaluation } from '@/server/construction/forecast-evaluations';
 
 export default async function ConstructionOperationsPage() {
   return withDurableRead(async () => {
@@ -48,6 +49,7 @@ export default async function ConstructionOperationsPage() {
       orders={world.pos.map((row) => ({ id: row.id, projectId: row.projectId, ref: row.ref, item: row.item, vendorName: row.vendorName, valueMinor: row.value.minor, qty: row.qty, deliveredQty: row.deliveredQty, status: row.status }))}
       payments={visible(state.payments).map((row) => { const po = poById.get(row.poId); return { id: row.id, ref: row.ref, poRef: po?.ref ?? row.poId, vendor: po?.vendorName ?? 'Supplier', invoiceRef: row.invoiceRef, invoiceMinor: row.invoiceMinor, retentionMinor: row.retentionMinor, whtMinor: row.whtMinor, payableMinor: row.payableMinor, status: row.status, threeWayMatched: row.threeWayMatched, paymentReference: row.paymentReference }; })}
       forecasts={forecasts}
+      forecastEvaluation={constructionForecastEvaluation(actor)}
       canCreate={can(actor, 'reports_analytics', 'create').allowed}
       canUpdate={can(actor, 'reports_analytics', 'update').allowed}
     /></div>;

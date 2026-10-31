@@ -133,6 +133,9 @@ export type Issue = TenantScoped & {
   inspection?: QualityInspection;
   clashDetection?: { runId: string; modelAId: string; modelBId: string; componentAId: string; componentBId: string;
     point: [number, number, number]; overlapMm: number; method: 'component_envelope_v1' };
+  bcf?: { guid: string; importedAtISO?: string; source?: string; description?: string; externalStatus?: string; componentIds?: string[] };
+  clashReview?: { disposition: 'confirmed' | 'false_positive' | 'accepted_tolerance' | 'needs_redesign';
+    rationale: string; evidenceReference: string; reviewerId: string; reviewerName: string; reviewedAtISO: string };
 };
 
 /* --- site operations ------------------------------------------------------ */

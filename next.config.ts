@@ -20,6 +20,7 @@ const clerkEnabled = Boolean(process.env.CLERK_SECRET_KEY && process.env.NEXT_PU
 const csp = contentSecurityPolicy(clerkEnabled ? process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY : undefined, process.env.NODE_ENV);
 
 const nextConfig: NextConfig = {
+  serverExternalPackages: ['web-ifc', 'pdfjs-dist'],
   poweredByHeader: false,
   // Next's development action tracing includes arguments (property addresses).
   // Keep normal request/error logs, but never print raw form payloads.

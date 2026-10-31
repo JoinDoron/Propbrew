@@ -19,6 +19,7 @@ const ownReadState = new Set(['inbox.ts:markNotificationsRead', 'inbox.ts:readTh
 const explicitAction = new Map([['construction.ts:createRfi', 'create'], ['construction.ts:reviewRfiAnswer', 'approve']]);
 const expectedModules: Record<string, readonly string[]> = {
   'admin-users.ts': ['estate', 'facility', 'shortlet', 'construction'],
+  'construction-forecast.ts': ['construction'],
   'announcements.ts': ['estate'], 'billing.ts': ['estate'], 'construction.ts': ['construction'], 'construction-control.ts': ['construction'], 'construction-quality.ts': ['construction'], 'construction-change-orders.ts': ['construction'], 'construction-safety.ts': ['construction'],
   'documents.ts': ['estate', 'construction'], 'estate.ts': ['estate'], 'estate-registration.ts': ['estate'],
   'estate-work-orders.ts': ['estate'], 'estate-billing-setup.ts': ['estate'], 'estate-tenancy-setup.ts': ['estate'], 'estate-amenity-setup.ts': ['estate'], 'facility.ts': ['facility'], 'facility-registration.ts': ['facility'],
@@ -40,11 +41,11 @@ const entries = readdirSync(directory).filter((file) => file.endsWith('.ts')).fl
 const operational = entries.filter(({ key }) => !nonOperational.has(key));
 
 describe('operational action durability coverage', () => {
-  it('accounts for all 258 operational actions and the explicit separate account/onboarding actions', () => {
-    expect(operational).toHaveLength(258);
+  it('accounts for all 260 operational actions and the explicit separate account/onboarding actions', () => {
+    expect(operational).toHaveLength(260);
     expect(entries.filter(({ key }) => nonOperational.has(key)).map(({ key }) => key).sort()).toEqual([...nonOperational].sort());
     expect(operational.filter(({ key }) => readOnly.has(key))).toHaveLength(2);
-    expect(operational.filter(({ key }) => !readOnly.has(key))).toHaveLength(256);
+    expect(operational.filter(({ key }) => !readOnly.has(key))).toHaveLength(258);
   });
 
   it.each(operational)('protects the entire authenticated $key body', ({ ast, fn, key, file }) => {

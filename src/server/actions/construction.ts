@@ -40,6 +40,7 @@ import { getCompanyPrincipal } from '@/server/auth/company';
 import { nativeAuthEnabled } from '@/server/auth/mode';
 import { pushNotification } from '@/server/data/inbox';
 import type { RFI, RFIActivity } from '@/domain/construction/types';
+import { canRecordQualitySignOff } from '@/server/construction/quality-access';
 
 export type Res = { ok: true; ref?: string } | { ok: false; error: string };
 
@@ -359,6 +360,7 @@ export async function advanceConstructionQualityIssue(id: string, status: 'in_pr
     if (!rfiPackageAllowed(g.actor, scopedConstructionProjectGet(g.actor, issue.projectId, 'update')!, issue.workPackageId)) return { ok: false, error: 'Issue not found.' };
     if (!qualityCategories.some((category) => category === issue.category)) return { ok: false, error: 'Use the source workflow for this issue.' };
     if (status === 'resolved' && issue.category !== 'Design clash') return { ok: false, error: 'Record corrective work and sign-off in Quality & coordination before closing this item.' };
+    if (status === 'resolved' && !issue.clashReview) return { ok: false, error: 'An authorised engineering review is required before closing a design conflict.' };
     if (issue.status === 'resolved') return { ok: false, error: 'Resolved issues require a separate adjustment to reopen.' };
     const note = correctiveAction?.trim();
     if (!note || note.length < 8 || note.length > 1000) return { ok: false, error: 'Describe the action in at least 8 characters.' };
@@ -372,6 +374,24 @@ export async function advanceConstructionQualityIssue(id: string, status: 'in_pr
     audit(g.actor, { action: status === 'resolved' ? 'resolve' : 'record', entity: 'construction_issue', entityRef: id, projectId: issue.projectId, summary: `${issue.category}: ${issue.title}`, before, after: status, note });
     revalidate();
     return { ok: true, ref: id };
+  }, 'construction');
+}
+
+export async function reviewConstructionClash(id: string, disposition: 'confirmed' | 'false_positive' | 'accepted_tolerance' | 'needs_redesign', rationale: string, evidenceReference: string): Promise<Res> {
+  return withDurableMutation(async () => {
+    const actor = await getActor();
+    const g = await gate(actor.companyAccess?.operationalProfileId === 'consultant-approver' ? 'approve' : 'update'); if (!g.ok) return g;
+    if (!canRecordQualitySignOff(g.actor)) return { ok: false, error: 'A project manager, quality inspector or consultant must review this clash.' };
+    const issue = scopedMutableGet(g.actor, 'reports_analytics', db.constructionIssues, id, 'update');
+    const project = issue && scopedConstructionProjectGet(g.actor, issue.projectId, 'update');
+    if (!issue || !project || !rfiPackageAllowed(g.actor, project, issue.workPackageId) || issue.category !== 'Design clash') return { ok: false, error: 'Design conflict not found.' };
+    if (issue.status === 'resolved') return { ok: false, error: 'Closed conflicts cannot be reviewed again without reopening.' };
+    const note = rationale.trim(), evidence = evidenceReference.trim();
+    if (!['confirmed', 'false_positive', 'accepted_tolerance', 'needs_redesign'].includes(disposition) || note.length < 12 || note.length > 1000 || evidence.length < 3 || evidence.length > 500) return { ok: false, error: 'Choose a decision and record a rationale and verifiable evidence reference.' };
+    const identity = nativeAuthEnabled() ? await getCompanyPrincipal() : null;
+    issue.clashReview = { disposition, rationale: note, evidenceReference: evidence, reviewerId: g.actor.userId, reviewerName: identity?.user.name ?? g.actor.userId, reviewedAtISO: operatingNowISO() };
+    audit(g.actor, { action: 'approve', entity: 'construction_issue', entityRef: id, projectId: issue.projectId, summary: `Engineering review: ${disposition} · ${issue.title}`, note: `${note} · ${evidence}` });
+    revalidate(); return { ok: true, ref: id };
   }, 'construction');
 }
 

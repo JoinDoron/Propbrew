@@ -51,7 +51,7 @@ describe('real AI shared copilot handler', () => {
     expect(JSON.stringify(delivered)).not.toContain('PRIVATE THOUGHT');
     expect(delivered.find((event) => event.type === 'meta')).toMatchObject({ source: 'llm', model: 'gpt-6.1-sol', coverage: [{ complete: false }] });
     expect(delivered.at(-1)).toMatchObject({ type: 'complete', usage: { inputTokens: 1000, outputTokens: 50, recorded: true } });
-    expect(builder).toHaveBeenCalledWith(manager());
+    expect(builder).toHaveBeenCalledWith(manager(), 'What needs attention?');
     expect(mocks.stream).toHaveBeenCalledOnce();
     expect(mocks.stream.mock.calls[0][0].instructions).toContain('123456789012');
     expect(mocks.reserve).toHaveBeenCalledWith(expect.objectContaining({ tenantId: manager().tenantId, feature: `${module}_copilot` }));

@@ -3,7 +3,7 @@
 export const MODEL_MAX_BYTES = 12 * 1024 * 1024;
 export const MODEL_MAX_COMPONENTS = 2_000;
 export const MODEL_MAX_CANDIDATES = 100;
-export type ModelFormat = 'obj' | 'glb';
+export type ModelFormat = 'obj' | 'glb' | 'ifc';
 export type Point3 = [number, number, number];
 export type ModelComponent = { id: string; name: string; min: Point3; max: Point3 };
 export type ClashCandidate = { a: ModelComponent; b: ModelComponent; point: Point3; overlapMm: number };
@@ -20,6 +20,7 @@ export function detectModelFormat(bytes: Uint8Array, fileName: string): ModelFor
   if (bytes.length < 32 || bytes.length > MODEL_MAX_BYTES) return null;
   const lower = fileName.toLowerCase();
   if (lower.endsWith('.glb') && new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(0, true) === 0x46546c67) return 'glb';
+  if (lower.endsWith('.ifc') && new TextDecoder().decode(bytes.subarray(0, Math.min(1024, bytes.length))).includes('ISO-10303-21;')) return 'ifc';
   if (lower.endsWith('.obj') && bytes.subarray(0, 1024).every((byte) => byte === 9 || byte === 10 || byte === 13 || byte >= 32 && byte <= 126)) return 'obj';
   return null;
 }
@@ -114,7 +115,8 @@ function parseGlb(bytes: Uint8Array): ModelComponent[] {
 
 export function parseModelComponents(bytes: Uint8Array, fileName: string): ModelComponent[] {
   const format = detectModelFormat(bytes, fileName);
-  if (!format) throw new Error('Upload an OBJ or embedded GLB model of at most 12 MB.');
+  if (!format) throw new Error('Upload an IFC, OBJ or embedded GLB model of at most 12 MB.');
+  if (format === 'ifc') throw new Error('IFC geometry must be parsed with the server IFC reader.');
   return format === 'obj' ? parseObj(bytes) : parseGlb(bytes);
 }
 

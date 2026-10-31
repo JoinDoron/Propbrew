@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { actorForCompanyMember } from '@/lib/auth/company-policy';
 import { createDemoWorkspaceState } from '@/server/data/demo-state';
 import { runWithRecordContext, type WorkspaceRecordState } from '@/server/data/record-context';
-import { advanceConstructionQualityIssue, recordConstructionQualityIssue } from '@/server/actions/construction';
+import { advanceConstructionQualityIssue, recordConstructionQualityIssue, reviewConstructionClash } from '@/server/actions/construction';
 
 const boundary = vi.hoisted(() => ({ actor: vi.fn() }));
 vi.mock('@/server/session', () => ({ getActor: boundary.actor }));
@@ -30,6 +30,8 @@ describe('construction quality and coordination', () => {
     expect(issue).toMatchObject({ tenantId: tenant, projectId, category: 'Design clash', status: 'open' });
     expect((await run(() => advanceConstructionQualityIssue(issue.id, 'resolved', 'The MEP route was rerouted.'))).ok).toBe(false);
     expect(issue.status).toBe('open');
+    expect((await run(() => advanceConstructionQualityIssue(issue.id, 'resolved', 'The MEP route was rerouted.', 'Field-photo-482'))).ok).toBe(false);
+    expect((await run(() => reviewConstructionClash(issue.id, 'confirmed', 'Reviewed the controlled MEP and structural revisions.', 'MEP-R03 / STR-R04'))).ok).toBe(true);
     expect((await run(() => advanceConstructionQualityIssue(issue.id, 'resolved', 'The MEP route was rerouted.', 'Field-photo-482'))).ok).toBe(true);
     expect(issue).toMatchObject({ status: 'resolved', evidenceReference: 'Field-photo-482' });
     expect(state.collections.constructionAudit).toEqual(expect.arrayContaining([expect.objectContaining({ entity: 'construction_issue', projectId, action: 'resolve' })]));

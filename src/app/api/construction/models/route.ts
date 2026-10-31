@@ -12,7 +12,7 @@ const schema = z.object({ expectedCompanyId: z.string().uuid(), projectId: z.str
 export async function POST(request: Request) {
   if (!nativeRequestOriginAllowed(request)) return reply({ error: 'Upload from your Propbrew workspace.' }, 403);
   const contentType = request.headers.get('Content-Type') ?? '';
-  if (!contentType.toLowerCase().startsWith('multipart/form-data;')) return reply({ error: 'Choose an OBJ or GLB model.' }, 400);
+  if (!contentType.toLowerCase().startsWith('multipart/form-data;')) return reply({ error: 'Choose an IFC, OBJ or GLB model.' }, 400);
   const reader = request.body?.getReader(); if (!reader) return reply({ error: 'Choose a model.' }, 400);
   try {
     let size = 0; const chunks: Uint8Array[] = [];
@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     const keys = [...form.keys()];
     if (keys.some((key) => !['expectedCompanyId', 'projectId', 'workPackageId', 'discipline', 'file'].includes(key)) || new Set(keys).size !== keys.length) return reply({ error: 'Provide one model and its project details.' }, 400);
     const file = form.get('file'), parsed = schema.safeParse(Object.fromEntries([...form.entries()].filter(([key]) => key !== 'file')));
-    if (!parsed.success || !(file instanceof File) || file.size < 32 || file.size > MODEL_MAX_BYTES) return reply({ error: 'Choose a valid OBJ or GLB model of at most 12 MB.' }, 400);
+    if (!parsed.success || !(file instanceof File) || file.size < 32 || file.size > MODEL_MAX_BYTES) return reply({ error: 'Choose a valid IFC, OBJ or GLB model of at most 12 MB.' }, 400);
     const model = await storeConstructionModel({ ...parsed.data, key: request.headers.get('Idempotency-Key') ?? '', name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) });
     return reply({ ok: true, model }, 201);
   } catch (error) { return failure(error); }

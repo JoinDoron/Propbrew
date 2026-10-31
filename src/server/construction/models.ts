@@ -13,6 +13,8 @@ import { withWorkspaceState } from '@/server/data/workspace-postgres';
 import { operatingDateISO, operatingNowISO } from '@/server/operating-clock';
 import { rfiPackageAllowed } from './rfi-access';
 import { compareModels, detectModelFormat, parseModelComponents, type ModelFormat, type Point3 } from '@/domain/construction/model-clashes';
+import { parseIfcModel } from './ifc-model';
+import { createBcfZip, parseBcfZip, type BcfTopic } from '@/domain/construction/bcf';
 import type { Issue, Project } from '@/domain/construction/types';
 
 export type StoredModel = { id: string; tenantId: string; projectId: string; workPackageId?: string; discipline: string;
@@ -23,6 +25,7 @@ type Registry = { models: StoredModel[]; runs: ClashRun[]; receipts: { actorId: 
 export class ConstructionModelError extends Error { constructor(message: string, readonly status = 400) { super(message); } }
 const uuid = (value: string): boolean => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 const packageScopeIds = (project: Project, id?: string): string[] => { const pack = project.mobilisation?.workPackages.find((row) => row.id === id); return id ? pack?.costCode ? [id, `${project.id}:${pack.costCode}`] : [id] : []; };
+const componentsFor = (bytes: Uint8Array, name: string) => detectModelFormat(bytes, name) === 'ifc' ? parseIfcModel(bytes) : Promise.resolve(parseModelComponents(bytes, name));
 
 function registry(write = false): Registry {
   const context = currentRecordContext(); if (!context) return { models: [], runs: [], receipts: [] };
@@ -77,9 +80,9 @@ export async function storeConstructionModel(input: { expectedCompanyId: string;
   if (!/^[A-Za-z0-9_-]{16,100}$/.test(input.key)) throw new ConstructionModelError('A valid upload request identifier is required.');
   if (!input.projectId || input.projectId.length > 200 || !input.discipline.trim() || input.discipline.length > 80) throw new ConstructionModelError('Choose a project and discipline.');
   const format = detectModelFormat(input.bytes, input.name);
-  if (!format) throw new ConstructionModelError('Choose a valid OBJ or embedded GLB model of at most 12 MB.');
+  if (!format) throw new ConstructionModelError('Choose a valid IFC, OBJ or embedded GLB model of at most 12 MB.');
   let components: ReturnType<typeof parseModelComponents>;
-  try { components = parseModelComponents(input.bytes, input.name); } catch (error) { throw new ConstructionModelError(error instanceof Error ? error.message : 'Model geometry is invalid.'); }
+  try { components = await componentsFor(input.bytes, input.name); } catch (error) { throw new ConstructionModelError(error instanceof Error ? error.message : 'Model geometry is invalid.'); }
   const sha256 = createHash('sha256').update(input.bytes).digest('hex'), name = modelName(input.name, format);
   const requestHash = createHash('sha256').update(JSON.stringify([input.projectId, input.workPackageId ?? '', input.discipline.trim(), name, sha256])).digest('hex');
   const saved = await inWorkspace(identity, async (client) => {
@@ -135,7 +138,7 @@ export async function detectConstructionClashes(input: { expectedCompanyId: stri
     if (!a || !b) throw new ConstructionModelError('Both models must be in your assigned project and package.', 404);
     if (a.workPackageId && b.workPackageId && a.workPackageId !== b.workPackageId && identity.actor.constructionPackageIds !== undefined) throw new ConstructionModelError('This comparison spans packages outside a single assignment.', 403);
     let candidates: ReturnType<typeof compareModels>;
-    try { candidates = compareModels(parseModelComponents(await bytesFor(client, identity, a), a.name), parseModelComponents(await bytesFor(client, identity, b), b.name), input.toleranceMm); }
+    try { candidates = compareModels(await componentsFor(await bytesFor(client, identity, a), a.name), await componentsFor(await bytesFor(client, identity, b), b.name), input.toleranceMm); }
     catch (error) { throw new ConstructionModelError(error instanceof Error ? error.message : 'Could not compare model geometry.'); }
     const runId = randomUUID(), at = operatingNowISO();
     // A cross-package issue must not reveal another package's component name
@@ -163,4 +166,57 @@ export async function detectConstructionClashes(input: { expectedCompanyId: stri
     return { value: structuredClone(result) };
   });
   revalidatePath('/construction/quality'); return run;
+}
+
+function topicGuid(issue: Issue): string {
+  if (issue.bcf?.guid) return issue.bcf.guid.toLowerCase();
+  const suffix = issue.id.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)?.[0];
+  if (suffix) return suffix;
+  const hex = createHash('sha256').update(issue.tenantId + ':' + issue.id).digest('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
+export async function exportConstructionBcf(projectId: string): Promise<{ name: string; bytes: Uint8Array; count: number }> {
+  const identity = await principal(false);
+  return inWorkspace(identity, async () => {
+    const project = scopedConstructionProjectGet(identity.actor, projectId, 'read');
+    if (!project) throw new ConstructionModelError('Project unavailable.', 404);
+    const issues = db.constructionIssues.filter((row) => row.tenantId === identity.company.id && row.projectId === projectId && row.category === 'Design clash' &&
+      rfiPackageAllowed(identity.actor, project, row.workPackageId));
+    if (!issues.length) throw new ConstructionModelError('This project has no visible design conflicts to export.', 404);
+    if (issues.length > 100) throw new ConstructionModelError('BCF export supports up to 100 visible topics. Narrow or archive the coordination register first.', 413);
+    const topics: BcfTopic[] = issues.map((issue) => ({ guid: topicGuid(issue), title: issue.title,
+      description: [issue.bcf?.description, issue.correctiveAction, issue.clashReview?.rationale].filter(Boolean).join('\n').slice(0, 2000),
+      status: issue.status === 'resolved' ? 'Resolved' : issue.status === 'in_progress' ? 'InProgress' : 'Open',
+      createdAtISO: `${issue.raisedISO}T00:00:00.000Z`,
+      componentIds: issue.clashDetection ? [issue.clashDetection.componentAId, issue.clashDetection.componentBId] : issue.bcf?.componentIds ?? [],
+      point: issue.clashDetection?.point }));
+    const hash = createHash('sha256').update(identity.company.id + ':' + project.id).digest('hex');
+    const projectGuid = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-8${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+    return { value: { name: `${project.code || 'project'}-coordination.bcfzip`, bytes: createBcfZip(project.name, projectGuid, topics), count: topics.length }, commit: false };
+  });
+}
+export async function importConstructionBcf(input: { expectedCompanyId: string; projectId: string; workPackageId?: string; bytes: Uint8Array }): Promise<{ imported: number; skipped: number }> {
+  const identity = await principal(true);
+  if (identity.company.id !== input.expectedCompanyId) throw new ConstructionModelError('Your company changed. Reopen BCF import.', 409);
+  let topics: BcfTopic[];
+  try { topics = parseBcfZip(input.bytes); } catch (error) { throw new ConstructionModelError(error instanceof Error ? error.message : 'BCFZIP is invalid.'); }
+  const result = await inWorkspace(identity, async (client) => {
+    const project = scopedConstructionProjectGet(identity.actor, input.projectId, 'create');
+    if (!project || !rfiPackageAllowed(identity.actor, project, input.workPackageId) || identity.actor.constructionPackageIds !== undefined && !input.workPackageId) throw new ConstructionModelError('Choose an assigned project and work package.', 403);
+    let imported = 0, skipped = 0;
+    for (const topic of topics) {
+      if (db.constructionIssues.some((row) => row.tenantId === identity.company.id && row.projectId === project.id && row.bcf?.guid === topic.guid)) { skipped++; continue; }
+      db.constructionIssues.unshift({ tenantId: identity.company.id as Issue['tenantId'], id: `is-bcf-${randomUUID()}`, projectId: project.id,
+        category: 'Design clash', title: topic.title, severity: 'medium', owner: 'Design coordination', raisedISO: operatingDateISO(),
+        dueISO: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10), status: 'open',
+        location: topic.point?.map((value) => value.toFixed(2)).join(', ') ?? 'See BCF viewpoint',
+        sourceReference: topic.componentIds[0] ?? 'External BCF topic', relatedReference: topic.componentIds[1] ?? 'External BCF topic',
+        workPackageId: input.workPackageId, bcf: { guid: topic.guid, source: 'BCF 3.0 import', importedAtISO: operatingNowISO(),
+          description: topic.description, externalStatus: topic.status, componentIds: topic.componentIds } });
+      imported++;
+    }
+    await audit(identity, client, 'construction.bcf.imported', project.id, project.id, { imported, skipped, workPackageId: input.workPackageId ?? null });
+    return { value: { imported, skipped } };
+  });
+  revalidatePath('/construction/quality'); return result;
 }
