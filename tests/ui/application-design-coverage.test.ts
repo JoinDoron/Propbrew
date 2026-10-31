@@ -43,6 +43,7 @@ const reviewed = {
     'review/login/page.tsx',
     'companies/page.tsx', 'company/team/page.tsx', 'invite/[token]/page.tsx',
     'account/security/page.tsx', 'login/two-factor/page.tsx', 'mobile/page.tsx',
+    'construction/transmittals/acknowledge/page.tsx',
   ],
   // Reviewed public entry: preserve its independent Propbrew marketing identity.
   publicMarketing: ['(marketing)/page.tsx'],
@@ -71,19 +72,19 @@ function discoverPages(directory: string): string[] {
 }
 
 describe('Exhaustive application design review manifest', () => {
-  it('accounts for every one of the 138 page files with no ignored directory or dynamic route', () => {
+  it('accounts for every one of the 139 page files with no ignored directory or dynamic route', () => {
     const files = manifest.map(({ file }) => file);
-    expect(new Set(files).size).toBe(138);
-    expect(files).toHaveLength(138);
+    expect(new Set(files).size).toBe(139);
+    expect(files).toHaveLength(139);
     expect(files.slice().sort()).toEqual(discoverPages(APP).sort());
     expect(files).toContain('(ops)/(facility)/work-orders/[ref]/page.tsx');
     expect(files).toContain('sign-up/[[...sign-up]]/page.tsx');
-    expect(manifest.filter(({ family }) => family !== 'publicMarketing')).toHaveLength(137);
+    expect(manifest.filter(({ family }) => family !== 'publicMarketing')).toHaveLength(138);
   });
 
   it.each([
     ['estate', 28], ['facility', 19], ['construction', 31], ['shortlet', 21],
-    ['portal', 16], ['admin', 8], ['entryShared', 14], ['publicMarketing', 1],
+    ['portal', 16], ['admin', 8], ['entryShared', 15], ['publicMarketing', 1],
   ] as const)('explicitly reviews all %s pages (%i)', (family, count) => {
     expect(reviewed[family]).toHaveLength(count);
   });

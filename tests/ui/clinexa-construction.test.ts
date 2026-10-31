@@ -32,7 +32,7 @@ const coverage = [
   ['build-watch', 'build-watch', ['progress', 'verification']],
   ['changes', 'change-orders-workspace', ['pipeline', 'posted', 'history']],
   ['copilot', 'copilot-workspace', ['assistant', 'safeguards']],
-  ['digest', 'digest-workspace', ['draft', 'overview', 'draft']],
+  ['digest', 'digest-workspace', ['draft', 'exports', 'overview', 'draft']],
   ['documents', 'documents-workspace', ['register', 'rfis', 'overview']],
   ['evm', 'evm-cockpit', ['overview', 'overview', 'curve', 'costs']],
   ['field', 'field-capture', ['report', 'issue', 'progress', 'evidence', 'attendance', 'queue']],

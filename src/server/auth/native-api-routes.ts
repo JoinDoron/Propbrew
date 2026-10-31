@@ -16,6 +16,11 @@ export function nativeApiRouteAllowed(pathname: string): boolean {
     || pathname === '/api/facility/evidence'
     || facilityEvidence.test(pathname)
     || pathname === '/api/construction/drawings'
+    || pathname === '/api/construction/transmittals'
+    || pathname === '/api/construction/transmittals/acknowledge'
+    || /^\/api\/construction\/transmittals\/tr-new-[1-9][0-9]{0,12}\/retry$/.test(pathname)
+    || pathname === '/api/construction/reports/export'
+    || pathname === '/api/webhooks/resend'
     || constructionDrawing.test(pathname)
     || constructionHandover.test(pathname);
 }

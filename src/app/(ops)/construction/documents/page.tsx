@@ -38,7 +38,7 @@ export default async function ConstructionDocumentsPage({ searchParams }: { sear
       changeNote: d.changeNote, uploadedBy: d.uploadedBy, approvedBy: d.approvedBy, approvedISO: d.approvedISO,
       fileName: d.fileName, fileUrl: d.fileId ? `/api/construction/drawings/${d.fileId}` : undefined, fileSizeBytes: d.fileSizeBytes, fileSha256: d.fileSha256,
       locationIds: d.locationIds ?? [], workPackageIds: d.workPackageIds ?? [], requiresFile: d.requiresFile,
-      transmittals: transmittals.filter((t) => t.docId === d.id).map((t) => ({ toParty: t.toParty, sentISO: t.sentISO, purpose: t.purpose, acknowledged: !!t.acknowledgedISO })),
+      transmittals: transmittals.filter((t) => t.docId === d.id).map((t) => ({ id: t.id, toParty: t.toParty, recipientEmail: t.recipientEmail, sentISO: t.sentISO, purpose: t.purpose, deliveryStatus: t.deliveryStatus, deliveredISO: t.deliveredISO, acknowledgedISO: t.acknowledgedISO, acknowledgedBy: t.acknowledgedBy, acknowledgedOrganisation: t.acknowledgedOrganisation, deliveryError: t.deliveryError, deliveryAttempts: t.deliveryAttempts })),
     })),
   }));
 
@@ -74,6 +74,7 @@ export default async function ConstructionDocumentsPage({ searchParams }: { sear
           overdueRfis: rfis.filter((r) => r.overdueDays > 0).length,
         }}
         canMutate={canMutate}
+        canExport={can(actor, 'reports_analytics', 'export').allowed}
         canCreate={canCreate}
         canApprove={can(actor, 'reports_analytics', 'approve').allowed}
         isManager={rfiManager(actor)}

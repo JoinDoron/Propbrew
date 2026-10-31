@@ -1,6 +1,7 @@
 import 'server-only';
 
 type Message = { to: string; body: string; purpose: string };
+type EmailMessage = Message & { attachments?: { filename: string; content: string }[]; tags?: { name: string; value: string }[]; idempotencyKey?: string };
 function requireEnv(name: string): string { const value = process.env[name]; if (!value) throw new Error(`${name} is not configured.`); return value; }
 
 export async function sendSms(message: Message): Promise<{ provider: 'termii'; id: string }> {
@@ -11,9 +12,9 @@ export async function sendSms(message: Message): Promise<{ provider: 'termii'; i
   return { provider: 'termii', id: data.message_id ?? 'accepted' };
 }
 
-export async function sendEmail(message: Message): Promise<{ provider: 'resend'; id: string }> {
+export async function sendEmail(message: EmailMessage): Promise<{ provider: 'resend'; id: string }> {
   const key = requireEnv('RESEND_API_KEY');
-  const res = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' }, body: JSON.stringify({ from: requireEnv('EMAIL_FROM'), to: [message.to], subject: message.purpose, text: message.body }) });
+  const res = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json', ...(message.idempotencyKey ? { 'Idempotency-Key': message.idempotencyKey } : {}) }, body: JSON.stringify({ from: requireEnv('EMAIL_FROM'), to: [message.to], subject: message.purpose, text: message.body, ...(message.attachments ? { attachments: message.attachments } : {}), ...(message.tags ? { tags: message.tags } : {}) }) });
   if (!res.ok) throw new Error(`Email provider failed (${res.status}).`);
   const data = await res.json() as { id?: string };
   return { provider: 'resend', id: data.id ?? 'accepted' };

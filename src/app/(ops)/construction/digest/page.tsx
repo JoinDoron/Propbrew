@@ -14,6 +14,7 @@ export default async function ConstructionDigestPage() {
   const { nowMs: NOW_MS, dateISO: TODAY } = operatingClock();
   const { actor } = await requireCapability('reports_analytics', 'read', 'construction');
   const canMutate = can(actor, 'reports_analytics', 'update').allowed;
+  const canExport = can(actor, 'reports_analytics', 'export').allowed;
   const world = constructionWorld(actor);
 
   const views: DigestView[] = world.projects
@@ -36,7 +37,7 @@ export default async function ConstructionDigestPage() {
 
   return (
     <div className="pb-page">
-      <DigestWorkspace views={views} canMutate={canMutate} />
+      <DigestWorkspace views={views} canMutate={canMutate} canExport={canExport} />
     </div>
   );
   });

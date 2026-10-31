@@ -283,9 +283,16 @@ export type ConstructionDoc = TenantScoped & {
 
 /** Controlled distribution: who was formally issued which revision, and when. */
 export type Transmittal = TenantScoped & {
-  id: string; docId: string; docNumber: string; revision: string;
+  id: string; projectId?: string; docId: string; docNumber: string; revision: string;
   toParty: string; sentISO: string; purpose: 'for_construction' | 'for_review' | 'for_information';
   acknowledgedISO?: string;
+  /** External distribution is separate from legacy manually recorded issues. */
+  recipientEmail?: string; requestKey?: string; createdByUserId?: string; issuedFileSha256?: string;
+  deliveryStatus?: 'pending' | 'sending' | 'accepted' | 'delivered' | 'delayed' | 'bounced' | 'failed' | 'simulated';
+  deliveryAttempts?: number; lastAttemptISO?: string; providerEmailId?: string;
+  providerAcceptedISO?: string; deliveredISO?: string; deliveryError?: string;
+  acknowledgementExpiresISO?: string; acknowledgedBy?: string; acknowledgedOrganisation?: string;
+  deliveryEventIds?: string[];
 };
 
 export type RFIStatus = 'draft' | 'submitted' | 'open' | 'answered' | 'reviewed' | 'distributed' | 'closed';
