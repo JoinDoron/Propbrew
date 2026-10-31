@@ -13,7 +13,7 @@ import { withWorkspaceState } from '@/server/data/workspace-postgres';
 import { operatingDateISO, operatingNowISO } from '@/server/operating-clock';
 import { nextRevision } from '@/domain/construction';
 import type { ConstructionDoc, Project } from '@/domain/construction/types';
-import { drawingFileName, drawingUploadSchema, validDrawingPdf, type DrawingUploadInput } from '@/domain/construction/drawings';
+import { drawingFileName, drawingUploadSchema, validDrawingFileId, validDrawingPdf, type DrawingUploadInput } from '@/domain/construction/drawings';
 
 export class ConstructionDrawingError extends Error {
   constructor(message: string, readonly status = 400) { super(message); }
@@ -143,7 +143,7 @@ export async function storeConstructionDrawing(input: Upload): Promise<{ id: str
 }
 
 export async function readConstructionDrawing(id: string): Promise<{ name: string; bytes: Uint8Array; size: number }> {
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) throw new ConstructionDrawingError('Drawing unavailable.', 404);
+  if (!validDrawingFileId(id)) throw new ConstructionDrawingError('Drawing unavailable.', 404);
   const identity = await principal(false);
   return inWorkspace(identity, async (client) => {
     const doc = db.constructionDocs.find((row) => row.fileId === id && row.tenantId === identity.company.id);

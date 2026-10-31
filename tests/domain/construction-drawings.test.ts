@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { DRAWING_MAX_BYTES, drawingFileName, drawingUploadSchema, validDrawingPdf } from '@/domain/construction/drawings';
+import { DRAWING_MAX_BYTES, drawingFileName, drawingUploadSchema, validDrawingFileId, validDrawingPdf } from '@/domain/construction/drawings';
 
 function pdf() {
   return new TextEncoder().encode('%PDF-1.7\n1 0 obj << /Type /Catalog >> endobj\n%%EOF');
 }
 describe('construction drawing file boundary', () => {
+  it('accepts complete stored-file UUIDs and rejects truncated IDs', () => {
+    expect(validDrawingFileId('1db771aa-68db-4bd7-942f-e63bd7f1b4d0')).toBe(true);
+    expect(validDrawingFileId('1db771aa-68db-4bd7-e63bd7f1b4d0')).toBe(false);
+  });
   it('accepts bounded PDF bytes and rejects spoofed, empty and oversized files', () => {
     expect(validDrawingPdf(pdf())).toBe(true);
     expect(validDrawingPdf(new TextEncoder().encode('<script>%PDF-1.7%%EOF</script>'))).toBe(false);

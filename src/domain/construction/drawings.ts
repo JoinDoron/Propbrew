@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const DRAWING_MAX_BYTES = 15 * 1024 * 1024;
 export const DRAWING_COMPANY_BYTES = 300 * 1024 * 1024;
 export const DRAWING_COMPANY_FILES = 500;
+export const validDrawingFileId = (value: string): boolean => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 export const drawingUploadSchema = z.object({
   expectedCompanyId: z.string().uuid(),
   projectId: z.string().min(1).max(200),
