@@ -7,6 +7,8 @@ import { NOW } from '@/domain/ppm';
 import { repos } from '@/server/data';
 import { collectCopilotRecords } from './records';
 import { constructionControl } from '@/server/construction-control';
+import { constructionDrawingVisible } from '@/server/construction/drawings';
+import { rfiInScope } from '@/server/construction/rfi-access';
 
 const money = (value: Money) => ({ currency: value.currency, minor: value.minor });
 const dependsOn = (value: { coverage: CopilotCoverage }, parents: CopilotCoverage[]) => ({ coverage: parents.every((parent) => parent.complete) ? value.coverage : { ...value.coverage, total: null, complete: false } });
@@ -32,8 +34,8 @@ export async function buildConstructionCopilotContext(actor: Actor): Promise<Cop
     collectCopilotRecords('Construction workers', (options) => repos.constructionWorkers.list(actor, options), { accept: inProject }),
     collectCopilotRecords('Construction attendance', (options) => repos.constructionAttendance.list(actor, options), { accept: inProject }),
     collectCopilotRecords('Construction issues', (options) => repos.constructionIssues.list(actor, options), { accept: inProject }),
-    collectCopilotRecords('Construction document register', (options) => repos.constructionDocs.list(actor, options), { accept: inProject }),
-    collectCopilotRecords('Construction RFIs', (options) => repos.constructionRfis.list(actor, options), { accept: inProject }),
+    collectCopilotRecords('Construction document register', (options) => repos.constructionDocs.list(actor, options), { accept: (row) => inProject(row) && constructionDrawingVisible(actor, row) }),
+    collectCopilotRecords('Construction RFIs', (options) => repos.constructionRfis.list(actor, options), { accept: (row) => inProject(row) && rfiInScope(actor, row) }),
     collectCopilotRecords('Construction building levels', (options) => repos.constructionZones.list(actor, options), { accept: inProject }),
     collectCopilotRecords('Construction safety permits', (options) => repos.constructionSafetyPermits.list(actor, options), { accept: inProject }),
     collectCopilotRecords('Construction safety events', (options) => repos.constructionSafetyEvents.list(actor, options), { accept: inProject }),

@@ -7,12 +7,19 @@ import { validCopilotSource } from '@/lib/ai/copilot-protocol';
 import { ForbiddenError, type Actor, type Role } from '@/lib/authz';
 import { actorForCompanyMember } from '@/lib/auth/company-policy';
 import { NOW } from '@/domain/ppm';
+import { db } from '@/server/data/store';
+import { rfiInScope } from '@/server/construction/rfi-access';
 
 const store = vi.hoisted(() => {
   const names = ['constructionProjects', 'constructionPhases', 'constructionTasks', 'constructionMilestones', 'constructionOrders', 'constructionReports', 'constructionWarehouses', 'constructionWorkers', 'constructionAttendance', 'constructionIssues', 'constructionDocs', 'constructionRfis', 'constructionZones', 'constructionSafetyPermits', 'constructionSafetyEvents', 'constructionToolboxTalks', 'constructionStock', 'constructionMaterials', 'constructionMovements', 'constructionCostCodes', 'constructionRequests', 'constructionRfqs', 'constructionTimesheets', 'constructionSubcontractors', 'constructionApprovals', 'shortletApartments', 'shortletBookings', 'shortletInspections', 'shortletIssues', 'shortletReviews', 'shortletPricingRules'];
   return { names, reads: Object.fromEntries(names.map((name) => [name, vi.fn()])), rows: {} as Record<string, unknown[]>, handle: vi.fn(), provider: vi.fn() };
 });
-vi.mock('@/server/data', () => ({ repos: Object.fromEntries(Object.entries(store.reads).map(([name, list]) => [name, { list }])) }));
+vi.mock('@/server/data', () => ({
+  repos: Object.fromEntries(Object.entries(store.reads).map(([name, list]) => [name, { list }])),
+  scopedConstructionProjectGet: (actor: Actor, id: string) => db.constructionProjects.find((project) =>
+    project.id === id && project.tenantId === actor.tenantId
+    && (actor.constructionProjectIds === undefined || actor.constructionProjectIds.includes(id))) ?? null,
+}));
 vi.mock('@/server/ai/copilot', () => ({ handleCopilot: store.handle }));
 
 const tenantId = seed.constructionProjects[0].tenantId;
@@ -115,6 +122,44 @@ describe('Construction AI context commercial and record boundaries', () => {
     expect(serialised).toContain('OWN PROJECT TASK');
     expect(serialised).not.toContain('PRIVATE PROJECT B');
     expect(context.scopeLabel).toContain('assigned Construction projects');
+  });
+
+  it('omits RFI and drawing metadata from other work packages', async () => {
+    const project = db.constructionProjects.find((row) => row.id === seed.constructionProjects[0].id)!;
+    const previous = project.mobilisation;
+    project.mobilisation = {
+      calendar: { name: 'Site', workingDays: [1, 2, 3, 4, 5], hoursPerDay: 8, timeZone: 'Africa/Lagos', holidays: [] },
+      baselines: [], team: [], locations: [], parties: [], lifecycle: [],
+      workPackages: [
+        { id: 'package-own', code: 'OWN', name: 'Assigned package', status: 'active' },
+        { id: 'package-private', code: 'PRIVATE', name: 'Other package', status: 'active' },
+      ],
+    };
+    store.rows.constructionRfis = [
+      { ...seed.constructionRfis[0], id: 'rfi-own', ref: 'RFI-OWN', workPackageId: 'package-own' },
+      { ...seed.constructionRfis[0], id: 'rfi-private', ref: 'RFI-PRIVATE', workPackageId: 'package-private' },
+    ];
+    store.rows.constructionDocs = [
+      { ...seed.constructionDocs[0], id: 'doc-own', number: 'DRAWING-OWN', workPackageIds: ['package-own'] },
+      { ...seed.constructionDocs[0], id: 'doc-private', number: 'DRAWING-PRIVATE', workPackageIds: ['package-private'] },
+    ];
+    const scopedActor = actorForCompanyMember({
+      membershipId: 'membership-package-ai', userId: 'context-reader', companyId: tenantId,
+      companyRole: 'member', status: 'active', companyStatus: 'active',
+      modules: { construction: 'manage' }, operationalProfileId: 'site-engineer',
+      estateIds: [], allEstates: false,
+      constructionProjectIds: [project.id], allConstructionProjects: false,
+      constructionPackageIds: ['package-own'],
+    }, 'context-reader')!;
+    try {
+      expect(scopedActor.constructionPackageIds).toEqual(['package-own']);
+      expect(rfiInScope(scopedActor, store.rows.constructionRfis[0] as typeof seed.constructionRfis[number])).toBe(true);
+      const context = await buildConstructionCopilotContext(scopedActor);
+      expect(context.facts.rfis).toEqual([expect.objectContaining({ ref: 'RFI-OWN' })]);
+      expect(context.facts.documents).toEqual([expect.objectContaining({ number: 'DRAWING-OWN' })]);
+    } finally {
+      project.mobilisation = previous;
+    }
   });
 
   it('does not repair absent investor child ownership by reading tenant-wide project data', async () => {
