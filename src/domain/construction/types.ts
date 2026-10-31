@@ -62,6 +62,8 @@ export type Project = TenantScoped & {
   plannedPercent: number; percentComplete: number;
   /** Approved change-order days affect the outlook, never the programme baseline. */
   approvedChangeDays?: number;
+  /** Minimum cost outlook supported by authorized change-order commitments. */
+  approvedChangeForecastMinor?: number;
   /** Mobilisation configuration is embedded in the durable project record so
    * existing company workspaces can adopt it without a destructive schema reset. */
   mobilisation?: ProjectMobilisation;

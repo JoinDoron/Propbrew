@@ -300,7 +300,9 @@ export function projectCommittedMinor(projectId: string, codes: readonly CostCod
   return codes.filter((c) => c.projectId === projectId).reduce((n, c) => n + minor(c.committed), 0);
 }
 export function projectEVMOf(p: Project, codes: readonly CostCode[]): EVM {
-  return projectEVM(p, projectActualMinor(p.id, codes));
+  const base = projectEVM(p, projectActualMinor(p.id, codes));
+  const eac = Math.max(base.eac, p.approvedChangeForecastMinor ?? 0, projectCommittedMinor(p.id, codes));
+  return { ...base, eac, etc: Math.max(0, eac - base.ac), vac: base.bac - eac };
 }
 
 /* --- risk radar: five deterministic detectors scanning the world ---------- */

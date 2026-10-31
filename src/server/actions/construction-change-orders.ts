@@ -182,8 +182,11 @@ export async function postConstructionChange(orderId: string, input: z.input<typ
     const codes = db.constructionCostCodes.filter((row) => row.tenantId === access.actor.tenantId && row.projectId === project.id);
     const beforeEvm = projectEVMOf(project, codes);
     const beforeForecast = forecastFinishISO(project, beforeEvm.spi).iso;
+    const newCostForecast = beforeEvm.eac + control.quote.amountMinor;
+    if (!Number.isSafeInteger(newCostForecast)) return { ok: false, error: 'This change exceeds the supported forecast range.' };
     project.approvedBudget = money(newBudget); code.budget = money(newCodeBudget); code.committed = money(newCommitment);
     project.approvedChangeDays = (project.approvedChangeDays ?? 0) + control.assessment.scheduleDays;
+    project.approvedChangeForecastMinor = newCostForecast;
     const afterEvm = projectEVMOf(project, codes);
     const afterForecast = forecastFinishISO(project, afterEvm.spi).iso;
     order.status = 'approved'; order.costImpact = money(control.assessment.budgetDeltaMinor); order.scheduleImpactDays = control.assessment.scheduleDays;

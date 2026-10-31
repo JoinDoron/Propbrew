@@ -70,7 +70,8 @@ describe('Construction change-order financial boundary', () => {
     expect(code.committed.minor).toBe(committedBefore + 1_000_000_000);
     expect(project.approvedChangeDays).toBe(5);
     expect(order).toMatchObject({ status: 'approved', changeOrder: { posting: { authorizationReference: 'FIN-01', budgetBeforeMinor: budgetBefore, budgetAfterMinor: budgetBefore + 1_200_000_000, commitmentBeforeMinor: committedBefore, commitmentAfterMinor: committedBefore + 1_000_000_000, forecastBeforeISO: forecastBefore } } });
-    expect(order.changeOrder!.posting!.costForecastAfterMinor).toBeGreaterThanOrEqual(order.changeOrder!.posting!.costForecastBeforeMinor);
+    expect(order.changeOrder!.posting!.costForecastAfterMinor).toBeGreaterThan(order.changeOrder!.posting!.costForecastBeforeMinor);
+    expect(projectEVMOf(project, codes()).eac).toBe(order.changeOrder!.posting!.costForecastAfterMinor);
     expect(order.changeOrder!.posting!.forecastAfterISO).not.toBe(forecastBefore);
     expect((await run(() => postConstructionChange(order.id, { reference: 'FIN-01' }))).ok).toBe(false);
     expect(project.approvedBudget.minor).toBe(budgetBefore + 1_200_000_000);
