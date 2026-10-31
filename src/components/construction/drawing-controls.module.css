@@ -1,0 +1,31 @@
+.panel { min-width: 0; padding: 0; overflow: hidden; }
+.header { padding: 24px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+.toolbar { display: flex; align-items: end; justify-content: space-between; flex-wrap: wrap; gap: 16px; padding: 16px 24px; }
+.project { display: grid; gap: 6px; min-width: min(100%, 300px); color: var(--text-2); font-size: 12px; font-weight: 600; }
+.project select, .form input, .form textarea { min-height: 44px; width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface); color: var(--text); font: inherit; }
+.project select:focus-visible, .form input:focus-visible, .form textarea:focus-visible, .download:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.count, .empty { color: var(--text-3); font-size: 13px; }
+.empty, .notice { padding: 16px 24px; color: var(--text-2); font-size: 13px; }
+.list { display: grid; }
+.drawing { border-top: 1px solid var(--border); padding: 20px 24px; }
+.drawingHeader, .versionMain, .actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.drawingHeader { justify-content: space-between; }
+.drawingHeader h3 { color: var(--text); font-size: 15px; font-weight: 600; }
+.drawingHeader p, .links { color: var(--text-3); font-size: 12px; overflow-wrap: anywhere; }
+.versions { display: grid; gap: 10px; margin-top: 14px; }
+.version { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface-2); }
+.versionMain { color: var(--text-2); font-size: 13px; }
+.versionMain strong { color: var(--text); }
+.hash { font-variant-numeric: tabular-nums; }
+.download { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; color: var(--primary); font-size: 13px; font-weight: 600; }
+.form { display: grid; gap: 16px; }
+.form > label { display: grid; gap: 6px; color: var(--text); font-size: 13px; font-weight: 600; }
+.form textarea { min-height: 88px; resize: vertical; }
+.form fieldset { border: 1px solid var(--border); border-radius: var(--radius-control); padding: 12px; }
+.form legend { color: var(--text); font-size: 13px; font-weight: 600; padding: 0 5px; }
+.form fieldset > p { color: var(--text-3); font-size: 12px; }
+.choices { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; max-height: 180px; overflow: auto; }
+.choices label { display: flex; align-items: center; gap: 8px; min-height: 44px; color: var(--text-2); font-size: 13px; }
+.choices input { width: 18px; min-height: 18px; accent-color: var(--primary); }
+.error { color: var(--negative); font-size: 13px; }
+@media (max-width: 640px) { .header, .toolbar, .drawing { padding: 16px; } .choices { grid-template-columns: 1fr; } }

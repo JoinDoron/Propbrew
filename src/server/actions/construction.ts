@@ -32,6 +32,7 @@ import {
 } from '@/domain/construction';
 import type { CurrencyCode } from '@/domain/primitives';
 import type { AuditAction, ProjectMobilisation, ProjectStatus } from '@/domain/construction/types';
+import { constructionDrawingEditable } from '@/server/construction/drawings';
 
 export type Res = { ok: true; ref?: string } | { ok: false; error: string };
 
@@ -588,7 +589,7 @@ export async function issueRevision(docId: string, changeNote: string): Promise<
   return withDurableMutation(async () => {
   const g = await gate('create'); if (!g.ok) return g;
   const prior = scopedMutableGet(g.actor, 'reports_analytics', db.constructionDocs, docId, 'update');
-  if (!prior) return { ok: false, error: 'Document not found.' };
+  if (!prior || !constructionDrawingEditable(g.actor, prior)) return { ok: false, error: 'Document not found.' };
   if (prior.status === 'superseded') return { ok: false, error: 'That revision is already superseded — issue from the current one.' };
   if (prior.status === 'approved' && !changeNote.trim()) return { ok: false, error: 'A change note is required when superseding an approved revision.' };
 
@@ -600,6 +601,8 @@ export async function issueRevision(docId: string, changeNote: string): Promise<
     effectiveISO: operatingDateISO(), changeNote: changeNote.trim() || undefined,
     uploadedBy: nameOf(g.actor), approvedBy: undefined, approvedISO: undefined,
     supersedesId: prior.id, supersededById: undefined,
+    fileId: undefined, fileName: undefined, fileSizeBytes: undefined, fileSha256: undefined, fileSizeKb: undefined,
+    requiresFile: true,
   } as (typeof db.constructionDocs)[number]);
   // The prior revision is NOT retired yet. A drawing under revision must keep
   // its approved issue current — the site has to have something to build to
@@ -614,9 +617,10 @@ export async function approveRevision(docId: string): Promise<Res> {
   return withDurableMutation(async () => {
   const g = await gate('update'); if (!g.ok) return g;
   const doc = scopedMutableGet(g.actor, 'reports_analytics', db.constructionDocs, docId, 'update');
-  if (!doc) return { ok: false, error: 'Document not found.' };
+  if (!doc || !constructionDrawingEditable(g.actor, doc)) return { ok: false, error: 'Document not found.' };
   if (doc.status === 'approved') return { ok: false, error: 'Already approved.' };
   if (doc.status === 'superseded') return { ok: false, error: 'A superseded revision cannot be approved.' };
+  if (doc.requiresFile && !doc.fileId) return { ok: false, error: 'Attach the drawing PDF before approving this revision.' };
   if (db.constructionDocs.some((other) => other.tenantId === doc.tenantId && other.projectId === doc.projectId && other.number === doc.number && other.revision === doc.revision && other.id !== doc.id && other.status === 'approved')) return { ok: false, error: 'This revision label already has an approved issue. Review the duplicate record instead.' };
   // Exactly one approved revision per document number.
   for (const other of db.constructionDocs) {
@@ -626,6 +630,7 @@ export async function approveRevision(docId: string): Promise<Res> {
     }
   }
   doc.status = 'approved'; doc.approvedBy = nameOf(g.actor); doc.approvedISO = operatingDateISO();
+  audit(g.actor, { action: 'approve', entity: 'construction_drawing', entityRef: doc.id, projectId: doc.projectId, summary: `Approved ${doc.number} rev ${doc.revision}`, note: doc.fileSha256 ? `PDF SHA-256 ${doc.fileSha256}` : 'Legacy revision without a stored PDF' });
   revalidate();
   return { ok: true, ref: `${doc.number} rev ${doc.revision}` };
 
@@ -637,11 +642,12 @@ export async function sendTransmittal(docId: string, toParty: string, purpose: '
   return withDurableMutation(async () => {
   const g = await gate('create'); if (!g.ok) return g;
   const doc = scopedMutableGet(g.actor, 'reports_analytics', db.constructionDocs, docId, 'update');
-  if (!doc) return { ok: false, error: 'Document not found.' };
+  if (!doc || !constructionDrawingEditable(g.actor, doc)) return { ok: false, error: 'Document not found.' };
   if (!toParty.trim()) return { ok: false, error: 'Name the party being issued to.' };
   if (doc.status !== 'approved' && purpose === 'for_construction') {
     return { ok: false, error: 'Only an approved revision can be issued for construction.' };
   }
+  if (purpose === 'for_construction' && !doc.fileId) return { ok: false, error: 'Attach the approved drawing PDF before issuing it for construction.' };
   db.constructionTransmittals.unshift({
     tenantId: g.actor.tenantId, id: `tr-new-${nextRecordSequence('construction:trSeq', 0, true)}`, docId, docNumber: doc.number,
     revision: doc.revision, toParty: toParty.trim(), sentISO: operatingDateISO(), purpose,

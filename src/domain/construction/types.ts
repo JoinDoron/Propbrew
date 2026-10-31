@@ -231,6 +231,11 @@ export type ConstructionDoc = TenantScoped & {
   /** the revision this one replaced, and the one that replaced it. */
   supersedesId?: string; supersededById?: string;
   fileSizeKb?: number;
+  /** Private, immutable PDF bound to this exact revision. Legacy fixture rows omit it. */
+  fileId?: string; fileName?: string; fileSizeBytes?: number; fileSha256?: string;
+  /** A metadata-only draft cannot be approved until its PDF is attached. */
+  requiresFile?: boolean;
+  locationIds?: string[]; workPackageIds?: string[];
 };
 
 /** Controlled distribution: who was formally issued which revision, and when. */

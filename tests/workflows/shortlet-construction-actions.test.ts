@@ -352,6 +352,8 @@ describe('Construction delivery, state and stock workflows', () => {
     expect(db.constructionDocs).toHaveLength(before + 1);
     const legacyDuplicate = { ...structuredClone(proposed), id: 'legacy-duplicate-revision' };
     db.constructionDocs.push(legacyDuplicate);
+    expect((await construction.approveRevision(proposed.id)).ok).toBe(false);
+    proposed.fileId = randomUUID(); proposed.fileName = 'QA design correction.pdf';
     expect((await construction.approveRevision(proposed.id)).ok).toBe(true);
     expect((await construction.approveRevision(legacyDuplicate.id)).ok).toBe(false);
     expect(proposed.status).toBe('approved'); expect(legacyDuplicate.status).toBe('draft');
