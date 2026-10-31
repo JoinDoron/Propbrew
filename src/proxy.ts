@@ -4,6 +4,7 @@ import { websiteOnlyEnabled, websiteReleaseDecision } from '@/lib/website-releas
 import { reviewModeEnabled, reviewProxy } from '@/server/review-auth';
 import { nativeAuthEnabled } from '@/server/auth/mode';
 import { getSessionCookie } from 'better-auth/cookies';
+import { nativeApiRouteAllowed } from '@/server/auth/native-api-routes';
 
 /**
  * Proxy (Next 16 renamed Middleware → Proxy). OPTIMISTIC redirect only.
@@ -39,11 +40,9 @@ export function proxy(request: NextRequest, event: Parameters<typeof clerkProxy>
   if (pathname.startsWith('/_next/static/') || pathname === '/_next/image' || pathname.startsWith('/brand/') || pathname === '/icon.svg' || pathname === '/favicon.ico') return NextResponse.next();
   if (nativeAuthEnabled()) {
     if (pathname.startsWith('/review/')) return new NextResponse('Not found',{status:404});
-    const aiRoutes=new Set(['/api/copilot','/api/estate/copilot','/api/shortlet/copilot','/api/construction/copilot']);
     if(pathname.startsWith('/api/')) {
       // Legacy mobile/provider endpoints stay closed until company-aware.
-      const facilityEvidence=pathname==='/api/facility/evidence'||/^\/api\/facility\/evidence\/[0-9a-f-]{36}$/i.test(pathname);
-      if(pathname.startsWith('/api/auth/')||pathname.startsWith('/api/mobile/v1/')||pathname==='/api/companies'||pathname==='/api/companies/select'||pathname==='/api/v1/health'||aiRoutes.has(pathname)||facilityEvidence)return NextResponse.next();
+      if (nativeApiRouteAllowed(pathname)) return NextResponse.next();
       return new NextResponse('Not found',{status:404,headers:{'Cache-Control':'no-store'}});
     }
     const publicPage=pathname==='/'||pathname==='/mobile'||pathname==='/login'||pathname.startsWith('/login/')||pathname==='/sign-up'||pathname.startsWith('/sign-up/')||pathname.startsWith('/invite/')||pathname==='/robots.txt'||pathname==='/sitemap.xml';
