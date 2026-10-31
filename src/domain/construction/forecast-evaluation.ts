@@ -29,11 +29,21 @@ export function evaluateConstructionForecasts(snapshots: ForecastSnapshot[], out
   }
   const count = evaluations.length;
   const mean = (values: number[]) => Math.round(values.reduce((sum, value) => sum + value, 0) / values.length * 10) / 10;
-  const calibrated = count >= 5;
+  // Use distinct projects in chronological completion order. The later 30% are
+  // held out: an interval is not called calibrated merely because it covers its training data.
+  const chronological = [...evaluations].sort((a, b) => a.actualFinishISO.localeCompare(b.actualFinishISO));
+  const validationReady = count >= 20;
+  const split = validationReady ? Math.floor(count * .7) : 0;
+  const training = chronological.slice(0, split), holdout = chronological.slice(split);
+  const empirical80FinishDays = validationReady ? percentile(training.map((row) => Math.abs(row.finishErrorDays)), .8) : null;
+  const empirical80CostPct = validationReady ? percentile(training.map((row) => Math.abs(row.costErrorPct)), .8) : null;
+  const holdoutFinishCoveragePct = validationReady ? Math.round(holdout.filter((row) => Math.abs(row.finishErrorDays) <= empirical80FinishDays!).length / holdout.length * 100) : null;
+  const holdoutCostCoveragePct = validationReady ? Math.round(holdout.filter((row) => Math.abs(row.costErrorPct) <= empirical80CostPct!).length / holdout.length * 100) : null;
+  const calibrated = validationReady && holdoutFinishCoveragePct! >= 70 && holdoutCostCoveragePct! >= 70;
   return { evaluations: evaluations.sort((a, b) => b.forecastAtISO.localeCompare(a.forecastAtISO)), count, calibrated,
+    validationReady, trainingCount: training.length, holdoutCount: validationReady ? holdout.length : 0, holdoutFinishCoveragePct, holdoutCostCoveragePct,
     meanAbsoluteFinishErrorDays: count ? mean(evaluations.map((row) => Math.abs(row.finishErrorDays))) : null,
     meanFinishBiasDays: count ? mean(evaluations.map((row) => row.finishErrorDays)) : null,
     meanAbsoluteCostErrorPct: count ? mean(evaluations.map((row) => Math.abs(row.costErrorPct))) : null,
-    empirical80FinishDays: calibrated ? percentile(evaluations.map((row) => Math.abs(row.finishErrorDays)), .8) : null,
-    empirical80CostPct: calibrated ? percentile(evaluations.map((row) => Math.abs(row.costErrorPct)), .8) : null };
+    empirical80FinishDays, empirical80CostPct };
 }

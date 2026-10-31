@@ -60,15 +60,18 @@ describe('native construction BIM exchange and forecast evidence', () => {
     expect(validCopilotSource('estate', { id: 'page', label: 'PDF page 2', href: '/api/construction/drawings/11111111-1111-4111-8111-111111111111#page=2' })).toBe(false);
   });
 
-  it('withholds calibration until five independent completed projects exist', () => {
-    const snapshots: ForecastSnapshot[] = Array.from({ length: 5 }, (_, index) => ({ id: String(index), tenantId: 'tenant-a', projectId: `p-${index}`, projectName: `Project ${index}`,
+  it('uses later completed projects to check the empirical error band', () => {
+    const snapshots: ForecastSnapshot[] = Array.from({ length: 20 }, (_, index) => ({ id: String(index), tenantId: 'tenant-a', projectId: `p-${index}`, projectName: `Project ${index}`,
       recordedAtISO: '2026-01-01T10:00:00Z', predictedFinishISO: '2026-02-01', predictedCostMinor: 10000,
       baselineFinishISO: '2026-02-01', cpi: 1, spi: 1, recordedBy: 'pm' }));
-    const outcomes = snapshots.map((row, index) => ({ projectId: row.projectId, completedAtISO: `2026-02-0${index + 2}T12:00:00Z`, actualCostMinor: 10000 + index * 1000 }));
-    expect(evaluateConstructionForecasts(snapshots.slice(0, 4), outcomes).calibrated).toBe(false);
+    const outcomes = snapshots.map((row, index) => ({ projectId: row.projectId, completedAtISO: `2026-02-${String(index + 2).padStart(2, '0')}T12:00:00Z`, actualCostMinor: 10000 + index * 1000 }));
+    expect(evaluateConstructionForecasts(snapshots.slice(0, 19), outcomes).validationReady).toBe(false);
     const evaluated = evaluateConstructionForecasts(snapshots, outcomes);
-    expect(evaluated.calibrated).toBe(true);
-    expect(evaluated.empirical80FinishDays).toBe(4);
-    expect(evaluated.count).toBe(5);
+    expect(evaluated.validationReady).toBe(true);
+    expect(evaluated.trainingCount).toBe(14);
+    expect(evaluated.holdoutCount).toBe(6);
+    expect(evaluated.holdoutFinishCoveragePct).toBe(0);
+    expect(evaluated.calibrated).toBe(false);
+    expect(evaluated.count).toBe(20);
   });
 });
